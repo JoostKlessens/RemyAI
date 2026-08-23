@@ -40,7 +40,7 @@ export function VanavondActionRow(props: VanavondActionRowProps): JSX.Element {
           label="Ik kies zelf"
           variant="secondary"
           onPress={onChooseSelf}
-          accessibilityLabel="Ik kies zelf, open de Feed"
+          accessibilityLabel="Ik kies zelf, open Mijn recepten"
           accessibilityHint="Geen wissels meer beschikbaar vandaag"
         />
       )}

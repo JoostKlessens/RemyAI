@@ -1,18 +1,19 @@
 /**
- * Shared open-with-failure-handling state for every tappable deep-link on
- * a Feed card: the thumbnail (opens the source post) and the creator
- * attribution row (opens the creator's profile). Each caller gets its own
- * independent status — one failing must never block or shadow the other.
+ * Shared open-with-failure-handling state for a tappable external link.
+ * Originally scoped to Feed cards (thumbnail + creator attribution row);
+ * generalized after the Feed was removed since `CreatorAttribution` still
+ * needs it for its "open the creator's profile" link on the import
+ * confirmation screen.
  */
 
 import { useCallback, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
-import { openFeedSourceUrl } from './feedLinking';
+import { openExternalUrl } from './externalLinking';
 
-export type OpenFeedLinkStatus = 'idle' | 'opening' | 'failed';
+export type OpenExternalLinkStatus = 'idle' | 'opening' | 'failed';
 
-export interface UseOpenFeedLinkResult {
-  readonly status: OpenFeedLinkStatus;
+export interface UseOpenExternalLinkResult {
+  readonly status: OpenExternalLinkStatus;
   readonly open: (url: string) => void;
 }
 
@@ -22,15 +23,15 @@ export interface UseOpenFeedLinkResult {
  * pattern established by SaveIntentSheet/DecisionCard for state changes
  * with no other on-screen signal a screen-reader user would catch.
  */
-export function useOpenFeedLink(failureAnnouncement: string): UseOpenFeedLinkResult {
-  const [status, setStatus] = useState<OpenFeedLinkStatus>('idle');
+export function useOpenExternalLink(failureAnnouncement: string): UseOpenExternalLinkResult {
+  const [status, setStatus] = useState<OpenExternalLinkStatus>('idle');
 
   const open = useCallback(
     (url: string) => {
       setStatus('opening');
-      // openFeedSourceUrl never rejects (see its own doc comment) — every
+      // openExternalUrl never rejects (see its own doc comment) — every
       // outcome, including failure, resolves to a plain typed result.
-      openFeedSourceUrl(url).then((result) => {
+      openExternalUrl(url).then((result) => {
         if (result === 'opened') {
           setStatus('idle');
           return;

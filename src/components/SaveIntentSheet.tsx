@@ -5,6 +5,18 @@
  * confirm. The tapped row flashes `positiveMuted` briefly first (a
  * completed action, not a decision-in-progress, so `positive` not
  * `accent`), matching docs/DESIGN.md.
+ *
+ * PD-004a (founder correction, 2026-08-23): this sheet used to offer a
+ * third option, "Alleen bewaren" ("just a bookmark") — a bare, unscheduled
+ * save that only ~16% of bookmarks anywhere are ever retrieved from. That
+ * contradicted this file's own reason for existing, so it is gone. Both
+ * remaining options are schedulable: `this_week` is prioritised and can be
+ * tonight's suggestion; `someday` has no fixed date but is a genuine
+ * rotation candidate the decision engine (decide.ts / scoring.ts's
+ * SOMEDAY_SAVE_* aging boost) is guaranteed to eventually surface — see
+ * PD-004a in docs/PRODUCT-DECISIONS.md. `SaveIntent`'s `'none'` variant
+ * still exists in src/domain/types.ts (DB compatibility only) but must
+ * never be produced from here again.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -27,10 +39,11 @@ interface IntentOption {
   readonly explainer: string;
 }
 
+// PD-004a: exactly two options, both schedulable — no bare-bookmark third
+// option. See the file header for why "Alleen bewaren" was removed.
 const OPTIONS: readonly IntentOption[] = [
   { value: 'this_week', label: 'Deze week', explainer: 'kan vanavond verschijnen' },
-  { value: 'someday', label: 'Ooit', explainer: 'komt op je backlog, geen planning' },
-  { value: 'none', label: 'Alleen bewaren', explainer: 'gewoon een bookmark' },
+  { value: 'someday', label: 'Ooit', explainer: 'komt vanzelf een keer voorbij' },
 ];
 
 export function SaveIntentSheet(props: SaveIntentSheetProps): JSX.Element {

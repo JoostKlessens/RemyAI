@@ -61,6 +61,18 @@ export type MealSource = 'seeded' | 'saved' | 'curated';
 /**
  * What a household member asked to happen with something they saved from
  * the Feed (F). "none" means "just bookmark it, don't schedule anything."
+ *
+ * PD-004a (founder correction, 2026-08-23): a bare bookmark with no
+ * schedule is a graveyard — "if I put something in my list, it must be
+ * able to come around at some point." `'none'` is therefore UNREACHABLE
+ * from the UI as of PD-004a: `SaveIntentSheet` (src/components) offers only
+ * `'this_week'` and `'someday'`, both of which the engine (decide.ts) is
+ * guaranteed to eventually surface. `'none'` stays in this union rather
+ * than being deleted because the `saves.intent` check constraint
+ * (supabase/migrations/0001_init.sql) still accepts it — for legacy rows
+ * written before this decision — and `recipeScheduling.ts` still branches
+ * on it (a `'none'` save renders as `geen_planning`, never as a schedule).
+ * No code should ever construct a new `'none'` save going forward.
  */
 export type SaveIntent = 'this_week' | 'someday' | 'none';
 
@@ -347,6 +359,22 @@ export interface DecisionRequest {
   readonly recentCookEvents: readonly CookEvent[];
   /** Saves with intent "this_week" not yet served back as a decision. */
   readonly pendingThisWeekSaves: readonly Save[];
+  /**
+   * Saves with intent "someday" not yet served back as a decision.
+   *
+   * PD-004a (additive field): an 'ooit' save must be a genuine rotation
+   * candidate, not a parked item that only surfaces if the user goes
+   * looking. Because `candidateMeals` already includes any meal the
+   * household owns regardless of how it was saved, a someday-saved meal's
+   * `Meal` row was always technically "in the pool" — but with nothing
+   * distinguishing it from an ordinary rotation meal, a low-scoring one
+   * could in principle keep losing its novelty-tier tie-break forever. This
+   * field lets scoring.ts apply an aging boost (SOMEDAY_SAVE_*) so a save
+   * that keeps losing gets more competitive the longer it waits, giving it
+   * a genuine, bounded-time guarantee of eventually winning its tier — see
+   * scoring.ts's `somedaySaveBoost` and decide.ts's `selectWinner`.
+   */
+  readonly pendingSomedaySaves: readonly Save[];
   /** Recent decisions for this household, for variety and to avoid immediate repeats. */
   readonly recentDecisions: readonly Decision[];
   readonly targetDate: IsoDateString;

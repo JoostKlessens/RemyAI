@@ -39,6 +39,40 @@ export const FITS_TIME_BOOST = 10;
 export const VARIETY_BOOST = 15;
 export const NOT_RECENT_BOOST = 12;
 
+/**
+ * PD-004a: an 'ooit' (someday) save must be a genuine rotation candidate
+ * the engine WILL eventually surface, not a parked item that only wins by
+ * luck. `pendingSomedaySaves` is otherwise scored like any ordinary
+ * candidate, so a meal with a merely-average score could in principle lose
+ * its novelty-tier tie-break indefinitely — the same failure mode PD-004a
+ * calls out for the old "Alleen bewaren" option, just at the ranking layer
+ * instead of the UI layer.
+ *
+ * The fix is an aging boost: a someday save starts small
+ * (SOMEDAY_SAVE_BASE_BOOST) and grows by SOMEDAY_SAVE_WEEKLY_ESCALATION per
+ * full week it has waited, capped after SOMEDAY_SAVE_ESCALATION_CAP_WEEKS
+ * weeks at SOMEDAY_SAVE_MAX_BOOST. That cap (45) comfortably exceeds the
+ * highest score an ordinary never-cooked competitor can reach from organic
+ * factors alone (VARIETY_BOOST + FITS_TIME_BOOST = 25 — `household_favourite`
+ * and `not_recent` both require prior cook history, which a never-cooked
+ * meal by definition lacks) — so once a someday save has waited out the
+ * cap, it is guaranteed to win a tie-break within whichever novelty tier it
+ * lands in. It stays below SAVED_THIS_WEEK_BOOST (100) on purpose: an
+ * aged 'ooit' save earns priority over ordinary rotation meals, but never
+ * outranks something the household explicitly asked for this week.
+ *
+ * Deliberately NOT added to scoreMeal's `contributions` list (below): the
+ * boost should make a someday save win more often, not change *why* it's
+ * being suggested — reasonText stays whatever the meal's honest organic
+ * factor is (almost always 'variety', since a someday save is normally
+ * never-cooked).
+ */
+export const SOMEDAY_SAVE_BASE_BOOST = 5;
+export const SOMEDAY_SAVE_WEEKLY_ESCALATION = 10;
+export const SOMEDAY_SAVE_ESCALATION_CAP_WEEKS = 4;
+export const SOMEDAY_SAVE_MAX_BOOST =
+  SOMEDAY_SAVE_BASE_BOOST + SOMEDAY_SAVE_WEEKLY_ESCALATION * SOMEDAY_SAVE_ESCALATION_CAP_WEEKS;
+
 /** Meals cooked within this many days of targetDate incur a recency penalty. */
 export const RECENCY_PENALTY_WINDOW_DAYS = 14;
 /** Penalty applied to a meal cooked *today*; tapers linearly to 0 at the window edge. */
@@ -72,6 +106,35 @@ function mostRecentCookEvent(
 
 function isSavedThisWeek(mealId: MealId, pendingThisWeekSaves: readonly Save[]): boolean {
   return pendingThisWeekSaves.some((save) => save.mealId === mealId);
+}
+
+/** The earliest pending someday save for this meal — the longest-waiting one earns the biggest aging boost. */
+function findEarliestSomedaySave(mealId: MealId, pendingSomedaySaves: readonly Save[]): Save | undefined {
+  let earliest: Save | undefined;
+  for (const save of pendingSomedaySaves) {
+    if (save.mealId !== mealId) {
+      continue;
+    }
+    if (earliest === undefined || save.savedAt < earliest.savedAt) {
+      earliest = save;
+    }
+  }
+  return earliest;
+}
+
+/** See the SOMEDAY_SAVE_* constants above for the full rationale. */
+function somedaySaveBoost(
+  mealId: MealId,
+  pendingSomedaySaves: readonly Save[],
+  targetDate: string,
+): number {
+  const earliestSave = findEarliestSomedaySave(mealId, pendingSomedaySaves);
+  if (earliestSave === undefined) {
+    return 0;
+  }
+  const daysWaited = Math.max(0, daysBetween(earliestSave.savedAt, targetDate));
+  const weeksWaited = Math.min(Math.floor(daysWaited / 7), SOMEDAY_SAVE_ESCALATION_CAP_WEEKS);
+  return SOMEDAY_SAVE_BASE_BOOST + weeksWaited * SOMEDAY_SAVE_WEEKLY_ESCALATION;
 }
 
 interface RecencySignal {
@@ -186,15 +249,23 @@ export function scoreMeal(
   recentCookEvents: readonly CookEvent[],
   pendingThisWeekSaves: readonly Save[],
   targetDate: string,
+  pendingSomedaySaves: readonly Save[] = [],
 ): ScoredMeal {
   const savedBoost = isSavedThisWeek(meal.id, pendingThisWeekSaves) ? SAVED_THIS_WEEK_BOOST : 0;
   const recency = computeRecencySignal(meal.id, recentCookEvents, targetDate);
   const repeatAdjustment = wouldRepeatAdjustment(meal.id, recentCookEvents);
   const timeBoost = fitsTimeBoost(meal, household);
   const noveltyBoost = varietyBoost(meal.id, recentCookEvents);
+  const somedayBoost = somedaySaveBoost(meal.id, pendingSomedaySaves, targetDate);
 
   const score =
-    savedBoost + recency.penalty + recency.notRecentBoost + repeatAdjustment + timeBoost + noveltyBoost;
+    savedBoost +
+    recency.penalty +
+    recency.notRecentBoost +
+    repeatAdjustment +
+    timeBoost +
+    noveltyBoost +
+    somedayBoost;
 
   const reasonCode = pickReasonCode(
     [
@@ -224,8 +295,9 @@ export function scoreMeals(
   recentCookEvents: readonly CookEvent[],
   pendingThisWeekSaves: readonly Save[],
   targetDate: string,
+  pendingSomedaySaves: readonly Save[] = [],
 ): readonly ScoredMeal[] {
   return meals
-    .map((meal) => scoreMeal(meal, household, recentCookEvents, pendingThisWeekSaves, targetDate))
+    .map((meal) => scoreMeal(meal, household, recentCookEvents, pendingThisWeekSaves, targetDate, pendingSomedaySaves))
     .sort(compareScoredMeals);
 }

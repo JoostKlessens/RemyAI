@@ -303,3 +303,71 @@ describe('decide — Dutch reason text', () => {
     expect(result.kind === 'suggestion' && result.reasonText).toBe('Je bewaarde dit woensdag');
   });
 });
+
+describe('decide — a "saved" meal is an ordinary rotation candidate (PD-004a)', () => {
+  test('a meal with source "saved" is not specially excluded — it competes like any other candidate', () => {
+    const candidateMeals = [makeMeal({ id: 'meal-saved-source', source: 'saved' })];
+    const request = makeDecisionRequest({ candidateMeals });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-saved-source');
+  });
+});
+
+describe('decide — an "ooit" (someday) save is eventually suggested (PD-004a)', () => {
+  test('a freshly-saved "ooit" meal does not yet outrank a strongly-scored ordinary meal', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 40 });
+    const candidateMeals = [
+      makeMeal({ id: 'meal-ordinary', estimatedMinutes: 15 }),
+      makeMeal({ id: 'meal-someday', estimatedMinutes: null }),
+    ];
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-someday', intent: 'someday', savedAt: '2026-08-22T08:00:00.000Z' })];
+    const request = makeDecisionRequest({ household, candidateMeals, pendingSomedaySaves, targetDate: '2026-08-22' });
+
+    const result = decide(request);
+
+    // Both meals are never-cooked/never-offered, so both classify into the
+    // same novelty tier here (see the next test's comment) — the ordinary
+    // meal's fits_time + variety genuinely outscores a same-day save.
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-ordinary');
+  });
+
+  test('the same "ooit" meal wins once it has waited long enough — the ranking bug PD-004a describes is fixed', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 40 });
+    const candidateMeals = [
+      makeMeal({ id: 'meal-ordinary', estimatedMinutes: 15 }),
+      makeMeal({ id: 'meal-someday', estimatedMinutes: null }),
+    ];
+    // Neither meal has ever been cooked or offered (recentCookEvents and
+    // recentDecisions both default to []), so both classify as
+    // 'genuinely_new' regardless of which tier today's seed prefers —
+    // pickTierWithFallback always cascades to the one non-empty tier. This
+    // makes the test deterministic across any targetDate/householdId, not
+    // dependent on hitting a lucky seed.
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-someday', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' })];
+    const request = makeDecisionRequest({ household, candidateMeals, pendingSomedaySaves, targetDate: '2026-08-22' });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-someday');
+    // Still an honest reason: the meal really has never been tried before.
+    expect(result.kind === 'suggestion' && result.reasonCode).toBe('variety');
+  });
+
+  test('an "ooit" save keeps being offered across consecutive target dates once aged in, proving it is not a one-off fluke', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 40 });
+    const candidateMeals = [
+      makeMeal({ id: 'meal-ordinary', estimatedMinutes: 15 }),
+      makeMeal({ id: 'meal-someday', estimatedMinutes: null }),
+    ];
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-someday', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' })];
+    const targetDates = ['2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23', '2026-08-24'];
+
+    for (const targetDate of targetDates) {
+      const request = makeDecisionRequest({ household, candidateMeals, pendingSomedaySaves, targetDate });
+      const result = decide(request);
+      expect(result.kind === 'suggestion' && result.mealId).toBe('meal-someday');
+    }
+  });
+});

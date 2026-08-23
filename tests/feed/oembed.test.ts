@@ -14,6 +14,7 @@ const VALID_TIKTOK_PAYLOAD = {
   type: 'video',
   title: 'Traybake met kip en citroen',
   author_name: 'Chef Remy',
+  author_url: 'https://www.tiktok.com/@chefremy',
   thumbnail_url: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
 };
 
@@ -29,6 +30,7 @@ describe('resolveOembed — TikTok', () => {
         thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
         title: 'Traybake met kip en citroen',
         authorName: 'Chef Remy',
+        authorUrl: 'https://www.tiktok.com/@chefremy',
       },
     });
   });
@@ -60,7 +62,25 @@ describe('resolveOembed — TikTok', () => {
 
     expect(result).toEqual({
       kind: 'ok',
-      payload: { thumbnailUrl: null, title: 'Only a title', authorName: null },
+      payload: { thumbnailUrl: null, title: 'Only a title', authorName: null, authorUrl: null },
+    });
+  });
+
+  test('parses author_url so attribution can link back to the creator', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse(200, { title: 'Pasta pesto', author_url: 'https://www.tiktok.com/@snellepasta' }),
+    );
+
+    const result = await resolveOembed('https://www.tiktok.com/@snellepasta/video/9', 'tiktok', { fetchFn });
+
+    expect(result).toEqual({
+      kind: 'ok',
+      payload: {
+        thumbnailUrl: null,
+        title: 'Pasta pesto',
+        authorName: null,
+        authorUrl: 'https://www.tiktok.com/@snellepasta',
+      },
     });
   });
 });

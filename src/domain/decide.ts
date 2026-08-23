@@ -96,6 +96,7 @@ function selectWinner(swapEligible: readonly Meal[], request: DecisionRequest): 
     request.recentCookEvents,
     request.pendingThisWeekSaves,
     request.targetDate,
+    request.pendingSomedaySaves,
   );
 
   const competitivePool = scored.filter((scoredMeal) => scoredMeal.score > 0);

@@ -6,6 +6,10 @@ import {
   SAVED_THIS_WEEK_BOOST,
   scoreMeal,
   scoreMeals,
+  SOMEDAY_SAVE_BASE_BOOST,
+  SOMEDAY_SAVE_ESCALATION_CAP_WEEKS,
+  SOMEDAY_SAVE_MAX_BOOST,
+  SOMEDAY_SAVE_WEEKLY_ESCALATION,
   VARIETY_BOOST,
 } from '@/domain/scoring';
 import { makeCookEvent, makeHousehold, makeMeal, makeSave } from './fixtures';
@@ -202,5 +206,115 @@ describe('scoreMeals', () => {
     scoreMeals(meals, household, [], [], TARGET_DATE);
 
     expect(meals.map((m) => m.id)).toEqual(originalOrder);
+  });
+});
+
+describe('scoreMeal — someday save aging boost (PD-004a)', () => {
+  test('a meal with no pending someday save gets no boost', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, []);
+
+    expect(result.score).toBe(VARIETY_BOOST);
+  });
+
+  test('a someday save for a DIFFERENT meal does not boost this one', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-other', intent: 'someday', savedAt: TARGET_DATE })];
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    expect(result.score).toBe(VARIETY_BOOST);
+  });
+
+  test('applies the base boost the moment a meal is saved (0 days waited)', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-1', intent: 'someday', savedAt: '2026-08-22T08:00:00.000Z' })];
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    expect(result.score).toBe(VARIETY_BOOST + SOMEDAY_SAVE_BASE_BOOST);
+  });
+
+  test('the boost escalates by SOMEDAY_SAVE_WEEKLY_ESCALATION per full week waited', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+    // Exactly 2 weeks (14 days) before TARGET_DATE.
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-1', intent: 'someday', savedAt: '2026-08-08T08:00:00.000Z' })];
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    expect(result.score).toBe(VARIETY_BOOST + SOMEDAY_SAVE_BASE_BOOST + 2 * SOMEDAY_SAVE_WEEKLY_ESCALATION);
+  });
+
+  test('the boost caps at SOMEDAY_SAVE_MAX_BOOST no matter how long ago it was saved', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+    // Far beyond SOMEDAY_SAVE_ESCALATION_CAP_WEEKS.
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-1', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' })];
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    expect(result.score).toBe(VARIETY_BOOST + SOMEDAY_SAVE_MAX_BOOST);
+    expect(SOMEDAY_SAVE_MAX_BOOST).toBe(
+      SOMEDAY_SAVE_BASE_BOOST + SOMEDAY_SAVE_WEEKLY_ESCALATION * SOMEDAY_SAVE_ESCALATION_CAP_WEEKS,
+    );
+  });
+
+  test('an earlier of two pending someday saves for the same meal drives the boost (longest wait wins)', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+    const pendingSomedaySaves = [
+      makeSave({ id: 'save-recent', mealId: 'meal-1', intent: 'someday', savedAt: '2026-08-20T08:00:00.000Z' }),
+      makeSave({ id: 'save-old', mealId: 'meal-1', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' }),
+    ];
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    expect(result.score).toBe(VARIETY_BOOST + SOMEDAY_SAVE_MAX_BOOST);
+  });
+
+  test('the boost never changes reasonCode away from the meal\'s honest organic factor', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const meal = makeMeal({ id: 'meal-1', estimatedMinutes: null });
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-1', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' })];
+
+    const result = scoreMeal(meal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    // Never cooked -> 'variety' stays the true story, even though the
+    // invisible boost is what wins it the tie-break against other meals.
+    expect(result.reasonCode).toBe('variety');
+  });
+
+  test('a fully-aged someday save outscores the strongest possible ordinary never-cooked competitor', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 40 });
+    const ordinaryMeal = makeMeal({ id: 'meal-ordinary', estimatedMinutes: 15 }); // comfortably under budget
+    const somedayMeal = makeMeal({ id: 'meal-someday', estimatedMinutes: null });
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-someday', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' })];
+
+    const ordinaryScore = scoreMeal(ordinaryMeal, household, [], [], TARGET_DATE, []);
+    const somedayScore = scoreMeal(somedayMeal, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    // The strongest an ordinary never-cooked meal can score from organic
+    // factors alone is VARIETY_BOOST + FITS_TIME_BOOST — household_favourite
+    // and not_recent both require prior cook history.
+    expect(ordinaryScore.score).toBe(VARIETY_BOOST + FITS_TIME_BOOST);
+    expect(somedayScore.score).toBeGreaterThan(ordinaryScore.score);
+  });
+
+  test('scoreMeals sorts a fully-aged someday save ahead of an ordinary competitor', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 40 });
+    const meals = [
+      makeMeal({ id: 'meal-ordinary', estimatedMinutes: 15 }),
+      makeMeal({ id: 'meal-someday', estimatedMinutes: null }),
+    ];
+    const pendingSomedaySaves = [makeSave({ mealId: 'meal-someday', intent: 'someday', savedAt: '2026-01-01T08:00:00.000Z' })];
+
+    const result = scoreMeals(meals, household, [], [], TARGET_DATE, pendingSomedaySaves);
+
+    expect(result[0]?.meal.id).toBe('meal-someday');
   });
 });

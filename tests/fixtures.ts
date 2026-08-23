@@ -134,6 +134,7 @@ export function makeDecisionRequest(overrides: Partial<DecisionRequest> = {}): D
     candidateMeals: [makeMeal({ householdId: household.id })],
     recentCookEvents: [],
     pendingThisWeekSaves: [],
+    pendingSomedaySaves: [],
     recentDecisions: [],
     targetDate: '2026-08-22',
     excludedMealIds: [],

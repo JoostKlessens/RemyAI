@@ -3,15 +3,18 @@
  * blank screen here would be a bug — every `NoCandidateReason` gets a
  * deliberate, differentiated state per the task brief:
  *  - `empty_rotation`: routes to Rotation Seeding onboarding, since
- *    browsing the Feed does not fix "you have not seeded a rotation yet."
- *    (docs/DESIGN.md's generic empty-state wireframe predates the
+ *    browsing "Mijn recepten" does not fix "you have not seeded a rotation
+ *    yet." (docs/DESIGN.md's generic empty-state wireframe predates the
  *    3-reason `NoCandidateReason` union and only specifies one catch-all
  *    "Kies zelf → Feed" treatment; empty_rotation is the one reason that
  *    calls for a different destination, so this deliberately diverges
- *    from that wireframe. See the frontend report for the full rationale.)
+ *    from that wireframe. See the frontend report for the full rationale.
+ *    The Feed itself was later removed as a product surface — "Mijn
+ *    recepten" is its structural replacement as a separate, non-decision
+ *    browsing tab.)
  *  - `all_excluded`: restrictions filtered everything — explained with
- *    exclusion framing, never "safety" framing, and offers the Feed as an
- *    alternative.
+ *    exclusion framing, never "safety" framing, and offers "Mijn
+ *    recepten" as an alternative.
  *  - `swaps_exhausted`: the PD-001 two exits (`Niet koken` / `Ik kies
  *    zelf`), with no dish to show because none remain.
  */
@@ -24,7 +27,7 @@ import { Button } from './Button';
 export interface NoCandidateStateProps {
   readonly reason: NoCandidateReason;
   readonly onNavigateOnboarding: () => void;
-  readonly onOpenFeed: () => void;
+  readonly onOpenRecipes: () => void;
   readonly onDecline: () => void;
 }
 
@@ -34,7 +37,7 @@ interface ReasonCopy {
 }
 
 export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
-  const { reason, onNavigateOnboarding, onOpenFeed, onDecline } = props;
+  const { reason, onNavigateOnboarding, onOpenRecipes, onDecline } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const copy = getCopyForReason(reason);
@@ -55,8 +58,8 @@ export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
           <Button
             label={reason === 'swaps_exhausted' ? 'Ik kies zelf' : 'Kies zelf'}
             variant="secondary"
-            onPress={onOpenFeed}
-            accessibilityLabel="Open de Feed om zelf te kiezen"
+            onPress={onOpenRecipes}
+            accessibilityLabel="Open Mijn recepten om zelf te kiezen"
           />
         )}
         <Button label="Niet koken" variant="tertiary" onPress={onDecline} accessibilityLabel="Niet koken vanavond" />

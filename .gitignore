@@ -16,3 +16,4 @@ coverage/
 supabase/.branches/
 supabase/.temp/
 coverage/
+dist-check/

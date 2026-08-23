@@ -79,8 +79,38 @@ optimised for, A/B tested toward, or reported as success.
 dwell time rises while cook rate does not, the Feed is working as entertainment and gets cut
 back, not expanded.
 
-**Corollary.** A save must always ask *when*: `Deze week` / `Ooit` / `Alleen bewaren`. A save with
-no time attached is exactly the graveyard failure users already have on TikTok.
+**Corollary — superseded by PD-004a below.**
+
+### PD-004a — Everything saved must eventually be suggested. No bookmark-only option.
+
+**Founder correction, 2026-08-23:** *"als ik iets in mijn lijst zet moet het altijd een keer voorbij
+kunnen komen"* — if I put something in my list, it must be able to come around at some point.
+
+He is right, and the original three-option sheet contradicted this file's own thesis. It shipped as:
+
+```
+Deze week      — kan vanavond verschijnen
+Ooit           — komt op je backlog, geen planning
+Alleen bewaren — gewoon een bookmark
+```
+
+That third option **is the graveyard.** PD-004 exists because ~12% of saves are ever cooked and only
+~16% of bookmarks are ever retrieved — and we then shipped a button whose explainer was literally
+"gewoon een bookmark". A backlog with "geen planning" is barely better.
+
+**Decision — two options, both schedulable:**
+
+| Option | Meaning |
+| :-- | :-- |
+| `Deze week` | Prioritised. Can be tonight's suggestion. |
+| `Ooit` | No fixed date, but it *will* come around — it enters the rotation pool and the engine surfaces it eventually. |
+
+There is no third option. Saving is an act of scheduling, not of filing.
+
+**Implementation consequence.** `SaveIntent`'s `'none'` variant must stop being reachable from the
+UI. The engine must treat an `'ooit'` save as a genuine rotation candidate — not a parked item that
+only surfaces if the user goes looking. If a saved meal has never been suggested after N weeks, that
+is a bug in the ranking, not a user problem.
 
 ---
 

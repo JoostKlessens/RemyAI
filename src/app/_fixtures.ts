@@ -24,11 +24,8 @@ import type {
   MealStep,
   Member,
   Restriction,
+  Save,
 } from '@/domain/types';
-import { filterServableFeedItems } from '@/domain/feed/eligibility';
-import { getCollidingTagsByFeedItem, rankFeedItems } from '@/domain/feed/ranking';
-import type { FeedRankingRequest } from '@/domain/feed/ranking';
-import type { Creator, FeedItem, FeedItemId } from '@/domain/feed/types';
 
 // ---------------------------------------------------------------------------
 // Household, members, restrictions
@@ -177,208 +174,34 @@ export const fixtureMeals: readonly Meal[] = [
     archivedAt: null,
     createdAt: '2026-06-05T09:00:00.000Z',
   },
+  /**
+   * Demonstrates the outcome of the import flow (src/app/import/**):
+   * `source: 'saved'`, a `sourceUrl`/`sourcePlatform` pointing back at the
+   * original post, and — per PD-006 — `allergenTagStatus: 'verified'`
+   * because this one was confirmed on the import confirmation screen
+   * (src/app/import/confirm.tsx) before saving, unlike a seeded
+   * title-only meal which always starts 'unknown'.
+   */
+  {
+    id: 'meal-7',
+    householdId: 'household-1',
+    title: 'Traybake met gehaktballen en paprika',
+    source: 'saved',
+    estimatedMinutes: 35,
+    skillLevel: 'beginner',
+    servings: 4,
+    ingredientTags: ['gehakt', 'paprika', 'ui'],
+    allergenTagStatus: 'verified',
+    sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/000005',
+    sourcePlatform: 'tiktok',
+    archivedAt: null,
+    createdAt: '2026-08-21T19:00:00.000Z',
+  },
 ];
 
 export function getMealById(mealId: string): Meal | undefined {
   return fixtureMeals.find((meal) => meal.id === mealId);
 }
-
-// ---------------------------------------------------------------------------
-// Feed (F) — creators and their opted-in content (PD-007)
-//
-// Field names/types mirror src/domain/feed/types.ts's `Creator`/`FeedItem`
-// exactly (owned by another agent working on this repo concurrently, not
-// edited here) so swapping these fixtures for a real Supabase-backed query
-// later is mechanical: same shape in, nothing in src/components changes.
-// ---------------------------------------------------------------------------
-
-export const fixtureFeedCreators: readonly Creator[] = [
-  {
-    id: 'creator-1',
-    handle: 'kokenmetkees',
-    displayName: 'Kees Kookt',
-    platform: 'tiktok',
-    profileUrl: 'https://www.tiktok.com/@kokenmetkees',
-    optedInAt: '2026-06-10T09:00:00.000Z',
-    optedOutAt: null,
-  },
-  {
-    id: 'creator-2',
-    handle: 'plantaardigpauline',
-    displayName: 'Plantaardig met Pauline',
-    platform: 'instagram',
-    profileUrl: 'https://www.instagram.com/plantaardigpauline',
-    optedInAt: '2026-06-18T09:00:00.000Z',
-    optedOutAt: null,
-  },
-  {
-    id: 'creator-3',
-    handle: 'ovenbakkers',
-    displayName: 'De Ovenbakkers',
-    platform: 'tiktok',
-    profileUrl: 'https://www.tiktok.com/@ovenbakkers',
-    optedInAt: '2026-07-02T09:00:00.000Z',
-    optedOutAt: null,
-  },
-  {
-    // Demonstrates PD-007.4 ("one-tap opt-out, honoured immediately")
-    // through the real eligibility gate below, not a UI-side guess: this
-    // creator's item must never reach fixtureFeedItems even though the
-    // row itself still exists.
-    id: 'creator-4',
-    handle: 'oudeaccount',
-    displayName: 'Oud account',
-    platform: 'tiktok',
-    profileUrl: 'https://www.tiktok.com/@oudeaccount',
-    optedInAt: '2026-05-01T09:00:00.000Z',
-    optedOutAt: '2026-07-20T09:00:00.000Z',
-  },
-  {
-    id: 'creator-5',
-    handle: 'snellepastas',
-    displayName: 'Snelle Pasta Keuken',
-    platform: 'tiktok',
-    profileUrl: 'https://www.tiktok.com/@snellepastas',
-    optedInAt: '2026-07-15T09:00:00.000Z',
-    optedOutAt: null,
-  },
-];
-
-export function getFeedCreatorById(creatorId: string): Creator | undefined {
-  return fixtureFeedCreators.find((creator) => creator.id === creatorId);
-}
-
-/**
- * Raw feed items, BEFORE the eligibility gate — includes `feed-4`, which
- * belongs to an opted-out creator, on purpose (see fixtureFeedCreators
- * above). Nothing in the UI should ever read this constant directly; it
- * exists so `fixtureFeedItems` below can prove the real filter removes it.
- */
-const fixtureFeedItemsRaw: readonly FeedItem[] = [
-  {
-    id: 'feed-1',
-    creatorId: 'creator-1',
-    sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/000001',
-    sourcePlatform: 'tiktok',
-    thumbnailUrl: 'https://picsum.photos/seed/remy-traybake-kip-citroen/720/1280',
-    title: 'Traybake met kip en citroen',
-    authorName: 'kokenmetkees',
-    oembedFetchedAt: '2026-08-20T07:00:00.000Z',
-    mealId: 'meal-3',
-    publishedAt: '2026-08-18T18:00:00.000Z',
-    removedAt: null,
-  },
-  {
-    id: 'feed-2',
-    creatorId: 'creator-2',
-    sourceUrl: 'https://www.instagram.com/reel/voorbeeld002',
-    sourcePlatform: 'instagram',
-    // Honest degraded state (task requirement 4): Instagram oEmbed needs
-    // an approved Facebook App (src/lib/oembed.ts's `instagramAccessToken`
-    // config) — when it isn't set, resolution fails `missing_credentials`
-    // before any network call, so this stays null rather than a fake
-    // placeholder image.
-    thumbnailUrl: null,
-    title: 'Linzensoep met komijn',
-    authorName: null,
-    oembedFetchedAt: null,
-    mealId: 'meal-6',
-    publishedAt: '2026-08-15T12:00:00.000Z',
-    removedAt: null,
-  },
-  {
-    id: 'feed-3',
-    creatorId: 'creator-3',
-    sourceUrl: 'https://www.tiktok.com/@ovenbakkers/video/000002',
-    sourcePlatform: 'tiktok',
-    thumbnailUrl: 'https://picsum.photos/seed/remy-kikkererwtencurry/720/1280',
-    // Not yet parsed into a structured Meal — mealId is null, title comes
-    // straight from oEmbed. The card must stay fully usable without it.
-    title: 'Kikkererwtencurry uit één pan',
-    authorName: 'ovenbakkers',
-    oembedFetchedAt: '2026-08-21T07:00:00.000Z',
-    mealId: null,
-    publishedAt: '2026-08-19T18:00:00.000Z',
-    removedAt: null,
-  },
-  {
-    id: 'feed-4',
-    creatorId: 'creator-4',
-    sourceUrl: 'https://www.tiktok.com/@oudeaccount/video/000003',
-    sourcePlatform: 'tiktok',
-    thumbnailUrl: 'https://picsum.photos/seed/remy-oud-account/720/1280',
-    title: 'Oude video',
-    authorName: 'oudeaccount',
-    oembedFetchedAt: '2026-07-01T07:00:00.000Z',
-    mealId: null,
-    publishedAt: '2026-06-01T18:00:00.000Z',
-    removedAt: null,
-  },
-  {
-    // PD-007a demo: `meal-2` ("Pasta pesto")'s ingredientTags include
-    // 'noten', which collides with fixtureRestrictions' allergen entry
-    // ('noten', member-1). This item is expected to (a) rank below the
-    // non-colliding items via src/domain/feed/ranking.ts's
-    // RESTRICTION_COLLISION_WEIGHT and (b) still be servable and visibly
-    // labelled on its card, per PD-007a's "rank down AND label, do not
-    // hide" — never filtered out.
-    id: 'feed-5',
-    creatorId: 'creator-5',
-    sourceUrl: 'https://www.tiktok.com/@snellepastas/video/000004',
-    sourcePlatform: 'tiktok',
-    thumbnailUrl: 'https://picsum.photos/seed/remy-pasta-pesto-noten/720/1280',
-    title: 'Romige pastapesto met pijnboompitten',
-    authorName: 'snellepastas',
-    oembedFetchedAt: '2026-08-22T07:00:00.000Z',
-    mealId: 'meal-2',
-    publishedAt: '2026-08-20T18:00:00.000Z',
-    removedAt: null,
-  },
-];
-
-const fixtureFeedCreatorsById = new Map(fixtureFeedCreators.map((creator) => [creator.id, creator] as const));
-const fixtureMealsById = new Map(fixtureMeals.map((meal) => [meal.id, meal] as const));
-
-/**
- * Built once and reused by both calls below so `fixtureFeedItems` and
- * `fixtureFeedCollidingTagsByItemId` are guaranteed to agree on the exact
- * same servable items/household/target date — two independent requests
- * that happened to diverge would reintroduce the exact drift PD-007a
- * exists to prevent (see ranking.ts's file header on why the two calls
- * are additive/separate in the first place, rather than one combined
- * return shape).
- */
-const feedRankingRequest: FeedRankingRequest = {
-  household: fixtureHousehold,
-  members: fixtureMembers,
-  restrictions: fixtureRestrictions,
-  items: filterServableFeedItems(fixtureFeedItemsRaw, fixtureFeedCreatorsById),
-  mealsById: fixtureMealsById,
-  targetDate: '2026-08-22',
-};
-
-/**
- * The Feed screen's actual data source: `fixtureFeedItemsRaw` run through
- * the real eligibility gate (src/domain/feed/eligibility.ts) exactly as a
- * live Supabase-backed repository would — `feed-4` (an opted-out creator)
- * never survives this, even though it's listed above. Ranking
- * (src/domain/feed/ranking.ts) then orders what's left for cookability
- * (PD-004: save-to-cook, never dwell time), not engagement.
- */
-export const fixtureFeedItems: readonly FeedItem[] = rankFeedItems(feedRankingRequest);
-
-/**
- * PD-007a: which of each servable feed item's linked meal's tags collide
- * with the fixture household's restrictions, keyed by feed item id — the
- * same `feedRankingRequest` that produced `fixtureFeedItems`' order, so a
- * card's "Bevat noten" label can never say something different from what
- * already ranked it down. Missing from the map, or mapped to `[]`, means
- * "no collision found OR no linked meal to check" — see
- * src/domain/feed/ranking.ts's file header on why a caller that cares
- * about that distinction must check `item.mealId` separately.
- */
-export const fixtureFeedCollidingTagsByItemId: ReadonlyMap<FeedItemId, readonly string[]> =
-  getCollidingTagsByFeedItem(feedRankingRequest);
 
 // ---------------------------------------------------------------------------
 // Meal steps (Cook Mode)
@@ -513,4 +336,61 @@ export const fixturePendingOutcomeDecision: Decision | null = {
   respondedAt: '2026-08-21T16:04:00.000Z',
 };
 
-export const fixtureCookEvents: readonly CookEvent[] = [];
+/**
+ * `meal-4` (Stamppot boerenkool) was cooked once already — the "al
+ * gekookt" demo case for "Mijn recepten" (src/app/(tabs)/recipes.tsx).
+ * `wouldRepeat: true` mirrors OutcomeCard's "Ja, graag" answer.
+ */
+export const fixtureCookEvents: readonly CookEvent[] = [
+  {
+    id: 'cook-event-1',
+    householdId: 'household-1',
+    mealId: 'meal-4',
+    decisionId: null,
+    cookedOn: '2026-08-10',
+    wouldRepeat: true,
+    createdAt: '2026-08-10T19:30:00.000Z',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Saves — scheduling intent per meal (PD-004's "when?" prompt)
+//
+// "Mijn recepten" (src/app/(tabs)/recipes.tsx) reads these, together with
+// fixtureCookEvents above, to show each recipe's real scheduling state
+// (deze week / ooit / al gekookt) rather than a flat archive — see
+// src/components/recipeScheduling.ts for the precedence rule (cooked beats
+// an active save, "this_week" beats "someday").
+// ---------------------------------------------------------------------------
+
+export const fixtureSaves: readonly Save[] = [
+  {
+    id: 'save-1',
+    householdId: 'household-1',
+    memberId: 'member-1',
+    mealId: 'meal-1',
+    intent: 'this_week',
+    sourceUrl: null,
+    savedAt: '2026-08-19T08:00:00.000Z',
+  },
+  {
+    // The meal-7 import-flow demo (see fixtureMeals above): saved with
+    // "Deze week" on the SaveIntentSheet at the end of the import flow.
+    id: 'save-2',
+    householdId: 'household-1',
+    memberId: 'member-2',
+    mealId: 'meal-7',
+    intent: 'this_week',
+    sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/000005',
+    savedAt: '2026-08-21T19:05:00.000Z',
+  },
+  {
+    id: 'save-3',
+    householdId: 'household-1',
+    memberId: 'member-1',
+    mealId: 'meal-5',
+    intent: 'someday',
+    sourceUrl: null,
+    savedAt: '2026-08-05T20:00:00.000Z',
+  },
+];

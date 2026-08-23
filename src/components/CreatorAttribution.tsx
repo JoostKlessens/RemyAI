@@ -1,20 +1,25 @@
 /**
- * Feed card creator attribution (docs/PRODUCT-DECISIONS.md PD-007.2):
- * every card names the creator's handle, source platform, and links to
- * their profile. Deliberately built to read as a credit line — an
- * avatar-initial chip plus a name, styled like MemberRow's household-
- * member rows — rather than small print bolted on as a footer. Lives
- * inside FeedVideoCard's video scrim, so every colour here comes from
- * `onScrimColors`, not the scheme-dependent token set.
+ * Creator attribution row (docs/PRODUCT-DECISIONS.md PD-007.2): names the
+ * creator's handle, source platform, and links to their profile.
+ * Deliberately built to read as a credit line — an avatar-initial chip
+ * plus a name, styled like MemberRow's household-member rows — rather than
+ * small print bolted on as a footer.
+ *
+ * Originally rendered inside the Feed's video scrim (hence a now-removed
+ * on-scrim colour treatment). After the Feed was removed this survives as
+ * the import confirmation screen's "this recipe still belongs to a
+ * creator" credit line (src/app/import/confirm.tsx) — a normal surface,
+ * not a video overlay — so it now uses the scheme-dependent token set like
+ * every other row in the app, the same pattern MemberRow already uses for
+ * its avatar-initial chip.
  */
 
 import { Feather } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Creator } from '@/domain/feed/types';
-import { radii, spacing, typeScale } from '@/theme/tokens';
-import { buildProfileAccessibilityLabel, getPlatformDisplayName } from './feedPresentation';
-import { onScrimColors } from './onScrimColors';
-import { useOpenFeedLink } from './useOpenFeedLink';
+import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
+import { buildProfileAccessibilityLabel, getPlatformDisplayName } from './creatorPresentation';
+import { useOpenExternalLink } from './useOpenExternalLink';
 
 export interface CreatorAttributionProps {
   readonly creator: Creator;
@@ -22,9 +27,11 @@ export interface CreatorAttributionProps {
 
 export function CreatorAttribution(props: CreatorAttributionProps): JSX.Element {
   const { creator } = props;
+  const scheme = useColorScheme();
+  const colors = getColors(scheme);
   const platformName = getPlatformDisplayName(creator.platform);
   const initial = creator.displayName.trim().charAt(0).toUpperCase() || '?';
-  const { status, open } = useOpenFeedLink(`Kon het profiel van ${creator.handle} niet openen`);
+  const { status, open } = useOpenExternalLink(`Kon het profiel van ${creator.handle} niet openen`);
   const hasFailed = status === 'failed';
 
   return (
@@ -38,16 +45,19 @@ export function CreatorAttribution(props: CreatorAttributionProps): JSX.Element 
       style={styles.row}
       hitSlop={4}
     >
-      <View style={[styles.avatar, { backgroundColor: onScrimColors.accentChip }]}>
-        <Text style={[typeScale.bodySmall, { color: onScrimColors.accentChipText }]}>{initial}</Text>
+      {/* A3: accentOnMuted, not accent — accent only clears 3:1 against
+          accentMuted (a fill), these initials are text and need 4.5:1,
+          matching MemberRow's identical avatar-initial chip. */}
+      <View style={[styles.avatar, { backgroundColor: colors.accentMuted }]}>
+        <Text style={[typeScale.bodySmall, { color: colors.accentOnMuted }]}>{initial}</Text>
       </View>
       <View style={styles.identity}>
-        <Text style={[typeScale.title3, { color: onScrimColors.text }]}>{creator.displayName}</Text>
-        <Text style={[typeScale.caption, styles.handleRow, { color: onScrimColors.text }]}>
+        <Text style={[typeScale.title3, { color: colors.textPrimary }]}>{creator.displayName}</Text>
+        <Text style={[typeScale.caption, styles.handleRow, { color: colors.textMuted }]}>
           {hasFailed ? `@${creator.handle} · opnieuw proberen` : `@${creator.handle} · ${platformName}`}
         </Text>
       </View>
-      <Feather name="external-link" size={16} color={onScrimColors.text} />
+      <Feather name="external-link" size={16} color={colors.textMuted} />
     </Pressable>
   );
 }

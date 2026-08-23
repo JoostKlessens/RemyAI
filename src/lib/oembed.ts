@@ -60,6 +60,14 @@ export interface OembedPayload {
   readonly thumbnailUrl: string | null;
   readonly title: string | null;
   readonly authorName: string | null;
+  /**
+   * The creator's profile URL. Both TikTok and Instagram return this as
+   * `author_url`. It is carried because attribution without a link back to
+   * the creator is weak attribution — and a display name cannot be turned
+   * into a profile URL reliably, since an oEmbed `author_name` is not a
+   * URL-safe handle.
+   */
+  readonly authorUrl: string | null;
 }
 
 /** Discriminated union result, matching the style of src/domain/types.ts's `DecisionResult`. */
@@ -173,6 +181,7 @@ function parseOembedPayload(raw: unknown): OembedPayload | null {
     thumbnailUrl: readOptionalString(raw.thumbnail_url),
     title: readOptionalString(raw.title),
     authorName: readOptionalString(raw.author_name),
+    authorUrl: readOptionalString(raw.author_url),
   };
   const isEntirelyEmpty = payload.thumbnailUrl === null && payload.title === null && payload.authorName === null;
   return isEntirelyEmpty ? null : payload;

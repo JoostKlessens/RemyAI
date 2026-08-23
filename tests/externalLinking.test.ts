@@ -1,19 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { Linking } from 'react-native';
-import { getPlatformDisplayName } from '@/components/feedPresentation';
-import { openFeedSourceUrl } from '@/components/feedLinking';
+import { openExternalUrl } from '@/components/externalLinking';
 
-describe('getPlatformDisplayName', () => {
-  test('maps tiktok to TikTok', () => {
-    expect(getPlatformDisplayName('tiktok')).toBe('TikTok');
-  });
-
-  test('maps instagram to Instagram', () => {
-    expect(getPlatformDisplayName('instagram')).toBe('Instagram');
-  });
-});
-
-describe('openFeedSourceUrl', () => {
+describe('openExternalUrl', () => {
   const originalCanOpenURL = Linking.canOpenURL;
   const originalOpenURL = Linking.openURL;
 
@@ -33,7 +22,7 @@ describe('openFeedSourceUrl', () => {
     Linking.openURL = async () => {};
 
     // Act
-    const result = await openFeedSourceUrl('https://www.tiktok.com/@kokenmetkees/video/000001');
+    const result = await openExternalUrl('https://www.tiktok.com/@kokenmetkees/video/000001');
 
     // Assert
     expect(result).toBe('opened');
@@ -48,7 +37,7 @@ describe('openFeedSourceUrl', () => {
     };
 
     // Act
-    const result = await openFeedSourceUrl('https://www.instagram.com/reel/voorbeeld002');
+    const result = await openExternalUrl('https://www.instagram.com/plantaardigpauline');
 
     // Assert
     expect(result).toBe('unsupported');
@@ -63,7 +52,7 @@ describe('openFeedSourceUrl', () => {
     };
 
     // Act
-    const result = await openFeedSourceUrl('https://www.tiktok.com/@kokenmetkees/video/000001');
+    const result = await openExternalUrl('https://www.tiktok.com/@kokenmetkees/video/000001');
 
     // Assert
     expect(result).toBe('failed');
@@ -76,7 +65,7 @@ describe('openFeedSourceUrl', () => {
     };
 
     // Act
-    const result = await openFeedSourceUrl('https://www.tiktok.com/@kokenmetkees/video/000001');
+    const result = await openExternalUrl('https://www.tiktok.com/@kokenmetkees/video/000001');
 
     // Assert
     expect(result).toBe('failed');

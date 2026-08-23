@@ -1,0 +1,143 @@
+import { describe, expect, test } from 'vitest';
+import { validateParsedRecipe } from '@/domain/import/validateParsed';
+
+const VALID_RAW = {
+  title: 'Traybake met kip en citroen',
+  ingredients: [
+    { name: 'Kipfilet', quantity: '300', unit: 'g' },
+    { name: 'Citroen', quantity: '1', unit: null },
+  ],
+  steps: ['Oven voorverwarmen op 200 graden.', 'Alles 25 minuten roosteren.'],
+  estimatedMinutes: 25,
+  servings: 4,
+};
+
+describe('validateParsedRecipe — valid shapes', () => {
+  test('accepts a fully populated, well-formed recipe', () => {
+    expect(validateParsedRecipe(VALID_RAW)).toEqual(VALID_RAW);
+  });
+
+  test('trims a title with surrounding whitespace', () => {
+    const result = validateParsedRecipe({ ...VALID_RAW, title: '  Traybake  ' });
+    expect(result?.title).toBe('Traybake');
+  });
+
+  test('treats a missing quantity/unit key on an ingredient as null', () => {
+    const result = validateParsedRecipe({
+      ...VALID_RAW,
+      ingredients: [{ name: 'Zout' }],
+    });
+    expect(result?.ingredients).toEqual([{ name: 'Zout', quantity: null, unit: null }]);
+  });
+
+  test('treats explicit null quantity/unit as null', () => {
+    const result = validateParsedRecipe({
+      ...VALID_RAW,
+      ingredients: [{ name: 'Zout', quantity: null, unit: null }],
+    });
+    expect(result?.ingredients).toEqual([{ name: 'Zout', quantity: null, unit: null }]);
+  });
+
+  test('treats missing estimatedMinutes/servings keys as null', () => {
+    const { estimatedMinutes: _m, servings: _s, ...withoutOptionalFields } = VALID_RAW;
+    const result = validateParsedRecipe(withoutOptionalFields);
+    expect(result?.estimatedMinutes).toBeNull();
+    expect(result?.servings).toBeNull();
+  });
+
+  test('ignores unknown extra fields on the raw object', () => {
+    const result = validateParsedRecipe({ ...VALID_RAW, extraField: 'should be ignored', confidence: 0.9 });
+    expect(result).toEqual(VALID_RAW);
+  });
+});
+
+describe('validateParsedRecipe — rejects malformed shapes (never a half-populated recipe)', () => {
+  test('rejects a non-object root value', () => {
+    expect(validateParsedRecipe('just a string')).toBeNull();
+    expect(validateParsedRecipe(42)).toBeNull();
+    expect(validateParsedRecipe(null)).toBeNull();
+    expect(validateParsedRecipe(undefined)).toBeNull();
+    expect(validateParsedRecipe([])).toBeNull();
+  });
+
+  test('rejects a missing title', () => {
+    const { title: _title, ...withoutTitle } = VALID_RAW;
+    expect(validateParsedRecipe(withoutTitle)).toBeNull();
+  });
+
+  test('rejects a blank/whitespace-only title', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, title: '   ' })).toBeNull();
+  });
+
+  test('rejects a non-string title', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, title: 123 })).toBeNull();
+  });
+
+  test('rejects a missing ingredients array', () => {
+    const { ingredients: _ingredients, ...withoutIngredients } = VALID_RAW;
+    expect(validateParsedRecipe(withoutIngredients)).toBeNull();
+  });
+
+  test('rejects an empty ingredients array (structurally recipe-shaped but substantively empty)', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, ingredients: [] })).toBeNull();
+  });
+
+  test('rejects ingredients that is not an array', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, ingredients: 'kip, citroen' })).toBeNull();
+  });
+
+  test('rejects an ingredient missing a name', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, ingredients: [{ quantity: '1', unit: 'stuk' }] })).toBeNull();
+  });
+
+  test('rejects an ingredient with a non-string quantity (e.g. a bare number)', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, ingredients: [{ name: 'Citroen', quantity: 1 }] })).toBeNull();
+  });
+
+  test('rejects an ingredient with a non-string unit', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, ingredients: [{ name: 'Citroen', unit: 5 }] })).toBeNull();
+  });
+
+  test('rejects a missing steps array', () => {
+    const { steps: _steps, ...withoutSteps } = VALID_RAW;
+    expect(validateParsedRecipe(withoutSteps)).toBeNull();
+  });
+
+  test('rejects an empty steps array', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, steps: [] })).toBeNull();
+  });
+
+  test('rejects steps that is not an array', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, steps: 'do the thing' })).toBeNull();
+  });
+
+  test('rejects a non-string step entry', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, steps: ['Roast it', 42] })).toBeNull();
+  });
+
+  test('rejects a blank step entry', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, steps: ['Roast it', '   '] })).toBeNull();
+  });
+
+  test('rejects a non-integer estimatedMinutes', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, estimatedMinutes: 25.5 })).toBeNull();
+  });
+
+  test('rejects a zero or negative estimatedMinutes', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, estimatedMinutes: 0 })).toBeNull();
+    expect(validateParsedRecipe({ ...VALID_RAW, estimatedMinutes: -5 })).toBeNull();
+  });
+
+  test('rejects a non-numeric estimatedMinutes', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, estimatedMinutes: '25' })).toBeNull();
+  });
+
+  test('rejects a zero or negative servings', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, servings: 0 })).toBeNull();
+    expect(validateParsedRecipe({ ...VALID_RAW, servings: -1 })).toBeNull();
+  });
+
+  test('rejects a non-numeric servings', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, servings: '4 personen' })).toBeNull();
+  });
+});
