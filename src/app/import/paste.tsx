@@ -5,8 +5,18 @@
  * so an obviously unsupported link fails instantly with no spinner at all.
  * Only a URL that passes that check goes on to the (fixture-backed) parse
  * step, which genuinely takes several seconds in the real system (an oEmbed
- * round trip plus an LLM call) — the loading state says so explicitly,
- * rather than a bare spinner that could resolve into nothing.
+ * round trip plus an LLM call).
+ *
+ * **The loading state is the point of this screen** (docs/DESIGN.md §3):
+ * three checkpoint rows — "Video gevonden" → "Bijschrift gelezen" →
+ * "Recept samengesteld" — each an unfilled-`border`-to-filled-`accent`
+ * circle. The first two advance on a short fixed timer purely to narrate
+ * progress; the third is NEVER completed by a timer — it only reflects the
+ * real result arriving, which is why `runImport` transitions straight to
+ * navigation/failure the instant that happens rather than ever setting a
+ * "checkpoint 3 filled" state to render. If the real call runs long, the
+ * second row simply stays lit — calm waiting, not a spinner resolving into
+ * nothing.
  *
  * Every non-`parsed` `ImportResult` renders its own honest failure state
  * (ImportFailureState) with a distinct recovery path; manual entry is
@@ -14,12 +24,12 @@
  * `no_recipe_in_caption` specifically being the common case, not an edge
  * case.
  *
- * A `__DEV__`-only scenario row (mirroring the one on Vanavond/the former
- * Feed) lets every `ImportResult` kind be exercised on device without a
- * backend; it never renders in production builds.
+ * A `__DEV__`-only scenario row (mirroring the one on Kiezen) lets every
+ * `ImportResult` kind be exercised on device without a backend; it never
+ * renders in production builds.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Feather } from '@expo/vector-icons';
@@ -45,6 +55,11 @@ import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 type PastePhase = 'idle' | 'loading';
 type DevScenarioValue = FixtureImportScenario | 'unsupported_url' | 'normal';
+/** How many of the first two checkpoint rows are filled — the third is never driven by this, see the file header. */
+type LoadingCheckpoint = 0 | 1 | 2;
+
+const CHECKPOINT_ONE_DELAY_MS = 500;
+const CHECKPOINT_TWO_DELAY_MS = 1400;
 
 interface FailedAttemptContext {
   readonly result: ImportFailureResult;
@@ -58,6 +73,8 @@ interface ConfirmNavigationContext {
   readonly authorName: string | null;
   readonly normalizedUrl: string | null;
   readonly platform: ImportPlatform | null;
+  /** oEmbed's thumbnail, when one was found — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Always null for manual entry. */
+  readonly thumbnailUrl: string | null;
 }
 
 export default function ImportPasteScreen(): JSX.Element {
@@ -68,6 +85,17 @@ export default function ImportPasteScreen(): JSX.Element {
   const [url, setUrl] = useState('');
   const [phase, setPhase] = useState<PastePhase>('idle');
   const [failedAttempt, setFailedAttempt] = useState<FailedAttemptContext | null>(null);
+  const [loadingCheckpoint, setLoadingCheckpoint] = useState<LoadingCheckpoint>(0);
+  const checkpointTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const clearCheckpointTimers = (): void => {
+    checkpointTimers.current.forEach(clearTimeout);
+    checkpointTimers.current = [];
+  };
+
+  // Never leave a timer running past this screen's lifetime — e.g. the
+  // user navigates back mid-import.
+  useEffect(() => clearCheckpointTimers, []);
 
   const navigateToConfirm = (mode: 'parsed' | 'manual', context: ConfirmNavigationContext): void => {
     router.push({
@@ -79,6 +107,7 @@ export default function ImportPasteScreen(): JSX.Element {
           sourceUrl: context.normalizedUrl,
           platform: context.platform,
           authorName: context.authorName,
+          thumbnailUrl: context.thumbnailUrl,
         }),
       },
     });
@@ -87,7 +116,17 @@ export default function ImportPasteScreen(): JSX.Element {
   const runImport = (normalizedUrl: string, platform: ImportPlatform): void => {
     setFailedAttempt(null);
     setPhase('loading');
+    setLoadingCheckpoint(0);
+    clearCheckpointTimers();
+    // Checkpoints 1/2 narrate progress on a short fixed timer — never
+    // checkpoint 3, which only ever reflects the real promise below
+    // settling (see the file header).
+    checkpointTimers.current = [
+      setTimeout(() => setLoadingCheckpoint(1), CHECKPOINT_ONE_DELAY_MS),
+      setTimeout(() => setLoadingCheckpoint(2), CHECKPOINT_TWO_DELAY_MS),
+    ];
     resolveFixtureImportResult(normalizedUrl, platform).then((attempt) => {
+      clearCheckpointTimers();
       setPhase('idle');
       if (attempt.result.kind === 'parsed') {
         AccessibilityInfo.announceForAccessibility('Recept gevonden.');
@@ -96,6 +135,7 @@ export default function ImportPasteScreen(): JSX.Element {
           authorName: attempt.authorName,
           normalizedUrl: attempt.result.sourceUrl,
           platform: attempt.result.platform,
+          thumbnailUrl: attempt.thumbnailUrl,
         });
         return;
       }
@@ -137,6 +177,10 @@ export default function ImportPasteScreen(): JSX.Element {
       authorName: failedAttempt?.authorName ?? null,
       normalizedUrl: failedAttempt?.normalizedUrl ?? null,
       platform: failedAttempt?.platform ?? null,
+      // Manual entry never carries a thumbnail — even when oEmbed had
+      // resolved one before the LLM step failed, a manually-typed recipe
+      // falls back to the library's monogram tile, per docs/DESIGN.md §2.
+      thumbnailUrl: null,
     });
   };
 
@@ -176,6 +220,7 @@ export default function ImportPasteScreen(): JSX.Element {
         authorName: attempt.authorName,
         normalizedUrl: attempt.result.sourceUrl,
         platform: attempt.result.platform,
+        thumbnailUrl: attempt.thumbnailUrl,
       });
       return;
     }
@@ -235,14 +280,11 @@ export default function ImportPasteScreen(): JSX.Element {
         </Pressable>
 
         {phase === 'loading' ? (
-          <View
-            style={[styles.loadingBlock, { backgroundColor: colors.surfaceSunken }]}
-            accessible
-            accessibilityLabel="Bezig met importeren"
-          >
-            <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>
-              Dit kan een paar seconden duren — Remy leest het bijschrift en zoekt het recept.
-            </Text>
+          <View style={styles.checkpointBlock}>
+            <CheckpointRow label="Video gevonden" filled={loadingCheckpoint >= 1} />
+            <CheckpointRow label="Bijschrift gelezen" filled={loadingCheckpoint >= 2} />
+            {/* Never driven by loadingCheckpoint/a timer — see the file header. */}
+            <CheckpointRow label="Recept samengesteld…" filled={false} />
           </View>
         ) : null}
 
@@ -277,6 +319,29 @@ export default function ImportPasteScreen(): JSX.Element {
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+/** One row of docs/DESIGN.md §3's loading checkpoint list — an unfilled `border` circle that fills solid `accent` once this step is done. */
+interface CheckpointRowProps {
+  readonly label: string;
+  readonly filled: boolean;
+}
+
+const TRANSPARENT_FILL = 'transparent';
+
+function CheckpointRow(props: CheckpointRowProps): JSX.Element {
+  const { label, filled } = props;
+  const scheme = useColorScheme();
+  const colors = getColors(scheme);
+  const circleColor = filled ? colors.accent : colors.border;
+  const circleFill = filled ? colors.accent : TRANSPARENT_FILL;
+
+  return (
+    <View style={styles.checkpointRow} accessible accessibilityLabel={`${label}${filled ? ', klaar' : ''}`}>
+      <View style={[styles.checkpointCircle, { borderColor: circleColor, backgroundColor: circleFill }]} />
+      <Text style={[typeScale.caption, { color: filled ? colors.textPrimary : colors.textMuted }]}>{label}</Text>
+    </View>
   );
 }
 
@@ -352,10 +417,23 @@ const styles = StyleSheet.create({
     minHeight: spacing.touchTargetMin,
     marginTop: spacing.space2,
   },
-  loadingBlock: {
-    borderRadius: radii.radiusMd,
-    padding: spacing.space4,
+  checkpointBlock: {
     marginTop: spacing.space5,
+    gap: spacing.space2,
+  },
+  checkpointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.space3,
+    paddingVertical: spacing.space1,
+  },
+  checkpointCircle: {
+    // A small status dot, not a spacing-scale size — mirrors
+    // TimerDisplay.tsx's own local CIRCLE_SIZE constant precedent.
+    width: 10,
+    height: 10,
+    borderRadius: radii.radiusFull,
+    borderWidth: 1.5,
   },
   failureBlock: {
     marginTop: spacing.space5,

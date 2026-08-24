@@ -1,5 +1,5 @@
 /**
- * The Vanavond action row. PD-001: "Iets anders" is capped at two swaps,
+ * The Kiezen action row. PD-001: "Iets anders" is capped at two swaps,
  * driven off `alternativesRemaining` from `DecisionResult`. At 0, the
  * affordance is replaced by "Ik kies zelf" — styled identically to the
  * secondary slot it replaces (never accent-filled, never the primary
@@ -40,7 +40,7 @@ export function VanavondActionRow(props: VanavondActionRowProps): JSX.Element {
           label="Ik kies zelf"
           variant="secondary"
           onPress={onChooseSelf}
-          accessibilityLabel="Ik kies zelf, open Mijn recepten"
+          accessibilityLabel="Ik kies zelf, open Bibliotheek"
           accessibilityHint="Geen wissels meer beschikbaar vandaag"
         />
       )}

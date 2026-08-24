@@ -13,25 +13,36 @@
  * mechanical: same `ImportResult` shape out, nothing in src/app/import's
  * screens changes.
  *
- * `authorName` is carried as a sidecar alongside `ImportResult`, not
- * inside it: the real edge function's HTTP response is `ImportResult`
- * exactly, and that type has no creator/attribution field (oEmbed's
- * authorName is consumed server-side only, to build the extraction
- * prompt — see buildExtractionRequest.ts). A real client wiring would get
- * `authorName` the same way this fixture models it: from its own
- * oEmbed-shaped resolution step, independent of the parse-recipe call —
- * see src/components/creatorFromAttribution.ts for where it's used.
- * `authorName` is only ever non-null once (simulated) oEmbed succeeded,
- * matching supabase/functions/parse-recipe/index.ts's real ordering
- * (oEmbed resolves before the LLM is ever called) — `unsupported_url` and
- * `oembed_failed` never carry one.
+ * `authorName`/`thumbnailUrl` are carried as sidecars alongside
+ * `ImportResult`, mostly: the real edge function's HTTP response is
+ * `ImportResult` exactly, and every non-`parsed` variant has no creator/
+ * attribution field at all (oEmbed's authorName is consumed server-side
+ * only, to build the extraction prompt — see buildExtractionRequest.ts).
+ * A real client wiring would get both the same way this fixture models
+ * them: from its own oEmbed-shaped resolution step, independent of the
+ * parse-recipe call — see src/components/creatorFromAttribution.ts for
+ * where `authorName` is used. Both are only ever non-null once (simulated)
+ * oEmbed succeeded, matching supabase/functions/parse-recipe/index.ts's
+ * real ordering (oEmbed resolves before the LLM is ever called) —
+ * `unsupported_url` and `oembed_failed` never carry either.
+ *
+ * The `parsed` variant is the one exception: `ImportResult.parsed`
+ * DOES carry an `attribution?: ImportAttribution` field (src/domain/
+ * import/types.ts), and that field's own doc comment says a future
+ * `_fixtures.ts` update should populate it for real rather than leaving it
+ * `undefined` — this is that update. `authorName`/`thumbnailUrl` stay
+ * available as sidecars too (paste.tsx already reads them uniformly across
+ * every scenario, success or failure), so nothing downstream needs two
+ * different code paths for "where did this come from."
  */
 
-import type { ImportPlatform, ImportResult, ParsedRecipe } from '@/domain/import/types';
+import type { ImportAttribution, ImportPlatform, ImportResult, ParsedRecipe } from '@/domain/import/types';
 
 export interface FixtureImportAttempt {
   readonly result: ImportResult;
   readonly authorName: string | null;
+  /** oEmbed's thumbnail, when (simulated) oEmbed succeeded. Null for `oembed_failed`, and for TikTok/Instagram fixtures deliberately built to demo the no-thumbnail library fallback (docs/DESIGN.md §2). */
+  readonly thumbnailUrl: string | null;
 }
 
 const SAMPLE_RECIPE_TIKTOK: ParsedRecipe = {
@@ -79,6 +90,25 @@ const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
   instagram: 'plantaardigpauline',
 };
 
+/**
+ * Deliberately asymmetric: the TikTok fixture has a thumbnail (the common
+ * case), the Instagram fixture doesn't — a real, honest example of oEmbed
+ * succeeding (title/author present, so this isn't `missing_credentials`)
+ * while genuinely returning no `thumbnail_url` (see src/lib/oembed.ts's
+ * `parseOembedPayload`, which only requires ONE of the three non-thumbnail
+ * fields to treat a payload as valid). This exercises Bibliotheek's
+ * monogram fallback (docs/DESIGN.md §2) on a `parsed` result without
+ * inventing a fake failure mode to demo it.
+ */
+const SAMPLE_THUMBNAIL_BY_PLATFORM: Readonly<Record<ImportPlatform, string | null>> = {
+  tiktok: 'https://p16-sign.tiktokcdn.com/traybake-kip-citroen~tplv-thumb.jpg',
+  instagram: null,
+};
+
+function buildAuthorUrl(platform: ImportPlatform, authorName: string): string {
+  return platform === 'tiktok' ? `https://www.tiktok.com/@${authorName}` : `https://www.instagram.com/${authorName}`;
+}
+
 export type FixtureImportScenario =
   | 'parsed'
   | 'no_recipe_in_caption'
@@ -114,28 +144,42 @@ export function buildFixtureImportAttempt(
   normalizedUrl: string,
 ): FixtureImportAttempt {
   const authorName = AUTHOR_NAME_BY_PLATFORM[platform];
+  const thumbnailUrl = SAMPLE_THUMBNAIL_BY_PLATFORM[platform];
   switch (scenario) {
-    case 'parsed':
+    case 'parsed': {
+      const attribution: ImportAttribution = {
+        authorName,
+        authorUrl: buildAuthorUrl(platform, authorName),
+        thumbnailUrl,
+      };
       return {
         result: {
           kind: 'parsed',
           recipe: platform === 'tiktok' ? SAMPLE_RECIPE_TIKTOK : SAMPLE_RECIPE_INSTAGRAM,
           sourceUrl: normalizedUrl,
           platform,
+          attribution,
         },
         authorName,
+        thumbnailUrl,
       };
+    }
     case 'no_recipe_in_caption':
-      return { result: { kind: 'no_recipe_in_caption', caption: SAMPLE_CAPTION_WITHOUT_RECIPE }, authorName };
+      return {
+        result: { kind: 'no_recipe_in_caption', caption: SAMPLE_CAPTION_WITHOUT_RECIPE },
+        authorName,
+        thumbnailUrl,
+      };
     case 'oembed_failed':
       return {
         result: { kind: 'oembed_failed', reason: platform === 'instagram' ? 'missing_credentials' : 'not_found' },
         authorName: null,
+        thumbnailUrl: null,
       };
     case 'llm_request_failed':
-      return { result: { kind: 'llm_request_failed' }, authorName };
+      return { result: { kind: 'llm_request_failed' }, authorName, thumbnailUrl };
     case 'parse_failed':
-      return { result: { kind: 'parse_failed' }, authorName };
+      return { result: { kind: 'parse_failed' }, authorName, thumbnailUrl };
     default: {
       const exhaustiveCheck: never = scenario;
       throw new Error(`Unhandled FixtureImportScenario: ${String(exhaustiveCheck)}`);

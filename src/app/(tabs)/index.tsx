@@ -1,18 +1,23 @@
 /**
- * Vanavond — the hero screen. One dish, one stated reason, three actions.
+ * Kiezen — the hero screen. One dish, one stated reason, three actions.
  * No list, no scroll, no browse affordance: this is the entire product
- * thesis. See docs/DESIGN.md §2 and docs/PRODUCT-DECISIONS.md.
+ * thesis. See docs/DESIGN.md §1 and docs/PRODUCT-DECISIONS.md.
  *
  * `DecisionResult` (src/domain/types.ts) is a discriminated union; every
  * branch below is switched on `kind`/`reason` explicitly so a blank
- * screen here is structurally impossible, not just unlikely.
+ * screen here is structurally impossible, not just unlikely. The
+ * `empty_rotation` branch is the genuinely common first-run case now: a
+ * fresh install seeds only a bare household (src/lib/repository/
+ * seedData.ts), no curated starter meals, so a household that hasn't
+ * pasted a single link yet reaches this branch honestly, not as an edge
+ * case — see NoCandidateState's own header.
  *
  * A small `__DEV__`-only scenario row at the top lets every state
  * (normal swap flow, each `no_candidate` reason, network error) be
- * exercised on device without a backend — it never renders in production
- * builds and does not affect the centered hero layout below it. Only
- * `devScenario === 'normal'` drives the real pipeline below; every other
- * scenario still renders from the fixture data, exactly as before.
+ * exercised on device without needing a real seeded household — it never
+ * renders in production builds and does not affect the centered hero
+ * layout below it. Only `devScenario === 'normal'` drives the real
+ * pipeline below; every other scenario still renders from fixture data.
  *
  * The "normal" path: load this household's real data through
  * `RemyRepository`, call the pure `decide()` engine (src/domain/decide.ts)
@@ -60,7 +65,7 @@ import type {
 } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
-import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
+import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
 type VanavondView = 'decision' | 'declined';
@@ -182,6 +187,12 @@ export default function VanavondScreen(): JSX.Element {
   const [pendingOutcomeDecision, setPendingOutcomeDecision] = useState<Decision | null>(null);
   const [pendingOutcomeMeal, setPendingOutcomeMeal] = useState<Meal | null>(null);
   const [pendingCookEventId, setPendingCookEventId] = useState<CookEventId | null>(null);
+  // docs/DESIGN.md §1: "on Ja, a hairline accent stroke draws under the
+  // dish name ... before navigating" — the grease-pencil circle landing.
+  // Navigation is deliberately delayed by that same duration so the stroke
+  // is actually visible; reduced motion collapses the delay to 0 via
+  // resolveDuration, same as the stroke animation itself.
+  const [isAccepting, setIsAccepting] = useState(false);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -193,6 +204,7 @@ export default function VanavondScreen(): JSX.Element {
         }
         setSession(nextSession);
         setExcludedMealIds([]);
+        setIsAccepting(false);
         setView(nextSession.decisionRow?.status === 'skipped' ? 'declined' : 'decision');
         setDeclineReason(nextSession.decisionRow?.declineReason ?? null);
 
@@ -234,6 +246,10 @@ export default function VanavondScreen(): JSX.Element {
   const getMealById = (mealId: MealId): Meal | undefined => session?.mealById.get(mealId);
 
   const handleAccept = (result: Extract<DecisionResult, { kind: 'suggestion' }>): void => {
+    if (isAccepting) {
+      return;
+    }
+    setIsAccepting(true);
     if (devScenario === 'normal' && session?.decisionRow) {
       // Fire-and-forget: cooking must never be blocked by a local
       // bookkeeping write. A failure here is extremely unlikely (this is
@@ -242,7 +258,9 @@ export default function VanavondScreen(): JSX.Element {
       // unaffected, so it's not worth stalling navigation over.
       void getAppRepository().respondToDecision(session.decisionRow.id, { status: 'accepted' });
     }
-    router.push(`/cook/${result.mealId}`);
+    setTimeout(() => {
+      router.push(`/cook/${result.mealId}`);
+    }, resolveDuration(motion.durationFast, reduceMotionEnabled));
   };
 
   const handleRequestAlternative = (): void => {
@@ -274,8 +292,8 @@ export default function VanavondScreen(): JSX.Element {
   };
 
   const handleChooseSelf = (): void => {
-    // The Feed was removed as a product surface; "Mijn recepten" is the
-    // PD-001 escape hatch's new destination (see (tabs)/_layout.tsx).
+    // Bibliotheek is the PD-001 escape hatch's destination (see
+    // (tabs)/_layout.tsx) — browsing lives there, never on this screen.
     router.push('/recipes');
   };
 
@@ -301,8 +319,8 @@ export default function VanavondScreen(): JSX.Element {
     }
   };
 
-  const handleNavigateOnboarding = (): void => {
-    router.push('/onboarding/seed');
+  const handleOpenImport = (): void => {
+    router.push('/import/paste');
   };
 
   const handleRetry = (): void => {
@@ -347,6 +365,7 @@ export default function VanavondScreen(): JSX.Element {
               meal={getMealById(currentResult.mealId)}
               reduceMotionEnabled={reduceMotionEnabled}
               bottomInset={insets.bottom}
+              accepted={isAccepting}
               onAccept={() => handleAccept(currentResult)}
               onRequestAlternative={handleRequestAlternative}
               onChooseSelf={handleChooseSelf}
@@ -356,7 +375,7 @@ export default function VanavondScreen(): JSX.Element {
             <View style={styles.heroBlock}>
               <NoCandidateState
                 reason={currentResult.reason}
-                onNavigateOnboarding={handleNavigateOnboarding}
+                onOpenImport={handleOpenImport}
                 onOpenRecipes={handleChooseSelf}
                 onDecline={handleDecline}
               />
@@ -395,6 +414,8 @@ interface SuggestionViewProps {
   readonly meal: Meal | undefined;
   readonly reduceMotionEnabled: boolean;
   readonly bottomInset: number;
+  /** True the instant "Ja" is tapped, until navigation to Kookmodus — drives DecisionCard's accept stroke (docs/DESIGN.md §1). */
+  readonly accepted: boolean;
   readonly onAccept: () => void;
   readonly onRequestAlternative: () => void;
   readonly onChooseSelf: () => void;
@@ -402,7 +423,7 @@ interface SuggestionViewProps {
 }
 
 function SuggestionView(props: SuggestionViewProps): JSX.Element {
-  const { result, meal, reduceMotionEnabled, bottomInset, onAccept, onRequestAlternative, onChooseSelf, onDecline } =
+  const { result, meal, reduceMotionEnabled, bottomInset, accepted, onAccept, onRequestAlternative, onChooseSelf, onDecline } =
     props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
@@ -416,6 +437,7 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
           estimatedMinutes={meal?.estimatedMinutes ?? null}
           servings={meal?.servings ?? null}
           reduceMotionEnabled={reduceMotionEnabled}
+          accepted={accepted}
         />
       </View>
       <View style={[styles.actionZone, { borderTopColor: colors.border, paddingBottom: spacing.space6 + bottomInset }]}>
@@ -437,7 +459,7 @@ function LoadingSkeleton(): JSX.Element {
 
   return (
     <View style={styles.heroBlock}>
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>VANAVOND</Text>
+      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>KIEZEN</Text>
       <View style={[styles.skeletonBar, { backgroundColor: colors.surfaceSunken }]} />
     </View>
   );

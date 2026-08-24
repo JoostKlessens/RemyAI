@@ -76,6 +76,7 @@ export function makeMeal(overrides: Partial<Meal> = {}): Meal {
     allergenTagStatus: 'verified',
     sourceUrl: null,
     sourcePlatform: null,
+    thumbnailUrl: null,
     archivedAt: null,
     createdAt: DEFAULT_CREATED_AT,
     ...overrides,

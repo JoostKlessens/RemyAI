@@ -16,6 +16,8 @@ export interface ImportConfirmParams {
   readonly sourceUrl: string | null;
   readonly platform: ImportPlatform | null;
   readonly authorName: string | null;
+  /** oEmbed's thumbnail, when parsing succeeded and one was returned — see Meal.thumbnailUrl (src/domain/types.ts). Always null in 'manual' mode. */
+  readonly thumbnailUrl: string | null;
 }
 
 export function encodeImportConfirmParams(params: ImportConfirmParams): string {
@@ -38,7 +40,14 @@ function isNullableString(value: unknown): value is string | null {
  * convention for router params.
  */
 export function decodeImportConfirmParams(raw: string | undefined): ImportConfirmParams {
-  const empty: ImportConfirmParams = { mode: 'manual', recipe: null, sourceUrl: null, platform: null, authorName: null };
+  const empty: ImportConfirmParams = {
+    mode: 'manual',
+    recipe: null,
+    sourceUrl: null,
+    platform: null,
+    authorName: null,
+    thumbnailUrl: null,
+  };
   if (raw === undefined) {
     return empty;
   }
@@ -50,6 +59,9 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
     if (!isNullableString(parsed.sourceUrl) || !isNullableString(parsed.authorName)) {
       return empty;
     }
+    if (!isNullableString(parsed.thumbnailUrl)) {
+      return empty;
+    }
     if (parsed.platform !== null && parsed.platform !== 'tiktok' && parsed.platform !== 'instagram') {
       return empty;
     }
@@ -58,7 +70,14 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
     // deep-validating it would duplicate validateParsed.ts's job for data
     // that already passed it once, server-side, before this screen ever saw it.
     const recipe = isRecord(parsed.recipe) ? (parsed.recipe as unknown as ParsedRecipe) : null;
-    return { mode: parsed.mode, recipe, sourceUrl: parsed.sourceUrl, platform: parsed.platform, authorName: parsed.authorName };
+    return {
+      mode: parsed.mode,
+      recipe,
+      sourceUrl: parsed.sourceUrl,
+      platform: parsed.platform,
+      authorName: parsed.authorName,
+      thumbnailUrl: parsed.thumbnailUrl,
+    };
   } catch {
     return empty;
   }

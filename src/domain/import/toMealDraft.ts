@@ -31,6 +31,14 @@ export interface MealDraftContext {
   /** The oEmbed-resolved URL actually used (`ImportResult.parsed.sourceUrl`) — carried straight through, never re-derived. */
   readonly sourceUrl: string;
   readonly platform: ImportPlatform;
+  /**
+   * `ImportAttribution.thumbnailUrl` (buildAttribution.ts), carried
+   * straight through — never re-derived or guessed. Null whenever oEmbed
+   * itself had no thumbnail to offer (Instagram without credentials, a
+   * 404/region-locked post, ...); the library must render a monogram
+   * fallback for that case, never a broken image.
+   */
+  readonly thumbnailUrl: string | null;
 }
 
 export interface MealIngredientDraft {
@@ -60,6 +68,8 @@ export interface MealDraftInsert {
   readonly allergenTagStatus: 'unknown';
   readonly sourceUrl: string;
   readonly sourcePlatform: 'tiktok' | 'reels';
+  /** See MealDraftContext.thumbnailUrl — carried straight through. */
+  readonly thumbnailUrl: string | null;
   readonly ingredients: readonly MealIngredientDraft[];
   readonly steps: readonly MealStepDraft[];
 }
@@ -104,6 +114,7 @@ export function toMealDraft(recipe: ParsedRecipe, context: MealDraftContext): Me
     allergenTagStatus: 'unknown',
     sourceUrl: context.sourceUrl,
     sourcePlatform: toMealSourcePlatform(context.platform),
+    thumbnailUrl: context.thumbnailUrl,
     ingredients: toIngredientDrafts(recipe),
     steps: toStepDrafts(recipe),
   };

@@ -1,20 +1,41 @@
 /**
  * Remy design tokens.
  *
- * Visual direction: "Instrument, not magazine." See docs/DESIGN.md for the
- * full rationale and per-screen specs. In short: flat colour fields, a
- * strict spacing grid, platform-native type for reading and a monospace
- * face for anything measured (time, quantities, counts). Colour is
- * rationed — one neutral palette carries ~95% of every screen, `accent`
- * (ember) appears only at the moment a choice is made, and `positive`
- * (moss) is reserved exclusively for completion so "decided" and "done"
- * never look the same.
+ * Visual direction: "The contact sheet, not the magazine." See
+ * docs/DESIGN.md for the full rationale and per-screen specs. In short:
+ * Remy is now a library of saved short-form video plus one decisive daily
+ * verdict, so the visual language borrows from a film editor's workbench —
+ * a proof sheet of saved takes, a grease-pencil circle around the one
+ * that's getting used tonight, burned-in timecode for anything measured or
+ * systemic. Two type voices, inverted from the old system: a warm grotesk
+ * (`fontFamily.sans*`) carries everything *read* — dish names, reasons,
+ * steps — and a monospace (`fontFamily.mono*`) now carries everything
+ * *systemic* — labels, buttons, captions, timers — not just numerals.
+ * Colour stays rationed exactly like before: one cool-neutral palette
+ * covers ~95% of every screen, a single marking-blue `accent` appears only
+ * at the moment a choice is made, and a separate green `positive` is
+ * reserved exclusively for completion, so "decided" and "done" never look
+ * the same.
  *
  * Every export here is a plain, frozen constant. Nothing in this file
  * depends on component state — screens read tokens, they never write them.
+ *
+ * IMPLEMENTATION REQUIREMENT for whoever wires this up: `fontFamily.*`
+ * below names specific pre-weighted Google Font exports from
+ * `@expo-google-fonts/archivo` and `@expo-google-fonts/ibm-plex-mono` (NOT
+ * bundled by default — add `expo-font` plus both packages). Each entry is
+ * already a *specific weight's* family name (e.g. `Archivo_700Bold`) —
+ * unlike the OS system font, a loaded custom font cannot be reliably
+ * bolded/weighted on the fly via the `fontWeight` style prop, so every
+ * `typeScale` entry pairs the correctly-pre-weighted family with a
+ * matching `fontWeight` for screen-reader/OS-level semantics, not for
+ * rendering. Because this file must stay a side-effect-free constant, it
+ * cannot itself gate on "are the fonts loaded yet" — that gate belongs in
+ * the app root: call `useFonts({...})` there and keep the splash screen
+ * mounted (`SplashScreen.preventAutoHideAsync()`) until it resolves, so by
+ * the time anything imports `typeScale` the fonts are guaranteed ready.
+ * See docs/DESIGN.md "Typography" for the exact package/version notes.
  */
-
-import { Platform } from 'react-native';
 
 // ---------------------------------------------------------------------------
 // Color
@@ -35,7 +56,7 @@ export interface ColorTokens {
   readonly surface: string;
   /** Sheets, modals, the outcome celebration card — the most elevated surface. */
   readonly surfaceRaised: string;
-  /** Recessed wells: unselected chips, text inputs, quick-pick grid cells. */
+  /** Recessed wells: unselected chips, text inputs, thumbnail grid gutters. */
   readonly surfaceSunken: string;
   /** Hairline dividers between rows/sections. Decorative only — not
    * checked against 3:1 (WCAG 1.4.11 doesn't apply to plain dividers).
@@ -55,36 +76,37 @@ export interface ColorTokens {
   /** De-emphasized text: helper copy, timestamps, disabled labels.
    * Verified >=4.5:1 against every surface token (background, surface,
    * surfaceSunken, surfaceRaised) in both schemes — see the contrast
-   * arithmetic in the A2 section of the frontend report. */
+   * arithmetic in the frontend report accompanying this revision. */
   readonly textMuted: string;
 
   /**
-   * The ember accent. Reserved for the single moment a choice is being
-   * made: the "Ja" button on Vanavond, the save-confirmation state on
-   * Feed. Never used as decoration or for more than one element at a time.
+   * The marking-blue accent — a flat, saturated cobalt, like the
+   * grease-pencil circle an editor draws around the take that's getting
+   * used. Reserved for the single moment a choice is being made: the "Ja"
+   * button on Kiezen, a selected allergen chip on Bevestigen. Never used
+   * as decoration or for more than one element at a time.
    */
   readonly accent: string;
   /** Text/icon color guaranteed to contrast against an `accent` fill. */
   readonly onAccent: string;
   /** Low-chroma tint of accent, for selected-chip backgrounds and badges.
-   * A FILL only — needs 3:1, which it has. Never draw text/icons directly
-   * in `accent` on top of this fill; use `accentOnMuted` for that. */
+   * A FILL only — needs 3:1 against an `accent` border/stroke drawn on top
+   * of it, which it has (see the frontend report). Never draw text/icons
+   * directly in `accent` on top of this fill; use `accentOnMuted`. */
   readonly accentMuted: string;
   /**
    * Text/icon color for content drawn ON TOP OF an `accentMuted` fill
-   * (selected chip label, selected segment label, avatar initials,
-   * consent checkmark). `accent` itself only clears 3:1 against
-   * `accentMuted` in light mode (fine for a fill/border, not for text) —
-   * `accentOnMuted` is a darker step of the same hue, verified >=4.5:1
-   * against `accentMuted`. Never use this against any other background.
+   * (selected chip label, avatar initials, the "deze week" badge label).
+   * A darker step of the same hue, verified >=4.5:1 against `accentMuted`
+   * in both schemes. Never use this against any other background.
    */
   readonly accentOnMuted: string;
 
   /**
-   * Moss green. Reserved exclusively for completion: "Gemaakt", streaks,
-   * success confirmations. Never reused for "decided" states — that's
-   * `accent`'s job. Keeping these separate is what stops "chosen" and
-   * "cooked" from blurring into the same visual language.
+   * Forest green. Reserved exclusively for completion: "Gemaakt", a
+   * verified allergen tag, streaks. Never reused for "decided" states —
+   * that's `accent`'s job. Keeping these separate is what stops "chosen"
+   * and "cooked" from blurring into the same visual language.
    */
   readonly positive: string;
   readonly onPositive: string;
@@ -96,101 +118,120 @@ export interface ColorTokens {
   readonly warningMuted: string;
 
   /** Form validation errors, destructive confirmations. Deliberately a
-   * different hue from `accent` (redder, less orange) so an error never
-   * reads as "the decision color". */
+   * different hue FAMILY from `accent` (red vs. blue, not two reds) so an
+   * error never reads as "the decision color". */
   readonly danger: string;
   readonly onDanger: string;
   readonly dangerMuted: string;
 
   /** Scrim behind sheets and modals. */
   readonly overlay: string;
-  /** Flat scrim behind video captions on Feed (transparent-to-solid, not a
-   * decorative color gradient). */
+  /** Flat scrim behind text overlaid on a Bibliotheek thumbnail (creator
+   * handle, "deze week"/"ooit" badge) — legibility only, transparent-to-
+   * solid, never a decorative color gradient. */
   readonly videoScrim: string;
+  /** Text/icon color for content drawn directly on the raw `videoScrim`
+   * wash (a dish title over a thumbnail) — deliberately the SAME light
+   * value in both schemes, unlike every other `onX` token, because
+   * `videoScrim` itself is a dark overlay in both light and dark mode (it
+   * sits on top of an arbitrary photo, not a theme-aware fill), so the
+   * text on it must stay light regardless of scheme. Never use this
+   * against any other background — it is not verified against anything
+   * but `videoScrim`. */
+  readonly onVideoScrim: string;
   /** Accessibility focus outline. */
   readonly focusRing: string;
 }
 
 const lightColors = {
-  background: '#F1F0EC',
-  surface: '#FBFAF7',
+  // Cool graphite/paper neutrals — a light table's plexi glow, not a warm
+  // cream. Deliberately NOT the "cream + serif + terracotta" AI-cliché
+  // palette: no yellow-beige cast anywhere in this scale.
+  background: '#E9EBEC',
+  surface: '#F4F5F6',
   surfaceRaised: '#FFFFFF',
-  surfaceSunken: '#E8E6DF',
-  border: '#DCDAD2',
-  // Retuned from #C7C4B9 (A9): the old value was 1.34-1.75:1 against the
-  // surface tokens, well under WCAG 1.4.11's 3:1 floor for interactive
-  // component boundaries. #817F78 clears >=3.21:1 against background,
-  // surface, surfaceSunken and surfaceRaised alike.
-  borderStrong: '#817F78',
+  surfaceSunken: '#DADDDF',
+  border: '#CBCFD1',
+  // Verified >=3.95:1 against all four neutral surfaces (worst case:
+  // surfaceSunken, 3.95:1; best case: surfaceRaised, 5.39:1) — clears
+  // WCAG 1.4.11's 3:1 floor for interactive component boundaries with
+  // margin to spare.
+  borderStrong: '#666B6F',
 
-  textPrimary: '#1C1B18',
-  textSecondary: '#514E45',
-  // Retuned from #8B8778 (A2): the old value was 2.88-3.60:1 against the
-  // surface tokens, below the 4.5:1 body-text floor everywhere it was
-  // used. #676351 clears >=4.83:1 against background, surface,
-  // surfaceSunken and surfaceRaised alike (worst case is surfaceSunken).
-  textMuted: '#676351',
+  textPrimary: '#14171A',
+  textSecondary: '#484D51',
+  // Verified >=5.11:1 against all four neutral surfaces (worst case:
+  // surfaceSunken; best case: surfaceRaised, 6.98:1) — clears the 4.5:1
+  // body-text floor everywhere it's used, with real margin.
+  textMuted: '#555A5E',
 
-  accent: '#C6491D',
-  onAccent: '#FBFAF7',
-  accentMuted: '#F2DDCE',
-  // A3: accent-on-accentMuted is only 3.66:1 in light mode — enough for a
-  // fill/border (3:1) but not for text/icons (4.5:1). #A83A15 is a
-  // darker step of the same hue, verified at 4.88:1 against accentMuted.
-  accentOnMuted: '#A83A15',
+  // Grease-pencil marking blue.
+  accent: '#1F4FA6',
+  onAccent: '#F5F7FA',
+  accentMuted: '#DCE6F5',
+  // accentOnMuted is a darker step of the same hue, verified at 8.69:1
+  // against accentMuted (the plain `accent` fill itself reads fine as a
+  // border/fill against accentMuted, but this token is specifically for
+  // TEXT on that fill, so it gets its own darker, higher-contrast step).
+  accentOnMuted: '#163A7A',
 
-  positive: '#2F5B3B',
-  onPositive: '#F2F7F1',
-  positiveMuted: '#DCE8DD',
+  positive: '#256B4A',
+  onPositive: '#F1F7F3',
+  positiveMuted: '#DCEBE2',
 
   warning: '#8A5A0A',
-  onWarning: '#FBF5E8',
-  warningMuted: '#F1E4C9',
+  onWarning: '#FBF3E4',
+  warningMuted: '#F1E3C4',
 
   danger: '#B3261E',
   onDanger: '#FBEDEC',
   dangerMuted: '#F5D9D6',
 
-  overlay: 'rgba(28, 27, 24, 0.5)',
-  videoScrim: 'rgba(15, 14, 12, 0.65)',
-  focusRing: '#C6491D',
+  overlay: 'rgba(10, 12, 14, 0.5)',
+  videoScrim: 'rgba(8, 10, 12, 0.68)',
+  // Same near-white value as darkColors.onVideoScrim, deliberately —
+  // videoScrim is dark in both schemes, so the text on it stays light in
+  // both too. >=15:1 against the scrim's own flattened tone, so it clears
+  // 4.5:1 regardless of what photo sits underneath at ~68% opacity.
+  onVideoScrim: '#F5F7FA',
+  focusRing: '#1F4FA6',
 } as const satisfies ColorTokens;
 
 const darkColors = {
-  // Warm charcoal, not pure #000 — closer to a cast-iron pan than an OLED
-  // "hacker" black. Never paired with a neon/acid accent.
-  background: '#171512',
-  surface: '#201D19',
-  surfaceRaised: '#2A2621',
-  surfaceSunken: '#0F0D0B',
-  border: '#3A352E',
-  // Retuned from #4C463C (A9): the old value was 1.61-2.08:1 against the
-  // surface tokens, below WCAG 1.4.11's 3:1 floor. #7C7262 clears
-  // >=3.18:1 against background, surface, surfaceSunken and surfaceRaised
-  // alike.
-  borderStrong: '#7C7262',
+  // Cool graphite, not warm charcoal and not OLED black — the edit bay
+  // with the safelight off, not a "hacker terminal". Never paired with a
+  // neon/acid accent; the only saturated colors below are the same
+  // marking-blue, forest-green, amber and coral used sparingly in light
+  // mode, just re-tuned for a dark ground rather than naively inverted.
+  background: '#121417',
+  surface: '#191C1F',
+  surfaceRaised: '#23272B',
+  surfaceSunken: '#0A0C0E',
+  border: '#33383D',
+  // Verified >=4.15:1 against all four neutral surfaces (worst case:
+  // surfaceRaised, the lightest of the four dark surfaces; best case:
+  // surfaceSunken, 5.41:1).
+  borderStrong: '#82878C',
 
-  textPrimary: '#F2EFE9',
-  textSecondary: '#C9C4B8',
-  // Retuned from #8E8879 (A2): the old value was 4.26:1 against
-  // surfaceRaised, below the 4.5:1 body-text floor. #9A9384 clears
-  // >=4.92:1 against background, surface, surfaceSunken and surfaceRaised
-  // alike (worst case is surfaceRaised).
-  textMuted: '#9A9384',
+  textPrimary: '#F1F2F0',
+  textSecondary: '#C7CBCE',
+  // Verified >=5.77:1 against all four neutral surfaces (worst case:
+  // surfaceRaised; best case: surfaceSunken, 7.52:1).
+  textMuted: '#9CA1A5',
 
   // Lightened/re-tuned for a dark ground, not a naive inversion of the
   // light-mode value.
-  accent: '#E2733B',
-  onAccent: '#1B1006',
-  accentMuted: '#3A2418',
-  // A3: unlike light mode, dark-mode accent-on-accentMuted already clears
-  // 4.67:1 against accentMuted — no separate darker step needed here, so
-  // accentOnMuted intentionally equals accent in this scheme.
-  accentOnMuted: '#E2733B',
+  accent: '#6C9BEF',
+  onAccent: '#0B1626',
+  accentMuted: '#1B2A44',
+  // Unlike light mode, a lighter step reads better than `accent` itself
+  // for text on this dark, desaturated fill — verified at 6.85:1 against
+  // accentMuted.
+  accentOnMuted: '#8FB4F5',
 
-  positive: '#6FA97D',
-  onPositive: '#0F1A12',
-  positiveMuted: '#1E2E22',
+  positive: '#6FBE93',
+  onPositive: '#08150F',
+  positiveMuted: '#16281F',
 
   warning: '#D9A544',
   onWarning: '#241804',
@@ -200,9 +241,11 @@ const darkColors = {
   onDanger: '#2B0906',
   dangerMuted: '#3A1512',
 
-  overlay: 'rgba(0, 0, 0, 0.6)',
-  videoScrim: 'rgba(0, 0, 0, 0.7)',
-  focusRing: '#E2733B',
+  overlay: 'rgba(0, 0, 0, 0.62)',
+  videoScrim: 'rgba(0, 0, 0, 0.72)',
+  // Same value as lightColors.onVideoScrim — see that field's comment.
+  onVideoScrim: '#F5F7FA',
+  focusRing: '#6C9BEF',
 } as const satisfies ColorTokens;
 
 export const colors = { light: lightColors, dark: darkColors } as const;
@@ -221,15 +264,28 @@ export function getColors(scheme: ColorScheme | null | undefined): ColorTokens {
 // ---------------------------------------------------------------------------
 
 /**
- * Two families only, both borrowed from the OS: the platform sans for
- * everything read, a monospace for anything measured (timers, quantities,
- * counts). No novelty display face — the interface never has to justify
- * its own font choice.
+ * Two families, inverted roles from the old system: `sans*` (Archivo) now
+ * carries everything READ — dish names, reasons, ingredient/step text —
+ * and `mono*` (IBM Plex Mono) carries everything SYSTEMIC — eyebrow
+ * labels, buttons, captions, meta rows, timers — read as "burned-in
+ * timecode," not just "numerals." Deliberately not Inter or Space
+ * Grotesk (the safe-default AI-app choice this revision explicitly
+ * avoids). Each entry below is a SPECIFIC pre-weighted Google Fonts
+ * export — see this file's header comment for why weight can't be
+ * synthesized at render time the way it can with the OS system font, and
+ * for the loading requirement this places on the app root.
+ *
+ * `sans`/`sansMedium`/`mono` keep their original names for compatibility;
+ * `sansBold` and `monoSemiBold` are new additions needed because the old
+ * system relied on the OS synthesizing bold from a single "sans" family
+ * via the `fontWeight` prop, which does not work for a loaded custom font.
  */
 export const fontFamily = {
-  sans: Platform.OS === 'android' ? 'sans-serif' : 'System',
-  sansMedium: Platform.OS === 'android' ? 'sans-serif-medium' : 'System',
-  mono: Platform.OS === 'android' ? 'monospace' : 'Menlo',
+  sans: 'Archivo_400Regular',
+  sansMedium: 'Archivo_600SemiBold',
+  sansBold: 'Archivo_700Bold',
+  mono: 'IBMPlexMono_500Medium',
+  monoSemiBold: 'IBMPlexMono_600SemiBold',
 } as const;
 
 export type FontWeightToken = '400' | '500' | '600' | '700';
@@ -291,26 +347,32 @@ export type TypeScaleKey =
  * in the component's layout math, not in the type contract.
  */
 export const typeScale: Record<TypeScaleKey, TypeStyle> = {
-  // Vanavond hero dish name. The one thing on the screen — earns the
-  // largest, tightest-tracked size in the system.
-  display: { fontFamily: fontFamily.sans, fontSize: 34, lineHeight: 40, fontWeight: '700', letterSpacing: -0.4 },
-  title1: { fontFamily: fontFamily.sans, fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.2 },
+  // Kiezen's hero dish name — the verdict. Still the single largest,
+  // tightest-tracked element in the app; now set in Archivo Bold rather
+  // than relying on OS weight synthesis.
+  display: { fontFamily: fontFamily.sansBold, fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: -0.4 },
+  title1: { fontFamily: fontFamily.sansBold, fontSize: 28, lineHeight: 35, fontWeight: '700', letterSpacing: -0.2 },
   title2: { fontFamily: fontFamily.sansMedium, fontSize: 22, lineHeight: 28, fontWeight: '600', letterSpacing: -0.1 },
-  title3: { fontFamily: fontFamily.sansMedium, fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: 0 },
+  title3: { fontFamily: fontFamily.sansMedium, fontSize: 17, lineHeight: 23, fontWeight: '600', letterSpacing: 0 },
   // Cook mode step text. Large by default because it must be glanceable
   // from arm's length with messy hands, before any Dynamic Type scaling.
   bodyLarge: { fontFamily: fontFamily.sans, fontSize: 19, lineHeight: 27, fontWeight: '400', letterSpacing: 0 },
   body: { fontFamily: fontFamily.sans, fontSize: 16, lineHeight: 23, fontWeight: '400', letterSpacing: 0 },
   bodySmall: { fontFamily: fontFamily.sans, fontSize: 14, lineHeight: 20, fontWeight: '400', letterSpacing: 0 },
-  caption: { fontFamily: fontFamily.sans, fontSize: 12, lineHeight: 16, fontWeight: '500', letterSpacing: 0.2 },
-  // Small tracked-out eyebrow label (e.g. "REDEN" above the stated reason).
+  // Small print read as burned-in metadata (creator handle, timestamps,
+  // scheduling badges) — mono, not sans, unlike the old system.
+  caption: { fontFamily: fontFamily.mono, fontSize: 12, lineHeight: 16, fontWeight: '500', letterSpacing: 0 },
+  // Tracked-out eyebrow label (e.g. "REDEN" above the stated reason).
   // Apply textTransform: 'uppercase' at the component, not in the token.
-  label: { fontFamily: fontFamily.sansMedium, fontSize: 12, lineHeight: 14, fontWeight: '600', letterSpacing: 1.2 },
-  button: { fontFamily: fontFamily.sansMedium, fontSize: 17, lineHeight: 22, fontWeight: '600', letterSpacing: 0 },
+  // Letter-spacing is lighter than a sans equivalent would need — a
+  // monospace face is already evenly spaced, so heavy extra tracking
+  // reads as gappy rather than considered.
+  label: { fontFamily: fontFamily.monoSemiBold, fontSize: 12, lineHeight: 15, fontWeight: '600', letterSpacing: 0.8 },
+  button: { fontFamily: fontFamily.monoSemiBold, fontSize: 16, lineHeight: 21, fontWeight: '600', letterSpacing: 0.2 },
   // Cook mode countdown. Monospace + tabular-nums so digits don't jitter
   // the layout as they change.
   timerDisplay: {
-    fontFamily: fontFamily.mono,
+    fontFamily: fontFamily.monoSemiBold,
     fontSize: 64,
     lineHeight: 68,
     fontWeight: '600',
@@ -351,8 +413,8 @@ export interface SpacingTokens {
   readonly screenPaddingHorizontal: number;
   /**
    * Height reserved along the bottom edge (above the safe-area inset) for
-   * primary actions — the Vanavond `Ja` / `Iets anders` / `Niet koken`
-   * row must fit inside this band so it sits in thumb reach.
+   * primary actions — the Kiezen `Ja` / `Iets anders` / `Niet koken` row
+   * must fit inside this band so it sits in thumb reach.
    */
   readonly thumbZoneMinHeight: number;
   /** Minimum touch target size (WCAG 2.5.5 / iOS HIG), in points. */
@@ -383,10 +445,10 @@ export const spacing = {
 // ---------------------------------------------------------------------------
 
 /**
- * Deliberately restrained — Remy does not use the "uniform rounded card"
- * template. Most surfaces are square or near-square; radius increases
- * only for things that are physically lifted off the page (sheets) or
- * genuinely circular (avatars, the single primary CTA).
+ * Deliberately restrained — a proof sheet has square-cut frames, not
+ * rounded-card wallpaper. Most surfaces are square or near-square; radius
+ * increases only for things genuinely lifted off the page (sheets) or
+ * genuinely circular (avatars, the timer's Start/Pause button).
  */
 export interface RadiiTokens {
   readonly radiusNone: number;
@@ -418,15 +480,16 @@ export interface ElevationStyle {
 }
 
 /**
- * Used sparingly, and only in light mode does the shadow itself do much
- * work — in dark mode elevation reads mainly through the surface color
- * step (background → surface → surfaceRaised), since shadows barely
- * register against a dark ground.
+ * Used sparingly and kept flatter/more graphic than a typical glossy-card
+ * shadow — paper stacked on a light table, not floating UI chrome. In
+ * dark mode elevation reads mainly through the surface color step
+ * (background → surface → surfaceRaised), since shadows barely register
+ * against a dark ground.
  */
 export const elevation = {
   none: { shadowColor: '#000000', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
-  low: { shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2 },
-  raised: { shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 6 },
+  low: { shadowColor: '#000000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 2 },
+  raised: { shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
 } as const satisfies Record<'none' | 'low' | 'raised', ElevationStyle>;
 
 // ---------------------------------------------------------------------------
@@ -438,8 +501,9 @@ export interface MotionTokens {
   readonly durationFast: number;
   readonly durationNormal: number;
   readonly durationSlow: number;
-  /** The Vanavond reveal: one dish arriving deserves an unhurried,
-   * considered entrance, not a snap. */
+  /** The Kiezen reveal: one dish arriving — the grease-pencil circle
+   * landing on the chosen take — deserves an unhurried, considered
+   * entrance, not a snap. */
   readonly durationDeliberate: number;
   /** Cubic-bezier control points, e.g. `Easing.bezier(...motion.easingStandard)`. */
   readonly easingStandard: readonly [number, number, number, number];

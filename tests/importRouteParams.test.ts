@@ -15,13 +15,21 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
       platform: 'tiktok',
       authorName: 'kokenmetkees',
+      thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
     };
 
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
   });
 
   test('round-trips a "manual" payload with no recipe/source at all', () => {
-    const params: ImportConfirmParams = { mode: 'manual', recipe: null, sourceUrl: null, platform: null, authorName: null };
+    const params: ImportConfirmParams = {
+      mode: 'manual',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+    };
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
   });
 
@@ -32,6 +40,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      thumbnailUrl: null,
     });
   });
 
@@ -41,12 +50,33 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
   });
 
   test('decodes to the safe empty shape when mode is not a recognised value', () => {
-    const raw = JSON.stringify({ mode: 'bogus', recipe: null, sourceUrl: null, platform: null, authorName: null });
+    const raw = JSON.stringify({
+      mode: 'bogus',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+    });
     expect(decodeImportConfirmParams(raw).mode).toBe('manual');
   });
 
   test('decodes to the safe empty shape when platform is outside the known union', () => {
-    const raw = JSON.stringify({ mode: 'manual', recipe: null, sourceUrl: null, platform: 'youtube', authorName: null });
-    expect(decodeImportConfirmParams(raw)).toEqual({ mode: 'manual', recipe: null, sourceUrl: null, platform: null, authorName: null });
+    const raw = JSON.stringify({
+      mode: 'manual',
+      recipe: null,
+      sourceUrl: null,
+      platform: 'youtube',
+      authorName: null,
+      thumbnailUrl: null,
+    });
+    expect(decodeImportConfirmParams(raw)).toEqual({
+      mode: 'manual',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+    });
   });
 });

@@ -124,6 +124,7 @@ function buildMealInputFromDraft(
     allergenTagStatus: allergenStatus,
     sourceUrl: draft.sourceUrl,
     sourcePlatform: draft.sourcePlatform,
+    thumbnailUrl: draft.thumbnailUrl,
     ingredients: draft.ingredients,
     steps: toMealStepInputs(draft),
   };
@@ -147,6 +148,9 @@ function buildManualMealInput(
     allergenTagStatus: allergenStatus,
     sourceUrl: null,
     sourcePlatform: null,
+    // Manual entry never carries a thumbnail — see paste.tsx's
+    // handleManualEntry comment; the library falls back to a monogram tile.
+    thumbnailUrl: null,
     ingredients: recipe.ingredients.map((ingredient, index) => ({
       name: ingredient.name,
       quantity: ingredient.quantity,
@@ -164,9 +168,9 @@ function buildMealInput(
   allergenTags: readonly string[],
   allergenStatus: AllergenTagStatus,
 ): CreateMealInput {
-  const { sourceUrl, platform } = confirmParams;
+  const { sourceUrl, platform, thumbnailUrl } = confirmParams;
   if (sourceUrl !== null && platform !== null) {
-    const draft = toMealDraft(recipe, { householdId, sourceUrl, platform });
+    const draft = toMealDraft(recipe, { householdId, sourceUrl, platform, thumbnailUrl });
     return buildMealInputFromDraft(draft, allergenTags, allergenStatus);
   }
   return buildManualMealInput(recipe, householdId, allergenTags, allergenStatus);

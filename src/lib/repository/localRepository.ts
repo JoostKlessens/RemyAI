@@ -9,7 +9,18 @@
 
 import type { KeyValueStore } from './keyValueStore';
 import { createRepositoryTables } from './local/tables';
-import { getCurrentHouseholdId, getHousehold, listMembers, listRestrictions } from './local/household';
+import {
+  createMember,
+  createRestriction,
+  getCurrentHouseholdId,
+  getHousehold,
+  listMembers,
+  listRestrictions,
+  removeMember,
+  removeRestriction,
+  setMemberHealthDataConsent,
+  updateHouseholdSettings,
+} from './local/household';
 import { createMeal, getMeal, getMealIngredients, getMealSteps, listHouseholdMeals } from './local/meals';
 import { createSave, listPendingSaves, listSaves } from './local/saves';
 import { createCookEvent, listCookEvents, setCookEventRepeat } from './local/cookEvents';
@@ -31,8 +42,16 @@ export function createLocalRepository(store: KeyValueStore): RemyRepository {
   return {
     getCurrentHouseholdId: () => getCurrentHouseholdId(tables),
     getHousehold: (householdId) => getHousehold(tables, householdId),
+    updateHouseholdSettings: (householdId, input) => updateHouseholdSettings(tables, householdId, input),
+
     listMembers: (householdId) => listMembers(tables, householdId),
+    createMember: (input) => createMember(tables, input),
+    removeMember: (memberId) => removeMember(tables, memberId),
+    setMemberHealthDataConsent: (memberId, consentAt) => setMemberHealthDataConsent(tables, memberId, consentAt),
+
     listRestrictions: (householdId) => listRestrictions(tables, householdId),
+    createRestriction: (input) => createRestriction(tables, input),
+    removeRestriction: (restrictionId) => removeRestriction(tables, restrictionId),
 
     listHouseholdMeals: (householdId) => listHouseholdMeals(tables, householdId),
     getMeal: (mealId) => getMeal(tables, mealId),

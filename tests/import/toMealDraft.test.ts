@@ -6,6 +6,7 @@ const TIKTOK_CONTEXT = {
   householdId: 'household-1',
   sourceUrl: 'https://www.tiktok.com/@chefremy/video/123',
   platform: 'tiktok' as const,
+  thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
 };
 
 describe('toMealDraft — PD-006 guarantee', () => {
@@ -46,9 +47,21 @@ describe('toMealDraft — field mapping', () => {
       householdId: 'household-xyz',
       sourceUrl: 'https://www.tiktok.com/@someone/video/999',
       platform: 'tiktok',
+      thumbnailUrl: null,
     });
     expect(draft.householdId).toBe('household-xyz');
     expect(draft.sourceUrl).toBe('https://www.tiktok.com/@someone/video/999');
+  });
+
+  test('passes thumbnailUrl straight through from context, never re-derived', () => {
+    const withThumbnail = toMealDraft(makeParsedRecipe(), {
+      ...TIKTOK_CONTEXT,
+      thumbnailUrl: 'https://p16-sign.tiktokcdn.com/other-thumb.jpg',
+    });
+    expect(withThumbnail.thumbnailUrl).toBe('https://p16-sign.tiktokcdn.com/other-thumb.jpg');
+
+    const withoutThumbnail = toMealDraft(makeParsedRecipe(), { ...TIKTOK_CONTEXT, thumbnailUrl: null });
+    expect(withoutThumbnail.thumbnailUrl).toBeNull();
   });
 
   test('maps ingredients with sortOrder assigned by array position, starting at 0', () => {
@@ -87,6 +100,7 @@ describe('toMealDraft — sourcePlatform bridging (0001_init.sql vocabulary)', (
       householdId: 'household-1',
       sourceUrl: 'https://www.instagram.com/reel/abc123/',
       platform: 'instagram',
+      thumbnailUrl: null,
     });
     expect(draft.sourcePlatform).toBe('reels');
   });

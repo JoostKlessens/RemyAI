@@ -77,6 +77,7 @@ function buildMealRow(input: CreateMealInput): Meal {
     allergenTagStatus: input.allergenTagStatus,
     sourceUrl: input.sourceUrl,
     sourcePlatform: input.sourcePlatform,
+    thumbnailUrl: input.thumbnailUrl,
     archivedAt: null,
     createdAt: nowIso(),
   };

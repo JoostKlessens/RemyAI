@@ -10,9 +10,12 @@ export type {
   CreateCookEventInput,
   CreateDecisionInput,
   CreateMealInput,
+  CreateMemberInput,
+  CreateRestrictionInput,
   CreateSaveInput,
   MealIngredientInput,
   MealStepInput,
   RemyRepository,
   RespondToDecisionInput,
+  UpdateHouseholdSettingsInput,
 } from './types';

@@ -17,3 +17,5 @@ supabase/.branches/
 supabase/.temp/
 coverage/
 dist-check/
+web-build-new/
+web-build-export-tmp/

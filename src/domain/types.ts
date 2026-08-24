@@ -216,6 +216,17 @@ export interface Meal {
   /** Creator video URL for Feed items (F) — resolved to an oEmbed player by the UI layer. */
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
+  /**
+   * oEmbed's `thumbnail_url` (src/lib/oembed.ts's `OembedPayload.thumbnailUrl`),
+   * carried through import (`ImportAttribution.thumbnailUrl` ->
+   * `toMealDraft` -> the repository) so the library (Bibliotheek) can show
+   * a real still of the source video. Null for manual entries, meals that
+   * predate this field, and any import whose oEmbed response genuinely had
+   * no thumbnail (Instagram without credentials, a 404/region-locked post,
+   * ...) — the UI must render a monogram fallback for null, never a broken
+   * image or a stock placeholder.
+   */
+  readonly thumbnailUrl: string | null;
   /** Set when a meal is removed from rotation. Soft-delete: history referencing it stays intact. */
   readonly archivedAt: IsoDateTimeString | null;
   readonly createdAt: IsoDateTimeString;

@@ -27,6 +27,23 @@ describe('buildFixtureImportAttempt', () => {
     }
   });
 
+  test('"parsed" on tiktok carries a thumbnail, both as a sidecar and inside attribution', () => {
+    const attempt = buildFixtureImportAttempt('parsed', 'tiktok', 'https://www.tiktok.com/@x/video/1');
+    expect(attempt.thumbnailUrl).not.toBeNull();
+    if (attempt.result.kind === 'parsed') {
+      expect(attempt.result.attribution?.thumbnailUrl).toBe(attempt.thumbnailUrl);
+      expect(attempt.result.attribution?.authorName).toBe(attempt.authorName);
+    }
+  });
+
+  test('"parsed" on instagram has no thumbnail — demos the library monogram fallback honestly', () => {
+    const attempt = buildFixtureImportAttempt('parsed', 'instagram', 'https://www.instagram.com/reel/1');
+    expect(attempt.thumbnailUrl).toBeNull();
+    if (attempt.result.kind === 'parsed') {
+      expect(attempt.result.attribution?.thumbnailUrl).toBeNull();
+    }
+  });
+
   test('"no_recipe_in_caption" still carries an author — oEmbed succeeded before the model ran', () => {
     const attempt = buildFixtureImportAttempt('no_recipe_in_caption', 'instagram', 'https://www.instagram.com/reel/1');
     expect(attempt.result.kind).toBe('no_recipe_in_caption');

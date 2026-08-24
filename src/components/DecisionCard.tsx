@@ -1,17 +1,20 @@
 /**
- * The Vanavond hero: eyebrow, dish name, stated reason, meta row. This is
+ * The Kiezen hero: eyebrow, dish name, stated reason, meta row. This is
  * the single most important visual in the product — see docs/DESIGN.md
- * §2. No photo/thumbnail: `Meal` (src/domain/types.ts) has no image field,
- * and the spec itself says to "omit entirely rather than show a
- * placeholder/stock image" when there is nothing real to show.
+ * §1. No photo/thumbnail here: the decision surface stays a spoken
+ * verdict, not a video still — thumbnails are Bibliotheek's language (§2),
+ * kept off the one screen that must never look like a browsable list.
  *
- * Two distinct motion treatments, both driven by `reduceMotionEnabled`
- * passed down from the screen (read once, per docs/DESIGN.md "Global
- * rules"): the first mount fades+rises in over `durationDeliberate` (the
- * slowest, most considered entrance in the app); a later change of
- * `dishTitle` (an "Iets anders" swap) only cross-fades over
- * `durationNormal` — the action row lives outside this component and
- * never moves, so the thumb never has to re-find the buttons.
+ * Three motion treatments, all driven by `reduceMotionEnabled` passed down
+ * from the screen (read once, per docs/DESIGN.md "Global rules"): the
+ * first mount fades+rises in over `durationDeliberate` (the slowest, most
+ * considered entrance in the app); a later change of `dishTitle` (an
+ * "Iets anders" swap) only cross-fades over `durationNormal` — the action
+ * row lives outside this component and never moves, so the thumb never
+ * has to re-find the buttons; and `accepted` draws a hairline `accent`
+ * stroke under the dish name (scaleX 0→1, `durationFast`) — "the
+ * grease-pencil circle landing" — the instant "Ja" is tapped, before the
+ * screen navigates to Kookmodus.
  */
 
 import { useEffect, useRef } from 'react';
@@ -24,15 +27,18 @@ export interface DecisionCardProps {
   readonly estimatedMinutes: number | null;
   readonly servings: number | null;
   readonly reduceMotionEnabled: boolean;
+  /** True the instant "Ja" is tapped, until the screen navigates to Kookmodus — draws the accept stroke under the dish name. */
+  readonly accepted: boolean;
 }
 
 export function DecisionCard(props: DecisionCardProps): JSX.Element {
-  const { dishTitle, reasonText, estimatedMinutes, servings, reduceMotionEnabled } = props;
+  const { dishTitle, reasonText, estimatedMinutes, servings, reduceMotionEnabled, accepted } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(8)).current;
+  const strokeScale = useRef(new Animated.Value(0)).current;
   const isFirstRender = useRef(true);
   const previousDishTitle = useRef(dishTitle);
 
@@ -85,17 +91,43 @@ export function DecisionCard(props: DecisionCardProps): JSX.Element {
     Animated.parallel(animations).start();
   }, [dishTitle, opacity, reduceMotionEnabled, translateY]);
 
+  useEffect(() => {
+    if (!accepted) {
+      // A new suggestion (swap, or a fresh screen load) always starts
+      // un-accepted — reset instantly, never animate the stroke away.
+      strokeScale.setValue(0);
+      return;
+    }
+    Animated.timing(strokeScale, {
+      toValue: 1,
+      duration: resolveDuration(motion.durationFast, reduceMotionEnabled),
+      easing: Easing.bezier(...motion.easingStandard),
+      useNativeDriver: true,
+    }).start();
+  }, [accepted, strokeScale, reduceMotionEnabled]);
+
   const metaParts = buildMetaParts(estimatedMinutes, servings);
 
   return (
     <View style={styles.container}>
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>VANAVOND</Text>
+      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>KIEZEN</Text>
       <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-        {/* A6: no numberOfLines cap — this is the single most important
-            content in the app; docs/DESIGN.md prefers letting a row grow
-            over capping it, and ellipsizing the dish name at 200% type
-            would hide the one thing the screen exists to show. */}
-        <Text style={[typeScale.display, styles.dishTitle, { color: colors.textPrimary }]}>{dishTitle}</Text>
+        <View style={styles.dishTitleWrap}>
+          {/* A6: no numberOfLines cap — this is the single most important
+              content in the app; docs/DESIGN.md prefers letting a row grow
+              over capping it, and ellipsizing the dish name at 200% type
+              would hide the one thing the screen exists to show. */}
+          <Text style={[typeScale.display, styles.dishTitle, { color: colors.textPrimary }]}>{dishTitle}</Text>
+          {/* Absolutely positioned so it never perturbs dishTitleWrap's own
+              layout height/spacing, whether accepted or not (scaleX alone
+              wouldn't collapse its box). */}
+          <Animated.View
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[styles.acceptStroke, { backgroundColor: colors.accent, transform: [{ scaleX: strokeScale }] }]}
+          />
+        </View>
         <View style={styles.reasonBlock}>
           <Text style={[typeScale.label, { color: colors.textMuted }]}>REDEN</Text>
           <Text style={[typeScale.body, styles.reasonText, { color: colors.textSecondary }]}>{reasonText}</Text>
@@ -130,9 +162,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.space3,
   },
+  dishTitleWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    marginBottom: spacing.space5,
+  },
   dishTitle: {
     textAlign: 'center',
-    marginBottom: spacing.space5,
+  },
+  acceptStroke: {
+    position: 'absolute',
+    left: '22.5%',
+    right: '22.5%',
+    bottom: -spacing.space2,
+    height: 2,
   },
   reasonBlock: {
     alignItems: 'center',

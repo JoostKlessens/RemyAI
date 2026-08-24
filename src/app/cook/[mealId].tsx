@@ -158,7 +158,7 @@ export default function CookModeScreen(): JSX.Element {
           <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>
             Kon dit recept niet laden
           </Text>
-          <Button label="Terug" variant="secondary" onPress={() => router.back()} accessibilityLabel="Terug naar Vanavond" />
+          <Button label="Terug" variant="secondary" onPress={() => router.back()} accessibilityLabel="Terug naar Kiezen" />
         </View>
       </SafeAreaView>
     );
@@ -178,7 +178,7 @@ export default function CookModeScreen(): JSX.Element {
             label="Terug"
             variant="secondary"
             onPress={() => router.back()}
-            accessibilityLabel="Terug naar Vanavond"
+            accessibilityLabel="Terug naar Kiezen"
           />
         </View>
       </SafeAreaView>
@@ -230,7 +230,7 @@ export default function CookModeScreen(): JSX.Element {
             label="Terug"
             variant="secondary"
             onPress={() => router.back()}
-            accessibilityLabel="Terug naar Vanavond"
+            accessibilityLabel="Terug naar Kiezen"
           />
         </View>
       </SafeAreaView>

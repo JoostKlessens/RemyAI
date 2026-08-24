@@ -25,6 +25,7 @@ import type {
   Household,
   HouseholdId,
   IsoDateString,
+  IsoDateTimeString,
   Meal,
   MealId,
   MealIngredient,
@@ -34,6 +35,8 @@ import type {
   MemberId,
   ReasonCode,
   Restriction,
+  RestrictionId,
+  RestrictionType,
   Save,
   SaveIntent,
   SkillLevel,
@@ -64,6 +67,8 @@ export interface CreateMealInput {
   readonly allergenTagStatus: AllergenTagStatus;
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
+  /** oEmbed's thumbnail, carried through import — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Null for manual entries. */
+  readonly thumbnailUrl: string | null;
   readonly ingredients: readonly MealIngredientInput[];
   readonly steps: readonly MealStepInput[];
 }
@@ -97,12 +102,52 @@ export interface RespondToDecisionInput {
   readonly status: 'accepted' | 'skipped';
 }
 
+/**
+ * Household settings screen (src/app/settings.tsx) — the only writable
+ * household-level fields that screen exposes. `decisionPushTime`/
+ * `skillLevel` have no UI yet, so they're deliberately not part of this
+ * input; add them here (not as a separate method) when they get one.
+ */
+export interface UpdateHouseholdSettingsInput {
+  readonly weeknightTimeBudgetMinutes: number;
+}
+
+export interface CreateMemberInput {
+  readonly householdId: HouseholdId;
+  readonly displayName: string;
+}
+
+export interface CreateRestrictionInput {
+  readonly memberId: MemberId;
+  readonly type: RestrictionType;
+  readonly excludesTag: string;
+  readonly notes: string | null;
+}
+
 export interface RemyRepository {
   /** The sole household this on-device install belongs to (no auth/multi-household UI exists yet — see localRepository.ts's module note). */
   getCurrentHouseholdId(): Promise<HouseholdId>;
   getHousehold(householdId: HouseholdId): Promise<Household | null>;
+  /** Settings screen: the household's weeknight time budget. Nothing else is writable there yet — see UpdateHouseholdSettingsInput. */
+  updateHouseholdSettings(householdId: HouseholdId, input: UpdateHouseholdSettingsInput): Promise<Household>;
+
   listMembers(householdId: HouseholdId): Promise<readonly Member[]>;
+  createMember(input: CreateMemberInput): Promise<Member>;
+  /** A real delete: a removed member's restrictions go with them (see removeRestriction/PD-005), never left orphaned. */
+  removeMember(memberId: MemberId): Promise<void>;
+  /**
+   * PD-005: allergen data is GDPR Article 9 special-category health data
+   * and requires explicit, unbundled consent BEFORE collection.
+   * `consentAt: null` revokes consent (the settings screen must then stop
+   * collecting/showing allergen tags for this member, matching
+   * `Member.healthDataConsentAt`'s own contract in src/domain/types.ts).
+   */
+  setMemberHealthDataConsent(memberId: MemberId, consentAt: IsoDateTimeString | null): Promise<Member>;
+
   listRestrictions(householdId: HouseholdId): Promise<readonly Restriction[]>;
+  createRestriction(input: CreateRestrictionInput): Promise<Restriction>;
+  /** PD-005: a real delete (not a soft-delete flag), so a household can service an erasure request directly. */
+  removeRestriction(restrictionId: RestrictionId): Promise<void>;
 
   /** Household's own (unarchived) + curated meals — mirrors the candidate-meal query comment on the `meals` table in 0001_init.sql. */
   listHouseholdMeals(householdId: HouseholdId): Promise<readonly Meal[]>;
@@ -136,6 +181,6 @@ export interface RemyRepository {
   respondToDecision(decisionId: DecisionId, input: RespondToDecisionInput): Promise<Decision>;
   setDecisionDeclineReason(decisionId: DecisionId, declineReason: DeclineReason): Promise<Decision>;
 
-  /** Populates every table from src/app/_fixtures.ts's seed data, but ONLY on a fresh install (households table empty). No-op otherwise. */
+  /** Populates a single default household on a genuinely fresh install (households table empty) — an honest empty start, no curated data. No-op otherwise. See seedData.ts. */
   seedIfEmpty(): Promise<void>;
 }

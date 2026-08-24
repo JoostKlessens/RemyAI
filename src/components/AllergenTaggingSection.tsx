@@ -5,12 +5,12 @@
  * tags allergens themselves, informed by the parsed ingredient list shown
  * elsewhere on the same screen, from the closed EU-14 vocabulary via
  * `RestrictionTagInput`'s existing vocabulary mode (reused, not
- * reimplemented — the same component `onboarding/household.tsx` uses for
- * this exact chip-select pattern).
+ * reimplemented — the same component `src/app/settings.tsx` uses for this
+ * exact chip-select pattern, at the household-restriction level).
  *
  * Confirming — even confirming zero tags — is the human act that earns
- * `verified`, mirroring `onboarding/allergen-check.tsx`'s "even 'none of
- * these' promotes to verified" rule. Skipping (or simply never tapping
+ * `verified`, mirroring the same "even 'none of these' promotes to
+ * verified" rule PD-006 applies elsewhere. Skipping (or simply never tapping
  * confirm) leaves the meal `unknown`, exactly like an untouched seeded
  * meal. `onSkip` also reopens the confirmed summary for editing — any tag
  * change is handled by the parent reverting `status` to `unknown` first

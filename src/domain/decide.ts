@@ -33,7 +33,7 @@ import type { DecisionRequest, DecisionResult, IsoDateTimeString, Meal, MealId, 
 export function decide(request: DecisionRequest): DecisionResult {
   const unarchived = filterUnarchived(request.candidateMeals);
   if (unarchived.length === 0) {
-    // No unarchived meals at all -- onboarding never seeded a rotation.
+    // No unarchived meals at all -- nothing has ever been pasted/saved yet.
     return { kind: 'no_candidate', reason: 'empty_rotation' };
   }
 

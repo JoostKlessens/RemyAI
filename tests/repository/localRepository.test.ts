@@ -1,7 +1,38 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+import type { Meal } from '@/domain/types';
 import { createInMemoryKeyValueStore, type KeyValueStore } from '@/lib/repository/keyValueStore';
 import { createLocalRepository } from '@/lib/repository/localRepository';
+import { createRepositoryTables } from '@/lib/repository/local/tables';
 import type { CreateMealInput, RemyRepository } from '@/lib/repository/types';
+
+/**
+ * A curated meal (`householdId: null`) is never created through
+ * `RemyRepository.createMeal` — its input type requires a real
+ * `HouseholdId`, matching 0001_init.sql's `meals_insert` RLS policy, which
+ * only the service-role content pipeline bypasses. This helper writes one
+ * directly into the underlying table, the same way a real curated row
+ * would arrive (out-of-band, not through this client), so tests can still
+ * exercise `listHouseholdMeals`'s "household's own + curated" contract.
+ */
+function makeCuratedMeal(overrides: Partial<Meal> = {}): Meal {
+  return {
+    id: 'curated-meal-1',
+    householdId: null,
+    title: 'Curated gerecht',
+    source: 'curated',
+    estimatedMinutes: 20,
+    skillLevel: 'beginner',
+    servings: 4,
+    ingredientTags: [],
+    allergenTagStatus: 'verified',
+    sourceUrl: null,
+    sourcePlatform: null,
+    thumbnailUrl: null,
+    archivedAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
 
 const HOUSEHOLD_ID = 'household-1';
 
@@ -17,6 +48,7 @@ function makeCreateMealInput(overrides: Partial<CreateMealInput> = {}): CreateMe
     allergenTagStatus: 'unknown',
     sourceUrl: 'https://www.tiktok.com/@test/video/1',
     sourcePlatform: 'tiktok',
+    thumbnailUrl: null,
     ingredients: [{ name: '400 g kipfilet', quantity: null, unit: null, sortOrder: 0 }],
     steps: [{ stepNumber: 1, instruction: 'Bak de kip.', durationMinutes: null }],
     ...overrides,
@@ -24,18 +56,27 @@ function makeCreateMealInput(overrides: Partial<CreateMealInput> = {}): CreateMe
 }
 
 describe('localRepository — seeding', () => {
-  test('seedIfEmpty populates the household/meals/saves from fixture data on a fresh store', async () => {
+  test('seedIfEmpty creates exactly one default household and nothing else — an honest empty first run', async () => {
     const store = createInMemoryKeyValueStore();
     const repository = createLocalRepository(store);
 
     await repository.seedIfEmpty();
     const householdId = await repository.getCurrentHouseholdId();
+    const household = await repository.getHousehold(householdId);
     const meals = await repository.listHouseholdMeals(householdId);
     const saves = await repository.listSaves(householdId);
+    const members = await repository.listMembers(householdId);
+    const restrictions = await repository.listRestrictions(householdId);
 
-    expect(householdId).toBe('household-1');
-    expect(meals.length).toBeGreaterThan(0);
-    expect(saves.length).toBeGreaterThan(0);
+    expect(household).not.toBeNull();
+    expect(household?.weeknightTimeBudgetMinutes).toBeGreaterThan(0);
+    // Curated (householdId null) meals would still show up here if any
+    // existed — none do on a fresh store, so this is a genuine "nothing at
+    // all" assertion, not just "nothing of mine".
+    expect(meals).toHaveLength(0);
+    expect(saves).toHaveLength(0);
+    expect(members).toHaveLength(0);
+    expect(restrictions).toHaveLength(0);
   });
 
   test('seedIfEmpty is a no-op once a household already exists — a real save is never clobbered by re-seeding', async () => {
@@ -104,11 +145,25 @@ describe('localRepository — meals (+ ingredients, + steps)', () => {
     expect(created.allergenTagStatus).toBe('verified');
   });
 
+  test('createMeal persists thumbnailUrl, and a meal without one stores null so the library can fall back to a monogram', async () => {
+    const withThumbnail = await repository.createMeal(
+      makeCreateMealInput({ thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg' }),
+    );
+    const withoutThumbnail = await repository.createMeal(makeCreateMealInput({ thumbnailUrl: null }));
+
+    expect(withThumbnail.thumbnailUrl).toBe('https://p16-sign.tiktokcdn.com/thumb.jpg');
+    expect(withoutThumbnail.thumbnailUrl).toBeNull();
+  });
+
   test("listHouseholdMeals includes the household's own meals and curated (null householdId) meals", async () => {
     // Matches real app ordering (src/app/_layout.tsx awaits ensureSeeded()
     // before any screen can write): seed first, then create.
     await repository.seedIfEmpty();
     await repository.createMeal(makeCreateMealInput({ householdId: HOUSEHOLD_ID, title: 'Eigen gerecht' }));
+    // Curated meals arrive out-of-band (service role, not this client) —
+    // see makeCuratedMeal's own comment.
+    const tables = createRepositoryTables(store);
+    await tables.meals.replaceAll([...(await tables.meals.list()), makeCuratedMeal()]);
 
     const meals = await repository.listHouseholdMeals(HOUSEHOLD_ID);
     expect(meals.some((meal) => meal.title === 'Eigen gerecht')).toBe(true);
@@ -377,5 +432,78 @@ describe('localRepository — decisions (decision responses)', () => {
 
     expect(recent).toHaveLength(1);
     expect(recent[0]?.decisionDate).toBe('2026-08-20');
+  });
+});
+
+describe('localRepository — household settings screen (PD-006 needs somewhere to write)', () => {
+  let repository: RemyRepository;
+
+  beforeEach(() => {
+    repository = createLocalRepository(createInMemoryKeyValueStore());
+  });
+
+  test('updateHouseholdSettings persists a new weeknight time budget', async () => {
+    await repository.seedIfEmpty();
+    const householdId = await repository.getCurrentHouseholdId();
+
+    const updated = await repository.updateHouseholdSettings(householdId, { weeknightTimeBudgetMinutes: 45 });
+
+    expect(updated.weeknightTimeBudgetMinutes).toBe(45);
+    expect((await repository.getHousehold(householdId))?.weeknightTimeBudgetMinutes).toBe(45);
+  });
+
+  test('createMember writes a real member with no health data consent yet', async () => {
+    const member = await repository.createMember({ householdId: HOUSEHOLD_ID, displayName: 'Sanne' });
+
+    expect(member.displayName).toBe('Sanne');
+    expect(member.healthDataConsentAt).toBeNull();
+    expect(await repository.listMembers(HOUSEHOLD_ID)).toContainEqual(member);
+  });
+
+  test('setMemberHealthDataConsent sets and revokes consent (PD-005)', async () => {
+    const member = await repository.createMember({ householdId: HOUSEHOLD_ID, displayName: 'Joost' });
+
+    const consented = await repository.setMemberHealthDataConsent(member.id, '2026-08-22T10:00:00.000Z');
+    expect(consented.healthDataConsentAt).toBe('2026-08-22T10:00:00.000Z');
+
+    const revoked = await repository.setMemberHealthDataConsent(member.id, null);
+    expect(revoked.healthDataConsentAt).toBeNull();
+  });
+
+  test('removeMember deletes the member and every restriction attached to them (PD-005 hard-delete)', async () => {
+    const member = await repository.createMember({ householdId: HOUSEHOLD_ID, displayName: 'Kees' });
+    await repository.createRestriction({ memberId: member.id, type: 'allergen', excludesTag: 'noten', notes: null });
+
+    await repository.removeMember(member.id);
+
+    expect(await repository.listMembers(HOUSEHOLD_ID)).toHaveLength(0);
+    expect(await repository.listRestrictions(HOUSEHOLD_ID)).toHaveLength(0);
+  });
+
+  test('createRestriction and removeRestriction round-trip a dislike/allergen tag, readable via listRestrictions', async () => {
+    const member = await repository.createMember({ householdId: HOUSEHOLD_ID, displayName: 'Sanne' });
+
+    const restriction = await repository.createRestriction({
+      memberId: member.id,
+      type: 'allergen',
+      excludesTag: 'pinda',
+      notes: null,
+    });
+    expect(await repository.listRestrictions(HOUSEHOLD_ID)).toContainEqual(restriction);
+
+    await repository.removeRestriction(restriction.id);
+    expect(await repository.listRestrictions(HOUSEHOLD_ID)).toHaveLength(0);
+  });
+
+  test('listRestrictions never returns a restriction belonging to another household', async () => {
+    const ownMember = await repository.createMember({ householdId: HOUSEHOLD_ID, displayName: 'Sanne' });
+    const otherMember = await repository.createMember({ householdId: 'other-household', displayName: 'Anna' });
+    await repository.createRestriction({ memberId: ownMember.id, type: 'dislike', excludesTag: 'paddenstoelen', notes: null });
+    await repository.createRestriction({ memberId: otherMember.id, type: 'dislike', excludesTag: 'ui', notes: null });
+
+    const restrictions = await repository.listRestrictions(HOUSEHOLD_ID);
+
+    expect(restrictions).toHaveLength(1);
+    expect(restrictions[0]?.excludesTag).toBe('paddenstoelen');
   });
 });
