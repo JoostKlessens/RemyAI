@@ -102,7 +102,13 @@ export interface OembedClientConfig {
 }
 
 const TIKTOK_OEMBED_ENDPOINT = 'https://www.tiktok.com/oembed';
-const INSTAGRAM_OEMBED_ENDPOINT = 'https://graph.facebook.com/v19.0/instagram_oembed';
+// Graph API versions are sunset roughly two years after release, and a
+// call to a retired version fails in a way that looks exactly like a bad
+// token — so this is pinned deliberately and needs revisiting, not left
+// to drift. v19 was already past its window; v25 is current as of this
+// change. TikTok needs no equivalent: its oEmbed endpoint is public and
+// unversioned.
+const INSTAGRAM_OEMBED_ENDPOINT = 'https://graph.facebook.com/v25.0/instagram_oembed';
 
 const TIKTOK_URL_PATTERN = /^https:\/\/(www\.)?tiktok\.com\/.+/i;
 const INSTAGRAM_URL_PATTERN = /^https:\/\/(www\.)?instagram\.com\/.+/i;
