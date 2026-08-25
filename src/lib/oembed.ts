@@ -193,6 +193,30 @@ function parseOembedPayload(raw: unknown): OembedPayload | null {
   return isEntirelyEmpty ? null : payload;
 }
 
+/**
+ * Meta reports an unapproved oEmbed Read feature as a 400 carrying
+ * `error.code === 10` — literally: "To use Meta oEmbed Read, your use of
+ * this endpoint must be reviewed and approved by Facebook." That is a
+ * credential problem, not an unknown one: the token authenticates fine, it
+ * simply is not cleared for this endpoint, and no retry will change that.
+ *
+ * Mapping it onto `missing_credentials` reuses copy that is already exactly
+ * right — "Instagram-links kan Remy op dit moment nog niet ophalen" — rather
+ * than the generic `unknown_error`, which implies something transient broke
+ * and invites a pointless retry. A 400 whose body we do not recognise still
+ * falls through to `unknown_error`.
+ */
+function classifyMetaErrorBody(raw: unknown): OembedErrorReason | null {
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const error = (raw as { readonly error?: unknown }).error;
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+  return (error as { readonly code?: unknown }).code === 10 ? 'missing_credentials' : null;
+}
+
 async function fetchAndParse(requestUrl: string, fetchFn: OembedFetchFunction): Promise<OembedResult> {
   let response: OembedFetchResponse;
   try {
@@ -206,7 +230,10 @@ async function fetchAndParse(requestUrl: string, fetchFn: OembedFetchFunction): 
     return { kind: 'error', reason: classifiedReason };
   }
   if (!response.ok) {
-    return { kind: 'error', reason: 'unknown_error' };
+    // The body is read only on the failure path, and only to tell a
+    // known provider error apart from a genuinely unknown one.
+    const errorBody: unknown = await response.json().catch(() => null);
+    return { kind: 'error', reason: classifyMetaErrorBody(errorBody) ?? 'unknown_error' };
   }
 
   let rawBody: unknown;

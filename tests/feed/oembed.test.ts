@@ -210,3 +210,50 @@ describe('resolveOembed — documented HTTP failure modes', () => {
     expect(result).toEqual({ kind: 'error', reason: 'invalid_response' });
   });
 });
+
+/**
+ * Meta gates the Instagram oEmbed endpoint behind App Review and reports an
+ * unapproved app as a 400 with error code 10. Verified against the live API:
+ * the token authenticates, the feature is simply not cleared. Treating that
+ * as unknown_error told the user something unexpected broke and invited a
+ * retry that can never succeed.
+ */
+describe('resolveOembed — Meta oEmbed Read is not approved', () => {
+  const IG_URL = 'https://www.instagram.com/reel/DQrVOKMjE2G/';
+  const CONFIG = { instagramAccessToken: '123456|abcdef' };
+
+  test('maps Meta error code 10 to missing_credentials, not unknown_error', async () => {
+    const body = {
+      error: {
+        message: "(#10) To use 'Meta oEmbed Read', your use of this endpoint must be reviewed and approved by Facebook.",
+        type: 'OAuthException',
+        code: 10,
+      },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(400, body));
+
+    const result = await resolveOembed(IG_URL, 'instagram', { ...CONFIG, fetchFn });
+
+    expect(result).toEqual({ kind: 'error', reason: 'missing_credentials' });
+  });
+
+  test('leaves an unrecognized 400 body as unknown_error rather than over-claiming', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(400, { error: { code: 190 } }));
+
+    const result = await resolveOembed(IG_URL, 'instagram', { ...CONFIG, fetchFn });
+
+    expect(result).toEqual({ kind: 'error', reason: 'unknown_error' });
+  });
+
+  test('survives an error response whose body is not JSON at all', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () => Promise.reject(new Error('not json')),
+    });
+
+    const result = await resolveOembed(IG_URL, 'instagram', { ...CONFIG, fetchFn });
+
+    expect(result).toEqual({ kind: 'error', reason: 'unknown_error' });
+  });
+});
