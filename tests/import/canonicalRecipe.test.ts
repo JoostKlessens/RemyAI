@@ -1,0 +1,377 @@
+import { describe, expect, test } from 'vitest';
+import {
+  buildRecipeIngredientRows,
+  buildRecipeRowInsert,
+  buildRecipeStepRows,
+  parseStoredRecipe,
+} from '@/domain/import/canonicalRecipe';
+import type { ImportAttribution } from '@/domain/import/types';
+import { makeParsedIngredient, makeParsedRecipe } from './fixtures';
+
+const ATTRIBUTION: ImportAttribution = {
+  authorName: 'Chef Remy',
+  authorUrl: 'https://www.tiktok.com/@chefremy',
+  thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
+};
+
+const CONTEXT = {
+  normalizedUrl: 'https://www.tiktok.com/@chefremy/video/123',
+  platform: 'tiktok' as const,
+  attribution: ATTRIBUTION,
+};
+
+const RECIPE_ID = '11111111-2222-3333-4444-555555555555';
+
+/**
+ * A well-formed `recipes` row as PostgREST returns it, with its two child
+ * tables embedded. Built locally rather than in tests/import/fixtures.ts:
+ * this is a database row shape, not a domain type, and only this suite
+ * has any business knowing it.
+ */
+function makeStoredRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    normalized_url: 'https://www.tiktok.com/@chefremy/video/123',
+    platform: 'tiktok',
+    title: 'Traybake met kip en citroen',
+    thumbnail_url: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
+    estimated_minutes: 25,
+    servings: 4,
+    author_name: 'Chef Remy',
+    author_url: 'https://www.tiktok.com/@chefremy',
+    dish_tags: ['kip'],
+    recipe_ingredients: [{ name: 'Kipfilet', quantity: '300', unit: 'g', sort_order: 0 }],
+    recipe_steps: [
+      { step_number: 1, instruction: 'Oven voorverwarmen op 200 graden.' },
+      { step_number: 2, instruction: 'Kip en groenten 25 minuten roosteren.' },
+    ],
+    ...overrides,
+  };
+}
+
+describe('buildRecipeRowInsert — PD-006 guarantee', () => {
+  test('produces no allergen column of any kind', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe(), CONTEXT);
+    const allergenKeys = Object.keys(row).filter((key) => key.includes('allergen'));
+    expect(allergenKeys).toEqual([]);
+  });
+
+  test('produces exactly the nine canonical columns and nothing more', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe(), CONTEXT);
+    expect(Object.keys(row).sort()).toEqual([
+      'author_name',
+      'author_url',
+      'dish_tags',
+      'estimated_minutes',
+      'normalized_url',
+      'platform',
+      'servings',
+      'thumbnail_url',
+      'title',
+    ]);
+  });
+
+  test('carries dish_tags — the one model-derived tagging that is not allergen data', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe({ dishTags: ['pasta', 'vegetarisch'] }), CONTEXT);
+    expect(row.dish_tags).toEqual(['pasta', 'vegetarisch']);
+  });
+
+  test('writes an empty dish_tags array, never undefined, for a recipe that predates the field', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe({ dishTags: undefined }), CONTEXT);
+    expect(row.dish_tags).toEqual([]);
+  });
+});
+
+describe('buildRecipeRowInsert — field mapping', () => {
+  test('takes normalized_url and platform from the context, never from the recipe', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe(), {
+      ...CONTEXT,
+      normalizedUrl: 'https://www.instagram.com/reel/abc',
+      platform: 'instagram',
+    });
+    expect(row.normalized_url).toBe('https://www.instagram.com/reel/abc');
+    expect(row.platform).toBe('instagram');
+  });
+
+  test('takes title, estimated_minutes and servings from the recipe', () => {
+    const row = buildRecipeRowInsert(
+      makeParsedRecipe({ title: 'Pasta pesto', estimatedMinutes: 15, servings: 2 }),
+      CONTEXT,
+    );
+    expect(row.title).toBe('Pasta pesto');
+    expect(row.estimated_minutes).toBe(15);
+    expect(row.servings).toBe(2);
+  });
+
+  test('takes thumbnail_url, author_name and author_url from the attribution', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe(), CONTEXT);
+    expect(row.thumbnail_url).toBe('https://p16-sign.tiktokcdn.com/thumb.jpg');
+    expect(row.author_name).toBe('Chef Remy');
+    expect(row.author_url).toBe('https://www.tiktok.com/@chefremy');
+  });
+
+  test('carries every nullable field through as null rather than dropping the key', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe({ estimatedMinutes: null, servings: null }), {
+      ...CONTEXT,
+      attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+    });
+    expect(row.estimated_minutes).toBeNull();
+    expect(row.servings).toBeNull();
+    expect(row.author_name).toBeNull();
+    expect(row.author_url).toBeNull();
+    expect(row.thumbnail_url).toBeNull();
+  });
+});
+
+describe('buildRecipeIngredientRows', () => {
+  test('emits one row per ingredient with 0-based sort_order in caption order', () => {
+    const rows = buildRecipeIngredientRows(
+      RECIPE_ID,
+      makeParsedRecipe({
+        ingredients: [
+          makeParsedIngredient({ name: 'Kipfilet' }),
+          makeParsedIngredient({ name: 'Citroen' }),
+          makeParsedIngredient({ name: 'Olijfolie' }),
+        ],
+      }),
+    );
+    expect(rows.map((row) => row.name)).toEqual(['Kipfilet', 'Citroen', 'Olijfolie']);
+    expect(rows.map((row) => row.sort_order)).toEqual([0, 1, 2]);
+  });
+
+  test('attaches the given recipe_id to every row', () => {
+    const rows = buildRecipeIngredientRows(
+      RECIPE_ID,
+      makeParsedRecipe({ ingredients: [makeParsedIngredient(), makeParsedIngredient({ name: 'Citroen' })] }),
+    );
+    expect(rows.every((row) => row.recipe_id === RECIPE_ID)).toBe(true);
+  });
+
+  test('carries a null quantity and unit through unchanged', () => {
+    const rows = buildRecipeIngredientRows(
+      RECIPE_ID,
+      makeParsedRecipe({ ingredients: [makeParsedIngredient({ quantity: null, unit: null })] }),
+    );
+    expect(rows[0]?.quantity).toBeNull();
+    expect(rows[0]?.unit).toBeNull();
+  });
+
+  test('emits no allergen column — allergen tagging is never derived here', () => {
+    const rows = buildRecipeIngredientRows(RECIPE_ID, makeParsedRecipe());
+    expect(Object.keys(rows[0] ?? {}).filter((key) => key.includes('allergen'))).toEqual([]);
+  });
+});
+
+describe('buildRecipeStepRows', () => {
+  test('numbers steps from 1, in caption order', () => {
+    const rows = buildRecipeStepRows(RECIPE_ID, makeParsedRecipe({ steps: ['Eerst', 'Dan', 'Tot slot'] }));
+    expect(rows.map((row) => row.step_number)).toEqual([1, 2, 3]);
+    expect(rows.map((row) => row.instruction)).toEqual(['Eerst', 'Dan', 'Tot slot']);
+  });
+
+  test('attaches the given recipe_id to every row', () => {
+    const rows = buildRecipeStepRows(RECIPE_ID, makeParsedRecipe({ steps: ['Eerst', 'Dan'] }));
+    expect(rows.every((row) => row.recipe_id === RECIPE_ID)).toBe(true);
+  });
+});
+
+describe('parseStoredRecipe — a cache hit is indistinguishable from a fresh import', () => {
+  test('reconstructs a full "parsed" result from a well-formed row', () => {
+    const result = parseStoredRecipe(makeStoredRow());
+    expect(result).toEqual({
+      kind: 'parsed',
+      recipe: {
+        title: 'Traybake met kip en citroen',
+        ingredients: [{ name: 'Kipfilet', quantity: '300', unit: 'g' }],
+        steps: ['Oven voorverwarmen op 200 graden.', 'Kip en groenten 25 minuten roosteren.'],
+        estimatedMinutes: 25,
+        servings: 4,
+        dishTags: ['kip'],
+      },
+      sourceUrl: 'https://www.tiktok.com/@chefremy/video/123',
+      platform: 'tiktok',
+      attribution: {
+        authorName: 'Chef Remy',
+        authorUrl: 'https://www.tiktok.com/@chefremy',
+        thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
+      },
+    });
+  });
+
+  test('takes sourceUrl from normalized_url — the deduplication key itself', () => {
+    const result = parseStoredRecipe(
+      makeStoredRow({ normalized_url: 'https://www.instagram.com/reel/xyz', platform: 'instagram' }),
+    );
+    expect(result).not.toBeNull();
+    expect(result?.kind === 'parsed' && result.sourceUrl).toBe('https://www.instagram.com/reel/xyz');
+    expect(result?.kind === 'parsed' && result.platform).toBe('instagram');
+  });
+
+  test('always returns a populated attribution object, even when every author column is null', () => {
+    const result = parseStoredRecipe(makeStoredRow({ author_name: null, author_url: null, thumbnail_url: null }));
+    expect(result?.kind === 'parsed' && result.attribution).toEqual({
+      authorName: null,
+      authorUrl: null,
+      thumbnailUrl: null,
+    });
+  });
+
+  test('reads a whitespace-only author column as a real null, not as a name made of spaces', () => {
+    const result = parseStoredRecipe(makeStoredRow({ author_name: '   ' }));
+    expect(result?.kind === 'parsed' && result.attribution?.authorName).toBeNull();
+  });
+
+  test('carries a null estimated_minutes and servings through as null', () => {
+    const result = parseStoredRecipe(makeStoredRow({ estimated_minutes: null, servings: null }));
+    expect(result?.kind === 'parsed' && result.recipe.estimatedMinutes).toBeNull();
+    expect(result?.kind === 'parsed' && result.recipe.servings).toBeNull();
+  });
+
+  test('carries a stored recipe with no allergen data whatsoever — there is none to inherit', () => {
+    const result = parseStoredRecipe(makeStoredRow());
+    expect(JSON.stringify(result)).not.toContain('allergen');
+  });
+
+  test('reads dish_tags back onto the recipe, so a hit is not a less-tagged import than a miss', () => {
+    const result = parseStoredRecipe(makeStoredRow({ dish_tags: ['pasta', 'vegetarisch'] }));
+    expect(result?.kind === 'parsed' && result.recipe.dishTags).toEqual(['pasta', 'vegetarisch']);
+  });
+
+  test('treats a missing or empty dish_tags column as an empty list, not a failure', () => {
+    expect(parseStoredRecipe(makeStoredRow({ dish_tags: [] }))?.kind === 'parsed').toBe(true);
+    expect(parseStoredRecipe(makeStoredRow({ dish_tags: undefined }))?.kind === 'parsed').toBe(true);
+  });
+
+  test('drops a stored dish tag that has since left the vocabulary, keeping the recipe', () => {
+    const result = parseStoredRecipe(makeStoredRow({ dish_tags: ['kip', 'italiaans'] }));
+    expect(result?.kind === 'parsed' && result.recipe.dishTags).toEqual(['kip']);
+  });
+});
+
+describe('parseStoredRecipe — ordering is never trusted to the database', () => {
+  test('sorts ingredients by sort_order regardless of the array order received', () => {
+    const result = parseStoredRecipe(
+      makeStoredRow({
+        recipe_ingredients: [
+          { name: 'Olijfolie', quantity: null, unit: null, sort_order: 2 },
+          { name: 'Kipfilet', quantity: '300', unit: 'g', sort_order: 0 },
+          { name: 'Citroen', quantity: '1', unit: null, sort_order: 1 },
+        ],
+      }),
+    );
+    expect(result?.kind === 'parsed' && result.recipe.ingredients.map((i) => i.name)).toEqual([
+      'Kipfilet',
+      'Citroen',
+      'Olijfolie',
+    ]);
+  });
+
+  test('sorts steps by step_number regardless of the array order received', () => {
+    const result = parseStoredRecipe(
+      makeStoredRow({
+        recipe_steps: [
+          { step_number: 3, instruction: 'Tot slot' },
+          { step_number: 1, instruction: 'Eerst' },
+          { step_number: 2, instruction: 'Dan' },
+        ],
+      }),
+    );
+    expect(result?.kind === 'parsed' && result.recipe.steps).toEqual(['Eerst', 'Dan', 'Tot slot']);
+  });
+});
+
+describe('parseStoredRecipe — any structural doubt degrades to a cache miss', () => {
+  test('returns null for a non-record input', () => {
+    expect(parseStoredRecipe(null)).toBeNull();
+    expect(parseStoredRecipe('a row')).toBeNull();
+    expect(parseStoredRecipe(undefined)).toBeNull();
+  });
+
+  test('returns null when normalized_url is missing or blank', () => {
+    expect(parseStoredRecipe(makeStoredRow({ normalized_url: undefined }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ normalized_url: '   ' }))).toBeNull();
+  });
+
+  test('returns null for a platform outside the import vocabulary', () => {
+    expect(parseStoredRecipe(makeStoredRow({ platform: 'reels' }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ platform: 'youtube' }))).toBeNull();
+  });
+
+  test('returns null when the title is missing or blank', () => {
+    expect(parseStoredRecipe(makeStoredRow({ title: undefined }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ title: '  ' }))).toBeNull();
+  });
+
+  test('returns null when the embedded child collections are missing or not arrays', () => {
+    expect(parseStoredRecipe(makeStoredRow({ recipe_ingredients: undefined }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ recipe_steps: 'Eerst' }))).toBeNull();
+  });
+
+  test('returns null for a stored recipe with zero ingredients or zero steps', () => {
+    expect(parseStoredRecipe(makeStoredRow({ recipe_ingredients: [] }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ recipe_steps: [] }))).toBeNull();
+  });
+
+  test('returns null when a child row carries no usable sort key', () => {
+    expect(
+      parseStoredRecipe(makeStoredRow({ recipe_ingredients: [{ name: 'Kipfilet', quantity: null, unit: null }] })),
+    ).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ recipe_steps: [{ instruction: 'Eerst' }] }))).toBeNull();
+  });
+
+  test('returns null when a child row is not a record at all', () => {
+    expect(parseStoredRecipe(makeStoredRow({ recipe_ingredients: ['Kipfilet'] }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ recipe_steps: [null] }))).toBeNull();
+  });
+
+  test('returns null when an author column holds something that is not a string', () => {
+    expect(parseStoredRecipe(makeStoredRow({ author_name: 42 }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ author_url: { href: 'x' } }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ thumbnail_url: true }))).toBeNull();
+  });
+
+  test('returns null for a stored numeric field that no longer satisfies the domain rules', () => {
+    expect(parseStoredRecipe(makeStoredRow({ estimated_minutes: 0 }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ servings: -2 }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ estimated_minutes: 12.5 }))).toBeNull();
+  });
+
+  test('returns null when dish_tags is a malformed container rather than a wrong word', () => {
+    expect(parseStoredRecipe(makeStoredRow({ dish_tags: 'kip' }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ dish_tags: [7] }))).toBeNull();
+  });
+
+  test('returns null when an ingredient has no name', () => {
+    expect(
+      parseStoredRecipe(makeStoredRow({ recipe_ingredients: [{ quantity: '300', unit: 'g', sort_order: 0 }] })),
+    ).toBeNull();
+  });
+});
+
+describe('canonicalRecipe — the write and read halves agree', () => {
+  test('a recipe written by the build functions reads back identically', () => {
+    const recipe = makeParsedRecipe({
+      title: 'Pasta pesto',
+      ingredients: [
+        makeParsedIngredient({ name: 'Pasta', quantity: '500', unit: 'g' }),
+        makeParsedIngredient({ name: 'Pesto', quantity: null, unit: null }),
+      ],
+      steps: ['Pasta koken.', 'Pesto erdoor.'],
+      estimatedMinutes: 15,
+      servings: 2,
+    });
+
+    const parent = buildRecipeRowInsert(recipe, CONTEXT);
+    const ingredients = buildRecipeIngredientRows(RECIPE_ID, recipe);
+    const steps = buildRecipeStepRows(RECIPE_ID, recipe);
+
+    const roundTripped = parseStoredRecipe({
+      ...parent,
+      recipe_ingredients: ingredients.map(({ recipe_id: _recipeId, ...rest }) => rest),
+      recipe_steps: steps.map(({ recipe_id: _recipeId, ...rest }) => rest),
+    });
+
+    expect(roundTripped?.kind === 'parsed' && roundTripped.recipe).toEqual(recipe);
+    expect(roundTripped?.kind === 'parsed' && roundTripped.sourceUrl).toBe(CONTEXT.normalizedUrl);
+    expect(roundTripped?.kind === 'parsed' && roundTripped.attribution).toEqual(ATTRIBUTION);
+  });
+});

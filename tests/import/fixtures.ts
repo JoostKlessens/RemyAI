@@ -23,6 +23,10 @@ export function makeParsedRecipe(overrides: Partial<ParsedRecipe> = {}): ParsedR
     steps: ['Oven voorverwarmen op 200 graden.', 'Kip en groenten 25 minuten roosteren.'],
     estimatedMinutes: 25,
     servings: 4,
+    // Deliberately non-empty by default: a `[]` default would let a
+    // regression that drops dishTags on the floor (toMealDraft, the
+    // repository) still pass every assertion downstream of it.
+    dishTags: ['kip'],
     ...overrides,
   };
 }

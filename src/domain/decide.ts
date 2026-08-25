@@ -15,10 +15,41 @@
  *   3. The novelty ratio        -> novelty.ts
  *   4. Reason text              -> reason.ts
  *   5. alternativesRemaining    -> computeAlternativesRemaining (below)
- *   6. No candidate             -> the three early returns below
+ *   6. No candidate             -> the four early returns below
+ *
+ * ---
+ *
+ * PD-009 — where tonight's filters sit, and why that order:
+ *
+ * Step 1 now runs three narrowing passes, and their ORDER is the whole
+ * point, because whichever one empties the pool is the one the user is
+ * told about (see `NoCandidateReason`):
+ *
+ *   empty_rotation  <- nothing in the library at all
+ *   all_excluded    <- the household's standing settings emptied it
+ *   filtered_out    <- tonight's stated filters emptied it
+ *   swaps_exhausted <- something survived, but it was already offered today
+ *
+ * Restrictions before filters: if an allergen restriction already removed
+ * everything, saying "je filter is te streng" would send someone to relax
+ * the one thing they must not, and would imply their allergies are why
+ * there's no dinner. The standing settings get named first because they
+ * are the deeper cause.
+ *
+ * Filters before "already offered": if a filter left something and it has
+ * merely been offered already, PD-001's two-swap cap is the binding
+ * constraint, not the filter — so `swaps_exhausted` and its two exits are
+ * the truthful answer. This also closes a loophole: were the order
+ * reversed, toggling a chip could keep producing fresh `filtered_out`
+ * states and, on relaxing it again, hand out swaps the cap already spent.
  */
 
-import { excludeAlreadyOffered, filterByRestrictionsAndTimeBudget, filterUnarchived } from './exclusions';
+import {
+  excludeAlreadyOffered,
+  filterByDecisionFilters,
+  filterByRestrictionsAndTimeBudget,
+  filterUnarchived,
+} from './exclusions';
 import {
   buildNoveltySeed,
   classifyNoveltyTier,
@@ -48,7 +79,14 @@ export function decide(request: DecisionRequest): DecisionResult {
     return { kind: 'no_candidate', reason: 'all_excluded' };
   }
 
-  const swapEligible = excludeAlreadyOffered(restrictionEligible, request.excludedMealIds);
+  const filterEligible = filterByDecisionFilters(restrictionEligible, request.filters);
+  if (filterEligible.length === 0) {
+    // PD-009. Something WOULD have been eligible; tonight's stated filters
+    // are what removed it, and one tap on a chip undoes that.
+    return { kind: 'no_candidate', reason: 'filtered_out' };
+  }
+
+  const swapEligible = excludeAlreadyOffered(filterEligible, request.excludedMealIds);
   if (swapEligible.length === 0) {
     // Something would have been eligible, but it was already offered
     // today -- PD-001's two-swap cap has been reached.

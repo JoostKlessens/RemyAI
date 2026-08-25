@@ -3,8 +3,8 @@
  * validation (`normalizeRecipeUrl`, src/domain/import/urlParsing.ts — the
  * same pure function the real edge function uses) runs first, synchronously,
  * so an obviously unsupported link fails instantly with no spinner at all.
- * Only a URL that passes that check goes on to the (fixture-backed) parse
- * step, which genuinely takes several seconds in the real system (an oEmbed
+ * Only a URL that passes that check goes on to the real parse
+ * step, which genuinely takes several seconds (an oEmbed
  * round trip plus an LLM call).
  *
  * **The loading state is the point of this screen** (docs/DESIGN.md §3):
@@ -44,10 +44,11 @@ import {
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { buildFixtureImportAttempt, resolveFixtureImportResult, type FixtureImportScenario } from './_fixtures';
+import { buildFixtureImportAttempt, type FixtureImportScenario } from './_fixtures';
 import { encodeImportConfirmParams } from './routeParams';
 import type { ImportPlatform, ParsedRecipe } from '@/domain/import/types';
 import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
+import { requestImport } from '@/lib/importRecipe';
 import { Button } from '@/components/Button';
 import { ImportFailureState } from '@/components/ImportFailureState';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
@@ -125,7 +126,7 @@ export default function ImportPasteScreen(): JSX.Element {
       setTimeout(() => setLoadingCheckpoint(1), CHECKPOINT_ONE_DELAY_MS),
       setTimeout(() => setLoadingCheckpoint(2), CHECKPOINT_TWO_DELAY_MS),
     ];
-    resolveFixtureImportResult(normalizedUrl, platform).then((attempt) => {
+    requestImport(normalizedUrl).then((attempt) => {
       clearCheckpointTimers();
       setPhase('idle');
       if (attempt.result.kind === 'parsed') {

@@ -67,6 +67,19 @@ export const fixtureNoCandidateAllExcluded: DecisionResult = {
   reason: 'all_excluded',
 };
 
+/**
+ * PD-009. Worth its own dev scenario rather than folding into
+ * `fixtureNoCandidateAllExcluded` above: the two states look nearly
+ * identical in a screenshot and differ in the things that matter (which
+ * action is primary, and whether the copy points at the user's standing
+ * settings or at a chip they can un-tap), so they need to be checkable
+ * side by side on device.
+ */
+export const fixtureNoCandidateFilteredOut: DecisionResult = {
+  kind: 'no_candidate',
+  reason: 'filtered_out',
+};
+
 export const fixtureNoCandidateSwapsExhausted: DecisionResult = {
   kind: 'no_candidate',
   reason: 'swaps_exhausted',

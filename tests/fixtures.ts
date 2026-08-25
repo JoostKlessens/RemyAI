@@ -11,6 +11,7 @@
 import type {
   CookEvent,
   Decision,
+  DecisionFilters,
   DecisionRequest,
   Household,
   Meal,
@@ -18,6 +19,7 @@ import type {
   Restriction,
   Save,
 } from '@/domain/types';
+import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 
 const DEFAULT_CREATED_AT = '2026-01-01T00:00:00.000Z';
 
@@ -74,6 +76,10 @@ export function makeMeal(overrides: Partial<Meal> = {}): Meal {
     // target the gate itself (see exclusions.test.ts) override this
     // explicitly to 'unknown'.
     allergenTagStatus: 'verified',
+    // Empty by default, unlike `allergenTagStatus` above: a dish category
+    // never gates anything, so no existing suite depends on one being
+    // present. Tests about categories set them explicitly.
+    dishTags: [],
     sourceUrl: null,
     sourcePlatform: null,
     thumbnailUrl: null,
@@ -126,6 +132,18 @@ export function makeDecision(overrides: Partial<Decision> = {}): Decision {
   };
 }
 
+/**
+ * Tonight's filters (PD-009). Defaults to the no-op identity so a test that
+ * says nothing about filters exercises exactly the pre-filter behaviour —
+ * the same posture `makeMeal`'s `dishTags: []` takes.
+ */
+export function makeDecisionFilters(overrides: Partial<DecisionFilters> = {}): DecisionFilters {
+  return {
+    ...NO_DECISION_FILTERS,
+    ...overrides,
+  };
+}
+
 export function makeDecisionRequest(overrides: Partial<DecisionRequest> = {}): DecisionRequest {
   const household = overrides.household ?? makeHousehold();
   return {
@@ -139,6 +157,7 @@ export function makeDecisionRequest(overrides: Partial<DecisionRequest> = {}): D
     recentDecisions: [],
     targetDate: '2026-08-22',
     excludedMealIds: [],
+    filters: NO_DECISION_FILTERS,
     ...overrides,
   };
 }

@@ -10,6 +10,7 @@ const VALID_RAW = {
   steps: ['Oven voorverwarmen op 200 graden.', 'Alles 25 minuten roosteren.'],
   estimatedMinutes: 25,
   servings: 4,
+  dishTags: ['kip'],
 };
 
 describe('validateParsedRecipe — valid shapes', () => {
@@ -48,6 +49,83 @@ describe('validateParsedRecipe — valid shapes', () => {
   test('ignores unknown extra fields on the raw object', () => {
     const result = validateParsedRecipe({ ...VALID_RAW, extraField: 'should be ignored', confidence: 0.9 });
     expect(result).toEqual(VALID_RAW);
+  });
+});
+
+/**
+ * The closed dish vocabulary (src/domain/dishTags.ts) meets untrusted
+ * input here. Two different failures are deliberately treated differently:
+ *
+ * - A value the vocabulary does not know is DROPPED, not rejected. That is
+ *   the entire point of a closed vocabulary — a model that answers
+ *   "italiaans" loses that one tag, and the perfectly good recipe around
+ *   it survives. Rejecting the whole recipe over a descriptive, optional
+ *   category would turn a cosmetic miss into a user-facing `parse_failed`.
+ * - A malformed CONTAINER (dishTags is a bare string, or holds a number)
+ *   is rejected like any other bad shape in this file, because that is not
+ *   the model choosing a wrong word — it is the model not honouring the
+ *   schema at all, and this file's contract is that structural doubt fails
+ *   the whole recipe rather than being silently coerced.
+ *
+ * Normalization is `sanitizeDishTags` + `normalizeTag` and nothing else:
+ * one path, shared with restriction entry and meal tagging, so a stored
+ * dish tag is comparable by `Set.has()` with no re-normalization anywhere
+ * downstream.
+ */
+describe('validateParsedRecipe — dishTags (closed vocabulary)', () => {
+  test('keeps a tag the vocabulary knows', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: ['pasta', 'soep'] })?.dishTags).toEqual(['pasta', 'soep']);
+  });
+
+  test('treats a missing dishTags key as an empty list, not as a malformed recipe', () => {
+    const { dishTags: _dishTags, ...withoutDishTags } = VALID_RAW;
+    expect(validateParsedRecipe(withoutDishTags)?.dishTags).toEqual([]);
+  });
+
+  test('treats an explicit null dishTags as an empty list', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: null })?.dishTags).toEqual([]);
+  });
+
+  test('treats an empty dishTags array as an empty list', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: [] })?.dishTags).toEqual([]);
+  });
+
+  test('normalizes a capitalized/padded model answer rather than storing the raw spelling', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: ['Pasta', ' SOEP '] })?.dishTags).toEqual(['pasta', 'soep']);
+  });
+
+  test('drops an invented category but keeps the rest of the recipe', () => {
+    const result = validateParsedRecipe({ ...VALID_RAW, dishTags: ['italiaans', 'pasta'] });
+    expect(result?.dishTags).toEqual(['pasta']);
+    expect(result?.title).toBe(VALID_RAW.title);
+  });
+
+  test('drops every tag when the model invents all of them, rather than failing the recipe', () => {
+    const result = validateParsedRecipe({ ...VALID_RAW, dishTags: ['italiaans', 'comfortfood'] });
+    expect(result?.dishTags).toEqual([]);
+    expect(result?.steps).toEqual(VALID_RAW.steps);
+  });
+
+  test('de-duplicates tags that normalize to the same value', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: ['pasta', 'Pasta', ' pasta'] })?.dishTags).toEqual(['pasta']);
+  });
+
+  /**
+   * PD-006 boundary at the import seam: an allergen literal must never
+   * survive into `dishTags`, and — just as importantly — must never reach
+   * `ingredientTags` from here either (toMealDraft.ts holds that second
+   * half; see its own suite).
+   */
+  test('drops an allergen value rather than accepting it as a category', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: ['noten', 'gluten'] })?.dishTags).toEqual([]);
+  });
+
+  test('rejects dishTags that is not an array (a malformed shape, not a wrong word)', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: 'pasta' })).toBeNull();
+  });
+
+  test('rejects a dishTags array holding a non-string entry', () => {
+    expect(validateParsedRecipe({ ...VALID_RAW, dishTags: ['pasta', 42] })).toBeNull();
   });
 });
 

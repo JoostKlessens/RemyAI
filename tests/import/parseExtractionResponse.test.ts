@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { parseExtractionResponse } from '@/domain/import/parseExtractionResponse';
 
-const RECIPE_TOOL_INPUT = {
+const RECIPE_ARGS = {
   title: 'Traybake met kip en citroen',
   ingredients: [{ name: 'Kipfilet', quantity: '300', unit: 'g' }],
   steps: ['Oven voorverwarmen.', 'Roosteren.'],
@@ -9,42 +9,46 @@ const RECIPE_TOOL_INPUT = {
   servings: 4,
 };
 
-function anthropicResponse(content: readonly unknown[]): unknown {
-  return { id: 'msg_1', type: 'message', role: 'assistant', content, stop_reason: 'tool_use' };
+/** One candidate, as the API returns when `candidateCount` is left at its default. */
+function geminiResponse(parts: readonly unknown[]): unknown {
+  return {
+    candidates: [{ content: { role: 'model', parts }, finishReason: 'STOP' }],
+    usageMetadata: { promptTokenCount: 512, candidatesTokenCount: 128 },
+  };
 }
 
 describe('parseExtractionResponse — recipe found', () => {
-  test('extracts the tool input from a sole report_recipe tool_use block', () => {
-    const raw = anthropicResponse([{ type: 'tool_use', id: 'tu_1', name: 'report_recipe', input: RECIPE_TOOL_INPUT }]);
-    expect(parseExtractionResponse(raw)).toEqual({ kind: 'recipe_found', rawRecipe: RECIPE_TOOL_INPUT });
+  test('extracts the function args from a sole report_recipe call', () => {
+    const raw = geminiResponse([{ functionCall: { name: 'report_recipe', args: RECIPE_ARGS } }]);
+    expect(parseExtractionResponse(raw)).toEqual({ kind: 'recipe_found', rawRecipe: RECIPE_ARGS });
   });
 
-  test('finds the tool_use block even alongside a preceding text block', () => {
-    const raw = anthropicResponse([
-      { type: 'text', text: "I'll extract this recipe." },
-      { type: 'tool_use', id: 'tu_1', name: 'report_recipe', input: RECIPE_TOOL_INPUT },
+  test('finds the function call even alongside a preceding text part', () => {
+    const raw = geminiResponse([
+      { text: "I'll extract this recipe." },
+      { functionCall: { name: 'report_recipe', args: RECIPE_ARGS } },
     ]);
-    expect(parseExtractionResponse(raw)).toEqual({ kind: 'recipe_found', rawRecipe: RECIPE_TOOL_INPUT });
+    expect(parseExtractionResponse(raw)).toEqual({ kind: 'recipe_found', rawRecipe: RECIPE_ARGS });
   });
 });
 
 describe('parseExtractionResponse — no recipe found (the honest failure path)', () => {
-  test('maps a sole report_no_recipe tool_use block to "no_recipe"', () => {
-    const raw = anthropicResponse([
-      { type: 'tool_use', id: 'tu_1', name: 'report_no_recipe', input: { reason: 'No ingredients stated.' } },
+  test('maps a sole report_no_recipe call to "no_recipe"', () => {
+    const raw = geminiResponse([
+      { functionCall: { name: 'report_no_recipe', args: { reason: 'No ingredients stated.' } } },
     ]);
     expect(parseExtractionResponse(raw)).toEqual({ kind: 'no_recipe' });
   });
 
-  test('maps report_no_recipe to "no_recipe" even with an empty input object', () => {
-    const raw = anthropicResponse([{ type: 'tool_use', id: 'tu_1', name: 'report_no_recipe', input: {} }]);
+  test('maps report_no_recipe to "no_recipe" even with an empty args object', () => {
+    const raw = geminiResponse([{ functionCall: { name: 'report_no_recipe', args: {} } }]);
     expect(parseExtractionResponse(raw)).toEqual({ kind: 'no_recipe' });
   });
 });
 
 describe('parseExtractionResponse — malformed (trust nothing from the network)', () => {
-  test('rejects a response with no content array at all', () => {
-    expect(parseExtractionResponse({ id: 'msg_1' })).toEqual({ kind: 'malformed' });
+  test('rejects a response with no candidates array at all', () => {
+    expect(parseExtractionResponse({ usageMetadata: {} })).toEqual({ kind: 'malformed' });
   });
 
   test('rejects a non-object root value', () => {
@@ -53,25 +57,53 @@ describe('parseExtractionResponse — malformed (trust nothing from the network)
     expect(parseExtractionResponse(undefined)).toEqual({ kind: 'malformed' });
   });
 
-  test('rejects a response with zero tool_use blocks (only text)', () => {
-    const raw = anthropicResponse([{ type: 'text', text: 'I found a great recipe for you!' }]);
+  test('rejects a candidate with no content.parts', () => {
+    expect(parseExtractionResponse({ candidates: [{ finishReason: 'SAFETY' }] })).toEqual({ kind: 'malformed' });
+  });
+
+  test('rejects an empty candidates array', () => {
+    expect(parseExtractionResponse({ candidates: [] })).toEqual({ kind: 'malformed' });
+  });
+
+  test('rejects several candidates rather than believing the first extraction', () => {
+    const raw = {
+      candidates: [
+        { content: { role: 'model', parts: [{ functionCall: { name: 'report_recipe', args: RECIPE_ARGS } }] } },
+        { content: { role: 'model', parts: [{ functionCall: { name: 'report_no_recipe', args: {} } }] } },
+      ],
+    };
     expect(parseExtractionResponse(raw)).toEqual({ kind: 'malformed' });
   });
 
-  test('rejects a response with an empty content array', () => {
-    expect(parseExtractionResponse(anthropicResponse([]))).toEqual({ kind: 'malformed' });
+  test('rejects a response with zero function calls (only text)', () => {
+    const raw = geminiResponse([{ text: 'I found a great recipe for you!' }]);
+    expect(parseExtractionResponse(raw)).toEqual({ kind: 'malformed' });
   });
 
-  test('rejects a response with two tool_use blocks rather than guessing which to trust', () => {
-    const raw = anthropicResponse([
-      { type: 'tool_use', id: 'tu_1', name: 'report_recipe', input: RECIPE_TOOL_INPUT },
-      { type: 'tool_use', id: 'tu_2', name: 'report_no_recipe', input: {} },
+  test('rejects a response with an empty parts array', () => {
+    expect(parseExtractionResponse(geminiResponse([]))).toEqual({ kind: 'malformed' });
+  });
+
+  /**
+   * Gemini offers no request-side "disable parallel tool use", so this is
+   * the only guard against a two-call response — it matters more here than
+   * it did against the Anthropic shape this replaced.
+   */
+  test('rejects a response with two function calls rather than guessing which to trust', () => {
+    const raw = geminiResponse([
+      { functionCall: { name: 'report_recipe', args: RECIPE_ARGS } },
+      { functionCall: { name: 'report_no_recipe', args: {} } },
     ]);
     expect(parseExtractionResponse(raw)).toEqual({ kind: 'malformed' });
   });
 
-  test('rejects a tool_use block calling an unrecognized tool name', () => {
-    const raw = anthropicResponse([{ type: 'tool_use', id: 'tu_1', name: 'some_other_tool', input: {} }]);
+  test('rejects a function call with an unrecognized name', () => {
+    const raw = geminiResponse([{ functionCall: { name: 'some_other_tool', args: {} } }]);
+    expect(parseExtractionResponse(raw)).toEqual({ kind: 'malformed' });
+  });
+
+  test('rejects a functionCall part that carries no name', () => {
+    const raw = geminiResponse([{ functionCall: { args: RECIPE_ARGS } }]);
     expect(parseExtractionResponse(raw)).toEqual({ kind: 'malformed' });
   });
 });

@@ -1,0 +1,66 @@
+-- Remy — cook event rating (additive only; does not touch 0001/0002/0003)
+--
+-- The outcome loop (PD-003) used to end on a single boolean: "Nog een
+-- keer?" -> would_repeat. That question has only two answers, so every
+-- lukewarm meal — the ones nobody minds and nobody asks for — was
+-- recorded as would_repeat = true and quietly earned scoring.ts's
+-- HOUSEHOLD_FAVOURITE_BOOST. The signal deciding what gets served again
+-- was being inflated by indifference. This column is the fix: a score
+-- with room in the middle for "it was fine."
+--
+-- WHY IT COEXISTS WITH would_repeat RATHER THAN REPLACING IT.
+-- Three reasons, none of them "we didn't get round to dropping it":
+--
+--   1. History. Every cook_events row written before this migration has a
+--      would_repeat and no rating, and there is no honest backfill — a
+--      `true` means "would cook this again", which is anywhere at or
+--      above the positive threshold, not one specific number. Inventing
+--      one would put opinions in people's mouths. src/domain/rating.ts's
+--      `resolveRepeatSignal` reads rating first and falls back to
+--      would_repeat, so old rows keep working forever, unconverted.
+--
+--   2. The middle band has no boolean. A score between the thresholds
+--      projects to NULL, not false — "it was fine" is not the claim
+--      "never again", and scoring.ts penalises the latter by 50 points.
+--      A two-valued column cannot carry a three-valued answer, which is
+--      precisely why collapsing this back to a boolean would lose
+--      information rather than simplify anything.
+--
+--   3. Tuning stays put. scoring.ts's HOUSEHOLD_FAVOURITE_BOOST and
+--      WOULD_NOT_REPEAT_PENALTY are tuned against a boolean. Keeping
+--      would_repeat as a derived column lets the score arrive without
+--      re-deriving those weights, and leaves any analytics query or view
+--      already joining on would_repeat working untouched.
+--
+-- would_repeat is therefore a LOSSY PROJECTION of rating, not an
+-- independent field, and the client keeps the two in step at its single
+-- write seam (src/lib/repository/local/cookEvents.ts, via rating.ts's
+-- `toRepeatSignal`) rather than re-deriving it on every read.
+-- Deliberately NOT a generated column and NOT a trigger: the thresholds
+-- are a product decision that belongs in rating.ts, where they can be
+-- read, tested and changed together with the middle-band rule — not
+-- duplicated into SQL, where the copy would silently drift out of step
+-- with the app that writes it.
+--
+-- Nullable, no default: skipping the question is a first-class answer
+-- (the same posture PD-002 takes toward the optional decline reason), and
+-- "nobody was asked" must stay distinguishable from any score at all.
+-- Never defaulted to a midpoint, which would fabricate a shrug nobody
+-- gave — the same reasoning behind PD-006's refusal to read an untagged
+-- meal as a safe one.
+--
+-- The CHECK mirrors RATING_MIN/RATING_MAX in src/domain/rating.ts. That
+-- file's header names this constraint as the one other place the scale is
+-- written down: moving to a Dutch 1-10 report-card scale is an edit there
+-- plus a new migration redefining this constraint, and nothing else.
+-- Bounds are written literally rather than hidden behind a domain or enum
+-- so the failure mode on a bad write is a loud constraint violation, not
+-- a silently clamped or coerced value. No index: rating is read as part
+-- of an already-indexed cook_events row (see idx_cook_events_household_*
+-- in 0001_init.sql), never filtered on by itself.
+
+alter table cook_events
+  add column rating integer check (rating between 1 and 5);
+
+comment on column cook_events.rating is
+  'The cook''s score for this meal, 1-5 — see RATING_MIN/RATING_MAX in src/domain/rating.ts, which owns the scale. Null when the question was skipped; skipping is optional by design, never a missing value to fill in. would_repeat is a lossy projection of this column, kept rather than dropped for pre-rating history and for the neutral middle band, which has no boolean equivalent.';

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { toMealDraft } from '@/domain/import/toMealDraft';
 import { makeParsedIngredient, makeParsedRecipe } from './fixtures';
+import { EU_ALLERGEN_TAGS } from '@/domain/allergens';
 
 const TIKTOK_CONTEXT = {
   householdId: 'household-1',
@@ -27,6 +28,29 @@ describe('toMealDraft — PD-006 guarantee', () => {
     const draft = toMealDraft(makeParsedRecipe(), TIKTOK_CONTEXT);
     expect(draft.skillLevel).toBeNull();
   });
+
+  /**
+   * The one AI-derived tag field that DOES flow through this function, and
+   * the reason the two must never be plumbed together: a dish category can
+   * only ever narrow a search the user asked for, so an occasional wrong
+   * one costs a missed result. `ingredientTags` drives the PD-006 exclusion
+   * gate, where a wrong value costs someone a reaction. Same shape, wholly
+   * different blast radius — hence one is populated from the model and the
+   * other is hardcoded empty three lines away.
+   */
+  test('populating dishTags never leaks into ingredientTags, however many categories the model returned', () => {
+    const draft = toMealDraft(makeParsedRecipe({ dishTags: ['pasta', 'vegetarisch', 'ovenschotel'] }), TIKTOK_CONTEXT);
+    expect(draft.dishTags).toEqual(['pasta', 'vegetarisch', 'ovenschotel']);
+    expect(draft.ingredientTags).toEqual([]);
+    expect(draft.allergenTagStatus).toBe('unknown');
+  });
+
+  test('no dish tag it carries is ever an allergen literal', () => {
+    const draft = toMealDraft(makeParsedRecipe({ dishTags: ['visgerecht', 'rijst'] }), TIKTOK_CONTEXT);
+    for (const tag of draft.dishTags) {
+      expect(EU_ALLERGEN_TAGS.has(tag)).toBe(false);
+    }
+  });
 });
 
 describe('toMealDraft — field mapping', () => {
@@ -40,6 +64,26 @@ describe('toMealDraft — field mapping', () => {
 
   test('sets source to "saved"', () => {
     expect(toMealDraft(makeParsedRecipe(), TIKTOK_CONTEXT).source).toBe('saved');
+  });
+
+  test('carries dishTags straight through from the validated recipe, never re-derived from the title', () => {
+    const draft = toMealDraft(makeParsedRecipe({ title: 'Pasta pesto', dishTags: ['soep'] }), TIKTOK_CONTEXT);
+    expect(draft.dishTags).toEqual(['soep']);
+  });
+
+  test('carries an empty dishTags list through as empty — no fallback category is guessed', () => {
+    expect(toMealDraft(makeParsedRecipe({ dishTags: [] }), TIKTOK_CONTEXT).dishTags).toEqual([]);
+  });
+
+  /**
+   * `ParsedRecipe.dishTags` is optional purely for literals that predate it
+   * (src/app/import/_fixtures.ts, confirm.tsx). Those still have to produce
+   * a storable draft, and the stored field is required — so the missing key
+   * must become `[]` here rather than travelling on as `undefined`.
+   */
+  test('treats a recipe literal with no dishTags key at all as having no categories', () => {
+    const { dishTags: _dishTags, ...withoutDishTags } = makeParsedRecipe();
+    expect(toMealDraft(withoutDishTags, TIKTOK_CONTEXT).dishTags).toEqual([]);
   });
 
   test('passes householdId and sourceUrl through from context, independent of the recipe', () => {

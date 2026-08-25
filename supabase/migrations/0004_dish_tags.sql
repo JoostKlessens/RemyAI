@@ -1,0 +1,44 @@
+-- Remy — dish categories (additive only; does not touch 0001/0002/0003)
+--
+-- The decision surface needs a way to answer "kies iets met pasta": a
+-- positive, user-initiated narrowing of a pool the household has already
+-- accepted. That is what this column carries — a closed vocabulary of
+-- dish categories (pasta, soep, ovenschotel, vegetarisch, ...), defined
+-- once in src/domain/dishTags.ts and enforced on every write path: the
+-- extraction schema constrains the model to those values
+-- (buildExtractionRequest.ts) and validateParsed.ts drops anything
+-- outside them before a row is ever built.
+--
+-- WHY THIS IS NOT `ingredient_tags`, AND MUST NEVER BE MERGED INTO IT:
+-- `ingredient_tags` (0001_init.sql) is a denormalized list of ALLERGENS.
+-- It drives the PD-006 exclusion gate — the candidate-meal query's
+-- `NOT (ingredient_tags && :excluded_tags)` — where a value REMOVES a
+-- meal from someone's rotation on health grounds. A dish category is
+-- descriptive and only ever narrows a search the household explicitly
+-- asked for. Same `text[]` shape, opposite direction, wholly different
+-- blast radius: a wrong dish tag costs a missed suggestion, a wrong
+-- allergen tag costs someone a reaction.
+--
+-- Storing both in one column would mean a category filter and an allergen
+-- exclusion silently operating on the same array — exactly the conflation
+-- PD-006 forbids — and would let an AI-derived category (dish tags are
+-- model-suggested; allergen tags are human-confirmed, see
+-- meals.allergen_tag_status) leak into a safety-relevant filter. Two
+-- columns make that leak impossible to write by accident rather than
+-- merely discouraged. The two vocabularies are additionally asserted to
+-- share no value — see tests/dishTags.test.ts.
+--
+-- `not null default '{}'`, mirroring `ingredient_tags`: a meal with no
+-- recognizable category is the normal case, not a missing-data case, so
+-- there is nothing a nullable column would express that an empty array
+-- does not. Existing rows adopt the default; no backfill is needed.
+--
+-- Deliberately NO GIN index yet, unlike `idx_meals_ingredient_tags`. That
+-- index exists because the candidate-meal query runs an array overlap on
+-- every decision. Nothing queries dish_tags yet — the filtering surface
+-- lands in a later phase — and an unused index is write cost for no read
+-- benefit. Add `create index ... using gin (dish_tags)` in the same
+-- migration as the query that needs it.
+
+alter table meals
+  add column dish_tags text[] not null default '{}';

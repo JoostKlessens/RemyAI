@@ -12,6 +12,7 @@ import {
   SOMEDAY_SAVE_WEEKLY_ESCALATION,
   VARIETY_BOOST,
 } from '@/domain/scoring';
+import { RATING_MAX, RATING_MIN, RATING_NEGATIVE_AT_OR_BELOW } from '@/domain/rating';
 import { makeCookEvent, makeHousehold, makeMeal, makeSave } from './fixtures';
 
 const TARGET_DATE = '2026-08-22';
@@ -84,6 +85,65 @@ describe('scoreMeal — wouldRepeat history', () => {
     // only the not_recent boost should apply.
     expect(result.score).toBe(NOT_RECENT_BOOST);
     expect(result.reasonCode).toBe('not_recent');
+  });
+});
+
+describe('scoreMeal — numeric rating (PD-008)', () => {
+  const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+
+  test('a top score boosts the meal as a household favourite', () => {
+    const meal = makeMeal({ id: 'meal-loved', estimatedMinutes: 20 });
+    const recentCookEvents = [
+      makeCookEvent({ mealId: 'meal-loved', cookedOn: '2026-06-01', wouldRepeat: null, rating: RATING_MAX }),
+    ];
+
+    const result = scoreMeal(meal, household, recentCookEvents, [], TARGET_DATE);
+
+    expect(result.reasonCode).toBe('household_favourite');
+    expect(result.score).toBeGreaterThan(NOT_RECENT_BOOST);
+  });
+
+  test('a bottom score penalizes the meal below an untried one', () => {
+    const ratedMeal = makeMeal({ id: 'meal-disliked', estimatedMinutes: 20 });
+    const untriedMeal = makeMeal({ id: 'meal-untried', estimatedMinutes: 20 });
+    const recentCookEvents = [
+      makeCookEvent({ mealId: 'meal-disliked', cookedOn: '2026-06-01', wouldRepeat: null, rating: RATING_MIN }),
+    ];
+
+    const ratedScore = scoreMeal(ratedMeal, household, recentCookEvents, [], TARGET_DATE);
+    const untriedScore = scoreMeal(untriedMeal, household, recentCookEvents, [], TARGET_DATE);
+
+    expect(untriedScore.score).toBeGreaterThan(ratedScore.score);
+  });
+
+  /**
+   * The reason the scale has a middle at all. Without it a lukewarm meal
+   * is recorded as a favourite and inflates the very signal that decides
+   * what gets served again — so a middling score must score exactly like
+   * an unanswered one.
+   */
+  test('a middling score contributes no adjustment, exactly like no answer', () => {
+    const meal = makeMeal({ id: 'meal-fine', estimatedMinutes: 20 });
+    const middlingScore = RATING_NEGATIVE_AT_OR_BELOW + 1;
+    const recentCookEvents = [
+      makeCookEvent({ mealId: 'meal-fine', cookedOn: '2026-06-01', wouldRepeat: null, rating: middlingScore }),
+    ];
+
+    const result = scoreMeal(meal, household, recentCookEvents, [], TARGET_DATE);
+
+    expect(result.score).toBe(NOT_RECENT_BOOST);
+    expect(result.reasonCode).toBe('not_recent');
+  });
+
+  test('a meal rated before the scale existed still scores on wouldRepeat alone', () => {
+    const meal = makeMeal({ id: 'meal-legacy', estimatedMinutes: 20 });
+    const recentCookEvents = [
+      makeCookEvent({ mealId: 'meal-legacy', cookedOn: '2026-06-01', wouldRepeat: true }),
+    ];
+
+    const result = scoreMeal(meal, household, recentCookEvents, [], TARGET_DATE);
+
+    expect(result.reasonCode).toBe('household_favourite');
   });
 });
 

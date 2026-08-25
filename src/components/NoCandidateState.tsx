@@ -10,6 +10,13 @@
  *  - `all_excluded`: restrictions filtered everything — explained with
  *    exclusion framing, never "safety" framing, and offers Bibliotheek as
  *    an alternative.
+ *  - `filtered_out` (PD-009): the household's own filters for tonight
+ *    emptied the pool. Deliberately worded and actioned differently from
+ *    `all_excluded` above: that one is about standing settings the user
+ *    must never be nudged to loosen (allergens), this one is about a
+ *    choice made ten seconds ago that a single tap undoes. So it leads
+ *    with a primary `Filters wissen` and says plainly that the filter, not
+ *    the library, is what came up empty.
  *  - `swaps_exhausted`: the PD-001 two exits (`Niet koken` / `Ik kies
  *    zelf`), with no dish to show because none remain.
  */
@@ -23,8 +30,15 @@ export interface NoCandidateStateProps {
   readonly reason: NoCandidateReason;
   /** empty_rotation only: "Recept plakken" -> the Plakken screen. */
   readonly onOpenImport: () => void;
-  /** all_excluded / swaps_exhausted: "Kies zelf" / "Ik kies zelf" -> Bibliotheek. */
+  /** all_excluded / filtered_out / swaps_exhausted: "Kies zelf" / "Ik kies zelf" -> Bibliotheek. */
   readonly onOpenRecipes: () => void;
+  /**
+   * filtered_out only (PD-009): clears tonight's `DecisionFilters` back to
+   * `NO_DECISION_FILTERS`. Required rather than optional so a future screen
+   * that renders this component has to decide what "relax the filter" means
+   * for it, instead of silently shipping a dead-end state.
+   */
+  readonly onClearFilters: () => void;
   /** Not rendered for empty_rotation — see the file header. */
   readonly onDecline: () => void;
 }
@@ -35,7 +49,7 @@ interface ReasonCopy {
 }
 
 export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
-  const { reason, onOpenImport, onOpenRecipes, onDecline } = props;
+  const { reason, onOpenImport, onOpenRecipes, onClearFilters, onDecline } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const copy = getCopyForReason(reason);
@@ -54,6 +68,20 @@ export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
           />
         ) : (
           <>
+            {/* PD-009: the one tap that undoes this state, and the only
+                reason on this screen that has one — so it takes the
+                primary slot above "Kies zelf" rather than sitting beside
+                it as an equal. Nothing comparable exists for
+                `all_excluded`, whose fix is a settings change we must not
+                push someone towards from here. */}
+            {reason === 'filtered_out' ? (
+              <Button
+                label="Filters wissen"
+                variant="primary"
+                onPress={onClearFilters}
+                accessibilityLabel="Wis de filters voor vanavond en zoek opnieuw"
+              />
+            ) : null}
             <Button
               label={reason === 'swaps_exhausted' ? 'Ik kies zelf' : 'Kies zelf'}
               variant="secondary"
@@ -79,6 +107,15 @@ function getCopyForReason(reason: NoCandidateReason): ReasonCopy {
       return {
         title: 'Niks voor de hand liggends vanavond',
         body: 'Je instellingen sluiten alle gerechten in je bibliotheek uit voor vanavond.',
+      };
+    case 'filtered_out':
+      // Names the filter as the cause, not the library and certainly not
+      // the household's restrictions — see the file header. "Te streng"
+      // rather than "verkeerd": the user asked for something reasonable,
+      // there just isn't a dish for it tonight.
+      return {
+        title: 'Niets binnen deze filters',
+        body: 'Je filters voor vanavond zijn te streng. Wis ze en Remy kijkt weer in je hele bibliotheek.',
       };
     case 'swaps_exhausted':
       return {

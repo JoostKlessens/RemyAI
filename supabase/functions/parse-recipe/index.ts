@@ -16,7 +16,7 @@
  * inside a mobile app bundle is trivially extractable (it's just a string
  * in a downloadable binary/JS bundle), so extraction has to happen
  * server-side, here, where the key lives only in this function's
- * environment and is attached to the outbound Anthropic request as a
+ * environment and is attached to the outbound Gemini request as a
  * header — never included in this function's own JSON response body, and
  * never logged. This is a security requirement, not a style preference.
  *
@@ -27,6 +27,18 @@
  * endpoint. No auth check is hand-rolled in this file — that would just
  * be a weaker, easier-to-get-wrong reimplementation of what the platform
  * already does in front of it.
+ *
+ * ---
+ *
+ * DEDUPLICATION (Fase 1b): before any third-party call, this function
+ * checks whether the resolved URL already has a canonical `recipes` row
+ * (supabase/migrations/0006_canonical_recipes.sql) and returns it
+ * unchanged if so — no oEmbed call, no LLM call, no cost. A miss runs the
+ * full pipeline and then writes that row for everyone after. See the
+ * CANONICAL RECIPE DEDUPLICATION section below for where exactly the
+ * lookup sits and why that position is the feature rather than a detail,
+ * and src/domain/import/canonicalRecipe.ts for the pure mapping and the
+ * PD-006 reason a shared recipe can never carry allergen state.
  *
  * ---
  *
@@ -70,11 +82,22 @@ declare const Deno: {
 
 import { normalizeRecipeUrl } from '../../../src/domain/import/urlParsing.ts';
 import { validateParsedRecipe } from '../../../src/domain/import/validateParsed.ts';
-import { buildExtractionRequest } from '../../../src/domain/import/buildExtractionRequest.ts';
+import { buildExtractionEndpoint, buildExtractionRequest } from '../../../src/domain/import/buildExtractionRequest.ts';
 import { parseExtractionResponse } from '../../../src/domain/import/parseExtractionResponse.ts';
 import { buildAttribution } from '../../../src/domain/import/buildAttribution.ts';
+import {
+  buildRecipeIngredientRows,
+  buildRecipeRowInsert,
+  buildRecipeStepRows,
+  parseStoredRecipe,
+} from '../../../src/domain/import/canonicalRecipe.ts';
 import { resolveOembed } from '../../../src/lib/oembed.ts';
-import type { ImportPlatform, ImportResult } from '../../../src/domain/import/types.ts';
+import type {
+  ImportAttribution,
+  ImportPlatform,
+  ImportResult,
+  ParsedRecipe,
+} from '../../../src/domain/import/types.ts';
 
 function readRequiredEnvVar(name: string): string {
   const value = Deno.env.get(name);
@@ -91,16 +114,45 @@ function readRequiredEnvVar(name: string): string {
 // readRequiredEnvVar pattern. A function that silently no-ops (or, worse,
 // silently skips extraction) without a configured key is a much harder
 // failure to notice than one that refuses to boot at all.
-const ANTHROPIC_API_KEY = readRequiredEnvVar('ANTHROPIC_API_KEY');
-// Cost-sensitive extraction task, no deep reasoning needed — Haiku is the
-// deliberate choice, not a placeholder. `-latest` is an alias; pin an
-// exact dated snapshot here before relying on this in production, so a
-// silent model upgrade can't silently change extraction behavior.
-const ANTHROPIC_MODEL = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-3-5-haiku-latest';
+const GEMINI_API_KEY = readRequiredEnvVar('GEMINI_API_KEY');
+// Structured extraction behind a forced function call — no deep reasoning
+// needed, so Flash-Lite is the deliberate choice, not a placeholder. It is
+// roughly a third the cost of the Flash tier for this workload.
+//
+// THE RISK THIS TRADES FOR COST: the anti-hallucination design in
+// buildExtractionRequest.ts depends on the model honestly calling
+// report_no_recipe for a caption with no real recipe, and honest refusal is
+// the first thing a smaller model gets worse at. If invented recipes start
+// appearing, raise this to a Flash tier before touching the prompt.
+//
+// This is a floating alias; pin an exact dated snapshot via the GEMINI_MODEL
+// secret before relying on this in production, so a silent model upgrade
+// cannot silently change extraction behavior.
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.6-flash';
 // Optional: see src/lib/oembed.ts's `instagramAccessToken` — undefined
 // here means every Instagram resolution fails with the typed
 // `missing_credentials` reason, never a silent empty result.
 const INSTAGRAM_OEMBED_ACCESS_TOKEN = Deno.env.get('INSTAGRAM_OEMBED_ACCESS_TOKEN');
+
+// Both are injected into every Edge Function by the platform itself — no
+// `supabase secrets set`, no new secret to manage or rotate, nothing added
+// to .env.example. That is the whole reason the canonical-recipe cache
+// uses the service role rather than, say, a bespoke key: the credential
+// with exactly the right power already exists here.
+//
+// SECURITY: the service role key bypasses RLS entirely, so it must never
+// leave this function — not in a response body, not in a log line. It is
+// used below only to read and write the three canonical tables from
+// 0006_canonical_recipes.sql, which have no client-writable policy at all
+// precisely because this is the only writer. Same posture as GEMINI_API_KEY
+// (see the file header's SECURITY note).
+//
+// Read via readRequiredEnvVar for the same reason as GEMINI_API_KEY: a
+// function that boots without them would silently degrade to "never
+// deduplicate anything" — every import paying full oEmbed + LLM cost — and
+// that is exactly the kind of expensive non-failure nobody notices.
+const SUPABASE_URL = readRequiredEnvVar('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = readRequiredEnvVar('SUPABASE_SERVICE_ROLE_KEY');
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -160,37 +212,287 @@ async function resolveEffectiveUrl(
   return { normalizedUrl: reNormalized.normalizedUrl, platform: reNormalized.platform };
 }
 
+/**
+ * ---------------------------------------------------------------------------
+ * CANONICAL RECIPE DEDUPLICATION (Fase 1b)
+ * ---------------------------------------------------------------------------
+ *
+ * WHY THE LOOKUP RUNS WHERE IT DOES. It sits immediately after
+ * `resolveEffectiveUrl` and strictly BEFORE the oEmbed call in
+ * `resolveImport` below. That position is the whole feature, not an
+ * implementation detail:
+ *
+ *  - Later (after oEmbed) would still save the LLM call, but would pay an
+ *    oEmbed round trip on every duplicate import for nothing.
+ *  - Earlier (on the raw pasted URL, before the redirect is followed) would
+ *    be actively wrong. A `vm.tiktok.com`/`vt.tiktok.com` share link's path
+ *    is an opaque short code, and the same video handed around by different
+ *    people yields different short codes — so keying on the pre-resolution
+ *    URL would miss every real duplicate and write a second `recipes` row
+ *    for a video we already had. Deduplicating too early guarantees exactly
+ *    the duplicate rows this exists to prevent.
+ *
+ * The window between the two is where the URL first becomes canonical, so
+ * that is where the cache key becomes meaningful.
+ *
+ * EVERY FAILURE HERE IS BEST-EFFORT, BY DESIGN. A lookup that errors
+ * returns null (a plain miss) and a write that errors is logged and
+ * swallowed. Deduplication is a cost and consistency optimization, never a
+ * correctness requirement: a database blip must degrade to "do the work
+ * again", which is slower and more expensive but produces the right recipe.
+ * It must never turn a working import into a failed one — the user pasted a
+ * link and deserves their recipe regardless of whether our cache is
+ * healthy. This is the one place in this file where swallowing an error is
+ * right, and it is why each one is still logged loudly.
+ */
+
+const RECIPES_ENDPOINT = `${SUPABASE_URL}/rest/v1/recipes`;
+
+/**
+ * PostgREST resource embedding pulls both child tables in the same request
+ * as the parent, so a cache hit costs exactly one round trip — the thing
+ * being optimized for. Ordering is deliberately NOT requested here (no
+ * `order=`): `parseStoredRecipe` sorts by `sort_order`/`step_number` itself,
+ * because a forgotten order parameter would produce a recipe with silently
+ * shuffled steps, and that is a bug no test of this query would catch.
+ */
+const STORED_RECIPE_SELECT = [
+  'normalized_url',
+  'platform',
+  'title',
+  'thumbnail_url',
+  'estimated_minutes',
+  'servings',
+  'author_name',
+  'author_url',
+  'dish_tags',
+  'recipe_ingredients(name,quantity,unit,sort_order)',
+  'recipe_steps(step_number,instruction)',
+].join(',');
+
+function serviceRoleHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    // Both are the service role key: PostgREST wants it as `apikey` for
+    // routing and as a Bearer token for the role claim. It never appears in
+    // this function's own response or in a log line — see its declaration.
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    'content-type': 'application/json',
+    ...extra,
+  };
+}
+
+/**
+ * The cache read. Returns the stored recipe as a fully-formed
+ * `ImportResult` (indistinguishable from a fresh extraction — see
+ * canonicalRecipe.ts), or null for a miss, an unusable row, or any failure.
+ */
+async function findStoredRecipe(normalizedUrl: string): Promise<ImportResult | null> {
+  // The filter value is double-quoted before encoding: PostgREST treats an
+  // unquoted value as ending at a reserved character, and quoting is its
+  // documented way to pass one through intact. Belt and braces — a
+  // normalized URL has had its query string and hash stripped already
+  // (urlParsing.ts) — but a URL is exactly the kind of value where assuming
+  // "no reserved characters" ages badly.
+  const endpoint =
+    `${RECIPES_ENDPOINT}?select=${encodeURIComponent(STORED_RECIPE_SELECT)}` +
+    `&normalized_url=eq.${encodeURIComponent(`"${normalizedUrl}"`)}&limit=1`;
+
+  try {
+    const response = await fetch(endpoint, { headers: serviceRoleHeaders() });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '<unreadable body>');
+      console.error(
+        `parse-recipe: canonical recipe lookup failed. status=${response.status} body=${detail.slice(0, 600)}`,
+      );
+      return null;
+    }
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return null;
+    }
+    // Narrowed in the domain layer, not here: this file is excluded from
+    // `tsc --noEmit` and ESLint (it is Deno), so any real logic living here
+    // would be untested and unchecked. See canonicalRecipe.ts.
+    return parseStoredRecipe(rows[0]);
+  } catch (error) {
+    console.error(`parse-recipe: canonical recipe lookup threw before a response. ${String(error)}`);
+    return null;
+  }
+}
+
+/**
+ * The race-safe half. Two people importing the same link at the same
+ * instant both reach here having both missed the lookup, and exactly one of
+ * them must end up with a row.
+ *
+ * `on_conflict=normalized_url` + `Prefer: resolution=ignore-duplicates`
+ * compiles to `INSERT ... ON CONFLICT (normalized_url) DO NOTHING`, so the
+ * UNIQUE constraint in 0006_canonical_recipes.sql — not application code,
+ * and not a read-then-write check that has a window between the two — is
+ * what decides the winner. `return=representation` then makes the outcome
+ * legible: PostgREST's RETURNING only yields rows actually inserted, so a
+ * non-empty response means WE created the row, and an empty one means
+ * somebody else already had it.
+ *
+ * WHY ignore-duplicates RATHER THAN merge-duplicates. `merge-duplicates`
+ * (`DO UPDATE`) would also be race-safe and would always return an id, which
+ * is superficially simpler. It is wrong here for two reasons. First, both
+ * racers would then think they owned the row and both would insert child
+ * rows, duplicating every ingredient and step. Second, two extractions of
+ * one caption are not guaranteed identical (the model is not deterministic),
+ * so `DO UPDATE` would let a later, worse parse silently overwrite a good
+ * stored one on every duplicate import. Write-once is the intended
+ * behaviour — see the `recipes` table's own note on why it has no
+ * `updated_at`.
+ *
+ * Returns the new recipe's id when this caller won, null otherwise.
+ */
+async function insertCanonicalRecipe(
+  recipe: ParsedRecipe,
+  normalizedUrl: string,
+  platform: ImportPlatform,
+  attribution: ImportAttribution,
+): Promise<string | null> {
+  try {
+    const response = await fetch(`${RECIPES_ENDPOINT}?on_conflict=normalized_url&select=id`, {
+      method: 'POST',
+      headers: serviceRoleHeaders({ prefer: 'resolution=ignore-duplicates,return=representation' }),
+      body: JSON.stringify([buildRecipeRowInsert(recipe, { normalizedUrl, platform, attribution })]),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '<unreadable body>');
+      console.error(
+        `parse-recipe: canonical recipe insert failed. status=${response.status} body=${detail.slice(0, 600)}`,
+      );
+      return null;
+    }
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      // Lost the race, or the row already existed. Not an error, and
+      // deliberately not logged as one — it is the constraint doing its job.
+      // Returning null here is what stops this caller writing a second set
+      // of children onto the winner's row.
+      return null;
+    }
+    const first: unknown = rows[0];
+    return isRecord(first) && typeof first.id === 'string' ? first.id : null;
+  } catch (error) {
+    console.error(`parse-recipe: canonical recipe insert threw before a response. ${String(error)}`);
+    return null;
+  }
+}
+
+/** One best-effort bulk insert of a recipe's child rows. Failures are logged, never thrown — see the section header. */
+async function insertCanonicalChildRows(table: string, rows: readonly unknown[]): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      // return=minimal: nothing here reads the inserted rows back, and not
+      // asking for them saves serializing a payload we would throw away.
+      headers: serviceRoleHeaders({ prefer: 'return=minimal' }),
+      body: JSON.stringify(rows),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '<unreadable body>');
+      console.error(
+        `parse-recipe: canonical ${table} insert failed. status=${response.status} body=${detail.slice(0, 600)}`,
+      );
+    }
+  } catch (error) {
+    console.error(`parse-recipe: canonical ${table} insert threw before a response. ${String(error)}`);
+  }
+}
+
+/**
+ * Stores a freshly extracted recipe as the canonical row for its URL.
+ *
+ * THE NON-ATOMICITY THIS ACCEPTS. The parent and its children are three
+ * separate PostgREST requests, so a failure between them can leave a
+ * `recipes` row with no ingredients or steps. That degrades honestly rather
+ * than dangerously: `parseStoredRecipe` rejects an ingredient-less or
+ * step-less row, so the next importer simply gets a cache miss and a
+ * correct, freshly extracted recipe — the URL just stops benefiting from
+ * deduplication, forever, until someone notices the logged failure.
+ *
+ * The atomic alternative is a `security definer` Postgres function taking
+ * the whole recipe as jsonb and inserting all three tables in one
+ * transaction. Rejected for now: it moves real logic into SQL where this
+ * repo can neither type-check nor unit-test it, and it trades a rare,
+ * self-healing, loudly-logged inconsistency for a permanently larger
+ * write surface. Revisit if orphaned parents actually show up in the logs.
+ */
+async function storeCanonicalRecipe(
+  recipe: ParsedRecipe,
+  normalizedUrl: string,
+  platform: ImportPlatform,
+  attribution: ImportAttribution,
+): Promise<void> {
+  const recipeId = await insertCanonicalRecipe(recipe, normalizedUrl, platform, attribution);
+  if (recipeId === null) {
+    return;
+  }
+  // Parallel: the two tables are independent, and both are already gated on
+  // this caller having won the parent insert above.
+  await Promise.all([
+    insertCanonicalChildRows('recipe_ingredients', buildRecipeIngredientRows(recipeId, recipe)),
+    insertCanonicalChildRows('recipe_steps', buildRecipeStepRows(recipeId, recipe)),
+  ]);
+}
+
 type LlmCallResult = { readonly kind: 'ok'; readonly json: unknown } | { readonly kind: 'error' };
 
 async function callExtractionModel(caption: string, authorName: string | null): Promise<LlmCallResult> {
-  const requestBody = buildExtractionRequest({ caption, authorName }, ANTHROPIC_MODEL);
+  const requestBody = buildExtractionRequest({ caption, authorName });
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(buildExtractionEndpoint(GEMINI_MODEL), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        // Never included in this function's own response — see the file
-        // header's SECURITY note.
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+        // Header rather than a "?key=" query parameter, and never
+        // included in this function's own response — see the file
+        // header's SECURITY note and buildExtractionEndpoint().
+        'x-goog-api-key': GEMINI_API_KEY,
       },
       body: JSON.stringify(requestBody),
     });
     if (!response.ok) {
+      // Gemini distinguishes a bad model id, a rejected schema and a bad
+      // key by status + message, and swallowing them here makes an
+      // extraction outage undebuggable from the outside: every one of
+      // them surfaces to the user as the same "Even niet gelukt". The
+      // request body carries no user secrets and the API key travels in a
+      // header, so neither can appear in what is logged.
+      const detail = await response.text().catch(() => '<unreadable body>');
+      console.error(
+        `parse-recipe: Gemini rejected the request. status=${response.status} model=${GEMINI_MODEL} body=${detail.slice(0, 600)}`,
+      );
       return { kind: 'error' };
     }
     const json: unknown = await response.json();
     return { kind: 'ok', json };
-  } catch {
+  } catch (error) {
+    // Transport-level failure (DNS, TLS, timeout) — distinct from a
+    // non-2xx above, and worth telling apart in the logs.
+    console.error(`parse-recipe: Gemini call threw before a response. ${String(error)}`);
     return { kind: 'error' };
   }
 }
 
 /**
- * The full pipeline for one pasted URL: validate -> resolve oEmbed ->
- * (maybe) ask the model -> validate its answer -> a typed `ImportResult`.
- * Every `return` below is a deliberate, named outcome — there is no
- * unhandled path that falls through to an implicit success.
+ * The full pipeline for one pasted URL: validate -> resolve the short link
+ * -> LOOK FOR AN EXISTING CANONICAL RECIPE -> resolve oEmbed -> (maybe) ask
+ * the model -> validate its answer -> store the canonical recipe -> a typed
+ * `ImportResult`. Every `return` below is a deliberate, named outcome —
+ * there is no unhandled path that falls through to an implicit success.
+ *
+ * The cache stage is the only one that can skip everything after it, and
+ * its exact position between short-link resolution and oEmbed is
+ * load-bearing — see the CANONICAL RECIPE DEDUPLICATION section above for
+ * why neither one step earlier nor one step later is correct.
  */
 async function resolveImport(rawUrl: string): Promise<ImportResult> {
   const normalized = normalizeRecipeUrl(rawUrl);
@@ -199,6 +501,15 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
   }
 
   const effective = await resolveEffectiveUrl(normalized.normalizedUrl, normalized.platform, normalized.isShortLink);
+
+  // A hit returns here, having called neither oEmbed nor the model: no
+  // third-party round trip, no tokens, no cost. This is the entire point of
+  // Fase 1b — the twentieth household to import a link pays one indexed
+  // lookup instead of the whole pipeline.
+  const storedRecipe = await findStoredRecipe(effective.normalizedUrl);
+  if (storedRecipe !== null) {
+    return storedRecipe;
+  }
 
   const oembedResult = await resolveOembed(effective.normalizedUrl, effective.platform, {
     fetchFn: fetch,
@@ -233,15 +544,30 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
     return { kind: 'parse_failed' };
   }
 
+  // Reuses the OembedPayload already fetched above to read the caption
+  // -- no second oEmbed round trip. See buildAttribution.ts: this is
+  // attribution, not PD-007 Feed opt-in consent.
+  const attribution = buildAttribution(oembedResult.payload);
+
+  // Only a fully validated recipe is ever stored — the failure branches
+  // above all returned already, so nothing half-parsed can become the
+  // canonical answer every later importer receives.
+  //
+  // AWAITED, not fire-and-forget. Letting this run detached would shave a
+  // few hundred milliseconds off the response, but an edge runtime is free
+  // to tear down the isolate once the response is returned, which would
+  // silently drop the write — turning deduplication into an expensive
+  // no-op that still looks like it is working. Correct-and-slightly-slower
+  // wins here, and only on the miss path, which was already paying for an
+  // LLM call.
+  await storeCanonicalRecipe(recipe, effective.normalizedUrl, effective.platform, attribution);
+
   return {
     kind: 'parsed',
     recipe,
     sourceUrl: effective.normalizedUrl,
     platform: effective.platform,
-    // Reuses the OembedPayload already fetched above to read the caption
-    // -- no second oEmbed round trip. See buildAttribution.ts: this is
-    // attribution, not PD-007 Feed opt-in consent.
-    attribution: buildAttribution(oembedResult.payload),
+    attribution,
   };
 }
 

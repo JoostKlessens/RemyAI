@@ -65,6 +65,22 @@ export interface CreateMealInput {
   /** Denormalized allergen tags — see meals.ingredient_tags's comment in 0001_init.sql. */
   readonly ingredientTags: readonly string[];
   readonly allergenTagStatus: AllergenTagStatus;
+  /**
+   * Dish categories from the closed vocabulary (src/domain/dishTags.ts) —
+   * NEVER allergens, and never merged with `ingredientTags` above; see
+   * `Meal.dishTags`'s own comment in src/domain/types.ts for why the two
+   * stay apart.
+   *
+   * Optional here while `Meal.dishTags` is required, and the asymmetry is
+   * deliberate: every caller of this input is a screen that may or may not
+   * have categories to offer yet, and there is no fail-safe reading to
+   * lose — a caller that omits it is saying "no categories", which is
+   * exactly what the stored `[]` means. Omitting is therefore honest
+   * rather than lossy, and it keeps adding this field from forcing an edit
+   * to every call site that has nothing to say. `createMeal` substitutes
+   * `[]`, never `undefined` (see local/meals.ts).
+   */
+  readonly dishTags?: readonly string[];
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
   /** oEmbed's thumbnail, carried through import — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Null for manual entries. */
@@ -165,6 +181,14 @@ export interface RemyRepository {
   listCookEvents(householdId: HouseholdId): Promise<readonly CookEvent[]>;
   createCookEvent(input: CreateCookEventInput): Promise<CookEvent>;
   setCookEventRepeat(cookEventId: CookEventId, wouldRepeat: boolean): Promise<CookEvent>;
+  /**
+   * The cook's score for a meal they just made, on the scale owned by
+   * src/domain/rating.ts. Also re-derives `wouldRepeat` from it via
+   * `toRepeatSignal`, so the two columns can never disagree — see
+   * local/cookEvents.ts for why both are kept. Rejects an off-scale score
+   * rather than clamping it into range.
+   */
+  setCookEventRating(cookEventId: CookEventId, rating: number): Promise<CookEvent>;
   /** PD-003: the most recent accepted decision with no recorded outcome yet, or null. */
   getPendingOutcomeDecision(householdId: HouseholdId): Promise<Decision | null>;
 

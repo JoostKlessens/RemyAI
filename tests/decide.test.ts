@@ -3,6 +3,7 @@ import { decide, isSwapExhausted, SWAP_EXHAUSTED_EVENT } from '@/domain/decide';
 import type { DecisionResult } from '@/domain/types';
 import {
   makeCookEvent,
+  makeDecisionFilters,
   makeDecisionRequest,
   makeHousehold,
   makeMeal,
@@ -369,5 +370,123 @@ describe('decide — an "ooit" (someday) save is eventually suggested (PD-004a)'
       const result = decide(request);
       expect(result.kind === 'suggestion' && result.mealId).toBe('meal-someday');
     }
+  });
+});
+
+describe('decide — tonight-only filters (PD-009)', () => {
+  test('a maxMinutes filter narrows the winner to a meal that fits tonight', () => {
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 90 });
+    const candidateMeals = [
+      makeMeal({ id: 'meal-long', householdId: household.id, estimatedMinutes: 60 }),
+      makeMeal({ id: 'meal-short', householdId: household.id, estimatedMinutes: 15 }),
+    ];
+    const request = makeDecisionRequest({
+      household,
+      candidateMeals,
+      filters: makeDecisionFilters({ maxMinutes: 20 }),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-short');
+  });
+
+  test('a requiredDishTags filter narrows the winner to a meal in that category', () => {
+    const candidateMeals = [
+      makeMeal({ id: 'meal-soep', dishTags: ['soep'] }),
+      makeMeal({ id: 'meal-pasta', dishTags: ['pasta'] }),
+    ];
+    const request = makeDecisionRequest({
+      candidateMeals,
+      filters: makeDecisionFilters({ requiredDishTags: ['pasta'] }),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-pasta');
+  });
+
+  test('the default request carries no filters, so pre-PD-009 behaviour is unchanged', () => {
+    const candidateMeals = [makeMeal({ id: 'meal-untagged', dishTags: [], estimatedMinutes: null })];
+    const request = makeDecisionRequest({ candidateMeals });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-untagged');
+  });
+
+  test('a meal with an unknown estimatedMinutes passes the household budget but not an explicit cap', () => {
+    // The asymmetry from exclusions.test.ts, proven end to end: the same
+    // request differs only in whether the user stated a cap for tonight.
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+    const candidateMeals = [makeMeal({ id: 'meal-unknown-time', householdId: household.id, estimatedMinutes: null })];
+
+    const withoutCap = decide(makeDecisionRequest({ household, candidateMeals }));
+    const withCap = decide(
+      makeDecisionRequest({ household, candidateMeals, filters: makeDecisionFilters({ maxMinutes: 30 }) }),
+    );
+
+    expect(withoutCap.kind === 'suggestion' && withoutCap.mealId).toBe('meal-unknown-time');
+    expect(withCap).toEqual({ kind: 'no_candidate', reason: 'filtered_out' });
+  });
+});
+
+describe('decide — filtered_out is its own reason, never all_excluded (PD-009)', () => {
+  test('filtered_out when only the filter emptied the pool', () => {
+    const candidateMeals = [makeMeal({ id: 'meal-soep', dishTags: ['soep'], estimatedMinutes: 20 })];
+    const request = makeDecisionRequest({
+      candidateMeals,
+      filters: makeDecisionFilters({ requiredDishTags: ['pasta'] }),
+    });
+
+    const result = decide(request);
+
+    expect(result).toEqual({ kind: 'no_candidate', reason: 'filtered_out' });
+  });
+
+  test('all_excluded still wins when restrictions already emptied the pool before the filter ran', () => {
+    // Order matters for honesty: telling someone "je filter is te streng"
+    // when their allergen restriction is what removed everything would
+    // send them to relax the wrong thing.
+    const restrictions = [makeRestriction({ memberId: 'member-1', type: 'allergen', excludesTag: 'noten' })];
+    const candidateMeals = [makeMeal({ id: 'meal-noten', dishTags: ['pasta'], ingredientTags: ['noten'] })];
+    const request = makeDecisionRequest({
+      restrictions,
+      candidateMeals,
+      filters: makeDecisionFilters({ requiredDishTags: ['pasta'] }),
+    });
+
+    const result = decide(request);
+
+    expect(result).toEqual({ kind: 'no_candidate', reason: 'all_excluded' });
+  });
+
+  test('swaps_exhausted still wins when the filter left something that was already offered today', () => {
+    // The filter is not the binding constraint here — PD-001's two-swap
+    // cap is, and relaxing a chip must never hand out extra swaps.
+    const candidateMeals = [
+      makeMeal({ id: 'meal-pasta', dishTags: ['pasta'] }),
+      makeMeal({ id: 'meal-soep', dishTags: ['soep'] }),
+    ];
+    const request = makeDecisionRequest({
+      candidateMeals,
+      excludedMealIds: ['meal-pasta'],
+      filters: makeDecisionFilters({ requiredDishTags: ['pasta'] }),
+    });
+
+    const result = decide(request);
+
+    expect(result).toEqual({ kind: 'no_candidate', reason: 'swaps_exhausted' });
+  });
+
+  test('empty_rotation still wins over filtered_out — an empty library is not a filter problem', () => {
+    const request = makeDecisionRequest({
+      candidateMeals: [],
+      filters: makeDecisionFilters({ requiredDishTags: ['pasta'] }),
+    });
+
+    const result = decide(request);
+
+    expect(result).toEqual({ kind: 'no_candidate', reason: 'empty_rotation' });
   });
 });

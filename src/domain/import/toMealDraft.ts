@@ -21,6 +21,21 @@
  * must never flow into `ingredientTags`/`allergenTagStatus`, which is what
  * the decision engine's exclusion filter (src/domain/exclusions.ts) treats
  * as this meal's real, if unverified, data.
+ *
+ * `dishTags` is that clearly separate field, and it is the ONE piece of
+ * model-derived tagging this function does carry through. The distinction
+ * is not stylistic. A dish category is descriptive and additive: it only
+ * ever narrows a search the household explicitly asked for ("iets met
+ * pasta"), so a wrong one costs a missed suggestion. `ingredientTags` is
+ * subtractive and safety-relevant: a value there REMOVES a meal from
+ * someone's rotation, and a wrong one costs someone a reaction. The two
+ * therefore travel on separate fields, from separate sources, and are
+ * never mapped into one another — see `Meal.dishTags`'s own comment in
+ * src/domain/types.ts and the closed vocabulary in src/domain/dishTags.ts,
+ * whose values are asserted to be disjoint from the allergen vocabulary.
+ * `ingredientTags: []` and `allergenTagStatus: 'unknown'` below stay
+ * hardcoded literals precisely so that adding dishTags here could not
+ * quietly become a precedent for populating them too.
  */
 
 import type { HouseholdId } from '../types';
@@ -66,6 +81,15 @@ export interface MealDraftInsert {
   readonly ingredientTags: readonly string[];
   /** Literal `'unknown'`, never the wider `AllergenTagStatus` — see the file header. */
   readonly allergenTagStatus: 'unknown';
+  /**
+   * The validated recipe's dish categories, carried straight through. Never
+   * re-derived here (no title keyword matching, no "a traybake is probably
+   * an ovenschotel" inference): validateParsed.ts has already narrowed
+   * these to the closed vocabulary, and a second guess at this layer would
+   * be a second, unvalidated source of tags. Sits next to `ingredientTags`
+   * in the shape and must never be mixed with it — see the file header.
+   */
+  readonly dishTags: readonly string[];
   readonly sourceUrl: string;
   readonly sourcePlatform: 'tiktok' | 'reels';
   /** See MealDraftContext.thumbnailUrl — carried straight through. */
@@ -112,6 +136,10 @@ export function toMealDraft(recipe: ParsedRecipe, context: MealDraftContext): Me
     servings: recipe.servings,
     ingredientTags: [],
     allergenTagStatus: 'unknown',
+    // `ParsedRecipe.dishTags` is optional only for literals that predate
+    // it (see its own comment); `[]` is the right reading of a missing
+    // one — no categories — never a reason to go guessing at some.
+    dishTags: recipe.dishTags ?? [],
     sourceUrl: context.sourceUrl,
     sourcePlatform: toMealSourcePlatform(context.platform),
     thumbnailUrl: context.thumbnailUrl,

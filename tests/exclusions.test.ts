@@ -2,10 +2,12 @@ import { describe, expect, test } from 'vitest';
 import {
   collectExcludedTags,
   excludeAlreadyOffered,
+  filterByDecisionFilters,
   filterByRestrictionsAndTimeBudget,
   filterUnarchived,
+  NO_DECISION_FILTERS,
 } from '@/domain/exclusions';
-import { makeHousehold, makeMeal, makeMember, makeRestriction } from './fixtures';
+import { makeDecisionFilters, makeHousehold, makeMeal, makeMember, makeRestriction } from './fixtures';
 
 describe('collectExcludedTags', () => {
   test('combines tags across multiple household members', () => {
@@ -281,5 +283,173 @@ describe('excludeAlreadyOffered', () => {
     const result = excludeAlreadyOffered(meals, []);
 
     expect(result).toHaveLength(2);
+  });
+});
+
+describe('filterByDecisionFilters — maxMinutes (PD-009)', () => {
+  test('excludes a meal estimated to take longer than the cap the user set for tonight', () => {
+    const meals = [
+      makeMeal({ id: 'meal-quick', estimatedMinutes: 20 }),
+      makeMeal({ id: 'meal-slow', estimatedMinutes: 45 }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ maxMinutes: 30 }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-quick']);
+  });
+
+  test('includes a meal exactly at the cap — "max 30 minuten" still means 30 is fine', () => {
+    const meals = [makeMeal({ id: 'meal-boundary', estimatedMinutes: 30 })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ maxMinutes: 30 }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-boundary']);
+  });
+
+  test('a null maxMinutes applies no time filter at all', () => {
+    const meals = [
+      makeMeal({ id: 'meal-long', estimatedMinutes: 180 }),
+      makeMeal({ id: 'meal-unknown-time', estimatedMinutes: null }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ maxMinutes: null }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-long', 'meal-unknown-time']);
+  });
+
+  test('EXCLUDES a meal with an unknown estimatedMinutes — the deliberate inverse of the household time budget', () => {
+    const meals = [makeMeal({ id: 'meal-unknown-time', estimatedMinutes: null })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ maxMinutes: 30 }));
+
+    expect(result).toHaveLength(0);
+  });
+
+  test('the same unknown-duration meal survives the household time budget — the two rules disagree on purpose', () => {
+    // Pins the asymmetry from both sides in one place, so anyone "fixing"
+    // the two into agreement is told which guarantee they broke. The
+    // household budget is a standing background preference, so unknown
+    // means "not disqualified" there; "ik heb vanavond 30 minuten" is a
+    // statement about right now, and a meal whose duration nobody ever
+    // recorded is not an honest answer to it.
+    const meal = makeMeal({ id: 'meal-unknown-time', estimatedMinutes: null });
+    const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+
+    const budgetSurvivors = filterByRestrictionsAndTimeBudget([meal], household, [makeMember()], []);
+    const filterSurvivors = filterByDecisionFilters([meal], makeDecisionFilters({ maxMinutes: 30 }));
+
+    expect(budgetSurvivors.map((survivor) => survivor.id)).toEqual(['meal-unknown-time']);
+    expect(filterSurvivors).toHaveLength(0);
+  });
+});
+
+describe('filterByDecisionFilters — requiredDishTags (PD-009)', () => {
+  test('an empty requiredDishTags applies no category filter', () => {
+    const meals = [
+      makeMeal({ id: 'meal-untagged', dishTags: [] }),
+      makeMeal({ id: 'meal-pasta', dishTags: ['pasta'] }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: [] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-untagged', 'meal-pasta']);
+  });
+
+  test('keeps only meals carrying the requested category', () => {
+    const meals = [
+      makeMeal({ id: 'meal-pasta', dishTags: ['pasta'] }),
+      makeMeal({ id: 'meal-soep', dishTags: ['soep'] }),
+      makeMeal({ id: 'meal-untagged', dishTags: [] }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['pasta'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-pasta']);
+  });
+
+  test('requires ALL listed tags, not any of them', () => {
+    const meals = [
+      makeMeal({ id: 'meal-veg-pasta', dishTags: ['pasta', 'vegetarisch'] }),
+      makeMeal({ id: 'meal-meat-pasta', dishTags: ['pasta', 'rundvlees'] }),
+      makeMeal({ id: 'meal-veg-soep', dishTags: ['soep', 'vegetarisch'] }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['pasta', 'vegetarisch'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-veg-pasta']);
+  });
+
+  test('extra categories on the meal never disqualify it — the filter narrows, it does not match exactly', () => {
+    const meals = [makeMeal({ id: 'meal-rich', dishTags: ['pasta', 'kip', 'ovenschotel'] })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['pasta'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-rich']);
+  });
+
+  test('matches through normalizeTag, so a stray capitalized or padded value still compares', () => {
+    const meals = [makeMeal({ id: 'meal-pasta', dishTags: ['pasta'] })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['  Pasta '] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-pasta']);
+  });
+
+  test('never reads ingredientTags — a dish category and an allergen tag are separate vocabularies', () => {
+    // The other half of the guarantee dishTags.ts's header and
+    // Meal.dishTags's doc comment both make: if this ever passed, an
+    // allergen string would have become a category filter's input.
+    const meals = [makeMeal({ id: 'meal-allergen-only', dishTags: [], ingredientTags: ['pasta'] })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['pasta'] }));
+
+    expect(result).toHaveLength(0);
+  });
+
+  test('does not mutate the input array', () => {
+    const meals = [
+      makeMeal({ id: 'meal-pasta', dishTags: ['pasta'] }),
+      makeMeal({ id: 'meal-soep', dishTags: ['soep'] }),
+    ];
+
+    filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['pasta'] }));
+
+    expect(meals.map((meal) => meal.id)).toEqual(['meal-pasta', 'meal-soep']);
+  });
+});
+
+describe('filterByDecisionFilters — deliberately NOT folded into filterByRestrictionsAndTimeBudget (PD-006 boundary)', () => {
+  test('carries no allergen exclusion of its own — a meal tagged with an allergen still passes here', () => {
+    // Not an oversight: this function's single job is "narrow what the
+    // user asked to narrow." The PD-006 allergen guarantee lives in
+    // filterByRestrictionsAndTimeBudget and stays there, so nobody can
+    // weaken it by editing a category filter. decide.ts runs both, in that
+    // order.
+    const meals = [makeMeal({ id: 'meal-noten', dishTags: ['pasta'], ingredientTags: ['noten'] })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['pasta'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-noten']);
+  });
+
+  test('carries no PD-006 tri-state gate either — an unknown allergenTagStatus is untouched here', () => {
+    const meals = [makeMeal({ id: 'meal-unknown-status', allergenTagStatus: 'unknown', dishTags: ['soep'] })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ requiredDishTags: ['soep'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-unknown-status']);
+  });
+});
+
+describe('NO_DECISION_FILTERS (PD-009)', () => {
+  test('is the identity: it removes nothing, whatever the meal looks like', () => {
+    const meals = [
+      makeMeal({ id: 'meal-untagged', dishTags: [], estimatedMinutes: null }),
+      makeMeal({ id: 'meal-long', dishTags: ['stamppot'], estimatedMinutes: 240 }),
+    ];
+
+    const result = filterByDecisionFilters(meals, NO_DECISION_FILTERS);
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-untagged', 'meal-long']);
   });
 });

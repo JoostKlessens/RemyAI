@@ -59,6 +59,33 @@ export interface ParsedRecipe {
   readonly estimatedMinutes: number | null;
   /** Only set when the caption states a serving count; never guessed. */
   readonly servings: number | null;
+  /**
+   * Dish categories the model picked from the closed vocabulary in
+   * src/domain/dishTags.ts — never free text. The extraction schema
+   * constrains the model to that list (buildExtractionRequest.ts) and
+   * validateParsed.ts drops anything outside it on the way in, so by the
+   * time a value reaches this field it is guaranteed to be a known,
+   * already-normalized tag. Empty is a normal, expected answer: most
+   * captions do not make a category obvious, and guessing one would be the
+   * same sin as guessing an ingredient.
+   *
+   * This is the ONLY tagging this pipeline ever accepts from the model. It
+   * is emphatically not allergen data and must never reach
+   * `Meal.ingredientTags` — see toMealDraft.ts's header for how that
+   * separation is made a compile error rather than a convention.
+   *
+   * Optional for exactly the reason `ImportResult.attribution` below is:
+   * object literals that predate this field live in src/app/import/
+   * _fixtures.ts and confirm.tsx, outside this module's ownership.
+   * `validateParsedRecipe` — the only way a real model response becomes a
+   * `ParsedRecipe` — always populates it, so `undefined` never reaches the
+   * import pipeline in production. Treat it as `[]` wherever it can appear
+   * (`toMealDraft` does), never as "categories unknown": there is no
+   * fail-safe reading to preserve, because a dish tag gates nothing.
+   * Whichever agent owns src/app should give those literals a real value
+   * and let this become required.
+   */
+  readonly dishTags?: readonly string[];
 }
 
 /**

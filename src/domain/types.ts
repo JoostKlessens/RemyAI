@@ -213,6 +213,33 @@ export interface Meal {
    * exclusions.ts's `resolveAllergenTagStatus`), never as `'verified'`.
    */
   readonly allergenTagStatus?: AllergenTagStatus;
+  /**
+   * Dish categories from the closed vocabulary in dishTags.ts — "pasta",
+   * "soep", "vegetarisch". Descriptive only: they exist so a household can
+   * say "kies iets met pasta" and narrow the pool it already accepted.
+   *
+   * STRICTLY SEPARATE FROM `ingredientTags` ABOVE, and never merged with
+   * it, iterated together with it, or copied between them. That field is a
+   * denormalized list of ALLERGENS and it drives the PD-006 exclusion gate
+   * (exclusions.ts): a value there REMOVES a meal from someone's rotation
+   * on safety grounds. A value here only ever narrows a search the user
+   * explicitly asked for. Same `readonly string[]` shape, opposite
+   * direction, wholly different blast radius — a wrong dish tag costs a
+   * missed suggestion, a wrong allergen tag costs someone a reaction.
+   * Keeping them in one column (or one union) would mean a category filter
+   * and an allergen exclusion silently operating on the same string, which
+   * is exactly the conflation PD-006 forbids. dishTags.ts's own header and
+   * tests/dishTags.test.ts hold the other half of this guarantee: the two
+   * vocabularies are asserted to share no value.
+   *
+   * Required and non-nullable, unlike `allergenTagStatus?` above: the
+   * absent state and the empty state genuinely coincide here (a meal with
+   * no recognized category IS a meal with no categories — there is no
+   * fail-safe reading to preserve), so an empty array says everything a
+   * missing key would. Rows persisted before this field existed are
+   * backfilled to `[]` on read — see src/lib/repository/local/meals.ts.
+   */
+  readonly dishTags: readonly string[];
   /** Creator video URL for Feed items (F) — resolved to an oEmbed player by the UI layer. */
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
@@ -320,6 +347,24 @@ export interface CookEvent {
   readonly cookedOn: IsoDateString;
   /** Null until "Nog een keer?" is answered. */
   readonly wouldRepeat: boolean | null;
+  /**
+   * The cook's score for this meal, on the scale defined by RATING_MIN /
+   * RATING_MAX in domain/rating.ts. Null when the question was skipped —
+   * rating is optional, in the same spirit as PD-002's optional decline
+   * reason.
+   *
+   * Optional for backward compatibility with `CookEvent` literals that
+   * predate this field, exactly how `Meal.allergenTagStatus?` was added.
+   * Never read this directly to decide whether a household liked a meal:
+   * go through `resolveRepeatSignal(event)`, which also understands
+   * events that only ever carried `wouldRepeat`.
+   *
+   * `wouldRepeat` is kept in sync as a lossy projection of this score
+   * (see `toRepeatSignal`) so scoring.ts's HOUSEHOLD_FAVOURITE_BOOST and
+   * WOULD_NOT_REPEAT_PENALTY keep both their meaning and their tuned
+   * values.
+   */
+  readonly rating?: number | null;
   readonly createdAt: IsoDateTimeString;
 }
 
@@ -391,6 +436,61 @@ export interface DecisionRequest {
   readonly targetDate: IsoDateString;
   /** Meal ids already offered today (original + prior swaps) — a swap must never repeat one of these. */
   readonly excludedMealIds: readonly MealId[];
+  /**
+   * PD-009 (additive field, same posture as `pendingSomedaySaves` above):
+   * what the household asked for *tonight*, before Remy picks.
+   *
+   * Required, not optional. An omitted filter set and an empty one mean
+   * exactly the same thing (`NO_DECISION_FILTERS` in exclusions.ts), so
+   * `filters?:` would have compiled everywhere untouched — which is
+   * precisely the problem. Making it required forced every existing
+   * `decide()` call site to state its answer out loud, and that surfaced
+   * the one place where the answer is genuinely "no filters, deliberately":
+   * the persisted daily decision row, which must stay the household's
+   * unfiltered offer for the day.
+   */
+  readonly filters: DecisionFilters;
+}
+
+/**
+ * PD-009 — the narrowing a household states for one evening ("ik heb 20
+ * minuten", "iets met pasta"), applied on top of everything the engine
+ * already does.
+ *
+ * DELIBERATELY NOT the same thing as `Household.weeknightTimeBudgetMinutes`
+ * or a `Restriction`. Those are standing settings: they persist, they
+ * describe the household in general, and they were set once in a calm
+ * moment. This is a statement about right now, made on the decision
+ * surface, and thrown away afterwards. Keeping the two apart is what lets
+ * `maxMinutes` be strict about unknown durations while the household budget
+ * stays lenient about them (see `filterByDecisionFilters` in exclusions.ts
+ * for the full argument), and what keeps a filter tap from quietly
+ * rewriting a household's saved preferences behind its back.
+ *
+ * Nothing here can ever *widen* the pool: filters run after the PD-006
+ * exclusion gate, never instead of it. A household cannot filter its way
+ * back to a meal an allergen restriction removed.
+ */
+export interface DecisionFilters {
+  /**
+   * Hard upper bound for tonight, separate from
+   * `Household.weeknightTimeBudgetMinutes`. Null = the user stated no cap,
+   * which is NOT the same as "a very large cap": a null cap leaves meals of
+   * unknown duration in the pool, an explicit one removes them.
+   */
+  readonly maxMinutes: number | null;
+  /**
+   * Meal must have ALL listed tags — "iets met pasta én vegetarisch" is one
+   * request, not two. Empty = no tag filter.
+   *
+   * Values come from dishTags.ts's closed vocabulary. Typed
+   * `readonly string[]` rather than a union for the same reason
+   * `Meal.dishTags` is: the vocabulary lives in dishTags.ts as data, and
+   * untrusted input is narrowed by `sanitizeDishTags` at the boundary.
+   * Matched against `Meal.dishTags` only — never against
+   * `Meal.ingredientTags`, which is allergen data (see `Meal.dishTags`).
+   */
+  readonly requiredDishTags: readonly string[];
 }
 
 /**
@@ -408,6 +508,22 @@ export type NoCandidateReason =
    * active allergen restriction.
    */
   | 'all_excluded'
+  /**
+   * PD-009. Restrictions left something eligible, but tonight's
+   * `DecisionFilters` removed all of it.
+   *
+   * Its own member rather than a reuse of `all_excluded` because the two
+   * ask the user to do opposite things. `all_excluded` means the
+   * household's standing settings — allergens, dislikes, the weeknight
+   * budget — emptied the pool; the honest response is "kies zelf" or grow
+   * the library, and the copy must never suggest loosening an allergen
+   * restriction. `filtered_out` means one tap on a chip fixes it. Folding
+   * the second into the first would tell someone who asked for pasta that
+   * their allergies are to blame for there being no dinner, which is both
+   * false and, given rule 3 of docs/PRODUCT-DECISIONS.md, the last thing
+   * this product should ever imply.
+   */
+  | 'filtered_out'
   /** Candidates existed but all had already been offered today (PD-001 cap reached). */
   | 'swaps_exhausted';
 

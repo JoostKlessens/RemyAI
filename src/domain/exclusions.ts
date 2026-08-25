@@ -5,6 +5,13 @@
  * reaches scoring. Nothing in this module mutates its inputs; every
  * function returns a new array or set.
  *
+ * Two independent gates live here and are never merged:
+ * `filterByRestrictionsAndTimeBudget` (the household's standing settings,
+ * carrying the PD-006 allergen guarantee) and `filterByDecisionFilters`
+ * (PD-009 — what the user asked for tonight). See the latter's own comment
+ * for why keeping them apart is load-bearing rather than tidiness, and for
+ * the one place they deliberately contradict each other.
+ *
  * ---
  *
  * Allergen vs. dislike, both hard (v1 decision):
@@ -75,6 +82,7 @@
 
 import type {
   AllergenTagStatus,
+  DecisionFilters,
   Household,
   Meal,
   MealId,
@@ -178,6 +186,112 @@ export function filterByRestrictionsAndTimeBudget(
       isWithinTimeBudget(meal, household) &&
       isAllergenStatusEligible(meal, requiresVerifiedAllergenStatus),
   );
+}
+
+/**
+ * PD-009 — tonight's stated filters, and NOTHING else.
+ *
+ * Kept as its own function rather than folded into
+ * `filterByRestrictionsAndTimeBudget` above, on purpose. That function
+ * carries the PD-006 allergen-exclusion guarantee, and a guarantee is only
+ * as strong as the smallest thing you can read in one sitting and be sure
+ * about. The moment a category filter and an allergen gate share a
+ * predicate, every future edit to "kies iets met pasta" is also an edit to
+ * the code path that decides whether someone with a nut allergy is shown a
+ * dish — and reviewing the former does not put anyone in the frame of mind
+ * to check the latter. One responsibility each: that one excludes on
+ * safety and standing household settings, this one narrows what the user
+ * asked to narrow. `decide.ts` composes them, in that order, and reports
+ * their two empty results as two different `NoCandidateReason`s.
+ *
+ * The rejected alternative was a single `filterCandidates(meals, context)`
+ * taking everything at once. It reads tidier at the call site and is worse
+ * everywhere else: it makes `all_excluded` and `filtered_out`
+ * indistinguishable without re-running the parts separately anyway, and it
+ * would have quietly given `maxMinutes` and `weeknightTimeBudgetMinutes`
+ * one shared implementation — which is exactly the thing they must not
+ * have (see `isWithinMaxMinutes` below).
+ *
+ * Note also what is NOT here: no restriction data, no `Household`, no
+ * `allergenTagStatus`. A filter cannot widen the pool, because it never
+ * sees the inputs that narrowed it.
+ */
+export function filterByDecisionFilters(meals: readonly Meal[], filters: DecisionFilters): readonly Meal[] {
+  const requiredTags = filters.requiredDishTags.map(normalizeTag);
+  return meals.filter(
+    (meal) => isWithinMaxMinutes(meal, filters.maxMinutes) && hasEveryRequiredDishTag(meal, requiredTags),
+  );
+}
+
+/**
+ * The "no filters stated" identity — `filterByDecisionFilters(meals,
+ * NO_DECISION_FILTERS)` returns every meal.
+ *
+ * Exported so callers that must pass a filter set but genuinely have none
+ * (the persisted daily decision, tests, the Kiezen screen's initial state)
+ * name that intent instead of re-typing an object literal whose meaning
+ * depends on remembering that `null` and `[]` are the neutral values.
+ */
+export const NO_DECISION_FILTERS: DecisionFilters = {
+  maxMinutes: null,
+  requiredDishTags: [],
+};
+
+/**
+ * THE DELIBERATE ASYMMETRY WITH `isWithinTimeBudget` ABOVE. Read both
+ * together before changing either; they disagree, and that is the design.
+ *
+ * `isWithinTimeBudget` treats an unknown `estimatedMinutes` as "not
+ * disqualified": `Household.weeknightTimeBudgetMinutes` is a standing
+ * background preference the household set once, and silently hiding every
+ * untimed meal from it would punish a content gap (a link import that
+ * yielded no duration) as if it were a user choice.
+ *
+ * An explicit `maxMinutes` is the opposite kind of statement. "Ik heb
+ * vanavond 20 minuten" is about right now, said out loud, on the screen
+ * where a dish is about to be named with confidence. A meal whose duration
+ * nobody ever recorded is not an honest answer to it — offering one would
+ * mean answering "does this fit in 20 minutes?" with "possibly", in a
+ * product whose entire premise is one dish stated without hedging. So
+ * unknown loses here.
+ *
+ * The cost is real and accepted: a household whose library is mostly
+ * untimed imports will see `filtered_out` the first time it asks for
+ * something quick. That is a legible, one-tap-recoverable failure (the
+ * copy in NoCandidateState offers exactly that tap) and it points at a
+ * genuine data gap, rather than papering over it with a dish that might
+ * take an hour.
+ */
+function isWithinMaxMinutes(meal: Meal, maxMinutes: number | null): boolean {
+  if (maxMinutes === null) {
+    return true;
+  }
+  if (meal.estimatedMinutes === null) {
+    return false;
+  }
+  return meal.estimatedMinutes <= maxMinutes;
+}
+
+/**
+ * AND, not OR: asking for "pasta" and "vegetarisch" is one request for a
+ * vegetarian pasta, not an invitation to serve either. OR would make each
+ * extra chip widen the pool, so a household narrowing its way to a
+ * decision would watch the result get vaguer with every tap.
+ *
+ * Reads `meal.dishTags` and never `meal.ingredientTags` — those are
+ * allergens, an entirely separate vocabulary pointed the opposite
+ * direction (see `Meal.dishTags` in types.ts and dishTags.ts's header).
+ * Both sides go through `normalizeTag` for the same defensive reason
+ * `collectExcludedTags` does: a stray un-normalized value from legacy data
+ * or a caller that bypassed `sanitizeDishTags` must still compare, rather
+ * than silently matching nothing.
+ */
+function hasEveryRequiredDishTag(meal: Meal, requiredTags: readonly string[]): boolean {
+  if (requiredTags.length === 0) {
+    return true;
+  }
+  const mealTags = new Set(meal.dishTags.map(normalizeTag));
+  return requiredTags.every((tag) => mealTags.has(tag));
 }
 
 /** A swap must never repeat a meal already offered today (original or a prior swap). */

@@ -12,6 +12,7 @@ function buildMeal(id: string, title: string): Meal {
     skillLevel: 'beginner',
     servings: 2,
     ingredientTags: [],
+    dishTags: [],
     sourceUrl: null,
     sourcePlatform: null,
     thumbnailUrl: null,

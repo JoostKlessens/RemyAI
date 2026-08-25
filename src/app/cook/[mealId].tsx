@@ -7,7 +7,10 @@
  * final step transitions in place to the `OutcomeCard` ("Gemaakt?") —
  * there is no separate outcome route, Cook Mode's own terminus *is* the
  * surface. "Gemaakt?" -> "Ja" writes a real cook_events row through
- * RemyRepository; "Nog een keer?" fills in that row's wouldRepeat.
+ * RemyRepository; the optional score that follows ("Hoe was het?") fills
+ * in that row's `rating`, and the repository re-derives `wouldRepeat`
+ * from it. Leaving without a score is a complete answer — nothing is
+ * written, and nothing asks again.
  *
  * Meal + steps load from RemyRepository, not fixtures — a meal with no
  * steps (a title-only seeded meal, or an imported recipe whose caption had
@@ -134,11 +137,17 @@ export default function CookModeScreen(): JSX.Element {
       });
   };
 
-  const handleRepeat = (wouldRepeat: boolean): void => {
+  /**
+   * Fires only when a score was actually given — closing the card unrated
+   * reports nothing, which is a legitimate end to the flow rather than an
+   * abandoned one. The projection onto `wouldRepeat` happens inside the
+   * repository, never here.
+   */
+  const handleRate = (rating: number): void => {
     if (cookEventId === null) {
       return;
     }
-    void getAppRepository().setCookEventRepeat(cookEventId, wouldRepeat);
+    void getAppRepository().setCookEventRating(cookEventId, rating);
   };
 
   if (loadState === 'loading') {
@@ -207,7 +216,7 @@ export default function CookModeScreen(): JSX.Element {
           <OutcomeCard
             dishTitle={dishTitle}
             onCooked={handleCooked}
-            onRepeatAnswer={handleRepeat}
+            onRate={handleRate}
             onDismiss={() => router.back()}
             reduceMotionEnabled={reduceMotionEnabled}
           />

@@ -30,6 +30,7 @@
  */
 
 import { daysBetween } from './date';
+import { resolveRepeatSignal } from './rating';
 import type { CookEvent, Household, Meal, MealId, ReasonCode, Save } from './types';
 
 export const SAVED_THIS_WEEK_BOOST = 100;
@@ -162,12 +163,29 @@ function computeRecencySignal(
   return { penalty: 0, notRecentBoost: NOT_RECENT_BOOST };
 }
 
-function wouldRepeatAdjustment(mealId: MealId, recentCookEvents: readonly CookEvent[]): number {
+/**
+ * PD-008. Reads the household's verdict on the last time this meal was
+ * cooked through `resolveRepeatSignal` rather than off `wouldRepeat`
+ * directly — that resolver prefers a numeric rating when one was given
+ * and falls back to the boolean for events written before the scale
+ * existed.
+ *
+ * Both weights keep the values they were tuned with: a rating changes how
+ * the verdict is *captured*, not what a favourite is worth. A middling
+ * score resolves to null and lands in the `=== null` branch below,
+ * scoring exactly like an unanswered question — which is the whole reason
+ * the scale has a middle.
+ */
+function ratingAdjustment(mealId: MealId, recentCookEvents: readonly CookEvent[]): number {
   const latest = mostRecentCookEvent(mealId, recentCookEvents);
-  if (latest === undefined || latest.wouldRepeat === null) {
+  if (latest === undefined) {
     return 0;
   }
-  return latest.wouldRepeat ? HOUSEHOLD_FAVOURITE_BOOST : -WOULD_NOT_REPEAT_PENALTY;
+  const repeatSignal = resolveRepeatSignal(latest);
+  if (repeatSignal === null) {
+    return 0;
+  }
+  return repeatSignal ? HOUSEHOLD_FAVOURITE_BOOST : -WOULD_NOT_REPEAT_PENALTY;
 }
 
 function fitsTimeBoost(meal: Meal, household: Household): number {
@@ -253,7 +271,7 @@ export function scoreMeal(
 ): ScoredMeal {
   const savedBoost = isSavedThisWeek(meal.id, pendingThisWeekSaves) ? SAVED_THIS_WEEK_BOOST : 0;
   const recency = computeRecencySignal(meal.id, recentCookEvents, targetDate);
-  const repeatAdjustment = wouldRepeatAdjustment(meal.id, recentCookEvents);
+  const repeatAdjustment = ratingAdjustment(meal.id, recentCookEvents);
   const timeBoost = fitsTimeBoost(meal, household);
   const noveltyBoost = varietyBoost(meal.id, recentCookEvents);
   const somedayBoost = somedaySaveBoost(meal.id, pendingSomedaySaves, targetDate);

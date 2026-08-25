@@ -15,9 +15,22 @@
  * `report_recipe` call that comes back structurally recipe-shaped but
  * substantively empty is itself a malformed response, not a valid sparse
  * recipe.
+ *
+ * `dishTags` is the one field that bends the "any doubt fails the whole
+ * recipe" rule, and only in one direction — see `readDishTags` below for
+ * why a wrong WORD is dropped while a wrong SHAPE still fails the recipe.
+ *
+ * Like buildExtractionRequest.ts, this module now carries runtime imports
+ * (`sanitizeDishTags`, `normalizeTag`) where it previously had only
+ * `import type`. See that file's "NOTE ON THE `dishTags` IMPORT" header
+ * section: the Deno edge function that calls this one relies on downstream
+ * references being erasable, and reconciling that is the edge function's
+ * concern, not a reason to grow a second normalization path here.
  */
 
 import type { ParsedIngredient, ParsedRecipe } from './types';
+import { sanitizeDishTags } from '../dishTags.ts';
+import { normalizeTag } from '../normalizeTag.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -94,6 +107,48 @@ function validateSteps(raw: unknown): readonly string[] | null {
   return steps;
 }
 
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+type DishTagsResult = { readonly ok: true; readonly value: readonly string[] } | { readonly ok: false };
+
+/**
+ * Two failures, treated deliberately differently.
+ *
+ * A value the closed vocabulary does not know is DROPPED and the recipe
+ * survives. That is what a closed vocabulary is for: a model answering
+ * "italiaans" has picked a wrong word for an optional, descriptive field,
+ * and failing an otherwise perfect recipe over it would turn a cosmetic
+ * miss into a user-facing `parse_failed` — a strictly worse outcome for
+ * the person who pasted the link. A dish tag gates nothing, so losing one
+ * costs a narrower search result and nothing else.
+ *
+ * A malformed CONTAINER — `dishTags` as a bare string, or an array holding
+ * a number — still fails the whole recipe, exactly like every other field
+ * in this file. That is not the model choosing a wrong word; it is the
+ * model not honouring the schema at all, and a response that ignores the
+ * shape in one place has earned no trust in the others.
+ *
+ * Missing or null is a plain empty list, not an error: most captions make
+ * no category obvious, and `report_recipe` deliberately does not mark
+ * `dishTags` as required (see buildExtractionRequest.ts).
+ *
+ * Normalization is `sanitizeDishTags` + the shared `normalizeTag` and
+ * nothing else — the SAME function restriction entry and meal tagging use.
+ * A second, local normalization path is what would let "Pasta" and "pasta"
+ * both end up in storage and stop comparing equal.
+ */
+function readDishTags(raw: unknown): DishTagsResult {
+  if (raw === undefined || raw === null) {
+    return { ok: true, value: [] };
+  }
+  if (!isStringArray(raw)) {
+    return { ok: false };
+  }
+  return { ok: true, value: sanitizeDishTags(raw, normalizeTag) };
+}
+
 /**
  * The single entry point: everything above exists only to be composed
  * here. Every branch fails the whole recipe (returns `null`) rather than
@@ -120,11 +175,17 @@ export function validateParsedRecipe(raw: unknown): ParsedRecipe | null {
     return null;
   }
 
+  const dishTags = readDishTags(raw.dishTags);
+  if (!dishTags.ok) {
+    return null;
+  }
+
   return {
     title: raw.title.trim(),
     ingredients,
     steps,
     estimatedMinutes: estimatedMinutes.value,
     servings: servings.value,
+    dishTags: dishTags.value,
   };
 }

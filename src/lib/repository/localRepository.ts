@@ -23,7 +23,7 @@ import {
 } from './local/household';
 import { createMeal, getMeal, getMealIngredients, getMealSteps, listHouseholdMeals } from './local/meals';
 import { createSave, listPendingSaves, listSaves } from './local/saves';
-import { createCookEvent, listCookEvents, setCookEventRepeat } from './local/cookEvents';
+import { createCookEvent, listCookEvents, setCookEventRating, setCookEventRepeat } from './local/cookEvents';
 import {
   createDecision,
   getDecisionByDate,
@@ -66,6 +66,7 @@ export function createLocalRepository(store: KeyValueStore): RemyRepository {
     listCookEvents: (householdId) => listCookEvents(tables, householdId),
     createCookEvent: (input) => createCookEvent(tables, input),
     setCookEventRepeat: (cookEventId, wouldRepeat) => setCookEventRepeat(tables, cookEventId, wouldRepeat),
+    setCookEventRating: (cookEventId, rating) => setCookEventRating(tables, cookEventId, rating),
     getPendingOutcomeDecision: (householdId) => getPendingOutcomeDecision(tables, householdId),
 
     listRecentDecisions: (householdId, sinceDate) => listRecentDecisions(tables, householdId, sinceDate),

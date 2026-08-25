@@ -73,6 +73,16 @@ const BODY_TEXT_ON_NEUTRAL_SURFACES: readonly TextOnSurfacesCase[] = [
   { text: 'textPrimary', surfaces: NEUTRAL_SURFACES },
   { text: 'textSecondary', surfaces: NEUTRAL_SURFACES },
   { text: 'textMuted', surfaces: NEUTRAL_SURFACES },
+  /**
+   * PD-009 introduced the first place `accent` is used as *text* on a plain
+   * surface rather than as a fill or a border: DecisionFilterBar's "WISSEN"
+   * reset. That makes it subject to 1.4.3's 4.5:1, not 1.4.11's 3:1 — the
+   * distinction A3 already had to learn the hard way with `accent` on
+   * `accentMuted` (see TEXT_ON_FILL below). Guarded across all four neutral
+   * surfaces, not just `background`, for the same reason the three rows
+   * above are: nothing pins which surface a component lands on.
+   */
+  { text: 'accent', surfaces: NEUTRAL_SURFACES },
 ];
 
 interface OnFillCase {
@@ -89,6 +99,41 @@ const TEXT_ON_FILL: readonly OnFillCase[] = [
   // A3: accentOnMuted is the token this review added specifically because
   // `accent` itself (3.66:1 in light mode) fails here.
   { text: 'accentOnMuted', fill: 'accentMuted' },
+  /**
+   * OutcomeCard's follow-up phase ("Gemaakt!" -> the rating scale) fades a
+   * fully opaque `positiveMuted` wash across the whole card, so from that
+   * moment on every glyph on it sits on `positiveMuted`, not on
+   * `surfaceRaised` — the surface the neutral-surface table above checks.
+   * Without these three rows the entire completion moment, Fase 4's
+   * rating chips and their anchor labels included, is unguarded.
+   */
+  { text: 'textPrimary', fill: 'positiveMuted' },
+  { text: 'textSecondary', fill: 'positiveMuted' },
+  { text: 'textMuted', fill: 'positiveMuted' },
+];
+
+interface BoundaryOnFillCase {
+  readonly boundary: ColorKey;
+  readonly fill: ColorKey;
+}
+
+/**
+ * Interactive component boundaries drawn on a non-neutral fill — WCAG
+ * 1.4.11's 3:1, not the stricter text ratio. Both entries are the rating
+ * chips' outlines on that same `positiveMuted` wash: `borderStrong` when
+ * unselected, `accent` when selected.
+ *
+ * The chips' own fills (`surfaceSunken` unselected, `accentMuted`
+ * selected) are deliberately NOT asserted against `positiveMuted` — they
+ * sit at roughly 1.1:1 there and always will, since both are near-neutral
+ * washes by design. 1.4.11 is satisfied by the boundary instead, which is
+ * exactly why the rating chips outline themselves in `borderStrong`
+ * rather than `Chip`'s decorative `border` token (1.27:1 here, and not a
+ * boundary token in the first place).
+ */
+const UI_BOUNDARY_ON_FILL: readonly BoundaryOnFillCase[] = [
+  { boundary: 'borderStrong', fill: 'positiveMuted' },
+  { boundary: 'accent', fill: 'positiveMuted' },
 ];
 
 /**
@@ -129,6 +174,13 @@ describe('token contrast (WCAG 2.2)', () => {
             expect(ratio).toBeGreaterThanOrEqual(UI_BOUNDARY_MIN_RATIO);
           });
         }
+      }
+
+      for (const { boundary, fill } of UI_BOUNDARY_ON_FILL) {
+        test(`${boundary} on ${fill} is at least ${UI_BOUNDARY_MIN_RATIO}:1`, () => {
+          const ratio = contrastRatio(tokens[boundary], tokens[fill]);
+          expect(ratio).toBeGreaterThanOrEqual(UI_BOUNDARY_MIN_RATIO);
+        });
       }
     });
   }

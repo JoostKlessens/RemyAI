@@ -3,6 +3,16 @@
  * No list, no scroll, no browse affordance: this is the entire product
  * thesis. See docs/DESIGN.md §1 and docs/PRODUCT-DECISIONS.md.
  *
+ * PD-009 adds one thing above the hero: `DecisionFilterBar`, where the
+ * household can say "ik heb 20 minuten" or "iets met pasta" *before* Remy
+ * picks. That is still one dish, one reason — it narrows the question
+ * rather than handing it back, which is why it doesn't breach rule 1 (see
+ * that component's header for the full argument). Its state lives here and
+ * nowhere else: filters are never persisted, never written to the
+ * decisions row, and reset on every reload, because they describe a mood
+ * at 17:45, not a setting. `handleChangeFilters` also explains why
+ * narrowing does NOT refund a spent swap.
+ *
  * `DecisionResult` (src/domain/types.ts) is a discriminated union; every
  * branch below is switched on `kind`/`reason` explicitly so a blank
  * screen here is structurally impossible, not just unlikely. The
@@ -44,19 +54,23 @@ import {
   fixtureDecisionSession,
   fixtureNoCandidateAllExcluded,
   fixtureNoCandidateEmptyRotation,
+  fixtureNoCandidateFilteredOut,
   fixtureNoCandidateSwapsExhausted,
 } from '@/app/_fixtures';
 import { Button } from '@/components/Button';
 import { DecisionCard } from '@/components/DecisionCard';
+import { DecisionFilterBar } from '@/components/DecisionFilterBar';
 import { DeclineReasonRow } from '@/components/DeclineReasonRow';
 import { NoCandidateState } from '@/components/NoCandidateState';
 import { OutcomeCard } from '@/components/OutcomeCard';
 import { VanavondActionRow } from '@/components/VanavondActionRow';
 import { decide } from '@/domain/decide';
+import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import type {
   CookEventId,
   Decision,
   DeclineReason,
+  DecisionFilters,
   DecisionRequest,
   DecisionResult,
   HouseholdId,
@@ -69,16 +83,29 @@ import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
 type VanavondView = 'decision' | 'declined';
-type DevScenario = 'normal' | 'empty_rotation' | 'all_excluded' | 'swaps_exhausted' | 'error';
+type DevScenario = 'normal' | 'empty_rotation' | 'all_excluded' | 'filtered_out' | 'swaps_exhausted' | 'error';
 
 /** How far back "recent" decisions/cook history reach for novelty-tier classification — see novelty.ts. */
 const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
 
 interface LiveSession {
   readonly householdId: HouseholdId;
-  readonly requestBase: Omit<DecisionRequest, 'excludedMealIds'>;
+  /**
+   * PD-009: `filters` is omitted alongside `excludedMealIds` because both
+   * change *within* a session without any reload. The loaded household data
+   * is the stable part; what the user asks for tonight is not, and baking a
+   * filter into `requestBase` would mean re-fetching the whole household to
+   * un-tap a chip.
+   */
+  readonly requestBase: Omit<DecisionRequest, 'excludedMealIds' | 'filters'>;
   readonly decisionRow: Decision | null;
   readonly mealById: ReadonlyMap<MealId, Meal>;
+  /**
+   * Every dish category present on at least one candidate meal, so the
+   * filter bar only offers narrowings that can actually return something —
+   * see DecisionFilterBar's header.
+   */
+  readonly availableDishTags: readonly string[];
 }
 
 async function loadLiveSession(): Promise<LiveSession> {
@@ -102,7 +129,7 @@ async function loadLiveSession(): Promise<LiveSession> {
   }
   const recentDecisions = await repository.listRecentDecisions(householdId, daysAgoIso(RECENT_DECISIONS_LOOKBACK_DAYS));
 
-  const requestBase: Omit<DecisionRequest, 'excludedMealIds'> = {
+  const requestBase: Omit<DecisionRequest, 'excludedMealIds' | 'filters'> = {
     household,
     members,
     restrictions,
@@ -117,15 +144,39 @@ async function loadLiveSession(): Promise<LiveSession> {
   const existingDecision = await repository.getDecisionByDate(householdId, targetDate);
   const decisionRow = existingDecision ?? (await createTodayDecisionIfSuggested(repository, requestBase, householdId));
 
-  return { householdId, requestBase, decisionRow, mealById: new Map(candidateMeals.map((meal) => [meal.id, meal])) };
+  return {
+    householdId,
+    requestBase,
+    decisionRow,
+    mealById: new Map(candidateMeals.map((meal) => [meal.id, meal])),
+    availableDishTags: collectAvailableDishTags(candidateMeals),
+  };
+}
+
+/** Deduplicated union of every candidate meal's dish categories — order is irrelevant, DecisionFilterBar re-sorts. */
+function collectAvailableDishTags(candidateMeals: readonly Meal[]): readonly string[] {
+  const tags = new Set<string>();
+  for (const meal of candidateMeals) {
+    for (const tag of meal.dishTags) {
+      tags.add(tag);
+    }
+  }
+  return [...tags];
 }
 
 async function createTodayDecisionIfSuggested(
   repository: ReturnType<typeof getAppRepository>,
-  requestBase: Omit<DecisionRequest, 'excludedMealIds'>,
+  requestBase: Omit<DecisionRequest, 'excludedMealIds' | 'filters'>,
   householdId: HouseholdId,
 ): Promise<Decision | null> {
-  const result = decide({ ...requestBase, excludedMealIds: [] });
+  // PD-009, deliberately unfiltered: this is the household's offer *for the
+  // day* — the row the scheduled Edge Function will eventually write at
+  // 16:00, before anyone has touched a chip. Persisting a filtered offer
+  // would freeze a passing mood ("iets met soep", tapped once) into the
+  // permanent record of what Remy suggested, and would make the
+  // accept-rate metric in plan §8 unreadable. Filters live only in this
+  // screen's state and are applied on every subsequent `decide()` below.
+  const result = decide({ ...requestBase, excludedMealIds: [], filters: NO_DECISION_FILTERS });
   if (result.kind !== 'suggestion') {
     return null;
   }
@@ -144,12 +195,15 @@ function resolveCurrentResult(
   sessionIndex: number,
   session: LiveSession | null,
   excludedMealIds: readonly MealId[],
+  filters: DecisionFilters,
 ): DecisionResult {
   switch (devScenario) {
     case 'empty_rotation':
       return fixtureNoCandidateEmptyRotation;
     case 'all_excluded':
       return fixtureNoCandidateAllExcluded;
+    case 'filtered_out':
+      return fixtureNoCandidateFilteredOut;
     case 'swaps_exhausted':
       return fixtureNoCandidateSwapsExhausted;
     case 'error':
@@ -161,7 +215,7 @@ function resolveCurrentResult(
       if (session === null) {
         return { kind: 'no_candidate', reason: 'empty_rotation' };
       }
-      return decide({ ...session.requestBase, excludedMealIds });
+      return decide({ ...session.requestBase, excludedMealIds, filters });
     default: {
       const exhaustiveCheck: never = devScenario;
       throw new Error(`Unhandled DevScenario: ${String(exhaustiveCheck)}`);
@@ -181,6 +235,9 @@ export default function VanavondScreen(): JSX.Element {
   const [sessionIndex, setSessionIndex] = useState(0);
   const [session, setSession] = useState<LiveSession | null>(null);
   const [excludedMealIds, setExcludedMealIds] = useState<readonly MealId[]>([]);
+  // PD-009. Session state, never persisted and never written to the
+  // decision row — see `createTodayDecisionIfSuggested`.
+  const [filters, setFilters] = useState<DecisionFilters>(NO_DECISION_FILTERS);
   const [view, setView] = useState<VanavondView>('decision');
   const [declineReason, setDeclineReason] = useState<DeclineReason | null>(null);
   const [showOutcomeOverlay, setShowOutcomeOverlay] = useState(false);
@@ -204,6 +261,7 @@ export default function VanavondScreen(): JSX.Element {
         }
         setSession(nextSession);
         setExcludedMealIds([]);
+        setFilters(NO_DECISION_FILTERS);
         setIsAccepting(false);
         setView(nextSession.decisionRow?.status === 'skipped' ? 'declined' : 'decision');
         setDeclineReason(nextSession.decisionRow?.declineReason ?? null);
@@ -238,10 +296,12 @@ export default function VanavondScreen(): JSX.Element {
   useEffect(() => load(), [load]);
 
   const currentResult = useMemo(
-    () => resolveCurrentResult(devScenario, sessionIndex, session, excludedMealIds),
-    [devScenario, sessionIndex, session, excludedMealIds],
+    () => resolveCurrentResult(devScenario, sessionIndex, session, excludedMealIds, filters),
+    [devScenario, sessionIndex, session, excludedMealIds, filters],
   );
   const effectivePhase: ScreenPhase = devScenario === 'error' ? 'error' : phase;
+  const isEmptyRotation = currentResult.kind === 'no_candidate' && currentResult.reason === 'empty_rotation';
+  const showFilterBar = effectivePhase === 'ready' && view === 'decision' && !isEmptyRotation;
 
   const getMealById = (mealId: MealId): Meal | undefined => session?.mealById.get(mealId);
 
@@ -272,7 +332,7 @@ export default function VanavondScreen(): JSX.Element {
       return;
     }
     const nextExcluded = [...excludedMealIds, currentResult.mealId];
-    const nextResult = decide({ ...session.requestBase, excludedMealIds: nextExcluded });
+    const nextResult = decide({ ...session.requestBase, excludedMealIds: nextExcluded, filters });
     setExcludedMealIds(nextExcluded);
     if (nextResult.kind === 'suggestion' && session.decisionRow !== null) {
       const decisionId = session.decisionRow.id;
@@ -323,6 +383,23 @@ export default function VanavondScreen(): JSX.Element {
     router.push('/import/paste');
   };
 
+  /**
+   * PD-009. Note what this deliberately does NOT do: reset
+   * `excludedMealIds`. Changing a filter is not a swap, so it must not
+   * refund one — otherwise PD-001's two-swap cap is bypassed by toggling a
+   * chip on and off, which is the cheapest possible way to reintroduce
+   * endless browsing on the one screen that exists to prevent it. The
+   * already-offered meals stay excluded for the rest of the evening
+   * regardless of how the pool is narrowed around them.
+   */
+  const handleChangeFilters = (nextFilters: DecisionFilters): void => {
+    setFilters(nextFilters);
+  };
+
+  const handleClearFilters = (): void => {
+    setFilters(NO_DECISION_FILTERS);
+  };
+
   const handleRetry = (): void => {
     setDevScenario('normal');
     load();
@@ -343,16 +420,36 @@ export default function VanavondScreen(): JSX.Element {
       .catch(() => {});
   };
 
-  const handleOutcomeRepeat = (wouldRepeat: boolean): void => {
+  /**
+   * Fires only when a score was actually given — dismissing the card
+   * unrated reports nothing, and that silence is a legitimate answer
+   * (PD-002's optional decline reason, applied to the outcome loop).
+   * `wouldRepeat` is re-derived from the score inside the repository, so
+   * nothing here projects it.
+   */
+  const handleOutcomeRate = (rating: number): void => {
     if (pendingCookEventId === null) {
       return;
     }
-    void getAppRepository().setCookEventRepeat(pendingCookEventId, wouldRepeat);
+    void getAppRepository().setCookEventRating(pendingCookEventId, rating);
   };
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {__DEV__ ? <DevScenarioRow active={devScenario} onSelect={setDevScenario} /> : null}
+
+      {/* PD-009. Above the hero rather than inside it, so "Iets anders"
+          still cross-fades only the name/reason/meta block and the action
+          row never moves (docs/DESIGN.md §1). Hidden for `empty_rotation`:
+          offering to narrow a library that has nothing in it is noise, and
+          that state's single job is to get the first link pasted. */}
+      {showFilterBar ? (
+        <DecisionFilterBar
+          filters={filters}
+          availableDishTags={session?.availableDishTags ?? []}
+          onChange={handleChangeFilters}
+        />
+      ) : null}
 
       <View style={styles.content}>
         {effectivePhase === 'loading' ? <LoadingSkeleton /> : null}
@@ -377,6 +474,7 @@ export default function VanavondScreen(): JSX.Element {
                 reason={currentResult.reason}
                 onOpenImport={handleOpenImport}
                 onOpenRecipes={handleChooseSelf}
+                onClearFilters={handleClearFilters}
                 onDecline={handleDecline}
               />
             </View>
@@ -398,7 +496,7 @@ export default function VanavondScreen(): JSX.Element {
             <OutcomeCard
               dishTitle={pendingOutcomeMeal.title}
               onCooked={handleOutcomeCooked}
-              onRepeatAnswer={handleOutcomeRepeat}
+              onRate={handleOutcomeRate}
               onDismiss={() => setShowOutcomeOverlay(false)}
               reduceMotionEnabled={reduceMotionEnabled}
             />
@@ -520,6 +618,7 @@ const DEV_SCENARIOS: ReadonlyArray<{ value: DevScenario; label: string }> = [
   { value: 'normal', label: 'Normaal' },
   { value: 'empty_rotation', label: 'Lege rotatie' },
   { value: 'all_excluded', label: 'Alles uitgesloten' },
+  { value: 'filtered_out', label: 'Weggefilterd' },
   { value: 'swaps_exhausted', label: 'Wissels op' },
   { value: 'error', label: 'Fout' },
 ];

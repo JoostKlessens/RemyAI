@@ -1,4 +1,12 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+import {
+  RATING_MAX,
+  RATING_MIN,
+  RATING_NEGATIVE_AT_OR_BELOW,
+  RATING_POSITIVE_AT_OR_ABOVE,
+  resolveRepeatSignal,
+  toRepeatSignal,
+} from '@/domain/rating';
 import type { Meal } from '@/domain/types';
 import { createInMemoryKeyValueStore, type KeyValueStore } from '@/lib/repository/keyValueStore';
 import { createLocalRepository } from '@/lib/repository/localRepository';
@@ -24,6 +32,7 @@ function makeCuratedMeal(overrides: Partial<Meal> = {}): Meal {
     skillLevel: 'beginner',
     servings: 4,
     ingredientTags: [],
+    dishTags: ['ovenschotel'],
     allergenTagStatus: 'verified',
     sourceUrl: null,
     sourcePlatform: null,
@@ -45,6 +54,7 @@ function makeCreateMealInput(overrides: Partial<CreateMealInput> = {}): CreateMe
     skillLevel: null,
     servings: 4,
     ingredientTags: [],
+    dishTags: ['kip'],
     allergenTagStatus: 'unknown',
     sourceUrl: 'https://www.tiktok.com/@test/video/1',
     sourcePlatform: 'tiktok',
@@ -143,6 +153,53 @@ describe('localRepository — meals (+ ingredients, + steps)', () => {
 
     expect(created.ingredientTags).toEqual(['noten']);
     expect(created.allergenTagStatus).toBe('verified');
+  });
+
+  /**
+   * PD-006 at the persistence seam. `dishTags` and `ingredientTags` are
+   * both `text[]` on the same row, so the only thing keeping a category
+   * out of the exclusion gate is that they are separate columns written
+   * from separate inputs — asserted here rather than assumed.
+   */
+  test('createMeal persists dishTags without touching ingredientTags', async () => {
+    const created = await repository.createMeal(
+      makeCreateMealInput({ dishTags: ['pasta', 'vegetarisch'], ingredientTags: ['gluten'] }),
+    );
+
+    expect(created.dishTags).toEqual(['pasta', 'vegetarisch']);
+    expect(created.ingredientTags).toEqual(['gluten']);
+  });
+
+  test('createMeal stores an empty dishTags list for a meal with no categories', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: [] }));
+    expect(created.dishTags).toEqual([]);
+  });
+
+  test('createMeal survives an app restart with its dishTags intact', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: ['curry', 'rijst'] }));
+
+    const restarted = createLocalRepository(store);
+    expect((await restarted.getMeal(created.id))?.dishTags).toEqual(['curry', 'rijst']);
+  });
+
+  /**
+   * `Meal.dishTags` is a required, non-nullable array, but rows written by
+   * a build that predates it are sitting in real installs' AsyncStorage
+   * without the key. Reading one back would hand every downstream caller
+   * an `undefined` where the type promises an array — a crash on the first
+   * `.some()`, not a missing filter. The read path backfills instead, in
+   * the same spirit as table.ts's "persisted storage is untrusted" note.
+   */
+  test('reads a meal row written before dishTags existed as having no categories, never undefined', async () => {
+    const tables = createRepositoryTables(store);
+    const { dishTags: _dishTags, ...legacyRow } = makeCuratedMeal();
+    await tables.meals.replaceAll([legacyRow as Meal]);
+
+    const meal = await repository.getMeal('curated-meal-1');
+    expect(meal?.dishTags).toEqual([]);
+
+    const listed = await repository.listHouseholdMeals(HOUSEHOLD_ID);
+    expect(listed.find((entry) => entry.id === 'curated-meal-1')?.dishTags).toEqual([]);
   });
 
   test('createMeal persists thumbnailUrl, and a meal without one stores null so the library can fall back to a monogram', async () => {
@@ -264,6 +321,149 @@ describe('localRepository — cook events (outcome loop, PD-003)', () => {
     const updated = await repository.setCookEventRepeat(cookEvent.id, true);
     expect(updated.wouldRepeat).toBe(true);
     expect(updated.id).toBe(cookEvent.id);
+  });
+
+  /**
+   * Fase 4. The scale itself lives in src/domain/rating.ts and is never
+   * spelled out here — every expectation below is derived from its
+   * constants, so a move to a 1-10 scale stays one edit there plus one
+   * CHECK constraint in a migration, exactly as rating.ts's header
+   * promises.
+   */
+  test('createCookEvent leaves rating unset — the question has not been asked yet, and unasked is not neutral', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+
+    expect(cookEvent.rating).toBeNull();
+    expect(resolveRepeatSignal(cookEvent)).toBeNull();
+  });
+
+  test('setCookEventRating stores the score and projects a high one onto wouldRepeat', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+
+    const updated = await repository.setCookEventRating(cookEvent.id, RATING_MAX);
+
+    expect(updated.id).toBe(cookEvent.id);
+    expect(updated.rating).toBe(RATING_MAX);
+    expect(updated.wouldRepeat).toBe(toRepeatSignal(RATING_MAX));
+    expect(updated.wouldRepeat).toBe(true);
+  });
+
+  test('setCookEventRating projects a low score onto wouldRepeat false', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+
+    const updated = await repository.setCookEventRating(cookEvent.id, RATING_MIN);
+
+    expect(updated.rating).toBe(RATING_MIN);
+    expect(updated.wouldRepeat).toBe(false);
+  });
+
+  /**
+   * The whole reason `wouldRepeat` survives alongside `rating`: a shrug
+   * must not inflate scoring.ts's HOUSEHOLD_FAVOURITE_BOOST, and it must
+   * not trigger WOULD_NOT_REPEAT_PENALTY either. The score is still
+   * recorded — the household did say something — it just produces no
+   * signal.
+   */
+  test('setCookEventRating records a middling score but leaves wouldRepeat null — recorded, never scored', async () => {
+    const middleBandRating = RATING_NEGATIVE_AT_OR_BELOW + 1;
+    expect(middleBandRating).toBeLessThan(RATING_POSITIVE_AT_OR_ABOVE);
+
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+
+    const updated = await repository.setCookEventRating(cookEvent.id, middleBandRating);
+
+    expect(updated.rating).toBe(middleBandRating);
+    expect(updated.wouldRepeat).toBeNull();
+  });
+
+  /**
+   * A previously answered "Nog een keer?" must not survive underneath a
+   * later score that contradicts it. `resolveRepeatSignal` prefers the
+   * score, so a stale `wouldRepeat` would be invisible in the app yet
+   * still wrong in any query (or future Supabase view) reading the column
+   * directly. Overwriting it back to null is the honest state.
+   */
+  test('setCookEventRating clears a stale wouldRepeat when the new score carries no signal', async () => {
+    const middleBandRating = RATING_NEGATIVE_AT_OR_BELOW + 1;
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+    await repository.setCookEventRepeat(cookEvent.id, true);
+
+    const updated = await repository.setCookEventRating(cookEvent.id, middleBandRating);
+
+    expect(updated.wouldRepeat).toBeNull();
+  });
+
+  test('setCookEventRating refuses an off-scale score rather than storing an opinion nobody expressed', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+
+    await expect(repository.setCookEventRating(cookEvent.id, RATING_MAX + 1)).rejects.toThrow();
+    await expect(repository.setCookEventRating(cookEvent.id, RATING_MIN - 1)).rejects.toThrow();
+    await expect(repository.setCookEventRating(cookEvent.id, RATING_MIN + 0.5)).rejects.toThrow();
+
+    const events = await repository.listCookEvents(HOUSEHOLD_ID);
+    expect(events.find((event) => event.id === cookEvent.id)?.rating).toBeNull();
+  });
+
+  test('setCookEventRating throws for an unknown cook event id instead of silently writing nothing', async () => {
+    await expect(repository.setCookEventRating('does-not-exist', RATING_MAX)).rejects.toThrow();
+  });
+
+  test('setCookEventRating leaves every other cook event untouched', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+    const rated = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-22',
+    });
+    const untouched = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: meal.id,
+      decisionId: null,
+      cookedOn: '2026-08-23',
+    });
+
+    await repository.setCookEventRating(rated.id, RATING_MAX);
+
+    const events = await repository.listCookEvents(HOUSEHOLD_ID);
+    expect(events.find((event) => event.id === untouched.id)?.rating).toBeNull();
+    expect(events.find((event) => event.id === untouched.id)?.wouldRepeat).toBeNull();
   });
 
   test('getPendingOutcomeDecision returns an accepted decision with no recorded cook event', async () => {
