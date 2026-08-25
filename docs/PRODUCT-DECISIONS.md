@@ -219,6 +219,85 @@ not filtered out.
 - **Only when we hold positive tag data.** An untagged item stays untagged. The absence of a label
   must never be readable as "checked and clean" — that is PD-006's whole point.
 
+## PD-008 — Cooked meals get a 1–5 score; `wouldRepeat` survives as a derived projection
+
+The outcome question is a **five-point scale**, not a thumbs up/down.
+
+- **Why a scale.** Leaderboards need ordinal data. A boolean cannot rank, and it cannot tell a
+  meal someone loved from one they merely didn't hate.
+- **The middle band deliberately produces no signal.** With only "liked it / didn't", every
+  lukewarm dinner gets recorded as `wouldRepeat: true` and quietly inflates
+  `HOUSEHOLD_FAVOURITE_BOOST` — the signal that decides what gets served again. A score of 3
+  resolves to `null` and scores exactly like an unanswered question. That is the whole reason the
+  scale has a middle.
+- **`wouldRepeat` is kept, not replaced.** It becomes a lossy projection of the score
+  (`>= 4 → true`, `<= 2 → false`, else `null`), so `scoring.ts` keeps both its meaning and its
+  tuned weights. Three reasons not to drop the column: cook history written before the scale
+  existed cannot be backfilled, the middle band has no honest boolean, and a manual cook-log path
+  with no score is already anticipated in `0001_init.sql`.
+- **The scale lives in `src/domain/rating.ts` and nowhere else.** Thresholds are stated once, never
+  hardcoded at a call site, so moving to a Dutch 1–10 report-card scale is one file plus one CHECK
+  constraint. The UI derives its chips from those constants rather than listing 1..5.
+- **Numbered mono chips, not stars.** DESIGN.md is icon-averse and forbids emoji as status
+  indicators. Rejected: a star row, which reads as a rating-site convention and imports its
+  baggage.
+- **Rating is optional, and skipping costs exactly one tap** — the same as giving one. PD-002's
+  optional decline reason is the precedent. A rating that nags is a rating that gets lied to.
+- **The old "Nog een keer? Ja / Liever niet" buttons are gone.** Asking both would ask the same
+  question twice and let the two columns disagree.
+
+## PD-009 — Decision filters are a separate gate from the allergen exclusion
+
+"Max 30 minuten" and "iets met pasta" filter the candidate pool through
+`filterByDecisionFilters`, which is **deliberately not folded into**
+`filterByRestrictionsAndTimeBudget`.
+
+- **Why two functions.** That second function carries the PD-006 exclusion guarantee. A guarantee
+  is only as strong as the smallest amount of code you can read in one sitting; sharing a predicate
+  would make every "kies iets met pasta" edit also an edit to the allergen path. Rejected:
+  a unified `filterCandidates(meals, context)`.
+- **Dish tags are a second, separate vocabulary.** `ingredientTags` is a denormalized list of
+  *allergens* and drives exclusion; `dishTags` is descriptive and only ever narrows a search the
+  user asked for. Merging them would let a category filter and a safety exclusion operate on the
+  same string — exactly what PD-006 forbids.
+- **An unknown cooking time IS excluded by an explicit filter** — the opposite of
+  `isWithinTimeBudget`, where unknown means "not disqualified". The household budget is a standing
+  background preference; "ik heb vanavond 20 minuten" is a statement about right now, and a dish
+  whose duration we don't know is not an honest answer to it.
+- **`filtered_out` is its own `NoCandidateReason`.** Without it, over-filtering surfaces as
+  `all_excluded`, which wrongly implies the household's allergens are to blame. The copy says the
+  filter is too strict and offers one tap to clear it.
+- **Filters are not persisted and never enter the `decisions` row.** A passing mood must not freeze
+  into the permanent record or distort PD-004's accept-rate metric.
+
+## PD-010 — Friends see the full recipe, behind a tap, with the creator attached
+
+**Owner's decision, superseding the plan's assumption.** The friend feed shows a card — thumbnail,
+recipe name, key ingredients. Tapping it opens the **full recipe**, with a link to the original
+video directly below.
+
+The alternative considered was a card that never opens: full recipe only after you import the link
+yourself. That was rejected as too little value for a social feature to be worth building.
+
+**What this costs, stated plainly so nobody rediscovers it later.** The recipe came out of someone
+else's video, and showing it to a third party is rebroadcast — the highest rung of the exposure
+ladder in `research/13-legal-tos.md`, and the thing that got Recipeasly killed inside 24 hours in
+2021. PD-007 exists because of that precedent. Choosing this deliberately means the mitigations
+below stop being nice-to-have and become the conditions the feature ships under:
+
+1. **Creator attribution on the card AND on the full recipe view** — handle, profile link, source
+   platform. Not a footer, not a tooltip.
+2. **The link to the original post sits with the recipe**, not buried. The pitch that we send
+   viewers to the creator has to be true on the surface where it matters most.
+3. **`meals.visibility` governs, defaulting to `private`.** Sharing is an act, never a default.
+4. **The PD-007 one-tap creator opt-out applies here too.** A creator who withdraws leaves this
+   surface as well as the feed.
+5. **Video is still never re-hosted, re-encoded, or cached.** That line does not move.
+
+**PD-006 is untouched by this.** A shared recipe carries no allergen verification across
+households: the canonical `recipes` row holds no allergen status, and every copied meal starts at
+`unknown`. Someone else's "verified" is not evidence for your kitchen.
+
 ---
 
 ## Deferred to Phase 2 — do not build
