@@ -42,6 +42,20 @@
  *
  * ---
  *
+ * DISPLAY-ONLY PLATFORMS (PD-011): Instagram resolves oEmbed and then
+ * stops. Meta licenses that endpoint for embedding a post — thumbnail,
+ * title, author, link back — and prohibits "any other use of metadata or
+ * content", which is what deriving and storing a recipe from the caption
+ * would be. So for Instagram this function never calls Gemini, never
+ * writes a canonical row, and never returns the caption to the client: it
+ * answers with the `display_only` variant, which carries attribution and a
+ * source URL and has nowhere to put caption text. The decision and the
+ * result shape both live in src/domain/import/displayOnlyPolicy.ts, where
+ * they are type-checked and unit-tested; this file only wires them in.
+ * TikTok is entirely unaffected and keeps full extraction.
+ *
+ * ---
+ *
  * SCOPE: oEmbed (src/lib/oembed.ts) is the only source of text this
  * function ever has — a caption/title and an author name, nothing else.
  * Downloading the video itself to run audio transcription or on-screen-
@@ -85,6 +99,7 @@ import { validateParsedRecipe } from '../../../src/domain/import/validateParsed.
 import { buildExtractionEndpoint, buildExtractionRequest } from '../../../src/domain/import/buildExtractionRequest.ts';
 import { parseExtractionResponse } from '../../../src/domain/import/parseExtractionResponse.ts';
 import { buildAttribution } from '../../../src/domain/import/buildAttribution.ts';
+import { buildDisplayOnlyResult, isDisplayOnlyPlatform } from '../../../src/domain/import/displayOnlyPolicy.ts';
 import {
   buildRecipeIngredientRows,
   buildRecipeRowInsert,
@@ -132,6 +147,13 @@ const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.6-flash';
 // Optional: see src/lib/oembed.ts's `instagramAccessToken` — undefined
 // here means every Instagram resolution fails with the typed
 // `missing_credentials` reason, never a silent empty result.
+//
+// Still needed after PD-011. Instagram being display-only removes the LLM
+// call, not the oEmbed call: resolving the post is precisely the use Meta's
+// policy DOES license, and it is what produces the thumbnail and the
+// creator credit the user is shown. Without a token, an Instagram paste
+// degrades to the honest `oembed_failed` / `missing_credentials` copy
+// exactly as it did before.
 const INSTAGRAM_OEMBED_ACCESS_TOKEN = Deno.env.get('INSTAGRAM_OEMBED_ACCESS_TOKEN');
 
 // Both are injected into every Edge Function by the platform itself — no
@@ -288,15 +310,20 @@ function serviceRoleHeaders(extra: Record<string, string> = {}): Record<string, 
  * canonicalRecipe.ts), or null for a miss, an unusable row, or any failure.
  */
 async function findStoredRecipe(normalizedUrl: string): Promise<ImportResult | null> {
-  // The filter value is double-quoted before encoding: PostgREST treats an
-  // unquoted value as ending at a reserved character, and quoting is its
-  // documented way to pass one through intact. Belt and braces — a
-  // normalized URL has had its query string and hash stripped already
-  // (urlParsing.ts) — but a URL is exactly the kind of value where assuming
-  // "no reserved characters" ages badly.
+  // DO NOT re-add double quotes around the filter value. That was tried as
+  // defence against reserved characters and it silently broke every cache
+  // read: PostgREST does not strip surrounding quotes here, it matches them
+  // as literal characters, so a stored
+  //   https://www.tiktok.com/@user/video/123
+  // never equals the queried
+  //   "https://www.tiktok.com/@user/video/123"
+  // and every lookup returned []. The store kept succeeding into a cache
+  // nobody could read, so imports still worked and nothing looked broken —
+  // they just always paid for oEmbed and the LLM again. encodeURIComponent
+  // already escapes every reserved character, which is the whole job.
   const endpoint =
     `${RECIPES_ENDPOINT}?select=${encodeURIComponent(STORED_RECIPE_SELECT)}` +
-    `&normalized_url=eq.${encodeURIComponent(`"${normalizedUrl}"`)}&limit=1`;
+    `&normalized_url=eq.${encodeURIComponent(normalizedUrl)}&limit=1`;
 
   try {
     const response = await fetch(endpoint, { headers: serviceRoleHeaders() });
@@ -443,6 +470,56 @@ async function storeCanonicalRecipe(
   ]);
 }
 
+/** One place that knows how this function calls oEmbed, so its two call sites cannot drift apart. */
+function resolveOembedFor(normalizedUrl: string, platform: ImportPlatform) {
+  return resolveOembed(normalizedUrl, platform, {
+    fetchFn: fetch,
+    instagramAccessToken: INSTAGRAM_OEMBED_ACCESS_TOKEN,
+  });
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * DISPLAY-ONLY PLATFORMS (PD-011)
+ * ---------------------------------------------------------------------------
+ *
+ * The entire pipeline for a display-only platform: resolve the post, credit
+ * its creator, return. No model call, no stored row, and no caption in the
+ * response — see this file's header and displayOnlyPolicy.ts.
+ *
+ * THE CAPTION IS NEVER READ ON THIS PATH, structurally rather than by
+ * convention. `oembedResult.payload.title` is not referenced anywhere in
+ * this function, and the only thing the payload is handed to is
+ * `buildDisplayOnlyResult`, which reads the attribution fields and nothing
+ * else. There is no local variable holding a caption to accidentally log,
+ * pass on, or return.
+ *
+ * WHY THE CALLER PUTS THIS BEFORE THE FASE 1b CACHE, NOT AFTER. Neither
+ * half of the canonical-recipe cache should run for a display-only import:
+ *
+ *  - No WRITE, because there is no extracted recipe to store. That cache
+ *    exists to stop us paying for repeat EXTRACTION, and there is no
+ *    extraction here to repeat. (A parent row with no ingredients or steps
+ *    would be rejected by `parseStoredRecipe` on the way back out anyway.)
+ *  - No READ either, and that half is deliberate rather than incidental.
+ *    Once nothing writes Instagram rows the lookup is a guaranteed miss, so
+ *    skipping it saves a pointless round trip — but the load-bearing reason
+ *    is that a row written by an EARLIER deployment must not be served now.
+ *    Handing back a stored, caption-derived Instagram recipe would be the
+ *    exact use PD-011 rules out; that it came from our own cache rather
+ *    than from a fresh model call does not change what it is.
+ */
+async function resolveDisplayOnlyImport(normalizedUrl: string, platform: ImportPlatform): Promise<ImportResult> {
+  const oembedResult = await resolveOembedFor(normalizedUrl, platform);
+  if (oembedResult.kind === 'error') {
+    // The same honest, typed failure as every other path: a deleted post or
+    // a missing Instagram token still has to say so, rather than pretend to
+    // have resolved something it did not.
+    return { kind: 'oembed_failed', reason: oembedResult.reason };
+  }
+  return buildDisplayOnlyResult({ sourceUrl: normalizedUrl, platform, payload: oembedResult.payload });
+}
+
 type LlmCallResult = { readonly kind: 'ok'; readonly json: unknown } | { readonly kind: 'error' };
 
 async function callExtractionModel(caption: string, authorName: string | null): Promise<LlmCallResult> {
@@ -484,10 +561,11 @@ async function callExtractionModel(caption: string, authorName: string | null): 
 
 /**
  * The full pipeline for one pasted URL: validate -> resolve the short link
- * -> LOOK FOR AN EXISTING CANONICAL RECIPE -> resolve oEmbed -> (maybe) ask
- * the model -> validate its answer -> store the canonical recipe -> a typed
- * `ImportResult`. Every `return` below is a deliberate, named outcome —
- * there is no unhandled path that falls through to an implicit success.
+ * -> STOP HERE IF THE PLATFORM IS DISPLAY-ONLY -> look for an existing
+ * canonical recipe -> resolve oEmbed -> (maybe) ask the model -> validate
+ * its answer -> store the canonical recipe -> a typed `ImportResult`. Every
+ * `return` below is a deliberate, named outcome — there is no unhandled
+ * path that falls through to an implicit success.
  *
  * The cache stage is the only one that can skip everything after it, and
  * its exact position between short-link resolution and oEmbed is
@@ -502,6 +580,15 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
 
   const effective = await resolveEffectiveUrl(normalized.normalizedUrl, normalized.platform, normalized.isShortLink);
 
+  // PD-011. Everything below this line — the cache, the model, the write —
+  // is skipped for a display-only platform. It sits after short-link
+  // resolution (so the platform is final) and before the cache lookup (so
+  // no stored, caption-derived row can be served either); see
+  // resolveDisplayOnlyImport for why both halves matter.
+  if (isDisplayOnlyPlatform(effective.platform)) {
+    return resolveDisplayOnlyImport(effective.normalizedUrl, effective.platform);
+  }
+
   // A hit returns here, having called neither oEmbed nor the model: no
   // third-party round trip, no tokens, no cost. This is the entire point of
   // Fase 1b — the twentieth household to import a link pays one indexed
@@ -511,10 +598,7 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
     return storedRecipe;
   }
 
-  const oembedResult = await resolveOembed(effective.normalizedUrl, effective.platform, {
-    fetchFn: fetch,
-    instagramAccessToken: INSTAGRAM_OEMBED_ACCESS_TOKEN,
-  });
+  const oembedResult = await resolveOembedFor(effective.normalizedUrl, effective.platform);
   if (oembedResult.kind === 'error') {
     return { kind: 'oembed_failed', reason: oembedResult.reason };
   }
