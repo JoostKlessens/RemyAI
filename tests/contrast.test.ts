@@ -83,6 +83,17 @@ const BODY_TEXT_ON_NEUTRAL_SURFACES: readonly TextOnSurfacesCase[] = [
    * above are: nothing pins which surface a component lands on.
    */
   { text: 'accent', surfaces: NEUTRAL_SURFACES },
+  /**
+   * `danger` as inline error TEXT on a plain surface. Fase 5b's shared
+   * recipe screen ("Openen lukte niet") is the third such use, after
+   * confirm.tsx's save error and OutcomeCard's — none of which were
+   * guarded, which is the gap this row closes rather than a new risk it
+   * introduces. Subject to 1.4.3's 4.5:1 like `accent` above, for the
+   * same reason: a fill token used as text answers to the text rule, not
+   * to 1.4.11's 3:1. `surfaceSunken` in light mode is the worst case at
+   * 4.74:1, so the margin here is real but thin — worth a gate.
+   */
+  { text: 'danger', surfaces: NEUTRAL_SURFACES },
 ];
 
 interface OnFillCase {
@@ -110,6 +121,22 @@ const TEXT_ON_FILL: readonly OnFillCase[] = [
   { text: 'textPrimary', fill: 'positiveMuted' },
   { text: 'textSecondary', fill: 'positiveMuted' },
   { text: 'textMuted', fill: 'positiveMuted' },
+  /**
+   * Fase 5b's PD-007a collision label ("bevat noten"), on a friend feed
+   * card and on the shared recipe itself — the first place `warning` is
+   * used as TEXT on its own muted fill, following the same fill/text
+   * token pairing RecipeTile's badges already use (`accentMuted` with
+   * `accentOnMuted`, `positiveMuted` with `positive`).
+   *
+   * This is the tightest pair in the table (4.66:1 in light mode) and it
+   * is guarded rather than eyeballed for exactly that reason: the amber
+   * scale has the least headroom of the four semantic hues, so retuning
+   * `warning` even slightly is the plausible way this label silently
+   * drops below 1.4.3's floor. Unlike a decorative badge, this string is
+   * the one carrying an allergen fact — the last text in the app that
+   * should become hard to read.
+   */
+  { text: 'warning', fill: 'warningMuted' },
 ];
 
 interface BoundaryOnFillCase {

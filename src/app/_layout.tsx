@@ -1,20 +1,27 @@
 /**
- * Root layout. The two-tab navigator (Kiezen, Bibliotheek) lives one level
- * down, at `(tabs)/_layout.tsx`, wrapped here in a `Stack` alongside Cook
- * Mode, the recipe import flow, and the settings screen as full-screen
- * siblings.
+ * Root layout. The tab navigator (Kiezen, Bibliotheek, Vrienden) lives one
+ * level down, at `(tabs)/_layout.tsx`, wrapped here in a `Stack` alongside
+ * Cook Mode, the recipe import flow, a friend's shared recipe, and the
+ * settings screen as full-screen siblings.
  *
  * Why: expo-router mounts every sibling route of a `<Tabs>` layout as an
  * additional tab unless explicitly hidden, and even hidden tab entries
- * still render inside the tab navigator's chrome. Cook Mode, import, and
- * settings all need to be completely free of the bottom tab bar (Cook
- * Mode's own spec calls for large, glanceable, single-purpose screens;
- * import is a focused paste-then-confirm task; settings is a plain form).
- * Nesting the real tab navigator inside a `(tabs)` route group — which
- * does not appear in the URL — keeps the public routes exactly as
- * specified (`/`, `/recipes`, `/cook/[mealId]`, `/import/paste`,
- * `/import/confirm`, `/settings`) while giving Cook Mode, import, and
- * settings a clean, tab-free full-screen presentation.
+ * still render inside the tab navigator's chrome. Cook Mode, import, the
+ * shared recipe and settings all need to be completely free of the bottom
+ * tab bar (Cook Mode's own spec calls for large, glanceable,
+ * single-purpose screens; import is a focused paste-then-confirm task;
+ * settings is a plain form). Nesting the real tab navigator inside a
+ * `(tabs)` route group — which does not appear in the URL — keeps the
+ * public routes exactly as specified (`/`, `/recipes`, `/friends`,
+ * `/cook/[mealId]`, `/import/paste`, `/import/confirm`,
+ * `/friends/[feedItemId]`, `/settings`) while giving the full-screen
+ * siblings a clean, tab-free presentation.
+ *
+ * Note the deliberate pairing of `/friends` (the tab, from the route
+ * group) with `/friends/[feedItemId]` (the full-screen sibling): the tab
+ * group contributes nothing to the URL, so these are two distinct paths
+ * and not a collision — a friend's recipe reads as a child of the feed it
+ * came from, which is exactly what it is.
  *
  * Font loading: docs/DESIGN.md specifies Archivo (reading text) and IBM
  * Plex Mono (systemic text — labels, buttons, timers) via
@@ -72,6 +79,12 @@ export default function RootLayout(): JSX.Element | null {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cook/[mealId]" options={{ presentation: 'fullScreenModal' }} />
+        {/* Fase 5b. A friend's full recipe (PD-010) opens over the tabs
+            rather than inside them: it is a read of somebody else's
+            kitchen, not another view of your own library, and leaving the
+            Vrienden tab lit underneath would suggest otherwise. Same
+            full-screen treatment as Cook Mode and the import flow. */}
+        <Stack.Screen name="friends/[feedItemId]" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/paste" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/confirm" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="settings" options={{ presentation: 'fullScreenModal' }} />

@@ -1,16 +1,26 @@
 /**
- * The two-tab navigator: Kiezen and Bibliotheek. Nested under `(tabs)` — a
- * route group, so it does not appear in the URL — specifically so Cook
- * Mode, the import flow, and settings (registered as sibling Stack screens
- * in the parent src/app/_layout.tsx) render full-screen, without this tab
- * bar leaking into them. See src/app/_layout.tsx for the rationale.
+ * The three-tab navigator: Kiezen, Bibliotheek and Vrienden. Nested under
+ * `(tabs)` — a route group, so it does not appear in the URL —
+ * specifically so Cook Mode, the import flow, a friend's shared recipe and
+ * settings (all registered as sibling Stack screens in the parent
+ * src/app/_layout.tsx) render full-screen, without this tab bar leaking
+ * into them. See src/app/_layout.tsx for the rationale.
  *
- * Two tasks, two tabs (docs/DESIGN.md): Kiezen is the one-dish decision
- * surface (PD-001/PD-002 govern it unchanged); Bibliotheek is where saved
- * recipes live and where a link gets pasted in. Settings (household size,
- * weeknight time budget, dislikes/allergens) has no tab of its own — it's
- * reachable from Bibliotheek's header instead, per the brief's "not a
- * gating wizard" instruction.
+ * The tabs, in the order they appear (docs/DESIGN.md "Navigation"):
+ * Kiezen is the one-dish decision surface (PD-001/PD-002 govern it
+ * unchanged); Bibliotheek is where saved recipes live and where a link
+ * gets pasted in; Vrienden, added in Fase 5b, is what people you know
+ * have cooked and sent on (PD-010).
+ *
+ * Vrienden is deliberately last. Tab order is a claim about priority, and
+ * the daily question this product exists to answer is still the first
+ * one — a social surface placed ahead of it would be the app quietly
+ * changing its mind about what it is for. Kiezen also stays the launch
+ * tab (`index`), unchanged.
+ *
+ * Settings (household size, weeknight time budget, dislikes/allergens)
+ * still has no tab of its own — it's reachable from Bibliotheek's header
+ * instead, per the brief's "not a gating wizard" instruction.
  *
  * No tab icons: the product's visual direction (docs/DESIGN.md, "the
  * contact sheet, not the magazine") is explicitly icon-averse, so
@@ -51,6 +61,13 @@ export default function TabsLayout(): JSX.Element {
         options={{
           title: 'Bibliotheek',
           tabBarAccessibilityLabel: 'Bibliotheek, jouw opgeslagen en geïmporteerde recepten',
+        }}
+      />
+      <Tabs.Screen
+        name="friends"
+        options={{
+          title: 'Vrienden',
+          tabBarAccessibilityLabel: 'Vrienden, recepten die vrienden met je deelden',
         }}
       />
     </Tabs>

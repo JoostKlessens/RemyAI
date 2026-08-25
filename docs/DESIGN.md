@@ -96,11 +96,44 @@ re-weighted via `fontWeight` like the OS system font, hence `sansBold`/
   boundary, not a copy taste).
 - **Language**: UI copy in Dutch; code, comments and token names in English.
 
-## Navigation: two tabs
+## Navigation: three tabs
 
-**Kiezen** (was "Vanavond") and **Bibliotheek** (was "Mijn recepten"). No
-tab icons — text-only labels in `typeScale.caption` (now monospace). No
-third tab: browsing lives in Bibliotheek, deciding lives in Kiezen.
+**Kiezen** (was "Vanavond"), **Bibliotheek** (was "Mijn recepten") and
+**Vrienden** (added in Fase 5b), in that order. No tab icons — text-only
+labels in `typeScale.caption` (monospace), matching each other exactly.
+
+**This document said "no third tab" until PD-010, and it was right to.**
+The argument was that the product has two tasks — deciding and keeping —
+and that a third tab is how a decision tool turns into a browsing app.
+That argument still holds against the tab it was written about: an
+"Ontdekken" surface of algorithmic strangers would be exactly the
+high-browsing, low-cooking failure PD-004 exists to prevent, and it is
+still not being built.
+
+**What changed is that the owner approved a different third thing.**
+PD-010 settles that friends see a real card — thumbnail, recipe name, key
+ingredients — that opens the full recipe with the creator's original video
+linked below it. That content cannot live in either existing tab without
+damaging it. Bibliotheek is defined as *your* rotation (it filters to
+`householdId` on purpose, and every tile promises "Deze week"/"Al gekookt"
+scheduling that a friend's recipe has no claim to), and Kiezen is one dish
+with no list at all. Putting somebody else's kitchen inside either one
+would blur a surface whose meaning is currently exact.
+
+**The rule that replaces "no third tab":** a tab may exist for a distinct
+*question a household actually asks*, never for a distinct kind of
+content. Kiezen answers "wat eten we vanavond". Bibliotheek answers "wat
+heb ik bewaard". Vrienden answers "wat hebben mensen die ik ken gemaakt" —
+a question that genuinely has more than one answer, which is why it is
+allowed to be a list where Kiezen is not. A fourth tab needs a fourth
+question of that kind, and there isn't one.
+
+**Vrienden is last, and that placement is load-bearing.** Tab order is a
+claim about priority; the daily decision stays first, and Kiezen stays the
+launch tab. The feed also carries structural limits so it cannot drift
+into a time-sink: it is finite and says so out loud at the bottom, it is
+ordered by cookability (`rankFeedItems`) rather than by recency, and no
+card anywhere carries a timestamp or a "nieuw" badge (§8).
 
 ---
 
@@ -437,6 +470,101 @@ tertiary exit.
 │ │   Recept handmatig invoeren     ││ primary (elevated here)
 │ └─────────────────────────────────┘│
 │         Andere link proberen       │ tertiary
+└───────────────────────────────────┘
+```
+
+---
+
+## 8. Vrienden — what people you know cooked
+
+**Purpose**: PD-010's friend feed. A card per shared recipe that *opens*
+into the full recipe, with the creator's original post linked underneath
+it. Not a discovery surface, not an algorithmic feed — the only things
+here are recipes a specific person you know deliberately sent you.
+
+**Layout**: header `title2` "Vrienden" over a `bodySmall`/`textMuted`
+line, "Wat vrienden echt gekookt hebben." Below it, a single-column list
+of `FriendRecipeCard`s, `space3` apart, each a `surface` panel with a
+`border` hairline and `radiusSm` — a proof sheet laid out as a strip
+rather than as a grid. Each card is one tap target: a 9:16 thumbnail
+column (`space20` wide, monogram fallback exactly as §2) beside a text
+block carrying, in order, a `label` mono eyebrow "GEDEELD DOOR SANNE", the
+dish in `title3`, key ingredients in `bodySmall`/`textSecondary`
+("kipfilet · paprika · citroen · +2"), a `numeral` mono meta row
+("35 min · 5/5"), and the creator in `caption` mono
+("@kokenmetkees · TikTok"). The list ends in a centered `caption`, "Dat is
+alles wat er gedeeld is."
+
+**Ordering and the anti-scroll rules**: `rankFeedItems`
+(src/domain/feed/ranking.ts) orders for cookability, never recency. No
+pagination, no infinite scroll, no pull-for-more, no autoplay, no
+timestamps, no "nieuw" badge. PD-004 measures this surface on
+save-to-cook; a feed that visibly ends is the structural version of that.
+
+**PD-007a — the collision label**: a recipe colliding with a household
+restriction is ranked to the bottom AND labelled, never hidden. On the
+card that's a small chip, `warningMuted` fill with `warning` `caption`
+text (the amber "allergen tag" role tokens.ts already reserves; the pair
+is guarded in `tests/contrast.test.ts`), reading exactly "bevat noten".
+Never a verdict about the reader ("niet veilig voor jou"), never `danger`
+red, never an icon instead of the word. On the recipe screen the same
+words get a full `warningMuted` panel, because that is the last screen
+before someone taps through to the video and cooks it without ever
+passing `exclusions.ts`. No label means only "nothing we hold collides" —
+never "checked and clean", which is why the recipe screen also carries a
+permanent `caption` caveat that a shared recipe's tags come from whoever
+shared it.
+
+**Card colour discipline**: no `positive` anywhere. A friend's 5/5 is an
+opinion, not a completion, so it sets as a plain mono numeral beside the
+cook time. `accent` stays absent too — nothing on this screen is the
+moment a choice gets made.
+
+**Empty state** (the common first run — sharing needs two households):
+`title2` "Nog niets gedeeld", `bodySmall` "Stuurt iemand je een recept,
+dan staat het hier — met het originele filmpje erbij.", a `border`
+hairline, then a `caption` footnote stating PD-010.3 plainly — "Andersom
+blijft alles van jou privé. Delen doe je zelf, per recept." One secondary
+`Naar je bibliotheek`. Deliberately no "nodig een vriend uit" primary:
+there is no invite flow behind it yet, and a primary action that does
+nothing is worse than none.
+
+**Shared recipe screen** (`/friends/[feedItemId]`, full-screen over the
+tabs): `Terug`, the mono eyebrow, `title1` dish name, the meta row, the
+PD-007a panel when it applies, then `CreatorAttribution` above a `border`
+rule (PD-010.1 — attribution on the card *and* on the recipe),
+`Ingrediënten`, `Bereiding`, and directly under the last step the
+full-width `borderStrong`-outlined link "Bekijk het originele filmpje op
+TikTok" with a Feather `external-link` icon (PD-010.2 — the link sits with
+the recipe, never buried). A recipe with no steps says so honestly rather
+than showing an empty heading. There is no save action yet; that write
+belongs with the real sharing model, and PD-010 requires a copied meal to
+start at `allergenTagStatus: 'unknown'`.
+
+**States**: *empty* as above; *withdrawn/removed* — `title2` "Dit recept
+staat er niet meer", `bodySmall` "De maker heeft het teruggetrokken, of de
+post is verwijderd.", one `Terug`. That state is genuinely reachable, not
+defensive: PD-007's one-tap creator opt-out is honoured immediately and
+applies to this surface too.
+
+```
+┌───────────────────────────────────┐
+│ Vrienden                           │ title2
+│ Wat vrienden echt gekookt hebben.  │ bodySmall, textMuted
+│ ┌─────────────────────────────────┐│
+│ │┌────┐ GEDEELD DOOR SANNE        ││ label · mono
+│ ││    │ Traybake met kip          ││ title3
+│ ││9:16│ kipfilet · paprika · +3   ││ bodySmall
+│ │└────┘ 35 min  ·  5/5            ││ numeral · mono
+│ │       @kokenmetkees · TikTok    ││ caption · mono
+│ └─────────────────────────────────┘│
+│ ┌─────────────────────────────────┐│
+│ │┌────┐ GEDEELD DOOR JORIS        ││
+│ ││ P  │ Romige pasta pesto        ││ monogram fallback
+│ │└────┘ 20 min  ·  4/5            ││
+│ │       [bevat noten]             ││ warningMuted + warning
+│ └─────────────────────────────────┘│
+│    Dat is alles wat er gedeeld is. │ caption, centered
 └───────────────────────────────────┘
 ```
 

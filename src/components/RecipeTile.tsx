@@ -21,7 +21,22 @@
  * scope (only `thumbnailUrl` was asked for).
  *
  * Tapping a tile opens Cook Mode directly (`/cook/[mealId]`) — unchanged
- * behavior from the old row.
+ * behavior from the old row, and still the default.
+ *
+ * `onPress` exists because that default is only correct for a recipe the
+ * household actually owns. Fase 5b puts recipes on screen that came out
+ * of somebody else's kitchen (the Vrienden tab, PD-010), and a tile that
+ * hardcodes `/cook/[mealId]` would cheerfully start cook mode — screen
+ * awake, step timers, a cook_events row waiting at the end — for a meal
+ * id this household has no row for. Handing the destination to the caller
+ * is the smallest fix. The alternative, teaching this component to tell
+ * an owned meal from a borrowed one, would bury an ownership rule inside
+ * a presentational tile, where nobody would think to look for it.
+ *
+ * Both new props are optional and default to today's exact behavior, so
+ * no existing call site changes. A caller overriding `onPress` should
+ * override `accessibilityHint` too — otherwise the tile keeps promising a
+ * screen reader it will open cook mode while doing something else.
  */
 
 import { useRouter } from 'expo-router';
@@ -33,10 +48,16 @@ import { type ColorTokens, fontFamily, getColors, radii, spacing, typeScale } fr
 export interface RecipeTileProps {
   readonly meal: Meal;
   readonly scheduling: RecipeSchedulingInfo;
+  /** Defaults to opening Cook Mode for this meal — see the file header for when it must not. */
+  readonly onPress?: () => void;
+  /** Defaults to Cook Mode's hint; override it whenever `onPress` is overridden. */
+  readonly accessibilityHint?: string;
 }
 
+const DEFAULT_ACCESSIBILITY_HINT = 'Open kookmodus voor dit gerecht';
+
 export function RecipeTile(props: RecipeTileProps): JSX.Element {
-  const { meal, scheduling } = props;
+  const { meal, scheduling, onPress, accessibilityHint } = props;
   const router = useRouter();
   const scheme = useColorScheme();
   const colors = getColors(scheme);
@@ -45,10 +66,10 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
 
   return (
     <Pressable
-      onPress={() => router.push(`/cook/${meal.id}`)}
+      onPress={onPress ?? (() => router.push(`/cook/${meal.id}`))}
       accessibilityRole="button"
       accessibilityLabel={`${meal.title}, ${buildSchedulingLabel(scheduling.state)}`}
-      accessibilityHint="Open kookmodus voor dit gerecht"
+      accessibilityHint={accessibilityHint ?? DEFAULT_ACCESSIBILITY_HINT}
       style={styles.tile}
     >
       <View style={[styles.frame, { backgroundColor: colors.surfaceSunken }]}>
