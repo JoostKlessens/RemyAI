@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 /**
@@ -38,6 +39,14 @@ const supabaseAnonKey = readRequiredEnvVar(
 
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    /**
+     * REQUIRED on React Native — persistSession has no effect without it.
+     * supabase-js defaults its session store to localStorage, which does
+     * not exist on native, so the session would be dropped on every cold
+     * start and every RLS-scoped query would silently run as anon. Passing
+     * AsyncStorage is what makes persistSession true actually mean it.
+     */
+    storage: AsyncStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,

@@ -25,6 +25,25 @@
 
 create extension if not exists pgcrypto;
 
+-- is_household_member() below is the RLS predicate for almost every policy
+-- in this file, including the ones on households — which are declared
+-- before household_members exists, since that table has an FK to
+-- households. A `language sql` body is parsed and validated eagerly at
+-- CREATE time, so the function cannot see a table declared further down,
+-- and the migration aborts on statement 2 with "relation household_members
+-- does not exist".
+--
+-- Turning the check off for this session is what pg_dump itself emits for
+-- exactly this situation (it restores functions before tables). The body is
+-- still resolved on first call, by which point every table exists. The
+-- setting is session-scoped and dies with this connection.
+--
+-- The two alternatives were both worse: reordering would mean moving the
+-- whole households policy block below household_members, and switching the
+-- function to plpgsql would stop the planner inlining it into all 47 policy
+-- expressions that call it — a real cost on every RLS-checked query.
+set check_function_bodies = off;
+
 -- ---------------------------------------------------------------------------
 -- Helper functions
 -- ---------------------------------------------------------------------------
