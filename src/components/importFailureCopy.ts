@@ -6,9 +6,24 @@
  * avoid (see that file's own header). No React Native imports here on
  * purpose, so this is unit-testable directly under vitest's `node`
  * environment — see tests/importFailureCopy.test.ts.
+ *
+ * ONE MEMBER OF THIS UNION IS NOT A FAILURE. `ImportFailureResult` is
+ * structurally "every outcome that isn't a finished recipe", and since
+ * PD-011 that set includes `display_only`: Instagram resolved perfectly,
+ * we are permitted to show the post and credit its creator, and we
+ * deliberately never asked the model to read the caption. Its copy must
+ * therefore read as a working path with a different shape, not as an
+ * apology — nothing broke, so nothing should sound broken.
+ *
+ * Renaming this type (and `ImportFailureState`) to something neutral was
+ * considered and rejected: it would touch the component, the screen and
+ * their tests without changing a single rendered pixel, and the shared
+ * container is genuinely the right one — a calm, bordered panel with a
+ * title, a sentence and the next action, which is exactly what this
+ * outcome needs too.
  */
 
-import type { ImportResult } from '@/domain/import/types';
+import type { ImportPlatform, ImportResult } from '@/domain/import/types';
 import type { OembedErrorReason } from '@/lib/oembed';
 
 export type ImportFailureResult = Exclude<ImportResult, { readonly kind: 'parsed' }>;
@@ -18,11 +33,22 @@ export interface ImportFailureCopy {
   readonly body: string;
   /** The caption Remy actually read, when one exists — lets the user judge for themselves instead of taking "no recipe" on faith. */
   readonly quote: string | null;
-  /** Whether "Opnieuw proberen" (retry the same URL) makes sense here. `unsupported_url` has no URL context to retry with. */
+  /**
+   * Whether "Opnieuw proberen" (retry the same URL) makes sense here.
+   * `unsupported_url` has no URL context to retry with; `display_only` has
+   * plenty of context but a deterministic answer — offering a retry there
+   * would promise a different result that can never arrive.
+   */
   readonly canRetry: boolean;
   /** Whether "Recept handmatig invoeren" should be the elevated, primary action rather than a secondary escape hatch. */
   readonly manualEntryIsPrimary: boolean;
 }
+
+/** The platform's own name, as its users write it — used in copy, never for logic. */
+const PLATFORM_LABELS: Readonly<Record<ImportPlatform, string>> = {
+  tiktok: 'TikTok',
+  instagram: 'Instagram',
+};
 
 function oembedFailureBody(reason: OembedErrorReason): string {
   switch (reason) {
@@ -80,6 +106,33 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
         canRetry: false,
         manualEntryIsPrimary: true,
       };
+    /**
+     * PD-011. Deliberately positive and deliberately specific: it names
+     * what Remy IS allowed to do with this post, says plainly why the
+     * bijschrift is off limits, and states that a second attempt changes
+     * nothing — so the user stops waiting for a different answer and
+     * starts typing. `quote` is null because there is no caption to show;
+     * the edge function never returns one for this variant, which is the
+     * whole point of it existing.
+     *
+     * The copy is built from `result.platform` rather than hardcoding
+     * "Instagram": today Instagram is the only display-only platform, but
+     * the sentence that names the wrong platform is the worst possible one
+     * to leave lying around if that ever changes.
+     */
+    case 'display_only': {
+      const platformLabel = PLATFORM_LABELS[result.platform];
+      return {
+        title: `${platformLabel}-post gevonden, recept typ je zelf`,
+        body:
+          `Van ${platformLabel} mag Remy de post en de maker laten zien, maar het bijschrift niet zelf overnemen. ` +
+          'Dat is een afspraak, geen storing — bij een tweede poging gebeurt hetzelfde. ' +
+          'De maker en het beeld blijven bewaard: typ het recept er zelf bij, dan staat het compleet in je lijst.',
+        quote: null,
+        canRetry: false,
+        manualEntryIsPrimary: true,
+      };
+    }
     case 'llm_request_failed':
       return {
         title: 'Even niet gelukt',

@@ -246,6 +246,12 @@ never auto-complete it on a timer, that's exactly the "spinner into
 nothing" this brief warns against. If the real call runs long, the second
 row just stays lit (not spinning) — calm waiting, not a stall.
 
+**Display-only imports narrate a shorter list.** An Instagram paste (PD-011)
+never reads a bijschrift, so it must not claim to: that pipeline shows two
+rows, "Post gevonden" -> "Maker erbij gezocht...", with the same rule that
+the last row only fills when the real result arrives. Same component, same
+circles — one fewer promise.
+
 **Failure state**: see §7 — same `ImportFailureState` component, reskinned.
 
 ```

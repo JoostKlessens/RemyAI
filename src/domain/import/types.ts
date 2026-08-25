@@ -148,6 +148,45 @@ export type ImportResult =
       readonly attribution?: ImportAttribution;
     }
   /**
+   * The post resolved, and we deliberately never asked the model to read
+   * it. There are two different things a platform's oEmbed endpoint can be
+   * used for: rendering the post (thumbnail, title, author, a link back)
+   * and mining its metadata for something else. Instagram's licenses only
+   * the first — Meta's documentation states the endpoint is "only meant to
+   * be used for embedding Instagram content in websites and apps. Any other
+   * use of metadata or content is prohibited." Deriving and storing a
+   * recipe from the caption is that other use. So Instagram resolves and
+   * stops. See docs/PRODUCT-DECISIONS.md PD-011. TikTok's oEmbed is public
+   * and unaffected; nothing about extraction there changes.
+   *
+   * THIS IS NOT A FAILURE. Nothing broke, nothing is missing, and nothing
+   * is retryable — the same link resolves the same way every time, because
+   * the limit is a licence rather than an outage. The UI treats it as a
+   * working path with a different shape: show the post and its creator,
+   * and let the user type the recipe themselves (see
+   * src/components/importFailureCopy.ts and src/app/import/paste.tsx).
+   *
+   * IT CARRIES NO CAPTION, AND THAT ABSENCE IS THE POINT.
+   * `no_recipe_in_caption` deliberately carries its caption so the user can
+   * judge what we read; this variant must not, because handing caption text
+   * to a client to be typed up and stored is precisely the prohibited use —
+   * doing it in the app rather than in the model would not make it a
+   * different act. `buildDisplayOnlyResult` (displayOnlyPolicy.ts) is the
+   * only constructor of this shape and never touches `OembedPayload.title`,
+   * so there is no code path that could regress this by forgetting.
+   *
+   * `attribution` is REQUIRED here, unlike on `parsed`: crediting the
+   * creator is the entire justification for showing this post at all, so a
+   * version of this result without one is not worth rendering.
+   */
+  | {
+      readonly kind: 'display_only';
+      readonly platform: ImportPlatform;
+      /** The oEmbed-resolved, normalized URL — carried through so manual entry keeps the link back to the original post. */
+      readonly sourceUrl: string;
+      readonly attribution: ImportAttribution;
+    }
+  /**
    * The honest failure this whole feature is built around (see file
    * header): oEmbed resolved successfully, but the caption contains no
    * usable ingredients/steps, and the model said so explicitly rather

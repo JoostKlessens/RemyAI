@@ -114,6 +114,72 @@ describe('parseImportResult — failure variants', () => {
   });
 });
 
+describe('parseImportResult — display_only', () => {
+  function displayOnlyResponse(overrides: Record<string, unknown> = {}): unknown {
+    return {
+      kind: 'display_only',
+      platform: 'instagram',
+      sourceUrl: 'https://www.instagram.com/reel/Cx1y2z3',
+      attribution: VALID_ATTRIBUTION,
+      ...overrides,
+    };
+  }
+
+  test('accepts a well-formed display_only result and keeps the creator attached', () => {
+    expect(parseImportResult(displayOnlyResponse())).toEqual({
+      kind: 'display_only',
+      platform: 'instagram',
+      sourceUrl: 'https://www.instagram.com/reel/Cx1y2z3',
+      attribution: VALID_ATTRIBUTION,
+    });
+  });
+
+  test('accepts an attribution whose fields are all null — a creator we cannot name is a real state', () => {
+    const result = parseImportResult(
+      displayOnlyResponse({ attribution: { authorName: null, authorUrl: null, thumbnailUrl: null } }),
+    );
+    expect(result).toMatchObject({ attribution: { authorName: null, authorUrl: null, thumbnailUrl: null } });
+  });
+
+  /**
+   * Unlike `parsed`, attribution is REQUIRED here: crediting the creator is
+   * the entire justification for this variant existing, so a response
+   * without one is version skew worth failing on, not a recipe-less post to
+   * render anonymously.
+   */
+  test('rejects a display_only result with no attribution at all', () => {
+    const response = displayOnlyResponse() as Record<string, unknown>;
+    delete response.attribution;
+    expect(parseImportResult(response)).toBeNull();
+    expect(parseImportResult(displayOnlyResponse({ attribution: null }))).toBeNull();
+  });
+
+  test('rejects a display_only result whose attribution is malformed rather than dropping the creator', () => {
+    expect(parseImportResult(displayOnlyResponse({ attribution: { authorName: 42 } }))).toBeNull();
+    expect(parseImportResult(displayOnlyResponse({ attribution: 'plantaardigpauline' }))).toBeNull();
+  });
+
+  test('rejects a display_only result with an unknown platform or a blank sourceUrl', () => {
+    expect(parseImportResult(displayOnlyResponse({ platform: 'youtube' }))).toBeNull();
+    expect(parseImportResult(displayOnlyResponse({ sourceUrl: '   ' }))).toBeNull();
+  });
+
+  /** Display-only is a property of the response, not of a hardcoded platform list on the client. */
+  test('accepts display_only for any known platform, without second-guessing the function', () => {
+    const result = parseImportResult(
+      displayOnlyResponse({ platform: 'tiktok', sourceUrl: 'https://www.tiktok.com/@x/video/1' }),
+    );
+    expect(result?.kind).toBe('display_only');
+  });
+
+  /** A caption must never reach the client on this path — if one is smuggled in, it is dropped, never narrowed through. */
+  test('drops any caption a rogue response tries to attach', () => {
+    const caption = '350 g pasta, 4 el pesto';
+    const result = parseImportResult(displayOnlyResponse({ caption }));
+    expect(JSON.stringify(result)).not.toContain(caption);
+  });
+});
+
 describe('parseImportResult — trust nothing from the network', () => {
   test('rejects non-object roots', () => {
     expect(parseImportResult(null)).toBeNull();

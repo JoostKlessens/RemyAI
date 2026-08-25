@@ -15,9 +15,10 @@
  *
  * `authorName`/`thumbnailUrl` are carried as sidecars alongside
  * `ImportResult`, mostly: the real edge function's HTTP response is
- * `ImportResult` exactly, and every non-`parsed` variant has no creator/
- * attribution field at all (oEmbed's authorName is consumed server-side
- * only, to build the extraction prompt — see buildExtractionRequest.ts).
+ * `ImportResult` exactly, and every non-`parsed`, non-`display_only`
+ * variant has no creator/attribution field at all (oEmbed's authorName is
+ * consumed server-side only, to build the extraction prompt — see
+ * buildExtractionRequest.ts).
  * A real client wiring would get both the same way this fixture models
  * them: from its own oEmbed-shaped resolution step, independent of the
  * parse-recipe call — see src/components/creatorFromAttribution.ts for
@@ -26,7 +27,12 @@
  * real ordering (oEmbed resolves before the LLM is ever called) —
  * `unsupported_url` and `oembed_failed` never carry either.
  *
- * The `parsed` variant is the one exception: `ImportResult.parsed`
+ * `display_only` (PD-011) is the second exception, and a stricter one: it
+ * REQUIRES an attribution, because showing an Instagram post we may not
+ * extract from is only defensible while its creator's name travels with
+ * it. Its fixture carries no caption anywhere, matching the real function.
+ *
+ * The `parsed` variant is the first exception: `ImportResult.parsed`
  * DOES carry an `attribution?: ImportAttribution` field (src/domain/
  * import/types.ts), and that field's own doc comment says a future
  * `_fixtures.ts` update should populate it for real rather than leaving it
@@ -105,12 +111,22 @@ const SAMPLE_THUMBNAIL_BY_PLATFORM: Readonly<Record<ImportPlatform, string | nul
   instagram: null,
 };
 
+/**
+ * Deliberately NOT SAMPLE_THUMBNAIL_BY_PLATFORM's Instagram entry, which is
+ * null on purpose to demo the monogram fallback. Showing the post's image
+ * and crediting its creator is the entire permitted use of Instagram's
+ * oEmbed (PD-011), so a display-only fixture without a thumbnail would demo
+ * the one thing this path is not.
+ */
+const SAMPLE_DISPLAY_ONLY_THUMBNAIL = 'https://scontent.cdninstagram.com/pastapesto~tplv-thumb.jpg';
+
 function buildAuthorUrl(platform: ImportPlatform, authorName: string): string {
   return platform === 'tiktok' ? `https://www.tiktok.com/@${authorName}` : `https://www.instagram.com/${authorName}`;
 }
 
 export type FixtureImportScenario =
   | 'parsed'
+  | 'display_only'
   | 'no_recipe_in_caption'
   | 'oembed_failed'
   | 'llm_request_failed'
@@ -124,6 +140,9 @@ export type FixtureImportScenario =
 export function detectFixtureScenario(normalizedUrl: string): FixtureImportScenario {
   if (normalizedUrl.includes('geen-recept')) {
     return 'no_recipe_in_caption';
+  }
+  if (normalizedUrl.includes('alleen-tonen')) {
+    return 'display_only';
   }
   if (normalizedUrl.includes('oembed-fout')) {
     return 'oembed_failed';
@@ -162,6 +181,23 @@ export function buildFixtureImportAttempt(
         },
         authorName,
         thumbnailUrl,
+      };
+    }
+    /**
+     * The real function reaches this after a successful oEmbed call and
+     * before any model call, so the fixture mirrors that: a creator, a
+     * thumbnail, a source URL — and no caption field at all.
+     */
+    case 'display_only': {
+      const attribution: ImportAttribution = {
+        authorName,
+        authorUrl: buildAuthorUrl(platform, authorName),
+        thumbnailUrl: SAMPLE_DISPLAY_ONLY_THUMBNAIL,
+      };
+      return {
+        result: { kind: 'display_only', platform, sourceUrl: normalizedUrl, attribution },
+        authorName,
+        thumbnailUrl: SAMPLE_DISPLAY_ONLY_THUMBNAIL,
       };
     }
     case 'no_recipe_in_caption':

@@ -21,7 +21,10 @@
  * obligation here, not decoration (PD-007, research/13-legal-tos.md), so
  * silently dropping it is a worse outcome than an honest failure the user
  * can retry. A shape we don't recognize means client/function version
- * skew, which is worth surfacing rather than papering over.
+ * skew, which is worth surfacing rather than papering over. On the
+ * `display_only` variant an ABSENT attribution is rejected too, not just a
+ * malformed one — showing someone's post is only defensible while their
+ * name travels with it (PD-011).
  */
 
 import type { OembedErrorReason } from '../../lib/oembed';
@@ -107,6 +110,36 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   return attribution.value === undefined ? base : { ...base, attribution: attribution.value };
 }
 
+/**
+ * The display-only variant (PD-011): a post we may show and credit, with
+ * no recipe and — deliberately — no caption. Two ways it is stricter than
+ * `parseParsedVariant`:
+ *
+ *  - `attribution` is REQUIRED, not optional. There are no pre-existing
+ *    object literals to stay compatible with (unlike `parsed`, whose
+ *    optionality exists only for src/app/import/_fixtures.ts), and a
+ *    display-only post without a creator is the one shape that should never
+ *    render.
+ *  - Nothing is copied off `raw` beyond the four fields named below, so a
+ *    caption attached by a rogue or future function is dropped here rather
+ *    than narrowed through into the app.
+ */
+function parseDisplayOnlyVariant(raw: Record<string, unknown>): ImportResult | null {
+  if (!isNonEmptyString(raw.sourceUrl) || typeof raw.platform !== 'string' || !PLATFORMS.has(raw.platform)) {
+    return null;
+  }
+  const attribution = readAttribution(raw.attribution);
+  if (!attribution.ok || attribution.value === undefined) {
+    return null;
+  }
+  return {
+    kind: 'display_only',
+    platform: raw.platform as ImportPlatform,
+    sourceUrl: raw.sourceUrl.trim(),
+    attribution: attribution.value,
+  };
+}
+
 /** The single entry point: takes the parsed JSON body of a parse-recipe response and narrows it, or returns null. */
 export function parseImportResult(raw: unknown): ImportResult | null {
   if (!isRecord(raw) || typeof raw.kind !== 'string') {
@@ -116,6 +149,8 @@ export function parseImportResult(raw: unknown): ImportResult | null {
   switch (raw.kind) {
     case 'parsed':
       return parseParsedVariant(raw);
+    case 'display_only':
+      return parseDisplayOnlyVariant(raw);
     case 'no_recipe_in_caption': {
       const caption = readNullableString(raw.caption);
       return caption.ok ? { kind: 'no_recipe_in_caption', caption: caption.value } : null;

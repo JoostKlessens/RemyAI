@@ -14,9 +14,21 @@
  * progress; the third is NEVER completed by a timer — it only reflects the
  * real result arriving, which is why `runImport` transitions straight to
  * navigation/failure the instant that happens rather than ever setting a
- * "checkpoint 3 filled" state to render. If the real call runs long, the
- * second row simply stays lit — calm waiting, not a spinner resolving into
+ * "last checkpoint filled" state to render. If the real call runs long,
+ * the second-to-last row simply stays lit — calm waiting, not a spinner resolving into
  * nothing.
+ *
+ * ONE OF THOSE OUTCOMES IS NOT A FAILURE. A display-only platform
+ * (PD-011 — Instagram today) resolves its post and stops there on purpose:
+ * Remy may show the post and credit its maker, and may not read the
+ * bijschrift, so the model is never asked. That lands here as
+ * `display_only`, and this screen treats it as a working path with a
+ * different shape rather than an error: the loading narration never claims
+ * to have read a bijschrift it will not read, the copy stays positive
+ * (importFailureCopy.ts), and "Recept handmatig invoeren" carries the
+ * source URL, the platform, the creator AND the thumbnail forward — this
+ * is the one manual-entry route that keeps its image, because showing that
+ * image and crediting its maker is precisely the use the platform permits.
  *
  * Every non-`parsed` `ImportResult` renders its own honest failure state
  * (ImportFailureState) with a distinct recovery path; manual entry is
@@ -47,6 +59,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { buildFixtureImportAttempt, type FixtureImportScenario } from './_fixtures';
 import { encodeImportConfirmParams } from './routeParams';
 import type { ImportPlatform, ParsedRecipe } from '@/domain/import/types';
+import { isDisplayOnlyPlatform } from '@/domain/import/displayOnlyPolicy';
 import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
 import { requestImport } from '@/lib/importRecipe';
 import { Button } from '@/components/Button';
@@ -56,17 +69,45 @@ import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 type PastePhase = 'idle' | 'loading';
 type DevScenarioValue = FixtureImportScenario | 'unsupported_url' | 'normal';
-/** How many of the first two checkpoint rows are filled — the third is never driven by this, see the file header. */
+/** How many leading checkpoint rows are filled — the last row of whichever list is showing is never driven by this, see the file header. */
 type LoadingCheckpoint = 0 | 1 | 2;
 
 const CHECKPOINT_ONE_DELAY_MS = 500;
 const CHECKPOINT_TWO_DELAY_MS = 1400;
 
+/**
+ * The loading narration, one list per pipeline shape. The last entry of
+ * either list is the step actually in flight and is NEVER filled by a timer
+ * — see the file header.
+ *
+ * A display-only import gets its own list because the standard one would
+ * lie: it lights "Bijschrift gelezen" on a fixed timer, and for a
+ * display-only platform no bijschrift is ever read. Narrating a step we
+ * deliberately do not perform is the same sin as a spinner that resolves
+ * into nothing, just better dressed.
+ */
+const CHECKPOINT_LABELS_EXTRACTION: readonly string[] = [
+  'Video gevonden',
+  'Bijschrift gelezen',
+  'Recept samengesteld…',
+];
+const CHECKPOINT_LABELS_DISPLAY_ONLY: readonly string[] = ['Post gevonden', 'Maker erbij gezocht…'];
+
+/**
+ * Everything the screen still knows after an attempt that produced no
+ * recipe. The name predates PD-011 and is now slightly generous:
+ * `display_only` lands here too and is not a failure (see the file header).
+ * Renaming it was weighed against renaming `ImportFailureResult` /
+ * `ImportFailureState` to match, and all three were left alone — see
+ * importFailureCopy.ts's header for that call.
+ */
 interface FailedAttemptContext {
   readonly result: ImportFailureResult;
   readonly authorName: string | null;
   readonly normalizedUrl: string | null;
   readonly platform: ImportPlatform | null;
+  /** oEmbed's thumbnail when the attempt resolved one. Only ever carried onward for `display_only` — see `handleManualEntry`. */
+  readonly thumbnailUrl: string | null;
 }
 
 interface ConfirmNavigationContext {
@@ -87,6 +128,8 @@ export default function ImportPasteScreen(): JSX.Element {
   const [phase, setPhase] = useState<PastePhase>('idle');
   const [failedAttempt, setFailedAttempt] = useState<FailedAttemptContext | null>(null);
   const [loadingCheckpoint, setLoadingCheckpoint] = useState<LoadingCheckpoint>(0);
+  /** The platform of the import currently in flight — decides which narration is honest, nothing else. */
+  const [loadingPlatform, setLoadingPlatform] = useState<ImportPlatform | null>(null);
   const checkpointTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const clearCheckpointTimers = (): void => {
@@ -118,6 +161,7 @@ export default function ImportPasteScreen(): JSX.Element {
     setFailedAttempt(null);
     setPhase('loading');
     setLoadingCheckpoint(0);
+    setLoadingPlatform(platform);
     clearCheckpointTimers();
     // Checkpoints 1/2 narrate progress on a short fixed timer — never
     // checkpoint 3, which only ever reflects the real promise below
@@ -145,6 +189,7 @@ export default function ImportPasteScreen(): JSX.Element {
         authorName: attempt.authorName,
         normalizedUrl,
         platform,
+        thumbnailUrl: attempt.thumbnailUrl,
       };
       setFailedAttempt(context);
       AccessibilityInfo.announceForAccessibility(buildImportFailureCopy(attempt.result).title);
@@ -158,7 +203,13 @@ export default function ImportPasteScreen(): JSX.Element {
     }
     const normalized = normalizeRecipeUrl(trimmed);
     if (normalized.kind === 'unsupported_url') {
-      setFailedAttempt({ result: { kind: 'unsupported_url' }, authorName: null, normalizedUrl: null, platform: null });
+      setFailedAttempt({
+        result: { kind: 'unsupported_url' },
+        authorName: null,
+        normalizedUrl: null,
+        platform: null,
+        thumbnailUrl: null,
+      });
       AccessibilityInfo.announceForAccessibility('Onbekende link.');
       return;
     }
@@ -178,10 +229,17 @@ export default function ImportPasteScreen(): JSX.Element {
       authorName: failedAttempt?.authorName ?? null,
       normalizedUrl: failedAttempt?.normalizedUrl ?? null,
       platform: failedAttempt?.platform ?? null,
-      // Manual entry never carries a thumbnail — even when oEmbed had
-      // resolved one before the LLM step failed, a manually-typed recipe
-      // falls back to the library's monogram tile, per docs/DESIGN.md §2.
-      thumbnailUrl: null,
+      // Manual entry normally carries no thumbnail: when oEmbed resolved one
+      // and the LLM step then failed, a manually-typed recipe still falls
+      // back to the library's monogram tile, per docs/DESIGN.md §2.
+      //
+      // `display_only` is the deliberate exception (PD-011). There the
+      // thumbnail is not a leftover from a step that went wrong — showing
+      // the post's image and crediting its maker IS the use the platform
+      // licenses, and it is the whole reason we resolved the post at all.
+      // Dropping it here would throw away the only part of the import that
+      // worked.
+      thumbnailUrl: failedAttempt?.result.kind === 'display_only' ? failedAttempt.thumbnailUrl : null,
     });
   };
 
@@ -210,11 +268,24 @@ export default function ImportPasteScreen(): JSX.Element {
       return;
     }
     if (scenario === 'unsupported_url') {
-      setFailedAttempt({ result: { kind: 'unsupported_url' }, authorName: null, normalizedUrl: null, platform: null });
+      setFailedAttempt({
+        result: { kind: 'unsupported_url' },
+        authorName: null,
+        normalizedUrl: null,
+        platform: null,
+        thumbnailUrl: null,
+      });
       return;
     }
-    const demoUrl = 'https://www.tiktok.com/@kokenmetkees/video/000009';
-    const attempt = buildFixtureImportAttempt(scenario, 'tiktok', demoUrl);
+    // The display-only demo has to be an Instagram link — it is the only
+    // platform that reaches that path, and a TikTok URL sitting under
+    // Instagram copy would demo a state that cannot happen.
+    const demoPlatform: ImportPlatform = scenario === 'display_only' ? 'instagram' : 'tiktok';
+    const demoUrl =
+      demoPlatform === 'instagram'
+        ? 'https://www.instagram.com/reel/000009'
+        : 'https://www.tiktok.com/@kokenmetkees/video/000009';
+    const attempt = buildFixtureImportAttempt(scenario, demoPlatform, demoUrl);
     if (attempt.result.kind === 'parsed') {
       navigateToConfirm('parsed', {
         recipe: attempt.result.recipe,
@@ -225,10 +296,20 @@ export default function ImportPasteScreen(): JSX.Element {
       });
       return;
     }
-    setFailedAttempt({ result: attempt.result, authorName: attempt.authorName, normalizedUrl: demoUrl, platform: 'tiktok' });
+    setFailedAttempt({
+      result: attempt.result,
+      authorName: attempt.authorName,
+      normalizedUrl: demoUrl,
+      platform: demoPlatform,
+      thumbnailUrl: attempt.thumbnailUrl,
+    });
   };
 
   const canRetry = failedAttempt !== null && failedAttempt.normalizedUrl !== null && failedAttempt.platform !== null;
+  const checkpointLabels =
+    loadingPlatform !== null && isDisplayOnlyPlatform(loadingPlatform)
+      ? CHECKPOINT_LABELS_DISPLAY_ONLY
+      : CHECKPOINT_LABELS_EXTRACTION;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -282,10 +363,15 @@ export default function ImportPasteScreen(): JSX.Element {
 
         {phase === 'loading' ? (
           <View style={styles.checkpointBlock}>
-            <CheckpointRow label="Video gevonden" filled={loadingCheckpoint >= 1} />
-            <CheckpointRow label="Bijschrift gelezen" filled={loadingCheckpoint >= 2} />
-            {/* Never driven by loadingCheckpoint/a timer — see the file header. */}
-            <CheckpointRow label="Recept samengesteld…" filled={false} />
+            {checkpointLabels.map((label, index) => (
+              <CheckpointRow
+                key={label}
+                label={label}
+                // The last row is the step genuinely in flight and is never
+                // driven by loadingCheckpoint/a timer — see the file header.
+                filled={index < checkpointLabels.length - 1 && loadingCheckpoint > index}
+              />
+            ))}
           </View>
         ) : null}
 
@@ -354,6 +440,7 @@ const DEV_SCENARIOS: ReadonlyArray<{ value: DevScenarioValue; label: string }> =
   { value: 'normal', label: 'Normaal' },
   { value: 'parsed', label: 'Gelukt' },
   { value: 'no_recipe_in_caption', label: 'Geen recept' },
+  { value: 'display_only', label: 'Alleen tonen' },
   { value: 'unsupported_url', label: 'Onbekende link' },
   { value: 'oembed_failed', label: 'Video-fout' },
   { value: 'llm_request_failed', label: 'Model-fout' },

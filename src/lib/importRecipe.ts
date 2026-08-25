@@ -23,17 +23,19 @@
  * reason: an unrecognized shape means we did not get a usable answer, and
  * retrying is the right advice.
  *
- * KNOWN GAP — creator attribution on failure paths. `authorName` and
- * `thumbnailUrl` are read off the `parsed` variant's `attribution`, which
- * is the only place the function returns them. Its failure variants carry
- * no attribution, so a user who falls back to manual entry after
- * `no_recipe_in_caption` reaches the confirm screen with no creator
+ * KNOWN GAP — creator attribution on the remaining failure paths.
+ * `authorName` and `thumbnailUrl` are read off `attribution`, which the
+ * function returns on exactly two variants: `parsed` and `display_only`
+ * (PD-011, where crediting the creator is the entire point and the
+ * attribution is mandatory rather than optional). The other failure
+ * variants still carry none, so a user who falls back to manual entry
+ * after `no_recipe_in_caption` reaches the confirm screen with no creator
  * attached, even though the function resolved one via oEmbed to build the
  * prompt. src/app/import/_fixtures.ts fakes a creator on those paths, so
  * this is a real behavioural difference from the fixture flow rather than
- * a regression in the screens. Closing it means returning attribution on
- * `no_recipe_in_caption` too — a change to the function and to
- * `ImportResult`, deliberately not smuggled in here.
+ * a regression in the screens. Closing what is left means returning
+ * attribution on `no_recipe_in_caption` too — a change to the function and
+ * to `ImportResult`, deliberately not smuggled in here.
  */
 
 import { parseImportResult } from '@/domain/import/parseImportResult';
@@ -44,7 +46,7 @@ const PARSE_RECIPE_FUNCTION = 'parse-recipe';
 
 export interface ImportAttempt {
   readonly result: ImportResult;
-  /** From the `parsed` variant's attribution only — see the file header's KNOWN GAP note. */
+  /** From the `parsed` or `display_only` variant's attribution — see the file header's KNOWN GAP note for the variants that still carry none. */
   readonly authorName: string | null;
   readonly thumbnailUrl: string | null;
 }
@@ -56,14 +58,25 @@ const TRANSPORT_FAILURE: ImportAttempt = {
 };
 
 function toAttempt(result: ImportResult): ImportAttempt {
-  if (result.kind !== 'parsed') {
-    return { result, authorName: null, thumbnailUrl: null };
+  if (result.kind === 'parsed') {
+    return {
+      result,
+      authorName: result.attribution?.authorName ?? null,
+      thumbnailUrl: result.attribution?.thumbnailUrl ?? null,
+    };
   }
-  return {
-    result,
-    authorName: result.attribution?.authorName ?? null,
-    thumbnailUrl: result.attribution?.thumbnailUrl ?? null,
-  };
+  if (result.kind === 'display_only') {
+    // Not optional-chained, unlike `parsed` above: this variant's
+    // attribution is required by the type, because showing a post we may
+    // not extract from is only defensible with its creator attached
+    // (PD-011). Reading it directly is the point, not an oversight.
+    return {
+      result,
+      authorName: result.attribution.authorName,
+      thumbnailUrl: result.attribution.thumbnailUrl,
+    };
+  }
+  return { result, authorName: null, thumbnailUrl: null };
 }
 
 /**

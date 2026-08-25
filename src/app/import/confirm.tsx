@@ -148,8 +148,11 @@ function buildManualMealInput(
     allergenTagStatus: allergenStatus,
     sourceUrl: null,
     sourcePlatform: null,
-    // Manual entry never carries a thumbnail — see paste.tsx's
-    // handleManualEntry comment; the library falls back to a monogram tile.
+    // A from-scratch add has no post to take a thumbnail from, so the
+    // library falls back to a monogram tile. Not a rule about manual entry
+    // in general: a display-only import (PD-011) is typed by hand too but
+    // keeps its post's image, and reaches this screen with a sourceUrl and
+    // platform, so it takes the drafted path above rather than this one.
     thumbnailUrl: null,
     ingredients: recipe.ingredients.map((ingredient, index) => ({
       name: ingredient.name,

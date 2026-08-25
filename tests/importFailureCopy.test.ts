@@ -2,6 +2,17 @@ import { describe, expect, test } from 'vitest';
 import type { OembedErrorReason } from '@/lib/oembed';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
 
+const DISPLAY_ONLY_RESULT: ImportFailureResult = {
+  kind: 'display_only',
+  platform: 'instagram',
+  sourceUrl: 'https://www.instagram.com/reel/Cx1y2z3',
+  attribution: {
+    authorName: 'plantaardigpauline',
+    authorUrl: 'https://www.instagram.com/plantaardigpauline',
+    thumbnailUrl: 'https://scontent.cdninstagram.com/pasta~thumb.jpg',
+  },
+};
+
 describe('buildImportFailureCopy', () => {
   test('unsupported_url: no retry (no URL context), manual entry not elevated', () => {
     const copy = buildImportFailureCopy({ kind: 'unsupported_url' });
@@ -73,10 +84,53 @@ describe('buildImportFailureCopy', () => {
       { kind: 'no_recipe_in_caption', caption: null },
       { kind: 'llm_request_failed' },
       { kind: 'parse_failed' },
+      DISPLAY_ONLY_RESULT,
     ];
     for (const result of results) {
       const copy = buildImportFailureCopy(result);
       expect((copy.title + ' ' + copy.body).toLowerCase()).not.toContain('veilig');
     }
+  });
+});
+
+/**
+ * `display_only` is the one member of `ImportFailureResult` that is not a
+ * failure (see importFailureCopy.ts's own note): oEmbed resolved, the
+ * creator is known, and we deliberately never asked the model. The copy has
+ * to read that way — these tests exist so a later edit cannot quietly turn
+ * a working path back into an apology.
+ */
+describe('buildImportFailureCopy — display_only', () => {
+  test('manual entry is the elevated action; retrying is not offered', () => {
+    const copy = buildImportFailureCopy(DISPLAY_ONLY_RESULT);
+    expect(copy.manualEntryIsPrimary).toBe(true);
+    // Not transient: the same link resolves the same way every time, so an
+    // "Opnieuw proberen" button would promise a different answer it cannot
+    // deliver.
+    expect(copy.canRetry).toBe(false);
+  });
+
+  test('never quotes a caption — none is ever returned for this variant', () => {
+    expect(buildImportFailureCopy(DISPLAY_ONLY_RESULT).quote).toBeNull();
+  });
+
+  test('names the platform the user actually pasted', () => {
+    const copy = buildImportFailureCopy(DISPLAY_ONLY_RESULT);
+    expect(`${copy.title} ${copy.body}`).toContain('Instagram');
+  });
+
+  test('reads as a working path, not as breakage', () => {
+    const copy = buildImportFailureCopy(DISPLAY_ONLY_RESULT);
+    const text = `${copy.title} ${copy.body}`.toLowerCase();
+    for (const brokenWord of ['mislukt', 'fout', 'ging mis', 'niet gelukt', 'probeer het opnieuw']) {
+      expect(text).not.toContain(brokenWord);
+    }
+  });
+
+  test('does not reuse no_recipe_in_caption copy — a different reason deserves different words', () => {
+    const displayOnly = buildImportFailureCopy(DISPLAY_ONLY_RESULT);
+    const noRecipe = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null });
+    expect(displayOnly.title).not.toBe(noRecipe.title);
+    expect(displayOnly.body).not.toBe(noRecipe.body);
   });
 });

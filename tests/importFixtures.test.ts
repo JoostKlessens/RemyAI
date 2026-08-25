@@ -11,6 +11,7 @@ describe('detectFixtureScenario', () => {
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/oembed-fout')).toBe('oembed_failed');
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/llm-fout')).toBe('llm_request_failed');
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/parse-fout')).toBe('parse_failed');
+    expect(detectFixtureScenario('https://www.instagram.com/reel/alleen-tonen')).toBe('display_only');
   });
 });
 
@@ -66,5 +67,30 @@ describe('buildFixtureImportAttempt', () => {
     expect(llmAttempt.authorName).not.toBeNull();
     expect(parseAttempt.result.kind).toBe('parse_failed');
     expect(parseAttempt.authorName).not.toBeNull();
+  });
+
+  /**
+   * The display-only path (PD-011) is a success with a different shape, so
+   * the fixture has to look like one: a resolved post with a creator and a
+   * thumbnail, and no caption anywhere.
+   */
+  test('"display_only" carries the creator and the source URL, and never a caption', () => {
+    const attempt = buildFixtureImportAttempt('display_only', 'instagram', 'https://www.instagram.com/reel/5');
+    expect(attempt.result.kind).toBe('display_only');
+    expect(attempt.authorName).not.toBeNull();
+    if (attempt.result.kind === 'display_only') {
+      expect(attempt.result.sourceUrl).toBe('https://www.instagram.com/reel/5');
+      expect(attempt.result.platform).toBe('instagram');
+      expect(attempt.result.attribution.authorName).toBe(attempt.authorName);
+      expect(Object.keys(attempt.result)).not.toContain('caption');
+    }
+  });
+
+  test('"display_only" carries a thumbnail through as a sidecar — it is the part we may show', () => {
+    const attempt = buildFixtureImportAttempt('display_only', 'instagram', 'https://www.instagram.com/reel/6');
+    expect(attempt.thumbnailUrl).not.toBeNull();
+    if (attempt.result.kind === 'display_only') {
+      expect(attempt.result.attribution.thumbnailUrl).toBe(attempt.thumbnailUrl);
+    }
   });
 });

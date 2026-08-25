@@ -300,6 +300,78 @@ households: the canonical `recipes` row holds no allergen status, and every copi
 
 ---
 
+## PD-011 — Instagram is display-only: we show the post, we never read the caption
+
+**One endpoint, two different uses.** An oEmbed endpoint answers a single URL you already hold with
+a thumbnail, a title, an author name and a link back to the post. Two things can be done with that
+response, and they are not the same act:
+
+1. **Render the post, credited.** Show the thumbnail and the creator's handle, and send the tap
+   back to the original. This is what oEmbed exists for, and it is what PD-007 already builds the
+   Feed on.
+2. **Mine the response's text.** Read the title as a caption, send it to a model, and store the
+   recipe that comes back in a household's library.
+
+**Only the first is licensed on Instagram.** Its oEmbed requires Meta's `oEmbed Read` feature. We
+tested it; the endpoint refuses without approval: `(#10) To use 'Meta oEmbed Read', your use of this
+endpoint must be reviewed and approved by Facebook.` Meta's own documentation states the scope
+plainly — the endpoint is *"only meant to be used for embedding Instagram content in websites and
+apps. Any other use of metadata or content is prohibited."* Deriving and storing a recipe from a
+caption is that other use. See `research/13-legal-tos.md` for where this sits on the exposure
+ladder.
+
+**Decision.** Instagram is **display-only**. `parse-recipe` resolves the post through oEmbed,
+returns the `display_only` result, and stops there.
+
+1. **The caption never reaches the model.** The display-only branch runs before the extraction call
+   and returns from it; there is no Instagram path into Gemini at all. The decision lives in one
+   pure, tested function (`src/domain/import/displayOnlyPolicy.ts`), not in an `if` inside the Deno
+   function where nothing type-checks it.
+2. **The caption never reaches the client either, and that is not a detail.** Handing the text to
+   the app so the *user* can copy it into a recipe would be the same prohibited use wearing a
+   different hat. The `display_only` variant has no caption field to put it in, and the one
+   function that constructs it never touches `payload.title`. The absence is the enforcement.
+3. **The creator travels with the post, always.** Attribution is **required** on this variant,
+   unlike on `parsed` — showing someone's post while dropping their name is the one shape that must
+   never render. A missing or malformed attribution fails the whole result client-side.
+4. **Nothing is cached for it.** No canonical `recipes` row is written: Fase 1b's dedup key exists
+   to avoid paying for repeat *extraction*, and there is no extraction here to repeat. The lookup
+   is skipped too — a row written by an earlier deployment must not be served now, because a stored
+   caption-derived Instagram recipe is the prohibited use regardless of which cache it came out of.
+5. **The user is not blocked.** They get the post, the thumbnail and the creator, and type the
+   recipe themselves; source URL, platform, creator and image all carry into the confirmation
+   screen. This is the one manual-entry route that keeps its thumbnail (docs/DESIGN.md §2's
+   monogram fallback still governs everywhere else), because showing that image *is* the permitted
+   use.
+
+**The copy says so plainly, and never apologises.** Nothing broke, so nothing should sound broken:
+*"Van Instagram mag Remy de post en de maker laten zien, maar het bijschrift niet zelf overnemen.
+Dat is een afspraak, geen storing."* No retry button either — the same link resolves the same way
+every time, and "Opnieuw proberen" would promise an answer that can never arrive.
+
+**Rejected: pursue App Review for extraction.** The tempting move is to submit the app for
+`oEmbed Read` approval and carry on as planned. It is the wrong move, because approval is not the
+constraint — the *scope* is. The documented purpose of the endpoint excludes what we would use it
+for, so a granted approval would authorise embedding, not extraction, and we would be running the
+prohibited use with a rubber stamp that does not cover it. Asking permission for something the
+permission explicitly does not grant is not diligence.
+
+**Rejected: refuse Instagram links outright.** Returning `unsupported_url` would be honest and
+trivially safe, and it throws away the half that is genuinely allowed: showing the post and sending
+viewers to the creator. That half is exactly the pitch PD-007 makes to creators — "we send viewers
+to you" — and refusing costs the user the one thing they were always able to do, which is type it
+themselves.
+
+**TikTok is entirely unaffected.** Its oEmbed is publicly documented with no equivalent
+restriction, and full caption extraction continues unchanged: same pipeline, same model, same
+canonical-recipe cache. This decision narrows one platform, not the feature.
+
+**PD-007 and PD-010 are untouched.** This is about what we may *read*, not about what a creator has
+consented to publish. Attribution here stays attribution and never becomes opt-in — see
+`src/domain/import/buildAttribution.ts`.
+
+---
+
 ## Deferred to Phase 2 — do not build
 
 - **Fridge scan.** Schema leaves room; nobody implements it until the decision loop proves
