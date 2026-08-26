@@ -21,13 +21,50 @@
 import { dutchWeekdayName } from './date';
 import type { IsoDateString, IsoDateTimeString, ReasonCode } from './types';
 
+import { joinDutchList } from './dutchText';
+import { formatGrade } from './rating';
+
 export interface ReasonContext {
   readonly targetDate: IsoDateString;
   /** Set only when reasonCode is 'saved_this_week' — the save this reason refers to. */
   readonly savedAt: IsoDateTimeString | null;
   /** Set when known — powers the "Klaar in N minuten" copy for 'fits_time'. */
   readonly estimatedMinutes: number | null;
+  /** Set only when reasonCode is 'friend_proof' — who cooked it, and what the circle publicly gave it. */
+  readonly friendProof: FriendProofContext | null;
 }
+
+/**
+ * The friends behind a `friend_proof` reason.
+ *
+ * `grade` IS A PUBLIC VOTE AND NEVER A PRIVATE ONE. It comes from
+ * `recipe_ratings`, the vote a person casts knowing it is public, and
+ * never from `cook_events.rating`, which is the decision engine's own
+ * input and never crosses a household boundary. That split is what makes
+ * printing a friend's number safe at all: a grade the proud friend can
+ * see is a grade that gets inflated, and an inflated grade feeding the
+ * engine would quietly corrupt every later suggestion. Null when the
+ * friends cooked it but nobody voted publicly — which is the common case,
+ * and reads perfectly well without a number.
+ */
+export interface FriendProofContext {
+  /** Display names, in the order they should be read. */
+  readonly friendNames: readonly string[];
+  /** The circle's public average, or null when nobody voted. Never `cook_events.rating`. */
+  readonly grade: number | null;
+}
+
+/**
+ * How many friends are named before the rest become "en 2 anderen".
+ *
+ * Two, because the reason line is two rendered lines at most and a list of
+ * five names pushes the dish off the screen it is meant to be selling. The
+ * overflow still carries names alongside the count — DESIGN-SOCIAL.md §2.1
+ * bans a count *without* a name ("2 vrienden maakten dit"), because an
+ * anonymous count is a stranger-aggregate wearing a friendly tone. The
+ * persuasive thing is the name.
+ */
+const FRIEND_PROOF_NAME_LIMIT = 2;
 
 function savedThisWeekText(context: ReasonContext): string {
   // Prefer the actual save date so "dit dinsdag" refers to when the
@@ -43,6 +80,47 @@ function fitsTimeText(context: ReasonContext): string {
     return 'Snel klaar';
   }
   return `Klaar in ${context.estimatedMinutes} minuten`;
+}
+
+/**
+ * "Sanne heeft dit ook gemaakt en gaf het een 8,5."
+ *
+ * THE ONLY REASON THAT IS A FULL SENTENCE, and it takes a full stop where
+ * the others take none. That is not an inconsistency: every other reason
+ * is a fragment ("Alweer even geleden", "Een favoriet in huis") and a
+ * fragment does not take a period, while this one has a subject and a
+ * verb. DESIGN-SOCIAL.md §2.1 quotes it with the period for that reason.
+ *
+ * Dutch agreement is done properly rather than approximated: one friend
+ * "heeft ... en gaf", two or more "hebben ... en gaven". A plural average
+ * says "gemiddeld" out loud, because it is one — quietly presenting the
+ * mean of four opinions as though it were a single verdict is the kind of
+ * small dishonesty that makes a number untrustworthy.
+ *
+ * The no-names branch is defensive only. `scoring.ts` emits this code
+ * exclusively when friends cooked the dish, so an empty list means a
+ * caller assembled the context wrongly; the copy stays true anyway rather
+ * than inventing a name or falling back to a bare count.
+ */
+function friendProofText(context: ReasonContext): string {
+  const proof = context.friendProof;
+  if (proof === null || proof.friendNames.length === 0) {
+    return 'Iemand uit je kring heeft dit ook gemaakt.';
+  }
+
+  const named = proof.friendNames.slice(0, FRIEND_PROOF_NAME_LIMIT);
+  const remaining = proof.friendNames.length - named.length;
+  const who = joinDutchList(
+    remaining === 0 ? named : [...named, remaining === 1 ? 'nog iemand' : `${remaining} anderen`],
+  );
+
+  const plural = proof.friendNames.length > 1;
+  const cooked = `${who} ${plural ? 'hebben' : 'heeft'} dit ook gemaakt`;
+  if (proof.grade === null) {
+    return `${cooked}.`;
+  }
+  const gave = plural ? 'gaven het gemiddeld' : 'gaf het';
+  return `${cooked} en ${gave} een ${formatGrade(proof.grade)}.`;
 }
 
 /**
@@ -62,6 +140,8 @@ export function buildReasonText(reasonCode: ReasonCode, context: ReasonContext):
       return fitsTimeText(context);
     case 'household_favourite':
       return 'Een favoriet in huis';
+    case 'friend_proof':
+      return friendProofText(context);
     case 'variety':
       return 'Nog niet eerder geprobeerd';
     case 'requested_repeat':

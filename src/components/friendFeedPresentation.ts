@@ -35,6 +35,7 @@
  * being grown here into a second source of truth.
  */
 
+import { joinDutchList } from '@/domain/dutchText';
 import { describeAllergenTag } from './allergenTaggingCopy';
 import { formatGrade } from './ratingScaleCopy';
 import { getPlatformDisplayName } from './creatorPresentation';
@@ -64,17 +65,7 @@ const META_SEPARATOR = '  ·  ';
  * PD-007a collision label, which is why it is exported and tested in its
  * own right rather than inlined twice.
  */
-export function joinDutchList(items: readonly string[]): string {
-  if (items.length === 0) {
-    return '';
-  }
-  if (items.length === 1) {
-    return items[0] ?? '';
-  }
-  const head = items.slice(0, -1);
-  const tail = items[items.length - 1] ?? '';
-  return `${head.join(', ')} en ${tail}`;
-}
+export { joinDutchList } from '@/domain/dutchText';
 
 export interface KeyIngredientsSummary {
   /** The names actually shown, already capped at the limit and in recipe order. */

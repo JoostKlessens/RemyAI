@@ -191,6 +191,11 @@ function buildReasonTextFor(winner: ScoredMeal, request: DecisionRequest): strin
     targetDate: request.targetDate,
     savedAt: findSavedAt(winner.meal.id, request.pendingThisWeekSaves),
     estimatedMinutes: winner.meal.estimatedMinutes,
+    // Null until the proof layer is wired: `scoring.ts` cannot emit
+    // 'friend_proof' yet, so a context carrying friends would be a
+    // promise no code keeps. It becomes a real lookup in the same change
+    // that gives scoreMeal its friend-cook argument.
+    friendProof: null,
   };
   return buildReasonText(winner.reasonCode, context);
 }

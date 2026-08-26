@@ -35,7 +35,7 @@
  */
 
 import { RATING_MAX, RATING_MIN, isValidRating } from '../rating';
-import type { RecipeId, RecipeRating } from './types';
+import type { ProfileId, RecipeId, RecipeRating } from './types';
 
 /**
  * The whole grade `distribution[0]` counts. Exported because a caller
@@ -63,8 +63,22 @@ const SCALE_LENGTH = RATING_MAX - RATING_MIN + 1;
  */
 export interface RecipeRatingSummary {
   readonly recipeId: RecipeId;
-  /** Distinct raters whose vote counted. Always equal to the sum of `distribution`. */
+  /** Distinct raters whose vote counted. Always equal to the sum of `distribution`, and to the length of `raterProfileIds`. */
   readonly count: number;
+  /**
+   * Who the counted votes belong to, in no meaningful order.
+   *
+   * Here rather than derived by a caller, because deriving it means
+   * repeating `latestValidVotePerRater` — the dedup and validity rules
+   * this file exists to state once. De kring names its voters ("8,5 ·
+   * Sanne en Joris"), and a second copy of those rules to answer "whose
+   * votes counted?" would be a second copy able to disagree with the
+   * number printed beside the names.
+   *
+   * Profile ids and not display names: this module knows nothing about
+   * profiles, and resolving a name is I/O.
+   */
+  readonly raterProfileIds: readonly ProfileId[];
   readonly average: number | null;
   /**
    * Votes per WHOLE grade; index = round(score) - RATING_DISTRIBUTION_BASE.
@@ -87,6 +101,7 @@ export function emptyRecipeRatingSummary(recipeId: RecipeId): RecipeRatingSummar
     recipeId,
     count: 0,
     average: null,
+    raterProfileIds: [],
     distribution: Array.from({ length: SCALE_LENGTH }, () => 0),
   };
 }
@@ -146,6 +161,7 @@ export function summarizeRecipeRatings(recipeId: RecipeId, ratings: readonly Rec
     recipeId,
     count: votes.length,
     average: total / votes.length,
+    raterProfileIds: votes.map((vote) => vote.raterProfileId),
     distribution,
   };
 }

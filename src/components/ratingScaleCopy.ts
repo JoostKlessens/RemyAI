@@ -40,35 +40,15 @@ import { RATING_MAX, RATING_MIN, RATING_STEP, toRepeatSignal } from '@/domain/ra
  * and walking past it is a complete answer. Nothing here may plead.
  */
 /**
- * Decimals a single vote is written to. One, matching RATING_STEP — a vote
- * IS one decimal, so "8" would be a different-looking number for the same
- * opinion and a column of grades would jump between widths.
- *
- * The board writes its score to more than this (see
- * LEADERBOARD_SCORE_DECIMALS) because an average of many votes genuinely
- * carries more precision than any one of them. That is a real difference,
- * not an inconsistency, which is why the two constants are separate.
+ * Re-exported, not defined here. Both moved into src/domain/rating.ts when
+ * the Kiezen reason started printing grades: reason.ts is domain code and
+ * cannot import from components, and a second copy of the decimal comma is
+ * how one screen ends up saying "7.5". Kept exported from this module so
+ * every existing importer and test keeps working unchanged.
  */
-export const RATING_DECIMALS = 1;
+import { RATING_DECIMALS, formatGrade } from '@/domain/rating';
 
-/**
- * A grade, written Dutch: "7,5", "8,0", "10,00".
- *
- * THE COMMA IS THE WHOLE POINT. This is a Dutch report-card grade and
- * "7.5" reads as a typo or a thousands separator to the people this app
- * is for. Every surface that prints a grade goes through here, so there is
- * one place the separator is decided rather than one per screen — the
- * board, the friend card, and anything added later.
- *
- * Built by hand rather than with `toLocaleString('nl-NL')`: Intl's locale
- * data is not guaranteed present in a React Native JS runtime, and a
- * silently-English fallback would produce exactly the "7.5" this exists to
- * prevent — on some devices and not others, which is the worst way to find
- * out.
- */
-export function formatGrade(value: number, decimals: number = RATING_DECIMALS): string {
-  return value.toFixed(decimals).replace('.', ',');
-}
+export { RATING_DECIMALS, formatGrade };
 
 export const RATING_QUESTION = 'Hoe was het?';
 

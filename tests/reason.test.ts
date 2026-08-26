@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { buildReasonText, type ReasonContext } from '@/domain/reason';
 
 const BASE_CONTEXT: ReasonContext = {
+  friendProof: null,
   targetDate: '2026-08-22',
   savedAt: null,
   estimatedMinutes: null,
@@ -73,5 +74,76 @@ describe('buildReasonText', () => {
     for (const text of allTexts) {
       expect(text.toLowerCase()).not.toMatch(/allerg|veilig|safe/);
     }
+  });
+});
+
+/**
+ * DESIGN-SOCIAL.md §2.1 quotes this copy exactly, so these assertions are
+ * against the quoted strings rather than against a shape. The grade comes
+ * from `recipe_ratings` — the public vote — and never from
+ * `cook_events.rating`; that split is enforced at the repository, but the
+ * reason it exists is worth restating where the number gets printed.
+ */
+describe('friend_proof — the social reason', () => {
+  const withFriends = (friendNames: readonly string[], grade: number | null): ReasonContext => ({
+    ...BASE_CONTEXT,
+    friendProof: { friendNames, grade },
+  });
+
+  test('names one friend and the grade they gave', () => {
+    expect(buildReasonText('friend_proof', withFriends(['Sanne'], 8.5))).toBe(
+      'Sanne heeft dit ook gemaakt en gaf het een 8,5.',
+    );
+  });
+
+  test('drops the grade clause when nobody voted publicly', () => {
+    expect(buildReasonText('friend_proof', withFriends(['Sanne'], null))).toBe('Sanne heeft dit ook gemaakt.');
+  });
+
+  /** Dutch agreement, done rather than approximated: one "heeft", two "hebben". */
+  test('two friends take the plural verb', () => {
+    expect(buildReasonText('friend_proof', withFriends(['Sanne', 'Joris'], null))).toBe(
+      'Sanne en Joris hebben dit ook gemaakt.',
+    );
+  });
+
+  /** A mean of several opinions says so out loud rather than posing as one verdict. */
+  test('a plural grade is announced as an average', () => {
+    expect(buildReasonText('friend_proof', withFriends(['Sanne', 'Joris'], 8.4))).toBe(
+      'Sanne en Joris hebben dit ook gemaakt en gaven het gemiddeld een 8,4.',
+    );
+  });
+
+  test('writes the grade Dutch, with a comma', () => {
+    const text = buildReasonText('friend_proof', withFriends(['Sanne'], 9));
+    expect(text).toContain('9,0');
+    expect(text).not.toContain('9.0');
+  });
+
+  /**
+   * §2.1 bans a count without a name — "2 vrienden maakten dit" is a
+   * stranger-aggregate wearing a friendly tone. Beyond the limit the
+   * overflow still travels next to real names.
+   */
+  test('overflow keeps names beside the count, never a bare count', () => {
+    const text = buildReasonText('friend_proof', withFriends(['Sanne', 'Joris', 'Kees', 'Fatima'], null));
+    expect(text).toBe('Sanne, Joris en 2 anderen hebben dit ook gemaakt.');
+  });
+
+  test('a single extra friend is a person, not a count of one', () => {
+    expect(buildReasonText('friend_proof', withFriends(['Sanne', 'Joris', 'Kees'], null))).toBe(
+      'Sanne, Joris en nog iemand hebben dit ook gemaakt.',
+    );
+  });
+
+  /** Defensive only — scoring never emits this code without friends. It must still say something true. */
+  test('says something true rather than inventing a name when the context is empty', () => {
+    expect(buildReasonText('friend_proof', withFriends([], null))).toBe('Iemand uit je kring heeft dit ook gemaakt.');
+  });
+
+  /** It is the one reason that is a full sentence, so it is the one that takes a full stop. */
+  test('ends in a full stop, unlike the fragment reasons', () => {
+    expect(buildReasonText('friend_proof', withFriends(['Sanne'], null)).endsWith('.')).toBe(true);
+    expect(buildReasonText('not_recent', BASE_CONTEXT).endsWith('.')).toBe(false);
   });
 });

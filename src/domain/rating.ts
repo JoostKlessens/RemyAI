@@ -56,6 +56,41 @@ export const RATING_NEGATIVE_AT_OR_BELOW = 4;
 export const RATING_POSITIVE_AT_OR_ABOVE = 8;
 
 /**
+ * Decimals a single vote is written to. One, matching RATING_STEP: a vote
+ * IS one decimal, so "8" would be a different-looking number for the same
+ * opinion and a column of grades would jump between widths.
+ *
+ * A board average is written to more than this, because an average of
+ * many votes genuinely carries more precision than any one of them. That
+ * is a real difference rather than an inconsistency, which is why the
+ * board states its own precision separately.
+ */
+export const RATING_DECIMALS = 1;
+
+/**
+ * A grade, written Dutch: "7,5", "8,0", "10,00".
+ *
+ * THE COMMA IS THE WHOLE POINT. This is a Dutch report-card grade, and
+ * "7.5" reads as a typo or a thousands separator to the people this app
+ * is for. Every surface that prints a grade goes through here — the
+ * board, the friend card, the Kiezen reason, the slider — so the
+ * separator is decided once rather than once per screen.
+ *
+ * It lives beside the scale rather than in a copy module because
+ * src/domain/reason.ts needs it and the domain must not import from
+ * components. Writing a number down is not presentation the way choosing
+ * a font is; it is part of what the scale MEANS.
+ *
+ * Built by hand rather than with `toLocaleString('nl-NL')`: Intl's locale
+ * data is not guaranteed present in a React Native JS runtime, and a
+ * silently-English fallback would produce exactly the "7.5" this exists
+ * to prevent.
+ */
+export function formatGrade(value: number, decimals: number = RATING_DECIMALS): string {
+  return value.toFixed(decimals).replace('.', ',');
+}
+
+/**
  * In range, and on the step — never a fraction finer than one decimal,
  * never NaN, never out of range.
  *

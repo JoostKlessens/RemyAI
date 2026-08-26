@@ -86,6 +86,7 @@ export type ReasonCode =
   | 'not_recent'
   | 'fits_time'
   | 'household_favourite'
+  | 'friend_proof'
   | 'variety'
   | 'requested_repeat'
   | 'fallback';
