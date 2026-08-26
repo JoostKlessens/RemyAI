@@ -20,7 +20,7 @@
  * third party's video content, not just reading metadata already offered
  * via a documented oEmbed endpoint) and is deliberately OUT OF SCOPE here.
  *
- * research/03-video-recipe-extraction.md identifies caption-only parsing
+ * research/12-prior-art.md identifies caption-only parsing
  * as the single most complained-about failure across this entire product
  * category (ReciMe, Flavorish, Pestle all fail the same way when a
  * creator speaks the recipe instead of typing it) — we inherit that

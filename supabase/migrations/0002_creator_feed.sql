@@ -6,7 +6,9 @@
 -- account media) was permanently shut down 4 Dec 2024, oEmbed only ever
 -- resolves a single URL you already hold, and TikTok's Developer ToS
 -- forbids replicating their service. See docs/PRODUCT-DECISIONS.md PD-007
--- and research/03-video-recipe-extraction.md [S31][S35][S36].
+-- and research/10-media-acquisition.md, which surveys the official APIs,
+-- the paid third-party scrapers and the open-source tooling in turn and
+-- finds no route that returns another account's media.
 --
 -- What this migration IS: storage for a feed of opt-in creator content
 -- only. `creators.opted_in_at` is the single gate everything below is built

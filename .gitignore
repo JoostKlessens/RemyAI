@@ -19,3 +19,11 @@ coverage/
 dist-check/
 web-build-new/
 web-build-export-tmp/
+
+# The legal risk review stays out of the public repo. It is a frank
+# self-assessment of where this product sits against TikTok's and Meta's
+# terms, written by a research agent and explicitly not legal advice —
+# the kind of document that reads as an admission once it is public.
+# The other research/ notes are committed; only this one is withheld.
+# Citations to it were rewritten to state their finding inline.
+research/13-legal-tos.md

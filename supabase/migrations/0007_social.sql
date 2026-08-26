@@ -19,9 +19,9 @@
 -- link to the original video directly below." The owner chose that
 -- deliberately, and PD-010 states the cost in the same breath: the recipe
 -- came out of someone else's video, and showing it to a third party is
--- rebroadcast — the highest rung of the exposure ladder in
--- research/13-legal-tos.md, and the thing that got Recipeasly killed inside
--- 24 hours in 2021.
+-- rebroadcast — the top rung of the exposure ladder in the legal risk
+-- review held outside this repo, and the thing that got Recipeasly killed
+-- inside 24 hours in 2021.
 --
 -- So point 3 of that decision is not a default chosen for convenience:
 -- "meals.visibility governs, defaulting to private. Sharing is an act,
@@ -541,8 +541,9 @@ create policy recipe_ratings_delete on recipe_ratings
 -- something a person does.
 --
 -- Two values, and no 'public'. Showing a household's recipe to a friend is
--- already the rebroadcast rung of research/13-legal-tos.md's exposure
--- ladder; putting it in front of strangers is a different product decision
+-- already the rebroadcast rung of the exposure ladder in the legal risk
+-- review held outside this repo; putting it in front of strangers is a
+-- different product decision
 -- that should have to be argued for, not arrive as an unused enum member
 -- somebody later switches on.
 -- ---------------------------------------------------------------------------

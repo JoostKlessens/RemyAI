@@ -18,7 +18,8 @@
  * ON REJECTING A MALFORMED `attribution`. It would be easy to treat a
  * broken attribution object as simply absent and show the recipe anyway.
  * That is deliberately not what happens: creator attribution is a legal
- * obligation here, not decoration (PD-007, research/13-legal-tos.md), so
+ * obligation here, not decoration (PD-007, and the legal risk review held
+ * outside this repo), so
  * silently dropping it is a worse outcome than an honest failure the user
  * can retry. A shape we don't recognize means client/function version
  * skew, which is worth surfacing rather than papering over. On the

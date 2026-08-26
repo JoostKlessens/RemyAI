@@ -143,7 +143,8 @@ export interface RecipeRating {
  *
  * There is deliberately no 'public' member. Showing a household's recipe
  * to a friend is already the rebroadcast rung of the exposure ladder in
- * research/13-legal-tos.md; a value that put it in front of strangers
+ * the legal risk review held outside this repo; a value that put it in
+ * front of strangers
  * would be a different product decision, and it should have to be argued
  * for rather than arrive as an unused enum member somebody later switches
  * on.

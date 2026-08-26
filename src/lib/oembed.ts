@@ -5,7 +5,8 @@
  * What this is NOT: a way to browse a creator's content. oEmbed only ever
  * resolves one URL you already hold to a title/thumbnail/author payload —
  * it is not a feed or search API. See docs/PRODUCT-DECISIONS.md PD-007 and
- * research/03-video-recipe-extraction.md [S31][S35][S36].
+ * research/10-media-acquisition.md, which finds no sanctioned route to
+ * another account's media.
  *
  * TikTok: `https://www.tiktok.com/oembed?url=...` is publicly documented
  * with no auth requirement described for it.

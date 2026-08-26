@@ -175,7 +175,9 @@ the only official route to personal-account media — was permanently shut down 
 and its Graph API replacement returns only a Business/Creator account's *own* media. oEmbed returns
 an embeddable player for a single URL you already hold; it is not a browsable stream. TikTok's
 Developer ToS separately prohibits attempts to "compete with or replicate any TikTok Services".
-See `research/03-video-recipe-extraction.md` [S31][S35][S36].
+See `research/10-media-acquisition.md`, which surveys the official APIs, the paid third-party
+scrapers and the open-source tooling in turn, and finds no route that returns another account's
+media.
 
 **Decision.** The Feed is filled exclusively with content from creators who have explicitly opted
 in. No scraping, no aggregation of non-consenting creators, no re-hosting.
@@ -280,9 +282,10 @@ The alternative considered was a card that never opens: full recipe only after y
 yourself. That was rejected as too little value for a social feature to be worth building.
 
 **What this costs, stated plainly so nobody rediscovers it later.** The recipe came out of someone
-else's video, and showing it to a third party is rebroadcast — the highest rung of the exposure
-ladder in `research/13-legal-tos.md`, and the thing that got Recipeasly killed inside 24 hours in
-2021. PD-007 exists because of that precedent. Choosing this deliberately means the mitigations
+else's video, and showing it to a third party is rebroadcast — the top rung of the five-rung
+exposure ladder in the legal risk review (held outside this repo): making a third party's content
+visible to somebody other than the person who imported it. It is also the thing that got
+Recipeasly killed inside 24 hours in 2021. PD-007 exists because of that precedent. Choosing this deliberately means the mitigations
 below stop being nice-to-have and become the conditions the feature ships under:
 
 1. **Creator attribution on the card AND on the full recipe view** — handle, profile link, source
@@ -317,8 +320,9 @@ tested it; the endpoint refuses without approval: `(#10) To use 'Meta oEmbed Rea
 endpoint must be reviewed and approved by Facebook.` Meta's own documentation states the scope
 plainly — the endpoint is *"only meant to be used for embedding Instagram content in websites and
 apps. Any other use of metadata or content is prohibited."* Deriving and storing a recipe from a
-caption is that other use. See `research/13-legal-tos.md` for where this sits on the exposure
-ladder.
+caption is that other use. The legal risk review (held outside this repo) puts a metadata read on
+the bottom rung of its exposure ladder — low risk, but not zero, and this clause is exactly why
+it is not zero.
 
 **Decision.** Instagram is **display-only**. `parse-recipe` resolves the post through oEmbed,
 returns the `display_only` result, and stops there.
