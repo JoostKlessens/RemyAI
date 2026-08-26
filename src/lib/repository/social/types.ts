@@ -93,6 +93,27 @@ export interface CanonicalRecipeSummary {
  */
 export const BOARD_RATING_ROW_CEILING = 50_000;
 
+/**
+ * One row of the `shared_cooks` view (0009): a friend, and a canonical
+ * recipe they cooked.
+ *
+ * NOTHING ELSE IS IN IT, and that is the design rather than a trimmed
+ * projection. No timestamp — proof is "Sanne maakte dit", never
+ * "gisteren", and a date would turn an ambient fact into a feed with
+ * recency. No count — cooking something four times is still one proof,
+ * and a count is the first step toward a leaderboard of your friends'
+ * kitchens. And structurally no rating: `cook_events.rating` is the
+ * decision engine's private input and never crosses a household
+ * boundary, so it is absent from the view rather than filtered out of it.
+ *
+ * The view is self-gating on friendship, so a row reaching this type is
+ * already about somebody the caller is mutually accepted friends with.
+ */
+export interface FriendCook {
+  readonly profileId: ProfileId;
+  readonly recipeId: RecipeId;
+}
+
 export interface RemySocialRepository {
   getProfile(profileId: ProfileId): Promise<Profile | null>;
   /** Handle lookup is how one person finds another, so it takes whatever was typed and normalizes before matching. */
@@ -137,6 +158,17 @@ export interface RemySocialRepository {
    * though it were everything.
    */
   listAllRecipeRatings(): Promise<readonly RecipeRating[]>;
+
+  /**
+   * Every (friend, recipe) pair the `shared_cooks` view will show this
+   * reader — ambient cook proof, for the Kiezen reason and the friend
+   * surfaces.
+   *
+   * Returns nothing at all until somebody opts in, which is the common
+   * case and not an error: the switch is off by default, and a household
+   * that never answers the question shares nothing, forever.
+   */
+  listFriendCookedRecipes(): Promise<readonly FriendCook[]>;
 
   /**
    * Display data for canonical recipes, by id. Ids not found are simply

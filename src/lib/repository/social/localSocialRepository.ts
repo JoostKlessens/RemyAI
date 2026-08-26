@@ -46,6 +46,7 @@ import type { KeyValueStore } from '../keyValueStore';
 import { createTableAccessor, type TableAccessor } from '../table';
 import type {
   CanonicalRecipeSummary,
+  FriendCook,
   RateRecipeInput,
   RemySocialRepository,
   UpsertProfileInput,
@@ -270,6 +271,15 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
       // fifty thousand ratings locally has a different problem than a
       // board that cannot be computed.
       return tables.recipeRatings.list();
+    },
+
+    async listFriendCookedRecipes(): Promise<readonly FriendCook[]> {
+      // Cook proof is a cross-household fact, and this store holds one
+      // device's rows. There is no friend's kitchen in here to read, and
+      // inventing one would make a local test pass for a reason the real
+      // backend cannot reproduce. Empty is the honest answer, the same
+      // one `listCanonicalRecipes` gives below.
+      return [];
     },
 
     async listCanonicalRecipes(recipeIds: readonly RecipeId[]): Promise<readonly CanonicalRecipeSummary[]> {

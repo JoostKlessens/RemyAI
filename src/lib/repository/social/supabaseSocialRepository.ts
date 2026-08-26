@@ -62,6 +62,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   BOARD_RATING_ROW_CEILING,
   type CanonicalRecipeSummary,
+  type FriendCook,
   type RateRecipeInput,
   type RemySocialRepository,
   type UpsertProfileInput,
@@ -101,6 +102,11 @@ interface RecipeRatingRow {
   readonly rater_profile_id: string;
   readonly rating: number | string;
   readonly rated_at: string;
+}
+
+interface SharedCookRow {
+  readonly profile_id: string;
+  readonly recipe_id: string;
 }
 
 interface RecipeRow {
@@ -438,6 +444,22 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
           'Client-side aggregation has outgrown the data; move the per-recipe aggregate into SQL ' +
           '(see the note on BOARD_RATING_ROW_CEILING in src/lib/repository/social/types.ts).',
       );
+    },
+
+    async listFriendCookedRecipes(): Promise<readonly FriendCook[]> {
+      // No filter and no friendship clause, deliberately: `shared_cooks`
+      // gates itself on `is_friend_of` inside the view body (0009), so
+      // the rows this returns are already scoped to the caller's accepted
+      // friends. Adding a WHERE here would be a second copy of a
+      // permission rule — and the copy that is easiest to get wrong.
+      const { data, error } = await client.from('shared_cooks').select('profile_id, recipe_id');
+      if (error) {
+        fail('Reading cook proof', error);
+      }
+      return ((data ?? []) as SharedCookRow[]).map((row) => ({
+        profileId: row.profile_id,
+        recipeId: row.recipe_id,
+      }));
     },
 
     async listCanonicalRecipes(recipeIds: readonly RecipeId[]): Promise<readonly CanonicalRecipeSummary[]> {
