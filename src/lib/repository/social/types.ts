@@ -30,6 +30,7 @@
  * replaces it calls the identical functions.
  */
 
+import type { CreatorPlatform } from '@/domain/feed/types';
 import type { Friendship, FriendshipAction, Profile, ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
 
 export interface UpsertProfileInput {
@@ -48,6 +49,49 @@ export interface RateRecipeInput {
   /** On src/domain/rating.ts's scale. An off-scale score is rejected, never clamped. */
   readonly rating: number;
 }
+
+/**
+ * A canonical `recipes` row (0006), reduced to what a list screen renders.
+ *
+ * Deliberately not the whole recipe: the global board shows a name, a face
+ * and a grade, and dragging ingredients and steps into a list query would
+ * make every row carry a recipe nobody asked to read.
+ *
+ * NOTE WHAT IS ABSENT: allergen tags. A canonical recipe has none, and that
+ * is PD-006 rather than an oversight — tagging is something a household
+ * does to its own copy on Bevestigen, and an untagged recipe is UNKNOWN,
+ * never "safe". Consequence for the board: it cannot show a PD-007a
+ * collision chip against canonical data, and the absence of a chip there
+ * must never be styled or read as reassurance.
+ */
+export interface CanonicalRecipeSummary {
+  readonly recipeId: RecipeId;
+  readonly title: string;
+  readonly platform: CreatorPlatform;
+  /** `recipes.author_name` — the creator's handle as the platform reported it. Null when oEmbed gave none. */
+  readonly authorName: string | null;
+  readonly thumbnailUrl: string | null;
+}
+
+/**
+ * The ceiling on a whole-table rating read, above which the board stops
+ * being able to tell the truth.
+ *
+ * The aggregate is client-side on purpose (src/domain/social/leaderboard.ts
+ * explains why), which for one recipe means a handful of rows. A GLOBAL
+ * board means every rating row in the database. That is fine at launch
+ * scale and not fine indefinitely.
+ *
+ * When this is exceeded the implementation THROWS rather than returning
+ * what it managed to fetch. A partial read would silently rank a subset
+ * while presenting itself as the world — the precise failure leaderboard.ts
+ * warns about — and a loud error naming the fix is worth far more than a
+ * board that is quietly wrong. The fix is a SQL aggregate returning
+ * per-recipe (count, avg), which the table's own unique and CHECK
+ * constraints make provably identical to what `summarizeRecipeRatingsByRecipe`
+ * computes, with `rankRecipes` still owning the prior, shrinkage and floor.
+ */
+export const BOARD_RATING_ROW_CEILING = 50_000;
 
 export interface RemySocialRepository {
   getProfile(profileId: ProfileId): Promise<Profile | null>;
@@ -83,4 +127,22 @@ export interface RemySocialRepository {
   rateRecipe(input: RateRecipeInput): Promise<RecipeRating>;
   /** Withdrawing a vote is a real delete — an unrated recipe and a withdrawn rating must be indistinguishable. */
   removeRecipeRating(recipeId: RecipeId, raterProfileId: ProfileId): Promise<void>;
+
+  /**
+   * Every rating in the system, for the global board (PD-014).
+   *
+   * Unbounded by nature — a board that ranks the world has to see the
+   * world — so the implementation reads to BOARD_RATING_ROW_CEILING and
+   * throws beyond it rather than returning a subset it would then rank as
+   * though it were everything.
+   */
+  listAllRecipeRatings(): Promise<readonly RecipeRating[]>;
+
+  /**
+   * Display data for canonical recipes, by id. Ids not found are simply
+   * absent from the result rather than an error: a rating can outlive the
+   * recipe it points at only if something has gone wrong upstream, and the
+   * board's job in that case is to drop the row, not to fail the screen.
+   */
+  listCanonicalRecipes(recipeIds: readonly RecipeId[]): Promise<readonly CanonicalRecipeSummary[]>;
 }

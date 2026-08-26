@@ -24,12 +24,16 @@
  */
 
 import { isValidRating } from '@/domain/rating';
-import { applyFriendshipAction, friendshipPairKey, friendshipRoleOf } from '@/domain/social/friendship';
+import {
+  applyFriendshipAction,
+  friendshipPairKey,
+  nextFriendshipFields,
+  resolveActorRole,
+} from '@/domain/social/friendship';
 import { parseHandle } from '@/domain/social/handle';
 import type {
   Friendship,
   FriendshipAction,
-  FriendshipRole,
   FriendshipStatus,
   Profile,
   ProfileId,
@@ -40,7 +44,12 @@ import { nowIso } from '../clock';
 import { generateLocalId } from '../id';
 import type { KeyValueStore } from '../keyValueStore';
 import { createTableAccessor, type TableAccessor } from '../table';
-import type { RateRecipeInput, RemySocialRepository, UpsertProfileInput } from './types';
+import type {
+  CanonicalRecipeSummary,
+  RateRecipeInput,
+  RemySocialRepository,
+  UpsertProfileInput,
+} from './types';
 
 interface SocialTables {
   readonly profiles: TableAccessor<Profile>;
@@ -80,22 +89,13 @@ function findPairRow(friendships: readonly Friendship[], profileA: ProfileId, pr
  * row yet the actor is the requester by definition — they are the one
  * asking.
  */
-function actorRole(existing: Friendship | null, actorProfileId: ProfileId): FriendshipRole {
-  if (existing === null) {
-    return 'requester';
-  }
-  return friendshipRoleOf(existing, actorProfileId) ?? 'requester';
-}
+
 
 /**
- * The row a legal action produces.
- *
- * The two sides swap on a re-request out of 'declined': whoever is asking
- * now becomes the requester, or the original addressee could re-open the
- * pair and then "accept" a request nobody made. The unordered pair is
- * unchanged, which is the property the migration's trigger actually
- * guards. `blockedBy` is set only alongside 'blocked' and cleared
- * otherwise, mirroring that column's CHECK constraint.
+ * The row a legal action produces: the domain decides every field that is
+ * a rule, this adds only the two a local store owns — an id it mints and a
+ * creation time it stamps. Postgres defaults both, which is exactly why
+ * they are not in `nextFriendshipFields`.
  */
 function nextFriendship(
   existing: Friendship | null,
@@ -104,21 +104,10 @@ function nextFriendship(
   status: FriendshipStatus,
 ): Friendship {
   const timestamp = nowIso();
-  const opening = status === 'pending';
-  const requesterId = existing === null || opening ? actorProfileId : existing.requesterId;
-  const addresseeId = existing === null || opening ? otherProfileId : existing.addresseeId;
-
   return {
     id: existing?.id ?? generateLocalId('friendship'),
-    requesterId,
-    addresseeId,
-    status,
-    blockedBy: status === 'blocked' ? actorProfileId : null,
     createdAt: existing?.createdAt ?? timestamp,
-    // A pending row is an unanswered question, so it carries no answer
-    // time — including a re-request, which resets the clock rather than
-    // keeping the answer to the request it replaces.
-    respondedAt: opening ? null : timestamp,
+    ...nextFriendshipFields(existing, actorProfileId, otherProfileId, status, timestamp),
   };
 }
 
@@ -204,7 +193,7 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
       const result = applyFriendshipAction({
         from: existing?.status ?? null,
         action,
-        actor: actorRole(existing, actorProfileId),
+        actor: resolveActorRole(existing, actorProfileId),
       });
       if (!result.ok) {
         // The domain's reason code travels verbatim into the message: the
@@ -273,6 +262,28 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
       await tables.recipeRatings.replaceAll(
         ratings.filter((rating) => !(rating.recipeId === recipeId && sameProfile(rating.raterProfileId, raterProfileId))),
       );
+    },
+
+    async listAllRecipeRatings(): Promise<readonly RecipeRating[]> {
+      // No ceiling check here, unlike the Supabase implementation. This
+      // store holds one device's rows, and a device that has accumulated
+      // fifty thousand ratings locally has a different problem than a
+      // board that cannot be computed.
+      return tables.recipeRatings.list();
+    },
+
+    async listCanonicalRecipes(recipeIds: readonly RecipeId[]): Promise<readonly CanonicalRecipeSummary[]> {
+      // Canonical recipes live only in Postgres — `recipes` (0006) is
+      // written by the parse-recipe edge function with the service role
+      // and has no local mirror, deliberately: it is shared data whose
+      // whole value is that it crosses household boundaries, and a
+      // device-local copy of it would be a cache nobody invalidates.
+      //
+      // Empty, not throwing. A caller that gets no display data drops the
+      // rows rather than failing, which is exactly the degradation the
+      // board wants from a store that structurally cannot answer.
+      void recipeIds;
+      return [];
     },
   };
 }

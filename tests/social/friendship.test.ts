@@ -5,6 +5,8 @@ import {
   friendshipPairKey,
   friendshipRoleOf,
   isLegalFriendshipTransition,
+  nextFriendshipFields,
+  resolveActorRole,
 } from '@/domain/social/friendship';
 import type { FriendshipAction, FriendshipStatus } from '@/domain/social/types';
 import { PROFILE_A, PROFILE_B, PROFILE_C, makeFriendship } from './fixtures';
@@ -270,5 +272,83 @@ describe('areFriends', () => {
 
   test('an empty friendship list is not an error', () => {
     expect(areFriends(PROFILE_A, PROFILE_B, [])).toBe(false);
+  });
+});
+
+/**
+ * These two moved out of localSocialRepository.ts when the Supabase
+ * backend arrived, because both implementations need them and a private
+ * copy in each is two places one rule could drift. They carry no id and no
+ * createdAt on purpose: a local store mints those, Postgres defaults them,
+ * and neither is a product decision.
+ */
+describe('resolveActorRole', () => {
+  test('the actor opening a pair that has no row is the requester', () => {
+    expect(resolveActorRole(null, PROFILE_A)).toBe('requester');
+  });
+
+  test('reads the actor off an existing row', () => {
+    const friendship = makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B });
+    expect(resolveActorRole(friendship, PROFILE_A)).toBe('requester');
+    expect(resolveActorRole(friendship, PROFILE_B)).toBe('addressee');
+  });
+
+  /** A stranger is not silently treated as the addressee — the transition table would then let them accept. */
+  test('falls back to requester for a profile that is not in the pair', () => {
+    const friendship = makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B });
+    expect(resolveActorRole(friendship, PROFILE_C)).toBe('requester');
+  });
+});
+
+describe('nextFriendshipFields', () => {
+  const NOW = '2026-03-01T12:00:00.000Z';
+
+  test('a brand-new pending row puts the actor on the requesting side', () => {
+    const fields = nextFriendshipFields(null, PROFILE_A, PROFILE_B, 'pending', NOW);
+    expect(fields.requesterId).toBe(PROFILE_A);
+    expect(fields.addresseeId).toBe(PROFILE_B);
+  });
+
+  /**
+   * The rule this function exists to state once: whoever re-opens a
+   * declined pair becomes the requester. Without the swap the original
+   * addressee could re-open and then "accept" a request nobody made.
+   */
+  test('re-requesting swaps the sides so the asker is the requester', () => {
+    const declined = makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B, status: 'declined' });
+    const fields = nextFriendshipFields(declined, PROFILE_B, PROFILE_A, 'pending', NOW);
+    expect(fields.requesterId).toBe(PROFILE_B);
+    expect(fields.addresseeId).toBe(PROFILE_A);
+  });
+
+  test('answering an existing request leaves the sides exactly as they were', () => {
+    const pending = makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B, status: 'pending' });
+    const fields = nextFriendshipFields(pending, PROFILE_B, PROFILE_A, 'accepted', NOW);
+    expect(fields.requesterId).toBe(PROFILE_A);
+    expect(fields.addresseeId).toBe(PROFILE_B);
+  });
+
+  /** A pending row is an unanswered question, including a re-request — it resets the clock rather than keeping the previous answer. */
+  test('a pending row carries no answer time', () => {
+    expect(nextFriendshipFields(null, PROFILE_A, PROFILE_B, 'pending', NOW).respondedAt).toBeNull();
+  });
+
+  test('any settled status stamps the moment it was settled', () => {
+    const pending = makeFriendship({ status: 'pending' });
+    expect(nextFriendshipFields(pending, PROFILE_B, PROFILE_A, 'accepted', NOW).respondedAt).toBe(NOW);
+    expect(nextFriendshipFields(pending, PROFILE_B, PROFILE_A, 'declined', NOW).respondedAt).toBe(NOW);
+  });
+
+  /** Mirrors the delete policy in 0007: only the blocker may lift a block, so the row has to record who it was. */
+  test('blocking records who blocked, and nothing else ever does', () => {
+    const accepted = makeFriendship({ status: 'accepted' });
+    expect(nextFriendshipFields(accepted, PROFILE_B, PROFILE_A, 'blocked', NOW).blockedBy).toBe(PROFILE_B);
+    expect(nextFriendshipFields(accepted, PROFILE_B, PROFILE_A, 'accepted', NOW).blockedBy).toBeNull();
+  });
+
+  /** Unblocking must clear the marker, or the pair stays blocked in every check that reads it. */
+  test('leaving blocked clears the blocker', () => {
+    const blocked = makeFriendship({ status: 'blocked', blockedBy: PROFILE_B });
+    expect(nextFriendshipFields(blocked, PROFILE_B, PROFILE_A, 'declined', NOW).blockedBy).toBeNull();
   });
 });

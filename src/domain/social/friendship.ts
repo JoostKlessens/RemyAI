@@ -64,6 +64,7 @@
  * Pure, no I/O.
  */
 
+import type { IsoDateTimeString } from '../types';
 import type { Friendship, FriendshipAction, FriendshipRole, FriendshipStatus, ProfileId } from './types';
 
 /** The two ids in the order the database files them: `low` is `least(...)`, `high` is `greatest(...)`. */
@@ -258,4 +259,64 @@ export function areFriends(
     const key = friendshipPairKey(friendship.requesterId, friendship.addresseeId);
     return key !== null && key.low === wanted.low && key.high === wanted.high;
   });
+}
+
+/**
+ * Which side of a pair the actor is on, defaulting to 'requester' when no
+ * row exists yet — because the only legal action from nothing is opening a
+ * request, and the person opening it is by definition the requester.
+ *
+ * Extracted here rather than kept private to a repository: both backends
+ * need it, and a second copy is a second place the default could drift.
+ */
+export function resolveActorRole(existing: Friendship | null, actorProfileId: ProfileId): FriendshipRole {
+  if (existing === null) {
+    return 'requester';
+  }
+  return friendshipRoleOf(existing, actorProfileId) ?? 'requester';
+}
+
+/**
+ * Every field of the row a legal action produces, except the two a storage
+ * backend owns: `id` and `createdAt`.
+ *
+ * WHY THOSE TWO ARE EXCLUDED. A local store mints an id and a timestamp
+ * itself; Postgres defaults both (`gen_random_uuid()`, `now()`), and having
+ * the client supply them would either fight the default or hand the
+ * database a value it did not choose. Everything else here is a product
+ * rule and must be identical in both backends, which is why it lives in
+ * the domain and not in either repository.
+ *
+ * THE SIDES SWAP ON A RE-REQUEST. When the status opens to 'pending',
+ * whoever is asking now becomes the requester — otherwise the original
+ * addressee could re-open a declined pair and then "accept" a request
+ * nobody made. That is the rule this function exists to state once.
+ *
+ * A pending row carries no `respondedAt`: it is an unanswered question,
+ * including a re-request, which resets the clock rather than keeping the
+ * answer to the request it replaces.
+ */
+export interface FriendshipFields {
+  readonly requesterId: ProfileId;
+  readonly addresseeId: ProfileId;
+  readonly status: FriendshipStatus;
+  readonly blockedBy: ProfileId | null;
+  readonly respondedAt: IsoDateTimeString | null;
+}
+
+export function nextFriendshipFields(
+  existing: Friendship | null,
+  actorProfileId: ProfileId,
+  otherProfileId: ProfileId,
+  status: FriendshipStatus,
+  now: IsoDateTimeString,
+): FriendshipFields {
+  const opening = status === 'pending';
+  return {
+    requesterId: existing === null || opening ? actorProfileId : existing.requesterId,
+    addresseeId: existing === null || opening ? otherProfileId : existing.addresseeId,
+    status,
+    blockedBy: status === 'blocked' ? actorProfileId : null,
+    respondedAt: opening ? null : now,
+  };
 }

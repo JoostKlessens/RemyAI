@@ -138,10 +138,20 @@ export function buildBoardMetaLine(score: number, count: number): string {
   return `${formatBoardScore(score)}${META_SEPARATOR}${formatVoteCount(count)}`;
 }
 
-/** "@kokenmetkees · TikTok". Attribution travels with the recipe on every surface (PD-007). */
+/**
+ * "@kokenmetkees · TikTok". Attribution travels with the recipe on every
+ * surface (PD-007).
+ *
+ * A creator with no handle falls back to the platform alone rather than
+ * rendering a bare "@ · TikTok". oEmbed does not always return an author,
+ * and `recipes.author_name` is nullable because of it — same fallback rule
+ * `mealStub.ts` applies to a feed item's stub title, for the same reason:
+ * attribution that renders as punctuation credits nobody.
+ */
 function buildCreatorLine(recipe: BoardRecipe): string {
   const platform = recipe.creatorPlatform === 'tiktok' ? 'TikTok' : 'Instagram';
-  return `@${recipe.creatorHandle} · ${platform}`;
+  const handle = recipe.creatorHandle.trim().replace(/^@/u, '');
+  return handle.length > 0 ? `@${handle} · ${platform}` : platform;
 }
 
 /**

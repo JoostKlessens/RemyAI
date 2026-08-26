@@ -28,43 +28,140 @@
  * untouched, and `assembleLeaderboard` owns that split rather than this
  * file.
  *
- * FIXTURES ONLY (src/app/ranglijst/_fixtures.ts). There is no loading
- * state and no error state because there is no fetch: a global board needs
- * a cross-household read path and `src/lib/repository/social/` has only an
- * on-device store. That file's header explains what has to land first, and
- * the one scaling decision to take before it does. Same staging Vrienden
- * shipped under in Fase 5b.
+ * LIVE, WITH FIXTURES BEHIND A DEV SWITCH. The board reads
+ * `recipe_ratings` and `recipes` through supabaseSocialRepository, both of
+ * which grant SELECT to any authenticated user, so no definer-rights
+ * function is involved. In a production build "live" is the only source
+ * there is; the scenario row exists only under `__DEV__`, so design work
+ * has something to look at while the real tables are still empty.
+ *
+ * WHY A COLLISION CHIP WILL NEVER APPEAR ON LIVE DATA. `recipes` carries
+ * no allergen tags, and that is PD-006 rather than an omission: tagging is
+ * something a household does to its own copy on Bevestigen, and an
+ * untagged recipe is UNKNOWN, never "safe". So the excluded-tag list this
+ * screen passes is empty, and the absence of a chip here says nothing
+ * about the dish. It must never be styled or read as reassurance. Giving
+ * the board a real collision label needs allergen data on the canonical
+ * recipe, which is a product decision nobody has taken.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  BOARD_SCENARIOS,
-  DEFAULT_BOARD_SCENARIO,
-  getBoardFixture,
-  type BoardScenario,
-} from '@/app/ranglijst/_fixtures';
+import { BOARD_SCENARIOS, getBoardFixture, type BoardScenario } from '@/app/ranglijst/_fixtures';
 import {
   BOARD_EMPTY_COPY,
   BOARD_END_COPY,
+  LEADERBOARD_MAX_ROWS,
   assembleLeaderboard,
   buildBoardRowAccessibilityLabel,
+  type BoardRecipe,
   type BoardRowModel,
 } from '@/components/leaderboardPresentation';
+import { buildLeaderboard } from '@/domain/social/leaderboard';
+import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { supabase } from '@/lib/supabase';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
+
+/** "live" is the real board; the rest are `__DEV__`-only fixtures to design against. */
+type BoardSource = 'live' | BoardScenario;
+
+const BOARD_SOURCES: readonly BoardSource[] = ['live', ...BOARD_SCENARIOS];
+
+/**
+ * Loading and error are real states here, unlike on Vrienden, because this
+ * screen genuinely fetches. `rows` survives an error so a refresh that
+ * fails does not blank a board the reader was already looking at.
+ */
+interface BoardState {
+  readonly status: 'loading' | 'ready' | 'error';
+  readonly rows: readonly BoardRowModel[];
+  readonly message: string | null;
+}
+
+const LOADING_COPY = 'Even kijken...';
+const ERROR_COPY = 'De ranglijst kon niet geladen worden.';
+
+/**
+ * Reads the board. Ranks first, then fetches display data for only the
+ * recipes that made the cut — the alternative is pulling every canonical
+ * recipe in the database to render at most LEADERBOARD_MAX_ROWS of them.
+ *
+ * `buildLeaderboard` runs twice: once here to learn which ids matter, and
+ * once inside `assembleLeaderboard`. That is deliberate. It is a pure
+ * function of the same input, so the two runs cannot disagree, and paying
+ * for it twice is cheaper than giving this screen its own copy of the
+ * ranking to keep in step with the domain's.
+ */
+async function loadLiveBoard(): Promise<readonly BoardRowModel[]> {
+  const repository = createSupabaseSocialRepository(supabase);
+  const ratings = await repository.listAllRecipeRatings();
+
+  const ranked = buildLeaderboard(ratings).slice(0, LEADERBOARD_MAX_ROWS);
+  const recipes = await repository.listCanonicalRecipes(ranked.map((entry) => entry.recipeId));
+
+  const boardRecipes: readonly BoardRecipe[] = recipes.map((recipe) => ({
+    recipeId: recipe.recipeId,
+    title: recipe.title,
+    creatorHandle: recipe.authorName ?? '',
+    creatorPlatform: recipe.platform,
+    thumbnailUrl: recipe.thumbnailUrl,
+    // Empty, and see this file's header: a canonical recipe carries no
+    // allergen tags by design (PD-006), so there is nothing here to
+    // collide with. Absence is UNKNOWN, never "safe".
+    allergenTags: [],
+  }));
+
+  return assembleLeaderboard({ ratings, recipes: boardRecipes, excludedAllergenTags: [] });
+}
 
 export default function RanglijstScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  const [scenario, setScenario] = useState<BoardScenario>(DEFAULT_BOARD_SCENARIO);
+  const [source, setSource] = useState<BoardSource>('live');
+  const [state, setState] = useState<BoardState>({ status: 'loading', rows: [], message: null });
 
-  const rows = useMemo(() => assembleLeaderboard(getBoardFixture(scenario)), [scenario]);
+  const load = useCallback(async (next: BoardSource, isCurrent: () => boolean): Promise<void> => {
+    if (next !== 'live') {
+      setState({ status: 'ready', rows: assembleLeaderboard(getBoardFixture(next)), message: null });
+      return;
+    }
+
+    setState((previous) => ({ status: 'loading', rows: previous.rows, message: null }));
+    try {
+      const rows = await loadLiveBoard();
+      if (isCurrent()) {
+        setState({ status: 'ready', rows, message: null });
+      }
+    } catch (error: unknown) {
+      if (isCurrent()) {
+        // The message is kept rather than flattened to a generic string:
+        // the repository puts the Postgres code in it, and that code is
+        // what tells an RLS refusal apart from a network failure.
+        setState((previous) => ({
+          status: 'error',
+          rows: previous.rows,
+          message: error instanceof Error ? error.message : null,
+        }));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Guarded against a source change landing while an older read is still
+    // in flight: without it, a slow "live" response can overwrite a
+    // fixture the developer switched to afterwards.
+    let active = true;
+    void load(source, () => active);
+    return () => {
+      active = false;
+    };
+  }, [source, load]);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-      {__DEV__ ? <DevScenarioRow active={scenario} onSelect={setScenario} /> : null}
+      {__DEV__ ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
 
       <View style={styles.header}>
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Best beoordeeld</Text>
@@ -73,13 +170,13 @@ export default function RanglijstScreen(): JSX.Element {
         </Text>
       </View>
 
-      <BoardBody rows={rows} />
+      <BoardBody state={state} />
     </SafeAreaView>
   );
 }
 
 interface BoardBodyProps {
-  readonly rows: readonly BoardRowModel[];
+  readonly state: BoardState;
 }
 
 /**
@@ -90,13 +187,21 @@ interface BoardBodyProps {
  * of a rule already enforced once at the root.
  */
 function BoardBody(props: BoardBodyProps): JSX.Element {
-  if (props.rows.length === 0) {
+  const { state } = props;
+
+  if (state.rows.length === 0 && state.status === 'loading') {
+    return <BoardNotice title={LOADING_COPY} body={null} />;
+  }
+  if (state.rows.length === 0 && state.status === 'error') {
+    return <BoardNotice title={ERROR_COPY} body={state.message} />;
+  }
+  if (state.rows.length === 0) {
     return <EmptyBoardState />;
   }
 
   return (
     <FlatList
-      data={props.rows}
+      data={state.rows}
       keyExtractor={(row: BoardRowModel) => row.recipeId}
       renderItem={({ item }: { item: BoardRowModel }) => <BoardRow row={item} />}
       ItemSeparatorComponent={ListGap}
@@ -193,9 +298,28 @@ function EmptyBoardState(): JSX.Element {
   );
 }
 
+/**
+ * Loading and failure, said plainly and in the same shape as the empty
+ * state. No spinner: this screen has nothing to animate toward, and a
+ * spinner over an empty list promises content that may not exist.
+ */
+function BoardNotice(props: { readonly title: string; readonly body: string | null }): JSX.Element {
+  const scheme = useColorScheme();
+  const colors = getColors(scheme);
+
+  return (
+    <View style={styles.empty}>
+      <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>{props.title}</Text>
+      {props.body === null ? null : (
+        <Text style={[typeScale.caption, styles.emptyFootnote, { color: colors.textMuted }]}>{props.body}</Text>
+      )}
+    </View>
+  );
+}
+
 interface DevScenarioRowProps {
-  readonly active: BoardScenario;
-  readonly onSelect: (scenario: BoardScenario) => void;
+  readonly active: BoardSource;
+  readonly onSelect: (source: BoardSource) => void;
 }
 
 /**
@@ -205,7 +329,8 @@ interface DevScenarioRowProps {
  * copy actually claims and the one that would otherwise only be seen in
  * production.
  */
-const DEV_SCENARIO_LABELS: Readonly<Record<BoardScenario, string>> = {
+const DEV_SCENARIO_LABELS: Readonly<Record<BoardSource, string>> = {
+  live: 'Live',
   gevuld: 'Gevuld',
   'net-te-weinig': 'Net te weinig',
   leeg: 'Leeg',
@@ -218,7 +343,7 @@ function DevScenarioRow(props: DevScenarioRowProps): JSX.Element {
 
   return (
     <View style={styles.devRow} accessibilityLabel="Ontwikkelaarsmodus: demoscenario kiezen">
-      {BOARD_SCENARIOS.map((scenario) => (
+      {BOARD_SOURCES.map((scenario) => (
         <Pressable
           key={scenario}
           onPress={() => onSelect(scenario)}
