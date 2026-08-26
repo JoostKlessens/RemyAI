@@ -51,7 +51,6 @@ import { Button } from '@/components/Button';
 import { FriendRecipeCard } from '@/components/FriendRecipeCard';
 import { assembleFriendFeed, type FriendRecipeCardModel } from '@/components/friendFeedPresentation';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
-import { useSession } from '@/hooks/useSession';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 
 export default function FriendsScreen(): JSX.Element {
@@ -61,15 +60,7 @@ export default function FriendsScreen(): JSX.Element {
   // docs/DESIGN.md "Global rules": read once per screen, pass it down.
   const reduceMotionEnabled = useReduceMotion();
 
-  const session = useSession();
-
   const [scenario, setScenario] = useState<FriendFeedScenario>(DEFAULT_FRIEND_FEED_SCENARIO);
-
-  // A __DEV__ build keeps the fixture feed reachable without a backend or
-  // an account, exactly as the scenario row above already assumes. In a
-  // production build identity decides, and nothing else on this screen
-  // does -- deciding, saving and cooking never ask who you are.
-  const feedIsReachable = session.capability.canUseFriends || __DEV__;
 
   const cards = useMemo(() => {
     const fixture = getFriendFeedFixture(scenario);
@@ -88,9 +79,6 @@ export default function FriendsScreen(): JSX.Element {
       </View>
 
       <FriendsBody
-        locked={!feedIsReachable}
-        isResolving={session.isResolving}
-        onRetry={session.refresh}
         cards={cards}
         reduceMotionEnabled={reduceMotionEnabled}
         onOpenLibrary={() => router.push('/recipes')}
@@ -101,9 +89,6 @@ export default function FriendsScreen(): JSX.Element {
 }
 
 interface FriendsBodyProps {
-  readonly locked: boolean;
-  readonly isResolving: boolean;
-  readonly onRetry: () => void;
   readonly cards: readonly FriendRecipeCardModel[];
   readonly reduceMotionEnabled: boolean;
   readonly onOpenLibrary: () => void;
@@ -111,19 +96,16 @@ interface FriendsBodyProps {
 }
 
 /**
- * Three bodies, chosen by early return rather than by nesting ternaries,
- * because the order of the questions is itself the rule: identity first,
- * then whether anyone has shared anything, then the feed.
+ * Two bodies, chosen by early return rather than a ternary, so adding a
+ * third later does not mean nesting one.
+ *
+ * There is deliberately no signed-out branch. An account is required
+ * before the app renders at all (PD-012), so a signed-out person never
+ * reaches this tab — the root layout answers that case with the sign-in
+ * screen. A gate here would be a second, weaker copy of a rule that is
+ * already enforced once.
  */
-function FriendsBody(props: FriendsBodyProps): JSX.Element | null {
-  if (props.locked) {
-    // Nothing at all while the first resolution settles. A sign-in prompt
-    // flashed at somebody who turns out to be signed in is worse than a
-    // beat of empty space, and this is the only screen that waits on
-    // identity -- see useSession's header on why it never blocks a render.
-    return props.isResolving ? null : <SignedOutState onRetry={props.onRetry} />;
-  }
-
+function FriendsBody(props: FriendsBodyProps): JSX.Element {
   if (props.cards.length === 0) {
     return <EmptyFeedState onOpenLibrary={props.onOpenLibrary} />;
   }
@@ -143,54 +125,6 @@ function FriendsBody(props: FriendsBodyProps): JSX.Element | null {
       ListFooterComponent={FeedEndNote}
       contentContainerStyle={styles.listContent}
     />
-  );
-}
-
-interface SignedOutStateProps {
-  readonly onRetry: () => void;
-}
-
-/**
- * What this tab shows without an identity -- which, until anonymous
- * sign-ins are enabled on the project, is everybody.
- *
- * The copy leads with what still works, because that is the true and
- * reassuring part: an account buys friends and nothing else. It does not
- * apologise and it does not diagnose, since from the device the two real
- * causes (the provider being off, or no connection) look identical and
- * guessing between them would be inventing a fact.
- *
- * One action, and it is a real one: try again. There is deliberately no
- * "maak een account" button -- the upgrade flow does not exist yet, and
- * the empty state above already establishes the rule that a primary action
- * with nothing behind it is worse than none.
- */
-function SignedOutState(props: SignedOutStateProps): JSX.Element {
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.empty}>
-      <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>
-        Vrienden werkt met een account
-      </Text>
-      <Text style={[typeScale.bodySmall, styles.emptyBody, { color: colors.textMuted }]}>
-        Kiezen, je bibliotheek en kookmodus werken gewoon door zonder account. Alleen recepten van
-        vrienden hebben er een nodig.
-      </Text>
-      <View style={[styles.emptyRule, { backgroundColor: colors.border }]} />
-      <Text style={[typeScale.caption, styles.emptyFootnote, { color: colors.textMuted }]}>
-        Remy kon nu geen account aanmaken.
-      </Text>
-      <View style={styles.emptyAction}>
-        <Button
-          label="Opnieuw proberen"
-          variant="secondary"
-          onPress={props.onRetry}
-          accessibilityLabel="Opnieuw proberen een account aan te maken"
-        />
-      </View>
-    </View>
   );
 }
 /** Cards are separated by space, not by a rule — each card already carries its own hairline border. */

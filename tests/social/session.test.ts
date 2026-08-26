@@ -5,63 +5,54 @@ import {
   resolveSessionState,
 } from '@/domain/social/session';
 
-const ANY_SESSION = { userId: 'auth-user-1', isAnonymous: true } as const;
-const IDENTIFIED_SESSION = { userId: 'auth-user-1', isAnonymous: false } as const;
+const ANY_SESSION = { userId: 'auth-user-1' } as const;
 const PROFILE = { id: 'p-1', handle: 'joost', displayName: 'Joost', avatarUrl: null } as const;
 
 describe('resolveSessionState', () => {
-  test('no session at all is signed_out — the normal state when anonymous sign-in is disabled or the device is offline', () => {
+  test('no session is signed_out — the sign-in screen is the whole app until this changes', () => {
     expect(resolveSessionState({ session: null, profile: null })).toBe('signed_out');
   });
 
-  test('a session without a profile is anonymous — there is an auth.uid(), but nobody to be a friend of yet', () => {
-    expect(resolveSessionState({ session: ANY_SESSION, profile: null })).toBe('anonymous');
-  });
-
-  test('a session with a profile is identified', () => {
-    expect(resolveSessionState({ session: ANY_SESSION, profile: PROFILE })).toBe('identified');
-  });
-
   /**
-   * The upgrade is two steps — attach an email, then claim a handle — and it
-   * can be interrupted between them. Having an email is NOT what unlocks
-   * friends; having a profile is, because that is the row every social RLS
-   * policy joins against.
+   * Onboarding is two steps and can be interrupted between them: the email
+   * is verified, then a handle is claimed. profiles is the row every social
+   * RLS policy joins against, so a session without one is not finished.
    */
-  test('an email-bearing session with no profile is still anonymous, not identified', () => {
-    expect(resolveSessionState({ session: IDENTIFIED_SESSION, profile: null })).toBe('anonymous');
+  test('a session without a profile is needs_profile, not ready', () => {
+    expect(resolveSessionState({ session: ANY_SESSION, profile: null })).toBe('needs_profile');
   });
 
-  test('a profile without a session is signed_out — a stale cached profile never grants access', () => {
+  test('a session with a profile is ready', () => {
+    expect(resolveSessionState({ session: ANY_SESSION, profile: PROFILE })).toBe('ready');
+  });
+
+  test('a cached profile never outranks a missing session', () => {
     expect(resolveSessionState({ session: null, profile: PROFILE })).toBe('signed_out');
   });
 });
 
 describe('describeSessionCapability', () => {
-  test('only an identified session may use the friend surfaces', () => {
-    expect(describeSessionCapability('identified').canUseFriends).toBe(true);
-    expect(describeSessionCapability('anonymous').canUseFriends).toBe(false);
-    expect(describeSessionCapability('signed_out').canUseFriends).toBe(false);
+  test('only a ready session may use the app or its friend surfaces', () => {
+    expect(describeSessionCapability('ready').canUseApp).toBe(true);
+    expect(describeSessionCapability('needs_profile').canUseApp).toBe(false);
+    expect(describeSessionCapability('signed_out').canUseApp).toBe(false);
   });
 
   /**
-   * Deciding, saving and cooking never depend on identity. This is the
-   * owner's explicit product decision and the reason a failed sign-in is
-   * survivable rather than fatal, so it is pinned here rather than left to
-   * whichever screen remembers to check.
+   * The owner reversed the earlier anonymous-first decision: an account is
+   * now required before anything. This is the test that would fail if some
+   * screen quietly reintroduced a signed-out path.
    */
-  test('every state may still decide, browse and cook — identity never gates the daily path', () => {
-    for (const state of ['signed_out', 'anonymous', 'identified'] as const) {
-      expect(describeSessionCapability(state).canUseCoreApp).toBe(true);
-    }
+  test('nothing is usable signed out — an account is required at launch', () => {
+    const capability = describeSessionCapability('signed_out');
+    expect(capability.canUseApp).toBe(false);
+    expect(capability.needsSignIn).toBe(true);
   });
 
-  test('an upgrade is offered exactly when there is something to upgrade to', () => {
-    expect(describeSessionCapability('anonymous').canUpgrade).toBe(true);
-    expect(describeSessionCapability('identified').canUpgrade).toBe(false);
-    // Signed out means we never got a session at all, so there is nothing to
-    // attach an email to yet — the retry is sign-in, not upgrade.
-    expect(describeSessionCapability('signed_out').canUpgrade).toBe(false);
+  test('a handle is asked for exactly once, when there is a session but no profile', () => {
+    expect(describeSessionCapability('needs_profile').needsHandle).toBe(true);
+    expect(describeSessionCapability('ready').needsHandle).toBe(false);
+    expect(describeSessionCapability('signed_out').needsHandle).toBe(false);
   });
 });
 

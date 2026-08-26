@@ -1,40 +1,46 @@
 /**
  * Who the app currently is, and what that entitles them to.
  *
- * The owner's two product decisions drive every line here:
+ * **An account is required before anything.** This reverses an earlier
+ * anonymous-first decision, and the reversal is the point of this file, so
+ * the reasoning is recorded here as well as in PD-012:
  *
- * 1. **Anonymous account, upgrade later.** A device signs in anonymously on
- *    first launch, which costs the user nothing and buys the app an
- *    `auth.uid()` — the thing every social RLS policy in 0007_social.sql is
- *    written against. An email is attached only when someone actually wants
- *    friends.
- * 2. **Identity gates friends and nothing else.** Kiezen, Bibliotheek,
- *    import and cook mode work with no account at all, exactly as they did
- *    before auth existed.
+ * - Local ids are not UUIDs (`src/lib/repository/id.ts` mints
+ *   `meal-lz8k2p-3-a9f2c1`), so any recipe saved before an identity existed
+ *   would need remapping the first time it synced. Requiring an account at
+ *   launch means there is never local-only data to remap — every row is
+ *   written under an identity from the first save.
+ * - An anonymous account that is never upgraded is an orphan: the recipe
+ *   library dies with the phone. The library is the valuable thing this
+ *   product accumulates, so losing it silently is the worst available
+ *   outcome.
+ * - It deletes a whole category of states — half-upgraded users, a
+ *   signed-out code path in every screen, an upgrade flow — that existed
+ *   only to defer the question.
  *
- * The second decision is why `signed_out` is modelled as an ORDINARY,
- * PERMANENT state rather than an error. Anonymous sign-in can be switched
- * off at the project level, the device can be offline, and a token can fail
- * to refresh — in all three the honest answer is "no identity today", and
- * the app must carry on. Nothing in this module returns an error type for
- * that case, precisely so no caller is tempted to render one.
+ * The cost, accepted knowingly: the first launch is no longer frictionless.
+ * A product whose thesis is answering one question fast now asks something
+ * first. That is a real trade, not an oversight.
  *
- * WHY A PROFILE, NOT AN EMAIL, IS THE LINE. Upgrading is two steps — attach
- * an email, then claim a handle — and a person can close the app between
- * them. `profiles` is the row every social policy joins against, so a
- * session holding an email but no profile still cannot participate. Reading
- * the email would put the boundary in the wrong place and grant access to a
- * half-finished upgrade.
+ * WHY A PROFILE, NOT A VERIFIED EMAIL, IS THE FINISH LINE. Onboarding is
+ * two steps — verify the email, then claim a handle — and a person can
+ * close the app between them. `profiles` is the row every social RLS policy
+ * in 0007_social.sql joins against, so a session without one is not
+ * finished, however valid its token. Treating a verified email as "done"
+ * would drop someone into an app whose social half silently returns
+ * nothing.
  */
 
 /**
  * Deliberately not Supabase's `Session`/`User`: this module is pure and
  * unit-tested, and must not drag a client type (or its transitive imports)
  * into the domain layer. The adapter at the edge maps one to the other.
+ *
+ * There is no `isAnonymous` flag any more — with accounts required there is
+ * no anonymous user to distinguish.
  */
 export interface SessionSnapshot {
   readonly userId: string;
-  readonly isAnonymous: boolean;
 }
 
 /**
@@ -46,13 +52,12 @@ export interface ProfilePresence {
   readonly id: string;
 }
 
-export type SessionState = 'signed_out' | 'anonymous' | 'identified';
+export type SessionState = 'signed_out' | 'needs_profile' | 'ready';
 
 export interface SessionCapability {
-  /** Always true. Stated explicitly so the guarantee is testable rather than implied by the absence of a check. */
-  readonly canUseCoreApp: boolean;
-  readonly canUseFriends: boolean;
-  readonly canUpgrade: boolean;
+  readonly canUseApp: boolean;
+  readonly needsSignIn: boolean;
+  readonly needsHandle: boolean;
 }
 
 export type ProfileCreationFailure = 'handle_taken' | 'invalid_handle' | 'unknown_error';
@@ -69,25 +74,27 @@ export interface ResolveSessionStateInput {
 
 /**
  * A cached profile never outranks a missing session: without a token there
- * is no `auth.uid()`, so every social read would come back empty anyway.
- * Reporting `identified` there would promise a capability the database will
- * refuse.
+ * is no `auth.uid()`, so every read would come back empty anyway. Reporting
+ * `ready` there would promise a capability the database will refuse.
  */
 export function resolveSessionState(input: ResolveSessionStateInput): SessionState {
   if (input.session === null) {
     return 'signed_out';
   }
-  return input.profile === null ? 'anonymous' : 'identified';
+  return input.profile === null ? 'needs_profile' : 'ready';
 }
 
+/**
+ * Exactly one of the three flags is the "what happens next" for each state,
+ * which is what lets the root layout choose a screen without re-deriving
+ * the rule — and what makes a screen quietly reintroducing a signed-out
+ * path a test failure rather than a discovery in production.
+ */
 export function describeSessionCapability(state: SessionState): SessionCapability {
   return {
-    canUseCoreApp: true,
-    canUseFriends: state === 'identified',
-    // Signed out means no session was ever obtained, so there is nothing to
-    // attach an email to. The recovery there is signing in, not upgrading —
-    // offering "upgrade" would send the user down a path that cannot start.
-    canUpgrade: state === 'anonymous',
+    canUseApp: state === 'ready',
+    needsSignIn: state === 'signed_out',
+    needsHandle: state === 'needs_profile',
   };
 }
 

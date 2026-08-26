@@ -1,29 +1,22 @@
 /**
- * Establishes the device's identity once per app run, and reports it as one
- * of three ordinary states.
+ * Establishes the signed-in identity and keeps it live for the app run.
  *
  * This is the impure adapter for `@/domain/social/session`, which holds
- * every actual rule. Read that file's header first — it explains why a
- * profile rather than an email is what unlocks friends, and why
- * `signed_out` is a normal permanent state rather than an error.
+ * every actual rule. Read that header first: an account is required before
+ * anything (PD-012), and a profile rather than a verified email is what
+ * finishes onboarding.
  *
- * NOTHING HERE MAY BE FATAL. Anonymous sign-in is a project-level setting
- * that can be off (the live API answers `anonymous_provider_disabled` when
- * it is), the device can be offline, and a refresh can fail. Every one of
- * those resolves to `signed_out` and the app carries on: deciding, saving
- * and cooking never needed an account. So every call below is wrapped, no
- * failure is rethrown, and no error state is exposed for callers to render.
+ * NOTHING HERE MAY THROW. A network failure, an expired refresh token or a
+ * cleared store all mean the same thing — no identity right now — and that
+ * resolves to `signed_out`, which the root layout answers with the sign-in
+ * screen. Every call is wrapped and no failure is rethrown, so a flaky
+ * connection produces a sign-in prompt rather than a crashed render.
  *
- * It also must not gate the splash screen. `src/app/_layout.tsx` holds the
- * splash until fonts resolve, and fonts are a hard dependency — text cannot
- * render without them. Identity is not: the UI is fully usable while this
- * is still resolving, so `isResolving` exists to suppress a premature
- * signed-out flash on the one screen that cares, never to block a render.
- *
- * ONE ATTEMPT, NOT A RETRY LOOP. If anonymous sign-in is disabled, retrying
- * produces the same 422 forever. A failed attempt is remembered for the
- * lifetime of the app run and re-driven only by an explicit `refresh()` —
- * which is what the Vrienden screen's retry offers.
+ * It subscribes to `onAuthStateChange` rather than only reading once,
+ * because the session appears asynchronously: the user types a code on the
+ * sign-in screen and the token arrives afterwards. Without the
+ * subscription the app would sit on the sign-in screen holding a perfectly
+ * valid session.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -64,29 +57,16 @@ async function readSession(): Promise<SessionSnapshot | null> {
     if (user === undefined) {
       return null;
     }
-    return { userId: user.id, isAnonymous: user.is_anonymous === true };
-  } catch {
-    return null;
-  }
-}
-
-async function signInAnonymously(): Promise<SessionSnapshot | null> {
-  try {
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error !== null || data.user === null) {
-      // Expected whenever the provider is disabled. Deliberately not logged
-      // as an error: it is a configuration answer, not a malfunction.
-      return null;
-    }
-    return { userId: data.user.id, isAnonymous: data.user.is_anonymous === true };
+    return { userId: user.id };
   } catch {
     return null;
   }
 }
 
 /**
- * A missing row is the ordinary case for an anonymous user who has never
- * upgraded, so `maybeSingle` is used and a null result is not an error.
+ * A missing row is the ordinary case between verifying an email and
+ * claiming a handle, so `maybeSingle` is used and a null result is not an
+ * error — it is what puts the app on the handle screen.
  */
 async function readProfile(userId: string): Promise<ResolvedProfile | null> {
   try {
@@ -105,8 +85,7 @@ async function readProfile(userId: string): Promise<ResolvedProfile | null> {
 }
 
 async function resolveIdentity(): Promise<ResolvedIdentity> {
-  const existing = await readSession();
-  const session = existing ?? (await signInAnonymously());
+  const session = await readSession();
   if (session === null) {
     return NO_IDENTITY;
   }
@@ -129,8 +108,22 @@ export function useSession(): SessionInfo {
       }
     });
 
+    // The session arrives after the user verifies a code, so a one-shot
+    // read would leave the app on the sign-in screen holding a valid token.
+    const { data: subscription } = supabase.auth.onAuthStateChange(() => {
+      if (isMounted) {
+        resolveIdentity().then((resolved) => {
+          if (isMounted) {
+            setIdentity(resolved);
+            setIsResolving(false);
+          }
+        });
+      }
+    });
+
     return () => {
       isMounted = false;
+      subscription.subscription.unsubscribe();
     };
   }, [attempt]);
 
