@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
@@ -49,6 +50,15 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     storage: AsyncStorage,
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    /**
+     * Web only, and the distinction is load-bearing. A magic link returns
+     * the session as a URL fragment, and supabase-js only reads it when
+     * this is on — leave it off and the link appears to do nothing at all.
+     *
+     * On native there is no URL to read: the link arrives as a deep link
+     * (scheme `remy`, see app.json) and is exchanged explicitly, so leaving
+     * this on there points the client at a location that does not exist.
+     */
+    detectSessionInUrl: Platform.OS === 'web',
   },
 });
