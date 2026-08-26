@@ -370,6 +370,59 @@ canonical-recipe cache. This decision narrows one platform, not the feature.
 consented to publish. Attribution here stays attribution and never becomes opt-in — see
 `src/domain/import/buildAttribution.ts`.
 
+## PD-012 — An account is required before the app renders
+
+**Owner decision, reversing PD-012a below on the same day it was made.** Remy asks you to sign in
+before anything else. There is no anonymous mode and no local-only path.
+
+**Why the reversal.** Three arguments, in the order they mattered:
+
+1. **The id remap disappears.** Local ids are not UUIDs — `src/lib/repository/id.ts` mints
+   `meal-lz8k2p-3-a9f2c1` — so anything saved before an identity existed would need remapping
+   the first time it synced. With an account from launch there is never local-only data to remap.
+2. **An un-upgraded anonymous account is an orphan.** The recipe library dies with the phone, and
+   the library is the valuable thing this product accumulates. Losing it silently is the worst
+   available outcome.
+3. **It deletes a whole category of states** — half-upgraded users, a signed-out branch in every
+   screen, an upgrade flow — that existed only to defer the question.
+
+**The cost, accepted knowingly.** The first launch is no longer frictionless. A product whose
+thesis is answering one question fast now asks something first. That is a real trade, not an
+oversight.
+
+**A profile, not a verified email, finishes onboarding.** `profiles` is the row every social
+RLS policy in `0007_social.sql` joins against, and onboarding is two steps a person can be
+interrupted between. A session holding a verified email but no profile is `needs_profile`,
+never `ready` — otherwise somebody lands in an app whose social half silently returns nothing.
+
+### PD-012a — Superseded: anonymous account, upgrade later
+
+Briefly decided and briefly built: every device would sign in anonymously, and attach an email only
+when it wanted friends. Recorded because the code carried it for one commit, and because the
+reasoning is worth keeping — it optimised for a frictionless first launch, which is a real thing to
+want and exactly what PD-012 gives up.
+
+---
+
+## PD-013 — Passwordless email, and why it is a link rather than a code
+
+**Sign-in is a magic link sent by email.** No passwords: nothing to store, reset or leak, which
+matters for an app already holding Article 9 dietary data under PD-005.
+
+**The link is a forced choice, not a preference.** A typed six-digit code is the better fit for a
+phone app — no trip out to a mail client, no deep-link handling, identical behaviour on web and
+native. It is unavailable: the code only appears in the email if `{{ .Token }}` is in the
+template, and Supabase gates template editing behind custom SMTP. Revisit the day custom SMTP exists.
+
+**Known limit, and not optional to fix before real users.** Supabase's built-in sender is explicitly
+a testing facility: a handful of messages an hour, from their domain, unmodifiable. Rate limiting is
+therefore an expected outcome during development, which is why it is its own named result in
+`src/lib/auth.ts` rather than a generic failure — the UI can then say something true about it.
+
+**Consequence for the client.** `detectSessionInUrl` must be on for web and off for native: a
+magic link returns the session as a URL fragment that supabase-js only reads when it is on, and on
+native there is no URL to read. Left at a single value, the link silently does nothing on one of the
+two platforms.
 ---
 
 ## Deferred to Phase 2 — do not build

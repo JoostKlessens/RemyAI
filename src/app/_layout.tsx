@@ -37,12 +37,13 @@
  */
 
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { Archivo_400Regular, Archivo_600SemiBold, Archivo_700Bold } from '@expo-google-fonts/archivo';
 import { IBMPlexMono_500Medium, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSession } from '@/hooks/useSession';
 
 // Must run once, at module scope, before the first render — calling this
 // inside the component body can race the initial paint on some platforms.
@@ -76,6 +77,7 @@ export default function RootLayout(): JSX.Element | null {
 
   return (
     <SafeAreaProvider>
+      <AuthGate />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cook/[mealId]" options={{ presentation: 'fullScreenModal' }} />
@@ -88,7 +90,58 @@ export default function RootLayout(): JSX.Element | null {
         <Stack.Screen name="import/paste" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/confirm" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="settings" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="sign-in" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+        <Stack.Screen name="claim-handle" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
       </Stack>
     </SafeAreaProvider>
   );
+}
+
+/**
+ * Sends people to the one screen their session state allows, and nowhere
+ * else. An account is required before the app renders (PD-012), so this is
+ * the single place that rule is enforced — no screen carries its own copy.
+ *
+ * WHY A REDIRECT RATHER THAN CONDITIONAL SCREENS. expo-router mounts every
+ * file in src/app as a route whether or not a <Stack.Screen> declares it,
+ * so omitting one does not make it unreachable — a deep link or a stale
+ * history entry still lands on it. Redirecting from a layout effect is the
+ * only place that catches all of those.
+ *
+ * IT WAITS. While `isResolving` is true nothing is redirected, because a
+ * session read from AsyncStorage settles a beat after mount and bouncing a
+ * signed-in person to sign-in for that beat is both wrong and jarring.
+ *
+ * The dependency on `segments` is what makes this idempotent: once the
+ * redirect lands, the guard re-runs, finds itself already on the right
+ * screen, and does nothing.
+ */
+function AuthGate(): null {
+  const session = useSession();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (session.isResolving) {
+      return;
+    }
+
+    const current = segments[0];
+    const onSignIn = current === 'sign-in';
+    const onClaimHandle = current === 'claim-handle';
+
+    if (session.capability.needsSignIn && !onSignIn) {
+      router.replace('/sign-in');
+      return;
+    }
+    if (session.capability.needsHandle && !onClaimHandle) {
+      router.replace('/claim-handle');
+      return;
+    }
+    if (session.capability.canUseApp && (onSignIn || onClaimHandle)) {
+      router.replace('/');
+    }
+  }, [session.isResolving, session.capability, segments, router]);
+
+  return null;
 }
