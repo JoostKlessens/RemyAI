@@ -62,15 +62,32 @@ grade feeds your engine; public vote feeds the world; the proof shows
 the public one or none. This two-instrument split is what makes showing
 a number safe at all, and it is restated as a condition in §6.5.
 
-**Sturen requires gemaakt: you can only send what you have cooked.**
-A send affordance does not exist on a meal this household never cooked.
-It caps supply at the rate real kitchens produce, makes every send a
-proof rather than a suggestion, and is the anti-spam guarantee stated as
-product instead of infrastructure. **Rejected alternative:** forwarding
-anything in your library — that is WhatsApp's job, one tap from the
-original app; Remy's send carries what WhatsApp cannot: the structured
-recipe, your public verdict, and the fact that a real kitchen produced
-it. See §6.2.
+**You can send anything in your library — a send is not proof, and does
+not pretend to be.** An earlier draft of this document required a cook
+event before a meal could be sent, arguing that it made the feed's
+promise structurally true and capped spam as product rather than
+infrastructure. The owner overruled it, and the argument does not
+survive contact with the two-tier model this document is built on.
+
+**Why the gate was wrong.** Proof is the thing that has to be earned,
+and proof is `shared_cooks` — derived from real cook events, gated on a
+real opt-in, and completely unaffected by who may send what. The send
+tier was being asked to carry an authenticity guarantee the proof tier
+already provides, and it paid for that with the feature's whole point: a
+send is *"ik moest aan jou denken"*, and requiring evidence before
+somebody may say that turns a generous impulse into an errand. The spam
+case was also thinner than it read — a send reaches only a mutually
+accepted friend, so the blast radius is your own friend list, and the
+remedy is the one every social graph already has.
+
+**What it costs, recorded rather than glossed.** Somebody can now send a
+friend something they merely found, so a send is a suggestion and not
+evidence. Two consequences follow, and both are handled elsewhere: the
+card must never dress an unmade dish as a made one (§4.2 — a send
+carries its sender and their note, never a cook proof it does not have),
+and if volume ever becomes a real problem the honest instrument is a
+rate limit, not a rule that claims to be about authenticity while
+actually being about frequency. See §6.2.
 
 **The note.** A send may carry one optional line in the sender's own
 words — "moet je proberen, echt 20 min". It renders in the
@@ -259,11 +276,11 @@ Two entry points, both earned in PD-003's sense:
    Sturen sheet while the card finishes closing underneath. Rating
    parity is untouched: one gesture to rate, one tap to skip, and the
    send affordance gates nothing.
-2. **A long-press on an "Al gekookt" tile in Bibliotheek** opens a small
-   action sheet: `Sturen`, plus the sharing rows of §3.5. On a
-   never-cooked tile no send action renders at all — the §1 rule made
-   visible, absent rather than disabled, because a disabled button is a
-   nag shaped like a promise.
+2. **A long-press on any tile in Bibliotheek** opens a small action
+   sheet: `Sturen`, plus the sharing rows of §3.5. Any tile, cooked or
+   not — the moment after your own cook (1, above) is the *best* time to
+   send, not the only permitted one, and a library you cannot send from
+   is a library with a locked drawer in it.
 
 **Motion of the send commit:** tapping `Stuur` on a friend row draws a
 hairline `accent` stroke under the friend's name — `scaleX` 0→1,
@@ -584,10 +601,17 @@ is shared by a migration, ever.
    `unknown` allergen status on copies) carry over unchanged. The
    privacy analysis, the exclusion and the rejected alternatives are §5,
    and belong in the PD verbatim.
-2. **New decision: a meal must have a cook event before it can be
-   sent.** Argument in §1. Cost stated plainly: Remy cannot forward
-   something you merely found — WhatsApp already does that, with the
-   original video attached.
+2. **Decision taken and then reversed: a send does NOT require a cook
+   event.** Recorded rather than deleted, because it is the kind of rule
+   a later version will propose again. The draft rule was "you can only
+   send what you have cooked", justified as making the feed's promise
+   structurally true and as anti-spam by product rule. It was wrong
+   because it asked the send tier to carry an authenticity guarantee
+   `shared_cooks` already provides, and charged the feature its whole
+   point to do it — see §1. Anything in your library may be sent. The
+   accepted costs are that a send is a suggestion rather than evidence,
+   which the card must never disguise (§4.2), and that volume, if it
+   ever matters, is a rate-limit problem.
 3. **PD-002/reason hierarchy (extension): the social reason on Kiezen,
    and a friend-proof scoring boost.** `friend_proof` outranks the
    novelty reason; `FRIEND_PROOF_BOOST` is a named constant beside the
@@ -687,8 +711,11 @@ is shared by a migration, ever.
 - **No read receipts.** "Gezien" creates the obligation to respond. The
   sender learns one thing, ever: that the dish got cooked — and only
   from a friend who shares her cooking at all.
-- **No sending of uncooked saves.** Decision 2. Remy sends proof;
-  WhatsApp forwards links.
+- **No pretending a send is proof.** Anything in your library may be
+  sent (§6.2), so a send card shows its sender and their note and never
+  borrows the language of cook proof. The two tiers stay visibly
+  different things: proof says a kitchen made this, a send says a person
+  thought of you.
 - **No counts without names, no stranger counts.** §5's rejected
   alternatives. A number with no person attached is engagement dressing.
 - **No padding the kring.** A thin friends list is never blended with
