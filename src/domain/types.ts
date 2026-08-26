@@ -215,6 +215,19 @@ export interface Meal {
    */
   readonly allergenTagStatus?: AllergenTagStatus;
   /**
+   * The canonical `recipes` row this meal was copied from, when it came
+   * from an import (`meals.recipe_id`, 0006). Null for the seeded,
+   * curated and hand-entered majority, which exist in exactly one
+   * household and have no shared object to be talked about.
+   *
+   * Optional for the same reason `allergenTagStatus` is: the column
+   * arrived after this type did, and every existing constructor predates
+   * it. It is what makes cook proof possible at all — proof is "we are
+   * talking about the same recipe", and without this link a friend's
+   * cook and your copy are two unrelated rows.
+   */
+  readonly recipeId?: string | null;
+  /**
    * Dish categories from the closed vocabulary in dishTags.ts — "pasta",
    * "soep", "vegetarisch". Descriptive only: they exist so a household can
    * say "kies iets met pasta" and narrow the pool it already accepted.

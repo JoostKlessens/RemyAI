@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
   FITS_TIME_BOOST,
+  FRIEND_PROOF_BOOST,
+  HOUSEHOLD_FAVOURITE_BOOST,
   NOT_RECENT_BOOST,
   RECENCY_PENALTY_WINDOW_DAYS,
   SAVED_THIS_WEEK_BOOST,
@@ -376,5 +378,116 @@ describe('scoreMeal — someday save aging boost (PD-004a)', () => {
     const result = scoreMeals(meals, household, [], [], TARGET_DATE, pendingSomedaySaves);
 
     expect(result[0]?.meal.id).toBe('meal-someday');
+  });
+});
+
+/**
+ * DESIGN-SOCIAL.md §2.1. The boost is a cookability signal in PD-004's own
+ * currency — a dish somebody you know actually produced converts to a cook
+ * more often than one nobody you know has — so it lives in the engine
+ * rather than being bolted on as a tiebreak.
+ *
+ * Every assertion here is written against the exported constants rather
+ * than against 20 or 30, so retuning a weight cannot silently invert the
+ * orderings these tests exist to protect.
+ */
+describe('scoreMeal — friend_proof', () => {
+  const RECIPE = 'recipe-tiramisu';
+  const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
+
+  test('a recipe a friend cooked scores above the same meal without proof', () => {
+    const meal = makeMeal({ id: 'meal-1', recipeId: RECIPE });
+
+    const withProof = scoreMeal(meal, household, [], [], TARGET_DATE, [], new Set([RECIPE]));
+    const without = scoreMeal(meal, household, [], [], TARGET_DATE, [], new Set());
+
+    expect(withProof.score - without.score).toBe(FRIEND_PROOF_BOOST);
+  });
+
+  test('states the friend as the reason when it is the strongest factor', () => {
+    const meal = makeMeal({ id: 'meal-1', recipeId: RECIPE });
+    expect(scoreMeal(meal, household, [], [], TARGET_DATE, [], new Set([RECIPE])).reasonCode).toBe('friend_proof');
+  });
+
+  /** Proof is about the shared canonical recipe. A meal that is nobody else's has nothing to be evidence about. */
+  test('a meal with no canonical recipe never earns it', () => {
+    const meal = makeMeal({ id: 'meal-1', recipeId: null });
+    const scored = scoreMeal(meal, household, [], [], TARGET_DATE, [], new Set([RECIPE]));
+
+    expect(scored.reasonCode).not.toBe('friend_proof');
+    expect(scored.score).toBe(scoreMeal(meal, household, [], [], TARGET_DATE, [], new Set()).score);
+  });
+
+  test('a different recipe having been cooked does not count', () => {
+    const meal = makeMeal({ id: 'meal-1', recipeId: RECIPE });
+    const scored = scoreMeal(meal, household, [], [], TARGET_DATE, [], new Set(['recipe-iets-anders']));
+
+    expect(scored.reasonCode).not.toBe('friend_proof');
+  });
+
+  /**
+   * The regression guard that matters most: a household with no friends,
+   * or whose friends have not opted in, must score exactly as it did
+   * before any of this existed.
+   */
+  test('an empty proof set changes nothing at all', () => {
+    const meal = makeMeal({ id: 'meal-1', recipeId: RECIPE, estimatedMinutes: 20 });
+    const saves = [makeSave({ mealId: 'meal-1' })];
+
+    const withArgument = scoreMeal(meal, household, [], saves, TARGET_DATE, [], new Set());
+    const withoutArgument = scoreMeal(meal, household, [], saves, TARGET_DATE);
+
+    expect(withArgument).toEqual(withoutArgument);
+  });
+
+  test('scoreMeals passes the proof set through to every meal', () => {
+    const meals = [makeMeal({ id: 'meal-1', recipeId: RECIPE }), makeMeal({ id: 'meal-2', recipeId: null })];
+    const scored = scoreMeals(meals, household, [], [], TARGET_DATE, [], new Set([RECIPE]));
+
+    expect(scored.find((entry) => entry.meal.id === 'meal-1')?.reasonCode).toBe('friend_proof');
+    expect(scored.find((entry) => entry.meal.id === 'meal-2')?.reasonCode).not.toBe('friend_proof');
+  });
+
+  describe('where it sits in the story', () => {
+    /**
+     * A friend's cook is evidence; your own kitchen's verdict is a
+     * decision. Evidence must never outrank a decision, which is why the
+     * boost sits below HOUSEHOLD_FAVOURITE_BOOST rather than beside it.
+     */
+    test('your own household favourite outranks a friend', () => {
+      expect(FRIEND_PROOF_BOOST).toBeLessThan(HOUSEHOLD_FAVOURITE_BOOST);
+
+      const meal = makeMeal({ id: 'meal-1', recipeId: RECIPE });
+      const lovedTwice = [
+        makeCookEvent({ mealId: 'meal-1', cookedOn: '2026-06-01', rating: RATING_MAX }),
+        makeCookEvent({ mealId: 'meal-1', cookedOn: '2026-06-08', rating: RATING_MAX }),
+      ];
+      const scored = scoreMeal(meal, household, lovedTwice, [], TARGET_DATE, [], new Set([RECIPE]));
+
+      expect(scored.reasonCode).toBe('household_favourite');
+    });
+
+    /** A named person beats a calendar fact — that is the whole argument for the slot. */
+    test('a friend outranks the timing and novelty factors', () => {
+      expect(FRIEND_PROOF_BOOST).toBeGreaterThan(FITS_TIME_BOOST);
+      expect(FRIEND_PROOF_BOOST).toBeGreaterThan(NOT_RECENT_BOOST);
+      expect(FRIEND_PROOF_BOOST).toBeGreaterThan(VARIETY_BOOST);
+
+      const quickAndNew = makeMeal({ id: 'meal-1', recipeId: RECIPE, estimatedMinutes: 10 });
+      const scored = scoreMeal(quickAndNew, household, [], [], TARGET_DATE, [], new Set([RECIPE]));
+
+      expect(scored.reasonCode).toBe('friend_proof');
+    });
+
+    /** An explicit save is you having asked. Nothing a friend did competes with that. */
+    test('a save you made yourself still wins', () => {
+      expect(FRIEND_PROOF_BOOST).toBeLessThan(SAVED_THIS_WEEK_BOOST);
+
+      const meal = makeMeal({ id: 'meal-1', recipeId: RECIPE });
+      const saves = [makeSave({ mealId: 'meal-1' })];
+      const scored = scoreMeal(meal, household, [], saves, TARGET_DATE, [], new Set([RECIPE]));
+
+      expect(scored.reasonCode).toBe('saved_this_week');
+    });
   });
 });

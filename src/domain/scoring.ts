@@ -41,6 +41,33 @@ export const VARIETY_BOOST = 15;
 export const NOT_RECENT_BOOST = 12;
 
 /**
+ * A friend cooked this recipe (DESIGN-SOCIAL.md §2.1).
+ *
+ * WHY IT IS A COOKABILITY SIGNAL AND NOT A SOCIAL ORNAMENT. PD-004
+ * measures every surface on save-to-cook, and a dish somebody you know
+ * actually produced is more likely to convert to a cook than one nobody
+ * you know has. That is the currency this engine already runs on, which
+ * is why the boost belongs here rather than being bolted on as a
+ * tiebreak.
+ *
+ * WHY 20, deliberately between VARIETY_BOOST (15) and
+ * HOUSEHOLD_FAVOURITE_BOOST (30). Above the novelty and timing factors,
+ * because a named person beats a calendar fact. Below your own
+ * household's history and far below an explicit save, because a friend's
+ * opinion is evidence where your own kitchen's verdict is a decision. A
+ * friend liking something must never outrank you having asked for it.
+ *
+ * WHY PERSONALISATION IS LEGITIMATE HERE, given PD-014.6 bans it on the
+ * board: Kiezen is per-household by definition and always has been — it
+ * already reads your restrictions, your history, your time budget. The
+ * board's ban exists because per-viewer ordering there creates an
+ * unaccountable private reality out of a list whose whole meaning is
+ * that everyone sees the same thing. A household's own dinner suggestion
+ * is the opposite surface.
+ */
+export const FRIEND_PROOF_BOOST = 20;
+
+/**
  * PD-004a: an 'ooit' (someday) save must be a genuine rotation candidate
  * the engine WILL eventually surface, not a parked item that only wins by
  * luck. `pendingSomedaySaves` is otherwise scored like any ordinary
@@ -213,6 +240,13 @@ function varietyBoost(mealId: MealId, recentCookEvents: readonly CookEvent[]): n
 const REASON_PRIORITY: readonly ReasonCode[] = [
   'saved_this_week',
   'household_favourite',
+  // A named person beats a calendar fact: "Sanne heeft dit ook gemaakt"
+  // is a better story than "alweer even geleden" or "klaar in 20
+  // minuten", and it is the only reason pointing at somebody the reader
+  // actually knows. It sits below the household's own signals because a
+  // save and a cook history are decisions, where a friend's cook is
+  // evidence.
+  'friend_proof',
   'fits_time',
   'not_recent',
   'variety',
@@ -268,6 +302,16 @@ export function scoreMeal(
   pendingThisWeekSaves: readonly Save[],
   targetDate: string,
   pendingSomedaySaves: readonly Save[] = [],
+  /**
+   * Canonical recipe ids at least one accepted friend has cooked, from
+   * the `shared_cooks` view (0009). Empty by default so every existing
+   * caller behaves exactly as before — a household with no friends, or
+   * one whose friends have not opted in, scores precisely as it did.
+   *
+   * Recipe ids and not meal ids: proof is about the shared canonical
+   * recipe, the only object two households have in common.
+   */
+  friendCookedRecipeIds: ReadonlySet<string> = new Set(),
 ): ScoredMeal {
   const savedBoost = isSavedThisWeek(meal.id, pendingThisWeekSaves) ? SAVED_THIS_WEEK_BOOST : 0;
   const recency = computeRecencySignal(meal.id, recentCookEvents, targetDate);
@@ -275,6 +319,11 @@ export function scoreMeal(
   const timeBoost = fitsTimeBoost(meal, household);
   const noveltyBoost = varietyBoost(meal.id, recentCookEvents);
   const somedayBoost = somedaySaveBoost(meal.id, pendingSomedaySaves, targetDate);
+  // `?? null` rather than a truthiness check: recipeId is optional on
+  // Meal, and an empty-string id must not be looked up as a match.
+  const mealRecipeId = meal.recipeId ?? null;
+  const friendProofBoost =
+    mealRecipeId !== null && friendCookedRecipeIds.has(mealRecipeId) ? FRIEND_PROOF_BOOST : 0;
 
   const score =
     savedBoost +
@@ -283,12 +332,14 @@ export function scoreMeal(
     repeatAdjustment +
     timeBoost +
     noveltyBoost +
-    somedayBoost;
+    somedayBoost +
+    friendProofBoost;
 
   const reasonCode = pickReasonCode(
     [
       { code: 'saved_this_week', weight: savedBoost },
       { code: 'household_favourite', weight: repeatAdjustment > 0 ? repeatAdjustment : 0 },
+      { code: 'friend_proof', weight: friendProofBoost },
       { code: 'fits_time', weight: timeBoost },
       { code: 'not_recent', weight: recency.notRecentBoost },
       { code: 'variety', weight: noveltyBoost },
@@ -314,8 +365,20 @@ export function scoreMeals(
   pendingThisWeekSaves: readonly Save[],
   targetDate: string,
   pendingSomedaySaves: readonly Save[] = [],
+  /** Passed straight through to scoreMeal; see its parameter for what this is and why it is recipe ids. */
+  friendCookedRecipeIds: ReadonlySet<string> = new Set(),
 ): readonly ScoredMeal[] {
   return meals
-    .map((meal) => scoreMeal(meal, household, recentCookEvents, pendingThisWeekSaves, targetDate, pendingSomedaySaves))
+    .map((meal) =>
+      scoreMeal(
+        meal,
+        household,
+        recentCookEvents,
+        pendingThisWeekSaves,
+        targetDate,
+        pendingSomedaySaves,
+        friendCookedRecipeIds,
+      ),
+    )
     .sort(compareScoredMeals);
 }
