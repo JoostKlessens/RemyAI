@@ -434,7 +434,7 @@ describe('localRepository — cook events (outcome loop, PD-003)', () => {
 
     await expect(repository.setCookEventRating(cookEvent.id, RATING_MAX + 1)).rejects.toThrow();
     await expect(repository.setCookEventRating(cookEvent.id, RATING_MIN - 1)).rejects.toThrow();
-    await expect(repository.setCookEventRating(cookEvent.id, RATING_MIN + 0.5)).rejects.toThrow();
+    await expect(repository.setCookEventRating(cookEvent.id, RATING_MIN + 0.55)).rejects.toThrow();
 
     const events = await repository.listCookEvents(HOUSEHOLD_ID);
     expect(events.find((event) => event.id === cookEvent.id)?.rating).toBeNull();

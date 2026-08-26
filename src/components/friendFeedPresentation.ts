@@ -36,6 +36,7 @@
  */
 
 import { describeAllergenTag } from './allergenTaggingCopy';
+import { formatGrade } from './ratingScaleCopy';
 import { getPlatformDisplayName } from './creatorPresentation';
 import { filterServableFeedItems } from '@/domain/feed/eligibility';
 import { getCollidingTagsByFeedItem, rankFeedItems, type FeedRankingRequest } from '@/domain/feed/ranking';
@@ -213,7 +214,7 @@ export function buildFriendRecipeMetaLine(estimatedMinutes: number | null, ratin
     parts.push(`${estimatedMinutes} min`);
   }
   if (rating !== null && isValidRating(rating)) {
-    parts.push(`${rating}/${RATING_MAX}`);
+    parts.push(`${formatGrade(rating)}/${RATING_MAX}`);
   }
   return parts.length === 0 ? null : parts.join(META_SEPARATOR);
 }

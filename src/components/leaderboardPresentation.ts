@@ -25,11 +25,16 @@
  * safety half — never hidden, always labelled — is untouched.
  */
 
-import { buildLeaderboard, type LeaderboardEntry } from '@/domain/social/leaderboard';
+import {
+  LEADERBOARD_SCORE_DECIMALS,
+  buildLeaderboard,
+  type LeaderboardEntry,
+} from '@/domain/social/leaderboard';
 import { normalizeTag } from '@/domain/normalizeTag';
 import type { RecipeId, RecipeRating } from '@/domain/social/types';
 import type { CreatorPlatform } from '@/domain/feed/types';
 import { buildAllergenCollisionLabel } from './friendFeedPresentation';
+import { formatGrade } from './ratingScaleCopy';
 
 /**
  * How many rows the board shows. DESIGN §9: "finite and says so out loud",
@@ -75,7 +80,7 @@ export interface BoardRowModel {
   readonly recipeId: RecipeId;
   readonly rank: number;
   readonly title: string;
-  /** "4,8  ·  204 stemmen" — the honest average with the evidence behind it. */
+  /** "8,72  ·  204 stemmen" — the board's score with the evidence behind it. */
   readonly metaLine: string;
   /** "@kokenmetkees · TikTok" — PD-007's attribution obligation, on every row. */
   readonly creatorLine: string;
@@ -92,37 +97,45 @@ export interface LeaderboardRequest {
 }
 
 /**
- * The average, written Dutch.
+ * The board's score, written Dutch: "8,72".
  *
- * The comma is not a stylistic choice: this is the only decimal number the
- * app renders, and "4.8" in a Dutch interface reads as a typo or as a
- * thousands separator. One decimal always, including a trailing zero, so a
- * column of scores keeps a constant width — the same reason the rank uses
+ * The comma is not a stylistic choice. This is a Dutch report-card grade,
+ * and "8.72" reads as a typo or as a thousands separator to the people
+ * this app is for. Trailing zeros are kept — "8,70", never "8,7" — so a
+ * column of grades holds a constant width, the same reason the rank uses
  * tabular figures.
+ *
+ * The precision comes from LEADERBOARD_SCORE_DECIMALS rather than a local
+ * 2, because the domain rounds to that same constant *before* it sorts.
+ * If this function and that constant ever disagreed, the board would once
+ * again be sorted on one number and displaying another — which is the
+ * whole failure the shared constant exists to make impossible.
  *
  * Built by hand rather than with `toLocaleString('nl-NL')`: Intl's locale
  * data is not guaranteed present in a React Native JS runtime, and a
- * silently-English fallback would produce exactly the "4.8" this function
+ * silently-English fallback would produce exactly the "8.72" this function
  * exists to prevent.
  */
-export function formatBoardAverage(average: number): string {
-  return average.toFixed(1).replace('.', ',');
+export function formatBoardScore(score: number): string {
+  return formatGrade(score, LEADERBOARD_SCORE_DECIMALS);
 }
 
 /**
  * "204 stemmen" / "1 stem".
  *
  * DESIGN §9: the count is never omitted and never abbreviated, because it
- * is what lets a reader weigh the average themselves — "4,8" alone is a
- * claim with its evidence removed.
+ * is what lets a reader weigh the grade themselves — "8,72" alone is a
+ * claim with its evidence removed. It carries more weight here than it
+ * would beside a raw average, since the score is already evidence-weighted
+ * and the count is what explains why a lower raw mean can rank higher.
  */
 export function formatVoteCount(count: number): string {
   return count === 1 ? '1 stem' : `${count} stemmen`;
 }
 
 /** The row's mono meta line: the verdict, then the evidence, never one without the other. */
-export function buildBoardMetaLine(average: number, count: number): string {
-  return `${formatBoardAverage(average)}${META_SEPARATOR}${formatVoteCount(count)}`;
+export function buildBoardMetaLine(score: number, count: number): string {
+  return `${formatBoardScore(score)}${META_SEPARATOR}${formatVoteCount(count)}`;
 }
 
 /** "@kokenmetkees · TikTok". Attribution travels with the recipe on every surface (PD-007). */
@@ -172,7 +185,7 @@ export function assembleLeaderboard(request: LeaderboardRequest): readonly Board
           recipeId: entry.recipeId,
           rank: entry.rank,
           title: recipe.title,
-          metaLine: buildBoardMetaLine(entry.average, entry.count),
+          metaLine: buildBoardMetaLine(entry.score, entry.count),
           creatorLine: buildCreatorLine(recipe),
           thumbnailUrl: recipe.thumbnailUrl,
           collisionLabel: buildAllergenCollisionLabel(findCollidingTags(recipe, request.excludedAllergenTags)),

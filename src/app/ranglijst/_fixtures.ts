@@ -25,8 +25,8 @@
  * fetching every rating row in the database in order to rank them. That is
  * fine at launch scale and is not fine indefinitely. The fix, when it is
  * needed, is a SQL aggregate returning per-recipe (count, avg) — which the
- * database's own `unique (recipe_id, rater_profile_id)` and
- * `check (rating between 1 and 5)` make provably identical to what
+ * database's own `unique (recipe_id, rater_profile_id)` and its range and
+ * step CHECKs (0008) make provably identical to what
  * `summarizeRecipeRatingsByRecipe` computes — with `rankRecipes` still
  * owning the prior, the shrinkage and the floor. Ranking stays in one
  * place either way. It needs a migration, so it needs the owner to push it.
@@ -50,15 +50,22 @@ const FIXTURE_RATED_AT = '2026-01-01T00:00:00.000Z';
  * quietly build a smaller sample than the fixture claims.
  *
  * Scores are dealt round-robin from `pattern` rather than repeated, so the
- * averages come out on realistic decimals ("4,7") instead of a suspiciously
- * flat "5,0" that would never exercise the Dutch comma.
+ * averages land on realistic decimals instead of a suspiciously flat
+ * "8,00" that would never exercise the Dutch comma or the second decimal.
+ *
+ * The patterns are Dutch report-card grades, which cluster high: people
+ * who bother to rate a recipe they chose to cook rate it well. That is
+ * what makes the board's population prior sit near 8 rather than near the
+ * midpoint, and it is the realistic shape to develop against — a fixture
+ * spread evenly over 1-10 would make the shrinkage look far gentler than
+ * it will be in practice.
  */
 function votes(recipeId: string, pattern: readonly number[], count: number): readonly RecipeRating[] {
   return Array.from({ length: count }, (_unused, index) => ({
     id: `${recipeId}-vote-${index}`,
     recipeId,
     raterProfileId: `fixture-rater-${index}`,
-    rating: pattern[index % pattern.length] ?? 4,
+    rating: pattern[index % pattern.length] ?? 7,
     ratedAt: FIXTURE_RATED_AT,
   }));
 }
@@ -109,11 +116,15 @@ const RECIPES: readonly BoardRecipe[] = [
 ];
 
 const POPULATED_RATINGS: readonly RecipeRating[] = [
-  ...votes('recipe-tiramisu', [5, 5, 5, 4], 84),
-  ...votes('recipe-zalm', [5, 4, 5, 5], 61),
-  ...votes('recipe-ramen', [5, 4, 4, 5], 38),
-  ...votes('recipe-linzen', [4, 4, 5, 3], 22),
-  ...votes('recipe-pasta', [4, 3, 4, 4], 17),
+  // Deliberately close at the top: tiramisu has the wider sample, zalm the
+  // slightly better grades. Whichever way the arithmetic lands, the two
+  // exercise the case the board exists to get right — and if their scores
+  // round to the same number, the vote count is what separates them.
+  ...votes('recipe-tiramisu', [9, 8.5, 9, 8.5], 84),
+  ...votes('recipe-zalm', [9, 8.5, 9, 9], 61),
+  ...votes('recipe-ramen', [8.5, 8, 8, 8.5], 38),
+  ...votes('recipe-linzen', [7.5, 7, 8, 7], 22),
+  ...votes('recipe-pasta', [7, 6.5, 7, 7.5], 17),
 ];
 
 /**
@@ -123,7 +134,7 @@ const POPULATED_RATINGS: readonly RecipeRating[] = [
  * *enough*", which is exactly what BOARD_EMPTY_COPY claims.
  */
 const NEARLY_ENOUGH_RATINGS: readonly RecipeRating[] = RECIPES.flatMap((recipe) =>
-  votes(recipe.recipeId, [5, 4], Math.max(0, LEADERBOARD_MIN_VOTES - 1)),
+  votes(recipe.recipeId, [8, 7.5], Math.max(0, LEADERBOARD_MIN_VOTES - 1)),
 );
 
 export interface BoardFixture {

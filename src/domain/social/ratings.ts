@@ -25,9 +25,11 @@
  *
  * THE SCALE IS NOT RESTATED HERE. `RATING_MIN`, `RATING_MAX` and
  * `isValidRating` come from rating.ts, which PD-008 names as the single
- * place the scale is written down. Moving to a Dutch 1-10 report card
- * changes that file plus one CHECK constraint; the distribution below
- * resizes itself.
+ * place the scale is written down. That claim was tested for real when the
+ * scale moved from 1-5 whole numbers to the Dutch 1,0-10,0 report card:
+ * this file needed one edit, to how `distribution` buckets, and it needed
+ * that only because a one-decimal scale has 91 expressible values and a
+ * histogram cannot have 91 bars.
  *
  * Pure, no I/O.
  */
@@ -36,10 +38,10 @@ import { RATING_MAX, RATING_MIN, isValidRating } from '../rating';
 import type { RecipeId, RecipeRating } from './types';
 
 /**
- * The score `distribution[0]` counts. Exported because a caller rendering
- * a histogram has to label its buckets, and deriving a label from an index
- * requires knowing where the index starts — a hardcoded `+ 1` at the call
- * site is exactly the drift PD-008 forbids.
+ * The whole grade `distribution[0]` counts. Exported because a caller
+ * rendering a histogram has to label its buckets, and deriving a label
+ * from an index requires knowing where the index starts — a hardcoded
+ * `+ 1` at the call site is exactly the drift PD-008 forbids.
  */
 export const RATING_DISTRIBUTION_BASE = RATING_MIN;
 
@@ -64,7 +66,18 @@ export interface RecipeRatingSummary {
   /** Distinct raters whose vote counted. Always equal to the sum of `distribution`. */
   readonly count: number;
   readonly average: number | null;
-  /** Votes per point on the scale; index = score - RATING_DISTRIBUTION_BASE. Always one bucket per point, so an unvoted score reads as 0 rather than as absent. */
+  /**
+   * Votes per WHOLE grade; index = round(score) - RATING_DISTRIBUTION_BASE.
+   * Always one bucket per whole grade, so an unvoted grade reads as 0
+   * rather than as absent, and the buckets always sum to `count`.
+   *
+   * Bucketed by whole grade rather than by distinct value because the
+   * scale carries one decimal: a bucket per expressible value would be 91
+   * of them, which is not a histogram anybody can read. Rounding to
+   * nearest is the honest reduction — a 7.5 is counted as an eight, the
+   * way it would be read aloud — and it is a reduction, so the precise
+   * figure stays in `average` where nothing is lost.
+   */
   readonly distribution: readonly number[];
 }
 
@@ -126,7 +139,7 @@ export function summarizeRecipeRatings(recipeId: RecipeId, ratings: readonly Rec
   const total = votes.reduce((sum, vote) => sum + vote.rating, 0);
   const distribution = Array.from(
     { length: SCALE_LENGTH },
-    (_unused, index) => votes.filter((vote) => vote.rating === index + RATING_DISTRIBUTION_BASE).length,
+    (_unused, index) => votes.filter((vote) => Math.round(vote.rating) === index + RATING_DISTRIBUTION_BASE).length,
   );
 
   return {

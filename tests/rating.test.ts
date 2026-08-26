@@ -4,6 +4,7 @@ import {
   RATING_MIN,
   RATING_NEGATIVE_AT_OR_BELOW,
   RATING_POSITIVE_AT_OR_ABOVE,
+  RATING_STEP,
   isValidRating,
   resolveRepeatSignal,
   toRepeatSignal,
@@ -41,8 +42,22 @@ describe('isValidRating', () => {
     expect(isValidRating(0)).toBe(false);
   });
 
-  test('rejects non-integers and non-finite values', () => {
-    expect(isValidRating(3.5)).toBe(false);
+  /** One decimal is the step, so a half grade is a real vote — "een 7,5" is how the grade is actually given. */
+  test('accepts a value on the step', () => {
+    expect(isValidRating(RATING_MIN + RATING_STEP)).toBe(true);
+    expect(isValidRating(7.5)).toBe(true);
+    expect(isValidRating(7.3)).toBe(true);
+  });
+
+  /**
+   * 7.3 is not representable in binary floating point, so a naive
+   * `value * 10 % 1 === 0` check rejects it. The pair above and below
+   * guard that specific trap together: the legal value must pass and the
+   * finer one must still fail.
+   */
+  test('rejects a value finer than the step, and non-finite values', () => {
+    expect(isValidRating(7.55)).toBe(false);
+    expect(isValidRating(RATING_MIN + RATING_STEP / 2)).toBe(false);
     expect(isValidRating(Number.NaN)).toBe(false);
     expect(isValidRating(Number.POSITIVE_INFINITY)).toBe(false);
   });

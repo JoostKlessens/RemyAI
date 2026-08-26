@@ -194,7 +194,7 @@ describe('recipe ratings', () => {
       /rating/i,
     );
     await expect(
-      repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 4.5 }),
+      repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 4.55 }),
     ).rejects.toThrow(/rating/i);
   });
 

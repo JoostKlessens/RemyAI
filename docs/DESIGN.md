@@ -110,7 +110,7 @@ That argument still holds against the tab it was written about: an
 "Ontdekken" surface of algorithmic strangers would be exactly the
 high-browsing, low-cooking failure PD-004 exists to prevent, and it is
 still not being built. Ranglijst is not that surface and does not reopen
-it: it ranks *recipes* by explicit 1-5 votes, with no personalisation and
+it: it ranks *recipes* by explicit 1,0-10,0 votes, with no personalisation and
 no per-viewer ordering — every reader sees the identical board. PD-014
 makes "no personalisation, ever" a condition of it existing, precisely so
 the two cannot be confused later.
@@ -506,7 +506,7 @@ column (`space20` wide, monogram fallback exactly as §2) beside a text
 block carrying, in order, a `label` mono eyebrow "GEDEELD DOOR SANNE", the
 dish in `title3`, key ingredients in `bodySmall`/`textSecondary`
 ("kipfilet · paprika · citroen · +2"), a `numeral` mono meta row
-("35 min · 5/5"), and the creator in `caption` mono
+("35 min · 8,5/10"), and the creator in `caption` mono
 ("@kokenmetkees · TikTok"). The list ends in a centered `caption`, "Dat is
 alles wat er gedeeld is."
 
@@ -530,7 +530,7 @@ never "checked and clean", which is why the recipe screen also carries a
 permanent `caption` caveat that a shared recipe's tags come from whoever
 shared it.
 
-**Card colour discipline**: no `positive` anywhere. A friend's 5/5 is an
+**Card colour discipline**: no `positive` anywhere. A friend's 8,5/10 is an
 opinion, not a completion, so it sets as a plain mono numeral beside the
 cook time. `accent` stays absent too — nothing on this screen is the
 moment a choice gets made.
@@ -570,7 +570,7 @@ applies to this surface too.
 │ │┌────┐ GEDEELD DOOR SANNE        ││ label · mono
 │ ││    │ Traybake met kip          ││ title3
 │ ││9:16│ kipfilet · paprika · +3   ││ bodySmall
-│ │└────┘ 35 min  ·  5/5            ││ numeral · mono
+│ │└────┘ 35 min  ·  8,5/10         ││ numeral · mono
 │ │       @kokenmetkees · TikTok    ││ caption · mono
 │ └─────────────────────────────────┘│
 │ ┌─────────────────────────────────┐│
@@ -611,20 +611,30 @@ Each row is one tap target, laid out as three columns:
 2. **A 9:16 thumbnail**, `space20` wide, monogram fallback exactly as §2
    and §8.
 3. **A text block** carrying, in order: the dish in `title3`; a `numeral`
-   mono meta row, "4,8 · 204 stemmen"; and the creator in `caption` mono,
+   mono meta row, "8,72 · 204 stemmen"; and the creator in `caption` mono,
    "@kokenmetkees · TikTok".
 
-**The score is written Dutch, with a comma.** "4,8" and never "4.8". It is
-the only decimal number the app renders, and a decimal point in a Dutch
-interface reads as a typo or as a thousands separator.
+**The grade is written Dutch, with a comma.** "8,72" and never "8.72".
+This is a Dutch report card, and a decimal point here reads as a typo or as
+a thousands separator. Trailing zeros are kept — "8,70", never "8,7" — so a
+column of grades holds a constant width.
 
-**The number shown is the honest average, not the score that sorted the
-board.** PD-014 states the reason: a recipe rated 5, 5, 5 has an average of
-5, and printing the shrunk figure that ranked it would answer a question
-nobody asked. The two disagree by design, and only one of them is displayed.
+**The number shown IS the number that sorted the board**, to two decimals.
+This reverses an earlier version of this spec, which displayed the raw
+average while sorting on the shrunk score. Those two disagree by
+construction, so wherever they disagreed visibly the list contradicted
+itself — worst of all when a row showing the same grade with *more* votes
+sat underneath one with fewer. PD-014 carries the full argument, including
+why displaying the raw average and sorting by it instead is the worse of
+the two ways out. The raw average is still true and still computed; it is
+simply not what this surface prints.
+
+**Ties are broken by evidence.** Because the score is rounded before it is
+sorted, two recipes comparing equal are two recipes showing the reader the
+identical grade — and at that point the more heavily voted one goes first.
 
 **The vote count is never omitted, and never abbreviated.** "204 stemmen"
-is what lets a reader weigh the average themselves; "4,8" alone is a claim
+is what lets a reader weigh the grade themselves; "8,72" alone is a claim
 with its evidence removed. One vote is "1 stem".
 
 **Ordering and the anti-scroll rules**: `rankRecipes`

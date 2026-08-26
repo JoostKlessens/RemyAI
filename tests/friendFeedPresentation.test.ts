@@ -244,17 +244,28 @@ describe('buildFriendRecipeMetaLine', () => {
   });
 
   test('renders a rating against the scale in domain/rating.ts, never a hardcoded maximum', () => {
-    expect(buildFriendRecipeMetaLine(null, 4)).toBe(`4/${RATING_MAX}`);
+    expect(buildFriendRecipeMetaLine(null, 4)).toBe(`4,0/${RATING_MAX}`);
   });
 
   test('joins both with the middot meta separator used everywhere else', () => {
-    expect(buildFriendRecipeMetaLine(35, 4)).toBe(`35 min  ·  4/${RATING_MAX}`);
+    expect(buildFriendRecipeMetaLine(35, 4)).toBe(`35 min  ·  4,0/${RATING_MAX}`);
+  });
+
+  /** A Dutch grade takes a comma. "7.5/10" on a Dutch card reads as a typo. */
+  test('writes a half grade with a comma, never a point', () => {
+    expect(buildFriendRecipeMetaLine(null, 7.5)).toBe(`7,5/${RATING_MAX}`);
+    expect(buildFriendRecipeMetaLine(null, 7.5)).not.toContain('.');
+  });
+
+  /** One decimal always, so a column of cards does not jump between "8" and "7,5". */
+  test('writes a whole grade to one decimal too', () => {
+    expect(buildFriendRecipeMetaLine(null, 8)).toBe(`8,0/${RATING_MAX}`);
   });
 
   test('drops an out-of-range rating instead of clamping it into an opinion nobody gave', () => {
     expect(buildFriendRecipeMetaLine(35, RATING_MAX + 1)).toBe('35 min');
     expect(buildFriendRecipeMetaLine(35, 0)).toBe('35 min');
-    expect(buildFriendRecipeMetaLine(35, 3.5)).toBe('35 min');
+    expect(buildFriendRecipeMetaLine(35, 3.55)).toBe('35 min');
   });
 });
 

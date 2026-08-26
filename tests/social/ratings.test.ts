@@ -93,13 +93,30 @@ describe('summarizeRecipeRatings', () => {
   });
 
   /** An off-scale value is stored data that predates, or violates, the scale rating.ts owns. Dropping it is honest; clamping would invent an opinion. */
-  test('drops off-scale and non-integer scores instead of clamping them', () => {
+  test('drops off-scale and off-step scores instead of clamping them', () => {
     const summary = summarizeRecipeRatings('recipe-1', [
       makeRecipeRating({ id: 'r1', raterProfileId: PROFILE_A, rating: RATING_MIN - 1 }),
       makeRecipeRating({ id: 'r2', raterProfileId: PROFILE_B, rating: RATING_MAX + 1 }),
-      makeRecipeRating({ id: 'r3', raterProfileId: PROFILE_C, rating: 3.5 }),
+      makeRecipeRating({ id: 'r3', raterProfileId: PROFILE_C, rating: 3.55 }),
     ]);
     expect(summary).toEqual(emptyRecipeRatingSummary('recipe-1'));
+  });
+
+  /**
+   * The scale carries one decimal but the histogram cannot carry 91 bars,
+   * so a vote lands in the bucket for its nearest whole grade — a 7,5 is
+   * counted as an eight, the way it is read aloud. `average` keeps the
+   * precise figure, so nothing is lost, only reduced.
+   */
+  test('buckets a decimal vote by its nearest whole grade', () => {
+    const summary = summarizeRecipeRatings('recipe-1', [
+      makeRecipeRating({ id: 'r1', raterProfileId: PROFILE_A, rating: 7.5 }),
+      makeRecipeRating({ id: 'r2', raterProfileId: PROFILE_B, rating: 7.4 }),
+    ]);
+    expect(summary.count).toBe(2);
+    expect(summary.average).toBeCloseTo(7.45, 10);
+    expect(summary.distribution[8 - RATING_DISTRIBUTION_BASE]).toBe(1);
+    expect(summary.distribution[7 - RATING_DISTRIBUTION_BASE]).toBe(1);
   });
 
   test('an off-scale duplicate never displaces the valid vote from the same rater', () => {

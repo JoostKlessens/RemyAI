@@ -221,9 +221,14 @@ not filtered out.
 - **Only when we hold positive tag data.** An untagged item stays untagged. The absence of a label
   must never be readable as "checked and clean" — that is PD-006's whole point.
 
-## PD-008 — Cooked meals get a 1–5 score; `wouldRepeat` survives as a derived projection
+## PD-008 — Cooked meals get a score; `wouldRepeat` survives as a derived projection
 
-The outcome question is a **five-point scale**, not a thumbs up/down.
+> **Revised by PD-008a.** The scale below is the original five-point one and is kept as the record
+> of why a *scale* was chosen over a boolean — that reasoning is unchanged and still governs. The
+> scale itself is now the Dutch report card, 1,0–10,0 to one decimal, and the control is a slider
+> rather than a chip row. Read PD-008a for what is current.
+
+The outcome question is a **scale**, not a thumbs up/down.
 
 - **Why a scale.** Leaderboards need ordinal data. A boolean cannot rank, and it cannot tell a
   meal someone loved from one they merely didn't hate.
@@ -247,6 +252,51 @@ The outcome question is a **five-point scale**, not a thumbs up/down.
   optional decline reason is the precedent. A rating that nags is a rating that gets lied to.
 - **The old "Nog een keer? Ja / Liever niet" buttons are gone.** Asking both would ask the same
   question twice and let the two columns disagree.
+
+### PD-008a — Revised: the scale is the Dutch report card, 1,0–10,0
+
+**The scale is 1,0–10,0, and a vote carries one decimal.** "Een 7,5" is how people here already say
+whether something was any good; it needs no legend, where "4 out of 5" is a rating-site convention
+borrowed from English apps. One decimal and not two: the room between the numbers is the whole point
+of a ten-point scale, but nobody holds an opinion to a hundredth, and offering that precision invites
+a spread the aggregate cannot honestly use.
+
+**PD-008's central claim survived the move, and that was the test of it.** It said the scale lives in
+`src/domain/rating.ts` and nowhere else, so a change would be "one file plus one CHECK constraint".
+That held almost exactly: `rating.ts` plus `0008_report_card_scale.sql`. Nothing carried a hardcoded
+"van 5" to hunt down. Two things did have to change, and both are honest consequences rather than
+misses:
+
+1. **The middle band moved to 4 and 8**, the pair PD-008 itself predicted. A 4 is a fail and an 8 is
+   properly good; the band between them is the same deliberate shrug.
+2. **The histogram buckets by whole grade.** A one-decimal scale has 91 expressible values, and a
+   91-bar histogram is not a histogram. A 7,5 counts as an eight, the way it is read aloud; the exact
+   figure stays in the average, so this is a reduction and not a loss.
+
+**The chip row is gone, and PD-008's "numbered mono chips, not stars" could not survive.** 91 grades
+cannot be chips, and even a whole-numbers-only row of ten needs about 440pt at the 44pt touch
+minimum — wider than a phone. The control is a **slider with the grade set large in mono**
+(`timerDisplay`, the same treatment Kookmodus gives its timer).
+
+What that kept is the part PD-008 actually cared about. Its objection was to borrowed rating-site
+idiom, not to chips as such: DESIGN.md bans emoji as status indicators and keeps icons sparse, so a
+star row is still out on both counts. The slider renders no glyph — only the numeral. Rating still
+costs one gesture (drag, release, commit) against one tap to skip, so PD-008's "skipping costs
+exactly one tap, the same as giving one" is intact.
+
+- **It does not open pre-filled.** The thumb rests mid-track showing an en dash until first touch. A
+  slider sitting on 5,5 has already put an opinion in the cook's mouth that they would have to
+  correct, which is the nag PD-008 forbids in a quieter voice.
+- **Assistive-technology increments are half a grade, not 0,1.** Ninety swipes to cross the scale is
+  not an accessible control, it is a technically-conformant one. The cost is that a 7,3 is reachable
+  by touch and not by swiping; if that ever matters to a real user, the fix is a way to type the
+  grade, not a finer increment.
+- **Stored as `numeric(4,2)` with a step CHECK, deliberately not `numeric(3,1)`.** Scale-1 coercion
+  would silently round a 7,55 to 7,6 and store it as though somebody had said it. The wider column
+  exists so the illegal value is representable long enough to be *refused*, which is the same refusal
+  to invent an opinion that runs through PD-006 and 0005.
+
+---
 
 ## PD-009 — Decision filters are a separate gate from the allergen exclusion
 
@@ -456,7 +506,7 @@ scoped to a household or a friend graph by design.
 
 **Why this is not the "Ontdekken" surface that was refused — and where it genuinely is.** It is not,
 in the one respect that matters most: the refused surface was *algorithmic strangers*, a ranked feed
-of people. This ranks **recipes**, by an average of explicit 1–5 votes, with no personalisation, no
+of people. This ranks **recipes**, by an average of explicit 1,0–10,0 votes, with no personalisation, no
 model, and no per-viewer ordering — every reader sees the identical board. It also exposes no
 household data whatsoever (see below). Where it genuinely is that surface: it is a scrollable list
 of recipes that is not the decision surface, and browsing it is not cooking. That is the real cost,
@@ -506,9 +556,21 @@ constants, `LEADERBOARD_MIN_VOTES` and `LEADERBOARD_PRIOR_VOTES`, both stated on
   is the textbook default and it is wrong here specifically: PD-008 gives the middle band the
   meaning "deliberately produces no signal", so using it as the prior would drag every thinly-rated
   recipe toward an opinion nobody expressed.
-- **The board displays the honest average and sorts by the score.** A recipe rated 5, 5, 5 shows
-  4.9 and not the shrunk figure that ordered it — printing the latter answers a question nobody
-  asked.
+- **The board displays the score, and the score is what sorted it.** This reverses the first
+  version of this decision, which displayed the honest average while sorting on the shrunk score.
+  Those two disagree by construction — the shrinkage exists precisely to disagree with the raw mean —
+  so the list contradicted itself wherever they disagreed visibly, most painfully when a row showing
+  the same number with *more* votes sat underneath one with fewer. Displaying the raw average and
+  sorting by that instead is worse: it hands the top of the board back to whoever collected three
+  enthusiastic votes, which is the whole accident the Bayesian estimate prevents. So the number on
+  screen and the number that ordered the board are the same number, rounded once, in the domain.
+- **Two decimals, and a tie is broken by evidence.** The score is rounded to two decimals *before*
+  sorting, which makes "the number shown" and "the sort key" the same value rather than two values
+  that happen to agree. When two recipes then compare equal, they are genuinely showing a reader the
+  identical grade, and the only honest thing left to separate them by is how much evidence each rests
+  on: **more votes goes first**. The raw average is still computed and still true; it is deliberately
+  not carried into the row model the screen renders, because putting it back re-creates the
+  contradiction.
 - **The aggregate stays client-side**, in the domain, for the reason 0007_social.sql already gives
   when it rejects an aggregate view: half in SQL and half in the app gives the score two
   definitions, and the one a person sees is whichever ran last. No `security definer` function and

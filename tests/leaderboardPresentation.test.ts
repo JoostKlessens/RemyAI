@@ -10,7 +10,12 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { LEADERBOARD_MIN_VOTES } from '@/domain/social/leaderboard';
+import {
+  LEADERBOARD_MIN_VOTES,
+  LEADERBOARD_SCORE_DECIMALS,
+  buildLeaderboard,
+} from '@/domain/social/leaderboard';
+import { RATING_MAX, RATING_MIN } from '@/domain/rating';
 import {
   BOARD_EMPTY_COPY,
   BOARD_END_COPY,
@@ -18,7 +23,7 @@ import {
   assembleLeaderboard,
   buildBoardMetaLine,
   buildBoardRowAccessibilityLabel,
-  formatBoardAverage,
+  formatBoardScore,
   formatVoteCount,
 } from '@/components/leaderboardPresentation';
 import type { BoardRecipe } from '@/components/leaderboardPresentation';
@@ -48,20 +53,23 @@ function makeBoardRecipe(overrides: Partial<BoardRecipe> = {}): BoardRecipe {
   };
 }
 
-describe('formatBoardAverage', () => {
-  /** The single most likely silent regression on this screen: a Dutch interface printing "4.8". */
+describe('formatBoardScore', () => {
+  /** The single most likely silent regression on this screen: a Dutch interface printing "8.72". */
   test('writes the decimal separator as a comma, never a point', () => {
-    expect(formatBoardAverage(4.83)).toBe('4,8');
-    expect(formatBoardAverage(4.83)).not.toContain('.');
+    expect(formatBoardScore(8.72)).toBe('8,72');
+    expect(formatBoardScore(8.72)).not.toContain('.');
   });
 
-  test('always shows one decimal, so a column of scores stays the same width', () => {
-    expect(formatBoardAverage(5)).toBe('5,0');
-    expect(formatBoardAverage(4)).toBe('4,0');
+  test('keeps trailing zeros, so a column of grades stays the same width', () => {
+    expect(formatBoardScore(8)).toBe('8,00');
+    expect(formatBoardScore(8.7)).toBe('8,70');
+    expect(formatBoardScore(10)).toBe('10,00');
   });
 
-  test('rounds rather than truncates', () => {
-    expect(formatBoardAverage(4.86)).toBe('4,9');
+  /** Two decimals is the precision the domain already rounded to; this must not add a third. */
+  test('shows exactly LEADERBOARD_SCORE_DECIMALS decimals', () => {
+    const decimals = formatBoardScore(7.5).split(',')[1];
+    expect(decimals).toHaveLength(LEADERBOARD_SCORE_DECIMALS);
   });
 });
 
@@ -78,17 +86,17 @@ describe('formatVoteCount', () => {
 });
 
 describe('buildBoardMetaLine', () => {
-  test('pairs the average with the evidence behind it', () => {
-    expect(buildBoardMetaLine(4.83, 204)).toContain('4,8');
-    expect(buildBoardMetaLine(4.83, 204)).toContain('204 stemmen');
+  test('pairs the grade with the evidence behind it', () => {
+    expect(buildBoardMetaLine(8.72, 204)).toBe(`8,72  ·  204 stemmen`);
   });
 
   /**
-   * DESIGN §9: "the vote count is never omitted... '4,8' alone is a claim
+   * DESIGN §9: "the vote count is never omitted... '8,72' alone is a claim
    * with its evidence removed."
    */
-  test('never renders the average on its own', () => {
-    expect(buildBoardMetaLine(5, 3)).not.toBe('5,0');
+  test('never renders the grade on its own', () => {
+    expect(buildBoardMetaLine(8.72, 3)).not.toBe('8,72');
+    expect(buildBoardMetaLine(8.72, 3)).toContain('3 stemmen');
   });
 });
 
@@ -122,16 +130,31 @@ describe('assembleLeaderboard', () => {
     expect(rows.map((row) => row.recipeId)).toEqual(['known']);
   });
 
-  test('shows the honest average, not the score that ordered the board', () => {
+  /**
+   * The board shows the number it sorted by, never the raw mean. A recipe
+   * rated 10,10,10 with the population sitting far below does NOT show
+   * 10,00 — printing a number the order contradicts is the failure this
+   * whole arrangement exists to prevent.
+   */
+  test('shows the score that ordered the board, not the raw average', () => {
+    const entries = buildLeaderboard([
+      ...votes('perfect', RATING_MAX, LEADERBOARD_MIN_VOTES),
+      ...votes('ballast', RATING_MIN, 40),
+    ]);
+    const perfect = entries.find((entry) => entry.recipeId === 'perfect');
+    expect(perfect?.average).toBe(RATING_MAX);
+    expect(perfect?.score).toBeLessThan(RATING_MAX);
+
     const rows = assembleLeaderboard({
-      ratings: [...votes('perfect', 5, LEADERBOARD_MIN_VOTES), ...votes('ballast', 1, 40)],
+      ratings: [...votes('perfect', RATING_MAX, LEADERBOARD_MIN_VOTES), ...votes('ballast', RATING_MIN, 40)],
       recipes: [
         makeBoardRecipe({ recipeId: 'perfect' }),
         makeBoardRecipe({ recipeId: 'ballast', title: 'Ballast' }),
       ],
       excludedAllergenTags: [],
     });
-    expect(rows[0]?.metaLine).toContain('5,0');
+    expect(rows[0]?.metaLine).toContain(formatBoardScore(perfect?.score ?? 0));
+    expect(rows[0]?.metaLine).not.toContain(formatBoardScore(RATING_MAX));
   });
 
   test('caps the board at LEADERBOARD_MAX_ROWS', () => {

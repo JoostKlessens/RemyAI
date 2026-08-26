@@ -65,25 +65,59 @@ export const LEADERBOARD_MIN_VOTES = 3;
 export const LEADERBOARD_PRIOR_VOTES = 5;
 
 /**
+ * How many decimals the board's score is carried — and shown — to.
+ *
+ * THIS IS WHY IT LIVES IN THE DOMAIN AND NOT IN THE PRESENTATION LAYER.
+ * The score is rounded to this precision *before* it is sorted, which
+ * makes "the number that ordered the board" and "the number on screen"
+ * the same value rather than two values that happen to agree. Without
+ * that, a board sorted on full precision and displayed at two decimals
+ * shows adjacent rows reading 8,72 and 8,72 in an order nothing on screen
+ * explains — and worse, the row with more votes can sit underneath.
+ *
+ * Rounding first also makes a tie a real tie, which is what gives
+ * `count` something to break. See the comparator below.
+ */
+export const LEADERBOARD_SCORE_DECIMALS = 2;
+
+/** The board's score at display precision. One definition, used to sort and to render. */
+function roundScore(score: number): number {
+  return Number(score.toFixed(LEADERBOARD_SCORE_DECIMALS));
+}
+
+/**
  * One row of the board.
  *
- * `score` orders the board and is never shown. `average` is what a reader
- * sees. Keeping both is the point: a recipe rated 5,5,5 genuinely has an
- * average of 5, and printing the shrunk 3.9 next to it would be answering
- * a question nobody asked ("why does my perfect recipe show 3.9?"). The
- * honest mean is displayed; the score that knows better does the sorting.
+ * `score` both orders the board and is the number shown on it, rounded to
+ * LEADERBOARD_SCORE_DECIMALS. That identity is deliberate and it reverses
+ * an earlier decision: the board used to display the raw `average` while
+ * sorting on the shrunk score, and the two disagree by construction — the
+ * shrinkage exists precisely to disagree with the raw mean. Whenever they
+ * disagreed visibly, the list contradicted itself, most painfully when a
+ * row with more votes and the same printed number sat underneath one with
+ * fewer.
  *
- * `rank` is competition ranking on `score` — an exact tie shares a rank
- * and the next recipe skips one (1, 1, 3). Two recipes the arithmetic
- * cannot separate are not first and second, and saying so would invent a
- * difference the data does not contain.
+ * Displaying the raw average and sorting by it instead was the other way
+ * out, and it is worse: it hands the top of the board back to whoever got
+ * three enthusiastic votes, which is the whole accident the Bayesian
+ * estimate was introduced to prevent.
+ *
+ * `average` is kept because it is true and the domain should not throw
+ * away what it knows — but it is deliberately NOT carried into the row
+ * model the screen renders. Putting it back on the board re-creates the
+ * contradiction described above.
+ *
+ * `rank` is competition ranking on `score` — a tie shares a rank and the
+ * next recipe skips one (1, 1, 3). Since `score` is rounded first, a tie
+ * means the two recipes genuinely show the same number, and calling them
+ * first and second would invent a difference a reader cannot see.
  */
 export interface LeaderboardEntry {
   readonly recipeId: RecipeId;
   readonly rank: number;
-  /** Bayesian, orders the board, never rendered. */
+  /** Bayesian, rounded to LEADERBOARD_SCORE_DECIMALS. Orders the board AND is what it displays. */
   readonly score: number;
-  /** The unrounded mean of the counted votes — what the board displays. */
+  /** The unrounded mean of the counted votes. True, kept, and deliberately not shown on the board. */
   readonly average: number;
   readonly count: number;
 }
@@ -91,12 +125,15 @@ export interface LeaderboardEntry {
 /**
  * The level the whole population rates at, weighted by vote.
  *
- * WHY NOT THE MIDPOINT OF THE SCALE. Shrinking toward 3 would be the
+ * WHY NOT THE MIDPOINT OF THE SCALE. Shrinking toward 5,5 would be the
  * textbook default and it is wrong here specifically: PD-008 gives the
  * middle band the meaning "deliberately produces no signal", so using it
  * as the prior would pull every thinly-rated recipe toward an opinion
- * nobody expressed. The population's actual level is a real opinion, held
- * by real raters.
+ * nobody expressed. It is also empirically wrong — people who bother to
+ * rate a recipe they cooked rate it well above the midpoint, so a 5,5
+ * prior would drag the whole board down toward a grade almost nobody
+ * gives. The population's actual level is a real opinion, held by real
+ * raters.
  *
  * WHY WEIGHTED BY VOTE AND NOT BY RECIPE. A mean of recipe means lets a
  * recipe with one vote move the prior as hard as one with two hundred,
@@ -145,9 +182,21 @@ function bayesianScore(average: number, count: number, prior: number): number {
  * silently changing the arithmetic.
  *
  * The comparator is total, so the board cannot reshuffle between two reads
- * of the same data: score descending, then sample size descending (more
- * evidence first when the score cannot separate them), then recipe id
- * ascending as a last resort that always decides.
+ * of the same data: score descending, then sample size descending, then
+ * recipe id ascending as a last resort that always decides.
+ *
+ * The middle key is the one that earns its place. Because `score` is
+ * already rounded to display precision, two recipes comparing equal on it
+ * are two recipes showing a reader the identical number — and at that
+ * point the only honest thing to separate them by is how much evidence
+ * each rests on. More votes goes first. A board where the better-attested
+ * of two identical-looking scores sits underneath is a board that looks
+ * broken whatever the full-precision arithmetic says.
+ *
+ * Note what this is NOT: the rounding is applied to the Bayesian score,
+ * never to the raw average, so shrinkage still drives the order. The
+ * tiebreak only decides between recipes the shrinkage has already placed
+ * within a hundredth of each other.
  */
 export function rankRecipes(summaries: Iterable<RecipeRatingSummary>): readonly LeaderboardEntry[] {
   const all = [...summaries];
@@ -165,7 +214,7 @@ export function rankRecipes(summaries: Iterable<RecipeRatingSummary>): readonly 
       recipeId: summary.recipeId,
       average: summary.average,
       count: summary.count,
-      score: bayesianScore(summary.average, summary.count, prior),
+      score: roundScore(bayesianScore(summary.average, summary.count, prior)),
     }))
     .sort(
       (left, right) =>
