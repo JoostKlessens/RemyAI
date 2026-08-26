@@ -98,9 +98,10 @@ re-weighted via `fontWeight` like the OS system font, hence `sansBold`/
 
 ## Navigation: three tabs
 
-**Kiezen** (was "Vanavond"), **Bibliotheek** (was "Mijn recepten") and
-**Vrienden** (added in Fase 5b), in that order. No tab icons — text-only
-labels in `typeScale.caption` (monospace), matching each other exactly.
+**Kiezen** (was "Vanavond"), **Bibliotheek** (was "Mijn recepten"),
+**Vrienden** (added in Fase 5b) and **Ranglijst** (added in Fase 6,
+PD-014), in that order. No tab icons — text-only labels in
+`typeScale.caption` (monospace), matching each other exactly.
 
 **This document said "no third tab" until PD-010, and it was right to.**
 The argument was that the product has two tasks — deciding and keeping —
@@ -108,7 +109,11 @@ and that a third tab is how a decision tool turns into a browsing app.
 That argument still holds against the tab it was written about: an
 "Ontdekken" surface of algorithmic strangers would be exactly the
 high-browsing, low-cooking failure PD-004 exists to prevent, and it is
-still not being built.
+still not being built. Ranglijst is not that surface and does not reopen
+it: it ranks *recipes* by explicit 1-5 votes, with no personalisation and
+no per-viewer ordering — every reader sees the identical board. PD-014
+makes "no personalisation, ever" a condition of it existing, precisely so
+the two cannot be confused later.
 
 **What changed is that the owner approved a different third thing.**
 PD-010 settles that friends see a real card — thumbnail, recipe name, key
@@ -125,8 +130,18 @@ would blur a surface whose meaning is currently exact.
 content. Kiezen answers "wat eten we vanavond". Bibliotheek answers "wat
 heb ik bewaard". Vrienden answers "wat hebben mensen die ik ken gemaakt" —
 a question that genuinely has more than one answer, which is why it is
-allowed to be a list where Kiezen is not. A fourth tab needs a fourth
-question of that kind, and there isn't one.
+allowed to be a list where Kiezen is not.
+
+**A fourth tab needed a fourth question, and PD-014 claims one.** Ranglijst
+answers "wat is hier echt goed" — the population's verdict, which no other
+tab can hold, because each of the three is scoped to a household or a
+friend graph by design. That claim was made over a stated objection to this
+very rule; PD-014 records the objection instead of dissolving it, and binds
+the board to six conditions (Kiezen stays the launch tab, the board is
+finite, ordered by score and never recency, every row routes to cooking,
+every row credits its creator, and never personalised). Read PD-014 before
+changing anything on that surface — a fifth tab still needs a fifth
+question, and there isn't one.
 
 **Vrienden is last, and that placement is load-bearing.** Tab order is a
 claim about priority; the daily decision stays first, and Kiezen stays the
@@ -567,6 +582,85 @@ applies to this surface too.
 │    Dat is alles wat er gedeeld is. │ caption, centered
 └───────────────────────────────────┘
 ```
+
+---
+
+## 9. Ranglijst — the global board
+
+**Purpose**: PD-014's fourth surface. One ordered board of canonical
+recipes, ranked by what every household that cooked them thought. Not
+personalised, not a feed, identical for every reader.
+
+**The tab reads "Ranglijst"; the header reads "Best beoordeeld".** The one
+place in the app where a tab label and its header differ, and the reason is
+mechanical: the tab label shares a monospace `caption` line with three
+other words and the header does not fit it.
+
+**Layout**: header `title2` "Best beoordeeld" over a `bodySmall`/`textMuted`
+line, "Wat over alle keukens heen het hoogst scoort." Below it, a
+single-column list of rows, `space3` apart, each a `surface` panel with a
+`border` hairline and `radiusSm` — the same proof-sheet strip as §8, so the
+two list surfaces read as siblings rather than as two different products.
+
+Each row is one tap target, laid out as three columns:
+
+1. **The rank**, in `numeral` mono. Tabular figures are the reason it is
+   `numeral` and not `caption`: a column of ranks that shifts horizontally
+   between 9 and 10 makes the list look broken. A shared rank repeats the
+   number rather than blanking it — a blank reads as missing data.
+2. **A 9:16 thumbnail**, `space20` wide, monogram fallback exactly as §2
+   and §8.
+3. **A text block** carrying, in order: the dish in `title3`; a `numeral`
+   mono meta row, "4,8 · 204 stemmen"; and the creator in `caption` mono,
+   "@kokenmetkees · TikTok".
+
+**The score is written Dutch, with a comma.** "4,8" and never "4.8". It is
+the only decimal number the app renders, and a decimal point in a Dutch
+interface reads as a typo or as a thousands separator.
+
+**The number shown is the honest average, not the score that sorted the
+board.** PD-014 states the reason: a recipe rated 5, 5, 5 has an average of
+5, and printing the shrunk figure that ranked it would answer a question
+nobody asked. The two disagree by design, and only one of them is displayed.
+
+**The vote count is never omitted, and never abbreviated.** "204 stemmen"
+is what lets a reader weigh the average themselves; "4,8" alone is a claim
+with its evidence removed. One vote is "1 stem".
+
+**Ordering and the anti-scroll rules**: `rankRecipes`
+(src/domain/social/leaderboard.ts) orders by score, never by recency. The
+board is capped at a bounded top N and ends in a centered `caption`, "Dat
+is de hele lijst." No pagination, no infinite scroll, no pull-for-more, no
+timestamps, no "nieuw" badge, no "trending" — a board that moves because
+something is new is a feed wearing a ranking's clothes.
+
+**Tapping a row opens the recipe**, which can be saved and scheduled from
+there. That is condition 4 of PD-014 and it is what keeps this surface
+measurable on save-to-cook: a row that led only to more browsing would make
+Ranglijst the thing PD-004 exists to prevent.
+
+**PD-007a — the collision label, and the one way it differs from §8.**
+A colliding recipe is **labelled but not ranked down here**, which is the
+opposite of what the friend feed does, and the difference is forced rather
+than chosen. Ranking down is per-household by definition, and PD-014's
+sixth condition is "no personalisation, ever" — a board reordered by the
+reader's restrictions is a different board per reader, which is the thing
+that would turn this surface into the one DESIGN.md refused. So ordering
+stays global and identical for everyone; the *label* stays per-reader,
+because a warning is not an ordering.
+
+PD-007a is satisfied in full: the rule is "rank down AND label, never
+hide", and the part that carries the safety meaning — never hidden, always
+labelled — is untouched. The chip is exactly as §8: `warningMuted` fill
+with `warning` `caption` text reading exactly "bevat noten". Never a
+verdict about the reader ("niet veilig voor jou"), never `danger` red,
+never an icon instead of the word.
+
+**Empty state**: before anything clears `LEADERBOARD_MIN_VOTES` the board
+has no rows. It says so in `bodySmall`/`textMuted` — "Nog niet genoeg
+beoordelingen." — and never renders a zero, a placeholder row, or a
+skeleton that implies content is coming. Same refusal to fabricate a
+verdict that `average: null` makes in the domain.
 
 ---
 

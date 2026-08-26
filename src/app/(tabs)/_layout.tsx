@@ -1,5 +1,6 @@
 /**
- * The three-tab navigator: Kiezen, Bibliotheek and Vrienden. Nested under
+ * The four-tab navigator: Kiezen, Bibliotheek, Vrienden and Ranglijst.
+ * Nested under
  * `(tabs)` — a route group, so it does not appear in the URL —
  * specifically so Cook Mode, the import flow, a friend's shared recipe and
  * settings (all registered as sibling Stack screens in the parent
@@ -10,13 +11,22 @@
  * Kiezen is the one-dish decision surface (PD-001/PD-002 govern it
  * unchanged); Bibliotheek is where saved recipes live and where a link
  * gets pasted in; Vrienden, added in Fase 5b, is what people you know
- * have cooked and sent on (PD-010).
+ * have cooked and sent on (PD-010); Ranglijst, added in Fase 6, is the
+ * global board of best-rated recipes (PD-014).
  *
- * Vrienden is deliberately last. Tab order is a claim about priority, and
- * the daily question this product exists to answer is still the first
- * one — a social surface placed ahead of it would be the app quietly
- * changing its mind about what it is for. Kiezen also stays the launch
- * tab (`index`), unchanged.
+ * The two social surfaces are deliberately last, in that order. Tab order
+ * is a claim about priority, and the daily question this product exists to
+ * answer is still the first one — a social surface placed ahead of it
+ * would be the app quietly changing its mind about what it is for. Kiezen
+ * also stays the launch tab (`index`), unchanged: that is condition 1 of
+ * PD-014, not a leftover.
+ *
+ * Ranglijst sits behind Vrienden because a board of strangers' verdicts is
+ * further from the daily decision than a friend's recipe is. PD-014 grants
+ * it a fourth question ("wat is hier echt goed") over a stated objection to
+ * DESIGN.md's own rule, and binds it to six conditions; read that decision
+ * before touching this order. A fifth tab still needs a fifth question, and
+ * there isn't one.
  *
  * Settings (household size, weeknight time budget, dislikes/allergens)
  * still has no tab of its own — it's reachable from Bibliotheek's header
@@ -68,6 +78,17 @@ export default function TabsLayout(): JSX.Element {
         options={{
           title: 'Vrienden',
           tabBarAccessibilityLabel: 'Vrienden, recepten die vrienden met je deelden',
+        }}
+      />
+      <Tabs.Screen
+        name="ranglijst"
+        options={{
+          // The label is "Ranglijst" while the screen header reads "Best
+          // beoordeeld" — the one place in the app where the two differ,
+          // because this label shares a monospace caption line with three
+          // other words and the header does not fit it (DESIGN.md §9).
+          title: 'Ranglijst',
+          tabBarAccessibilityLabel: 'Ranglijst, de best beoordeelde recepten',
         }}
       />
     </Tabs>

@@ -429,6 +429,99 @@ native there is no URL to read. Left at a single value, the link silently does n
 two platforms.
 ---
 
+## PD-014 — The global board is a fourth surface, and what that overrides
+
+**The decision.** Remy gets a fourth tab: a global board ranking canonical recipes by what every
+household that cooked them thought. Fase 6.
+
+**This was taken over a stated objection, and the objection is recorded rather than dissolved.**
+Three things in this repo argued against it, and none of them were wrong:
+
+- DESIGN.md's replacement for "no third tab" — *"a tab may exist for a distinct question a
+  household actually asks, never for a distinct kind of content. A fourth tab needs a fourth
+  question of that kind, and there isn't one."*
+- The same section's explicit refusal: an *"Ontdekken"* surface of algorithmic strangers *"would be
+  exactly the high-browsing, low-cooking failure PD-004 exists to prevent, and it is still not
+  being built."*
+- PD-004, which measures every surface on save-to-cook and never on dwell time.
+
+The owner chose the board with those three in view. What follows is the fourth question it claims,
+and the conditions that keep the other two rules true rather than merely outvoted.
+
+**The fourth question.** "Wat is hier echt goed?" — a question about the population's verdict, which
+genuinely has an answer no existing tab holds. Kiezen answers what to eat tonight and shows one
+dish. Bibliotheek answers what you kept. Vrienden answers what people you know made. None of them
+can tell you that a recipe you have never seen is the best-rated thing in the app, because each is
+scoped to a household or a friend graph by design.
+
+**Why this is not the "Ontdekken" surface that was refused — and where it genuinely is.** It is not,
+in the one respect that matters most: the refused surface was *algorithmic strangers*, a ranked feed
+of people. This ranks **recipes**, by an average of explicit 1–5 votes, with no personalisation, no
+model, and no per-viewer ordering — every reader sees the identical board. It also exposes no
+household data whatsoever (see below). Where it genuinely is that surface: it is a scrollable list
+of recipes that is not the decision surface, and browsing it is not cooking. That is the real cost,
+and the conditions below exist to bound it rather than to argue it away.
+
+**What it ranks, and why that is the whole safety argument.** Rows in `recipes` — canonical
+extractions of publicly-posted creator content — and never a household's `meals` row. PD-010 is
+enforced by `meals.visibility`, which defaults to `private` and deliberately has no `public` member;
+a board over meals would be precisely the "in front of strangers" decision that
+`src/domain/social/types.ts` refuses to let arrive as an unused enum value. Nothing on this surface
+reads a meal, a household, or a member. Both tables it does read (`recipes` in 0006,
+`recipe_ratings` in 0007) already grant SELECT to any authenticated user, and both say why in their
+own migrations. **The board therefore exposes nothing that was not already exposed.** It needed a
+product argument, not a privacy one — and it does not reopen PD-010.
+
+**The conditions this ships under.** Not nice-to-have; the reasons the two rules above survive.
+
+1. **Kiezen stays first and stays the launch tab.** Tab order is a claim about priority (DESIGN.md
+   §Navigation) and the daily decision keeps it. The board is last.
+2. **The board is finite and says so out loud**, exactly as the friend feed does — a bounded top N,
+   no pagination, no infinite scroll, no pull-for-more.
+3. **Ordered by score, never by recency.** No timestamps, no "nieuw" badge, no "trending". A board
+   that moves because something is new is a feed wearing a ranking's clothes.
+4. **Every row is a route to cooking**, not to more browsing: a row opens the recipe, which can be
+   saved and scheduled. PD-004's metric is unchanged and this surface is measured by it.
+5. **Every row carries its creator.** These are extractions of somebody's post; PD-007's attribution
+   obligation applies here exactly as it does in the Feed and on Bevestigen.
+6. **No personalisation, ever.** One board, identical for every reader. The moment it is ordered
+   per-viewer it becomes the surface DESIGN.md refused, and this PD stops authorising it.
+
+**Where condition 6 collides with PD-007a, and which one gives.** PD-007a says a recipe colliding
+with a household restriction is ranked down AND labelled, never hidden. Ranking down is per-household
+by definition, so on this surface the two rules cannot both hold. **Ordering gives; labelling does
+not.** A colliding recipe keeps its global position and still carries its "bevat noten" chip. The
+half of PD-007a that carries the safety meaning — never hidden, always labelled — is untouched;
+the half that would have made the board per-reader is the half that yields, because a board
+reordered per reader is the surface this PD was written to bound. A warning is not an ordering.
+
+**The arithmetic, and why a raw average was rejected.** A mean alone puts a recipe with one 5 above
+one with two hundred 4.8s, which is not a verdict but an accident. The board uses a Bayesian
+estimate — `(v·R + m·C) / (v + m)`, the recipe's own average weighted against the population's by
+how much evidence each rests on — plus a hard floor below which a recipe is not ranked at all. Two
+constants, `LEADERBOARD_MIN_VOTES` and `LEADERBOARD_PRIOR_VOTES`, both stated once in
+`src/domain/social/leaderboard.ts`, the same way PD-008 requires of the scale itself.
+
+- **The prior is the population's actual mean, not the midpoint of the scale.** Shrinking toward 3
+  is the textbook default and it is wrong here specifically: PD-008 gives the middle band the
+  meaning "deliberately produces no signal", so using it as the prior would drag every thinly-rated
+  recipe toward an opinion nobody expressed.
+- **The board displays the honest average and sorts by the score.** A recipe rated 5, 5, 5 shows
+  4.9 and not the shrunk figure that ordered it — printing the latter answers a question nobody
+  asked.
+- **The aggregate stays client-side**, in the domain, for the reason 0007_social.sql already gives
+  when it rejects an aggregate view: half in SQL and half in the app gives the score two
+  definitions, and the one a person sees is whichever ran last. No `security definer` function and
+  no materialized view is needed, because neither table's RLS hides a row from an authenticated
+  reader. **If either policy ever narrows, the aggregate has to move server-side in the same
+  change** — otherwise this module quietly ranks a subset while presenting itself as the world.
+
+**Naming.** The tab reads "Ranglijst" and the screen header reads "Best beoordeeld" — the one place
+in the app where the two differ, because tab labels share a monospace caption line with three other
+words and "Best beoordeeld" does not fit it.
+
+---
+
 ## Deferred to Phase 2 — do not build
 
 - **Fridge scan.** Schema leaves room; nobody implements it until the decision loop proves
