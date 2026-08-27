@@ -138,7 +138,7 @@ describe('friend_proof — the social reason', () => {
 
   /** Defensive only — scoring never emits this code without friends. It must still say something true. */
   test('says something true rather than inventing a name when the context is empty', () => {
-    expect(buildReasonText('friend_proof', withFriends([], null))).toBe('Iemand uit je kring heeft dit ook gemaakt.');
+    expect(buildReasonText('friend_proof', withFriends([], null))).toBe('Iemand die je kent heeft dit ook gemaakt.');
   });
 
   /** It is the one reason that is a full sentence, so it is the one that takes a full stop. */

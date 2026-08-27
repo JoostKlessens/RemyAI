@@ -138,6 +138,40 @@ export interface Household {
   readonly decisionPushTime: string;
   readonly weeknightTimeBudgetMinutes: number;
   readonly skillLevel: SkillLevel;
+  /**
+   * PD-010 / DESIGN-SOCIAL.md §5 — the household's single cook-proof
+   * opt-in (`households.share_cooks_with_friends`, migration 0009). When
+   * true, this household's cook events become "Sanne maakte dit" proof to
+   * mutually accepted friends, via the `shared_cooks` projection.
+   *
+   * What consenting exposes, exactly: the link between a member's display
+   * name and a canonical recipe id — *that* someone here cooked it. The
+   * recipe's content, creator and public votes were already world-readable
+   * (PD-014). What it NEVER exposes, opt-in or not: restrictions and
+   * allergens (`member_restrictions` stays the only Article 9 table and no
+   * social path reads it), the household's members, `CookEvent.rating`,
+   * the library, the schedule, or anything nobody cooked. No timestamps
+   * travel — a proof is "Sanne maakte dit", never "gisteren" and never
+   * "4x". Revoking removes all past proof at each friend's next read,
+   * because proof is assembled per read and nothing is stored on the
+   * receiving side.
+   *
+   * OPTIONAL, and it earns that the same way `Meal.allergenTagStatus?`
+   * does: the column arrived after this type did, so household rows
+   * already sitting in real installs' storage carry no such key and come
+   * back `undefined` no matter what this declaration claims — `required`
+   * here would be a promise the read path cannot keep without rewriting
+   * every legacy row on launch. It is also the rare case where the absent
+   * state and the fail-safe state coincide *and* point the same way: a
+   * missing key means the household was never asked, which is exactly
+   * 0009's `default false` and §5's "a household that never answers the
+   * question shares nothing, forever". Read it through
+   * `RemyRepository.getHouseholdCookSharing`, which normalises to a plain
+   * boolean, rather than testing this field directly — a bare truthiness
+   * check happens to be right today, and is one negation away from being
+   * exactly backwards.
+   */
+  readonly shareCooksWithFriends?: boolean;
   readonly createdAt: IsoDateTimeString;
 }
 
@@ -254,6 +288,50 @@ export interface Meal {
    * backfilled to `[]` on read — see src/lib/repository/local/meals.ts.
    */
   readonly dishTags: readonly string[];
+  /**
+   * The SECOND descriptive axis, from the closed vocabulary in
+   * dishMoods.ts — "zomers", "soul-food", "high-protein". What a dish
+   * FEELS like and what occasion it belongs to, as opposed to `dishTags`
+   * above, which is what it is made of and what form it takes.
+   *
+   * WHERE IT COMES FROM, AND WHY THAT IS THE WHOLE POINT. `dishTags` is
+   * set once at IMPORT time, by the extraction path, before anybody has
+   * eaten anything. A mood is added by a PERSON, after they cooked the
+   * dish, in the outcome moment beside the grade — one mood per rating,
+   * accumulated as a union across cooks, because a stamppot genuinely is
+   * both `winters` and `soul-food` and no cook's honest description
+   * should be able to delete the previous one's.
+   *
+   * IT IS PUBLIC BY DESIGN, AND IT IS SAFE TO BE (PD-019). The mood is
+   * the socially visible half of that moment and `CookEvent.rating` is
+   * the private half; they are written to two different rows by two
+   * different calls, and neither is ever derived from the other. What
+   * makes publishing this one safe is that a mood carries NO NUMBER and
+   * no mood is better than another, so there is nothing in it to inflate
+   * — the exact pressure PD-019 protects the private grade from. Nothing
+   * anywhere may turn a mood into a score, rank moods, or count them into
+   * one.
+   *
+   * NEVER MERGED WITH `ingredientTags`, and never with `dishTags` either.
+   * The first is allergen data driving the PD-006 exclusion gate; the
+   * second is a different question with different filter semantics (ALL
+   * of the chosen dishTags, ANY of the chosen moods — see
+   * `DecisionFilters`). Three `readonly string[]` fields on one row, three
+   * vocabularies asserted to share no value (tests/dishMoods.test.ts).
+   *
+   * OPTIONAL, unlike `dishTags` beside it, and the asymmetry is
+   * deliberate. `dishTags` is required and backfilled on read because it
+   * predates almost nothing; this arrived after ~68 `Meal` object
+   * literals already existed across the codebase, several of them in
+   * files other hands own right now, and requiring it would force a value
+   * into every one of them. It also earns optionality the way `recipeId?`
+   * does: a missing key is already one of its legal readings ("nobody has
+   * described this dish yet") and that reading is identical to the stored
+   * `[]`, so there is no fail-safe state to lose. Read it through
+   * `readMealDishMoods` (dishMoods.ts) rather than testing this field
+   * directly — that is where the `Array.isArray` repair lives.
+   */
+  readonly dishMoods?: readonly string[];
   /** Creator video URL for Feed items (F) — resolved to an oEmbed player by the UI layer. */
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
@@ -268,6 +346,45 @@ export interface Meal {
    * image or a stock placeholder.
    */
   readonly thumbnailUrl: string | null;
+  /**
+   * DESIGN-SOCIAL.md §3.5, "Deel deze niet"
+   * (`meals.excluded_from_cook_proof`, migration 0009). The per-meal
+   * escape hatch that makes one global switch honest: a household happy to
+   * share its cooking in general may have a single dish that says too
+   * much — a medical diet, a religious observance week — and without this
+   * the only choices are total silence and total disclosure.
+   *
+   * When true it silences ALL cook proof for this meal, THE PAST
+   * INCLUDED, at the next read: proof is assembled per read and never
+   * stored on the friend's side, so there is no back catalogue left
+   * standing on someone else's device to catch up with.
+   *
+   * INDEPENDENT of `Household.shareCooksWithFriends`, and unaffected by
+   * toggling it — the global switch going off and on again does not
+   * resurrect an excluded meal. The two are separate answers to separate
+   * questions, and the exclusion is not a share tier layered under the
+   * opt-in.
+   *
+   * It also does NOT block a directed send (`recipe_shares`): a send is
+   * its own explicit act aimed at one named person, so an excluded meal
+   * can still be sent, and those are withdrawn per-act with `Stop delen`.
+   * And it does not touch `recipe_ratings` votes — a vote is
+   * world-readable by design and is withdrawn by deleting the vote, which
+   * is a different instrument entirely.
+   *
+   * OPTIONAL for the same reason `recipeId?` above is, and on the same
+   * stored/absent equivalence: the column arrived after this type, so
+   * legacy meal rows have no such key, and a missing key already means
+   * what `false` means — nobody has ever asked for this dish to be
+   * withheld. Required would additionally force a value into all ~68
+   * `Meal` literals across the codebase, several of them in files other
+   * agents own right now. Note this is the one field here whose absent
+   * reading is fail-OPEN rather than fail-closed, so read it through
+   * `RemyRepository.getMealCookProofExclusion` (which normalises, and
+   * refuses an unknown meal id rather than answering "not excluded")
+   * instead of testing this field at a call site.
+   */
+  readonly excludedFromCookProof?: boolean;
   /** Set when a meal is removed from rotation. Soft-delete: history referencing it stays intact. */
   readonly archivedAt: IsoDateTimeString | null;
   readonly createdAt: IsoDateTimeString;
@@ -505,6 +622,42 @@ export interface DecisionFilters {
    * `Meal.ingredientTags`, which is allergen data (see `Meal.dishTags`).
    */
   readonly requiredDishTags: readonly string[];
+  /**
+   * The second axis: meal must have ANY ONE of the listed moods. Empty =
+   * no mood filter. Values come from dishMoods.ts's closed vocabulary and
+   * are matched against `Meal.dishMoods` only.
+   *
+   * OR, WHERE `requiredDishTags` ABOVE IS AND. Read both together before
+   * changing either; they disagree, and that is the design.
+   *
+   * `requiredDishTags` asks a COMPOSITION question, and two chips there
+   * are one request: "iets met pasta én vegetarisch" describes a single
+   * dish that has both a base and a diet, and OR would make each extra
+   * chip widen the pool, so narrowing your way to a decision would watch
+   * the answer get vaguer with every tap.
+   *
+   * `anyDishMoods` asks what somebody is IN THE MOOD FOR, and two chips
+   * there are two alternatives: "ik heb zin in iets zomers of iets
+   * lichts" is a real sentence, and "iets dat tegelijk zomers én winters
+   * is" is a request for nothing — the vocabulary is built in opposing
+   * pairs (see dishMoods.ts), so AND across a pair is guaranteed empty by
+   * construction. There is a mechanical reason on top of the semantic
+   * one: a mood arrives ONE AT A TIME (one per rating), so a dish cooked
+   * once carries exactly one, and AND would empty the pool on almost
+   * every second tap in a young library.
+   *
+   * BETWEEN the two axes it is AND: "iets met pasta, en dan iets zomers
+   * of iets lichts" is one coherent request and it is the one
+   * `filterByDecisionFilters` composes. The asymmetry is stated out loud
+   * in each chip row's accessibility label, so a screen-reader user is
+   * not left to infer it from a result they cannot see.
+   *
+   * Required, not optional, for the reason `filters` itself is required
+   * on `DecisionRequest`: an omitted set and an empty one mean the same
+   * thing, so `anyDishMoods?:` would have compiled everywhere untouched,
+   * which is precisely how a filter nobody passes stays dead.
+   */
+  readonly anyDishMoods: readonly string[];
 }
 
 /**

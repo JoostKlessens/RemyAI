@@ -61,6 +61,18 @@
  * shape the app would have to learn about, and a second place for the two
  * paths to drift apart.
  *
+ * "INDISTINGUISHABLE" NOW INCLUDES THE ROW'S OWN ID (W-01b), and that is
+ * the half of deduplication that is about people rather than cost. Saving
+ * an oEmbed call and an LLM call is the visible win; joining two
+ * households to ONE `recipes` row is the reason the table exists at all,
+ * because that shared row is the only thing a friend's cook can be matched
+ * against (`shared_cooks` in 0009). So `parseStoredRecipe` reads `id` and
+ * puts it on `ImportResult.recipeId`, exactly as the fresh path puts the
+ * id its insert returned there — same URL, same id, whichever path served
+ * it. A row that arrives without an `id` is rejected as a cache miss
+ * rather than served with a null one; see the guard for why the loud
+ * failure is the cheap one.
+ *
  * THE TRADEOFF WE ARE ACCEPTING. Deduplication makes a bad extraction
  * sticky: once a mediocre parse of a URL is stored, every later importer
  * of that URL gets it, instead of rolling the dice on the model again.
@@ -274,6 +286,18 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
     return null;
   }
 
+  // A `recipes` row always has an id — it is the primary key — so a row
+  // without one means the SELECT forgot to ask for it. Failing the row is
+  // the loud version of that mistake: the URL simply stops benefiting from
+  // deduplication until someone notices the extra extractions. The quiet
+  // version — returning the recipe with a null `recipeId` — is strictly
+  // worse and is the exact bug W-01 was: every importer of that URL gets a
+  // meal linked to no canonical row, no friend's cook can ever match it,
+  // and nothing anywhere reports a problem.
+  if (!isNonEmptyString(raw.id)) {
+    return null;
+  }
+
   if (!isNonEmptyString(raw.normalized_url) || !isImportPlatform(raw.platform)) {
     return null;
   }
@@ -310,6 +334,15 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
   return {
     kind: 'parsed',
     recipe,
+    // THE POINT OF THE CACHE, for the social half of the product. The
+    // stored row's own primary key is what makes a hit worth more than
+    // saved tokens: it hands the twentieth household the SAME canonical
+    // recipe the first one created, which is the only object their two
+    // cooks can be joined on (`shared_cooks`, 0009). Read off the row,
+    // never derived from `normalized_url` below — that column is this
+    // row's deduplication KEY, not its identity, and the two are not
+    // interchangeable.
+    recipeId: raw.id.trim(),
     // The deduplication key IS the source URL — by construction the same
     // normalized, post-redirect URL the original import resolved.
     sourceUrl: raw.normalized_url.trim(),

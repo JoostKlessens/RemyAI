@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { decodeImportConfirmParams, encodeImportConfirmParams, type ImportConfirmParams } from '@/app/import/routeParams';
 
+const RECIPE_ID = '11111111-2222-3333-4444-555555555555';
+
 describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
   test('round-trips a "parsed" payload', () => {
     const params: ImportConfirmParams = {
@@ -16,6 +18,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       platform: 'tiktok',
       authorName: 'kokenmetkees',
       thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
+      recipeId: RECIPE_ID,
     };
 
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
@@ -29,6 +32,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       platform: null,
       authorName: null,
       thumbnailUrl: null,
+      recipeId: null,
     };
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
   });
@@ -41,6 +45,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       platform: null,
       authorName: null,
       thumbnailUrl: null,
+      recipeId: null,
     });
   });
 
@@ -61,6 +66,63 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
     expect(decodeImportConfirmParams(raw).mode).toBe('manual');
   });
 
+  /**
+   * W-01b: the canonical `recipes` id is the one thing on this payload
+   * that cannot be recovered on the far side. `sourceUrl` survives the
+   * hop and looks like it would do — it is the row's deduplication key,
+   * not its id, and a screen that "recovered" the id from it would point
+   * a household's meal at a row that does not exist.
+   */
+  test('carries a canonical recipeId across the paste -> confirm hop', () => {
+    const raw = encodeImportConfirmParams({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
+      platform: 'tiktok',
+      authorName: 'kokenmetkees',
+      thumbnailUrl: null,
+      recipeId: RECIPE_ID,
+    });
+    expect(decodeImportConfirmParams(raw).recipeId).toBe(RECIPE_ID);
+  });
+
+  test('keeps an explicitly null recipeId null — a manual add is a copy of nothing', () => {
+    const raw = encodeImportConfirmParams({
+      mode: 'manual',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+      recipeId: null,
+    });
+    expect(decodeImportConfirmParams(raw).recipeId).toBeNull();
+  });
+
+  test('decodes to the safe empty shape when recipeId is missing or is not a string', () => {
+    const withoutKey = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+    });
+    expect(decodeImportConfirmParams(withoutKey).mode).toBe('manual');
+
+    const wrongType = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+      recipeId: 42,
+    });
+    expect(decodeImportConfirmParams(wrongType).mode).toBe('manual');
+    expect(decodeImportConfirmParams(wrongType).recipeId).toBeNull();
+  });
+
   test('decodes to the safe empty shape when platform is outside the known union', () => {
     const raw = JSON.stringify({
       mode: 'manual',
@@ -69,6 +131,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       platform: 'youtube',
       authorName: null,
       thumbnailUrl: null,
+      recipeId: RECIPE_ID,
     });
     expect(decodeImportConfirmParams(raw)).toEqual({
       mode: 'manual',
@@ -77,6 +140,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       platform: null,
       authorName: null,
       thumbnailUrl: null,
+      recipeId: null,
     });
   });
 });

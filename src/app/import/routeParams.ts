@@ -18,6 +18,29 @@ export interface ImportConfirmParams {
   readonly authorName: string | null;
   /** oEmbed's thumbnail, when parsing succeeded and one was returned — see Meal.thumbnailUrl (src/domain/types.ts). Always null in 'manual' mode. */
   readonly thumbnailUrl: string | null;
+  /**
+   * The canonical `recipes` row (0006) this import resolved to, straight
+   * off `ImportResult.recipeId` — the shared object `meals.recipe_id`
+   * points at, and the only thing a friend's cook can be joined to
+   * (`shared_cooks`, 0009).
+   *
+   * IT MUST TRAVEL, BECAUSE IT CANNOT BE RECOVERED. Everything else on
+   * this payload the confirmation screen could in principle look up again;
+   * this it cannot. `sourceUrl` is sitting right there and is a perfectly
+   * stable, unique string — and it is the `recipes` row's deduplication
+   * KEY, not its id. A screen that "recovered" the id from it would write
+   * meals pointing at rows that do not exist, silently, forever.
+   *
+   * REQUIRED, NOT OPTIONAL, and stated even when it is null — the same
+   * call `MealDraftInsert.recipeId` makes one layer down, for the same
+   * reason. This link went unwritten from 0006 until W-01b precisely
+   * because every layer that could omit it did. A required field makes
+   * dropping it a compile error at the one write site rather than a social
+   * feature that quietly never fires. `null` is the honest, permanent
+   * answer for a manual add, a display-only import (PD-011 stores no
+   * canonical row) and any import whose canonical write failed.
+   */
+  readonly recipeId: string | null;
 }
 
 export function encodeImportConfirmParams(params: ImportConfirmParams): string {
@@ -47,6 +70,7 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
     platform: null,
     authorName: null,
     thumbnailUrl: null,
+    recipeId: null,
   };
   if (raw === undefined) {
     return empty;
@@ -60,6 +84,14 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
       return empty;
     }
     if (!isNullableString(parsed.thumbnailUrl)) {
+      return empty;
+    }
+    // Held to the same rule as every other scalar here rather than a
+    // lenient "missing means null": this flow's own `paste.tsx` always
+    // writes the key (the field is required), so a payload without it did
+    // not come from the screen this decoder trusts, and the safe empty
+    // shape is the honest reading of that.
+    if (!isNullableString(parsed.recipeId)) {
       return empty;
     }
     if (parsed.platform !== null && parsed.platform !== 'tiktok' && parsed.platform !== 'instagram') {
@@ -77,6 +109,7 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
       platform: parsed.platform,
       authorName: parsed.authorName,
       thumbnailUrl: parsed.thumbnailUrl,
+      recipeId: parsed.recipeId,
     };
   } catch {
     return empty;

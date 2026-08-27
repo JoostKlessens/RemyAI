@@ -37,11 +37,35 @@
  * no existing call site changes. A caller overriding `onPress` should
  * override `accessibilityHint` too — otherwise the tile keeps promising a
  * screen reader it will open cook mode while doing something else.
+ *
+ * `onLongPress` (W-13) adds the app's FIRST long-press affordance —
+ * Bibliotheek's action sheet, DESIGN-SOCIAL.md §3.1. It is optional for
+ * the same reason `onPress` is: a borrowed meal on the Vrienden side has
+ * no library actions to offer, and a tile advertising a menu with nothing
+ * in it would be worse than one advertising nothing at all.
+ *
+ * A GESTURE IS NEVER THE ONLY PATH. A long-press is invisible to a screen
+ * reader and impossible for anyone who cannot hold a press steady, so
+ * whenever `onLongPress` is supplied the tile also publishes the same
+ * action through `accessibilityActions` — the iOS rotor and the Android
+ * actions menu both surface it — and swaps in a hint that says the gesture
+ * exists at all. The standard `'longpress'` action name is used rather
+ * than a custom one because Android maps it onto the platform's own
+ * ACTION_LONG_CLICK instead of adding a second, parallel entry beside it.
+ *
+ * REJECTED: a visible "..." button in the tile corner. It would be the
+ * honest third path, but the tile already carries a scheduling badge in
+ * that corner and a title over a scrim, and docs/DESIGN.md §2's grid is
+ * built around the still image being the thing you read. A second chip
+ * competing with the badge costs every tile in the library to serve an
+ * action taken on a handful of them. Worth revisiting if the sheet grows
+ * past two rows and long-press stops being a rare, deliberate act.
  */
 
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Meal } from '@/domain/types';
+import { LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL, LIBRARY_TILE_ACTIONS_HINT } from './libraryTileActionCopy';
 import { buildSchedulingLabel, type RecipeSchedulingInfo } from './recipeScheduling';
 import { type ColorTokens, fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
@@ -50,26 +74,56 @@ export interface RecipeTileProps {
   readonly scheduling: RecipeSchedulingInfo;
   /** Defaults to opening Cook Mode for this meal — see the file header for when it must not. */
   readonly onPress?: () => void;
+  /**
+   * Opens the tile's action sheet (`LibraryTileActionSheet`). Omitted, the
+   * tile advertises no long-press and no accessibility action at all.
+   */
+  readonly onLongPress?: () => void;
   /** Defaults to Cook Mode's hint; override it whenever `onPress` is overridden. */
   readonly accessibilityHint?: string;
 }
 
 const DEFAULT_ACCESSIBILITY_HINT = 'Open kookmodus voor dit gerecht';
 
+/**
+ * RN's standard action name for a long press. Android dispatches it as
+ * ACTION_LONG_CLICK; iOS has no native equivalent, so VoiceOver offers it
+ * in the rotor under the label below.
+ */
+const LONG_PRESS_ACTION_NAME = 'longpress';
+
+const LONG_PRESS_ACCESSIBILITY_ACTIONS = [
+  { name: LONG_PRESS_ACTION_NAME, label: LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL },
+];
+
 export function RecipeTile(props: RecipeTileProps): JSX.Element {
-  const { meal, scheduling, onPress, accessibilityHint } = props;
+  const { meal, scheduling, onPress, onLongPress, accessibilityHint } = props;
   const router = useRouter();
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const badge = resolveBadgeStyle(scheduling.state, colors);
   const monogram = meal.title.trim().charAt(0).toUpperCase() || '?';
+  const hasActions = onLongPress !== undefined;
 
   return (
     <Pressable
       onPress={onPress ?? (() => router.push(`/cook/${meal.id}`))}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={`${meal.title}, ${buildSchedulingLabel(scheduling.state)}`}
-      accessibilityHint={accessibilityHint ?? DEFAULT_ACCESSIBILITY_HINT}
+      // An explicit override still wins: a caller that repointed `onPress`
+      // knows what its tile does better than this default can.
+      accessibilityHint={accessibilityHint ?? (hasActions ? LIBRARY_TILE_ACTIONS_HINT : DEFAULT_ACCESSIBILITY_HINT)}
+      accessibilityActions={hasActions ? LONG_PRESS_ACCESSIBILITY_ACTIONS : undefined}
+      onAccessibilityAction={
+        hasActions
+          ? (event) => {
+              if (event.nativeEvent.actionName === LONG_PRESS_ACTION_NAME) {
+                onLongPress();
+              }
+            }
+          : undefined
+      }
       style={styles.tile}
     >
       <View style={[styles.frame, { backgroundColor: colors.surfaceSunken }]}>

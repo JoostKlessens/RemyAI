@@ -16,9 +16,52 @@
  * path here goes through `toMealRow` so that meal rows written before that
  * column existed come back with `dishTags: []` rather than `undefined` —
  * see its own comment.
+ *
+ * `recipeId` (supabase/migrations/0006_canonical_recipes.sql's
+ * `meals.recipe_id`) rides on that same row and is written by
+ * `buildMealRow` below. It had to be: the column and `Meal.recipeId` both
+ * existed from 0006 onward while no write path anywhere populated either,
+ * so `shared_cooks` (0009) had nothing to join a friend's cook to
+ * and the whole cook-proof feature was unreachable on real data — a bug
+ * every test missed because they all built their `Meal` by hand instead of
+ * going through `createMeal`.
+ *
+ * Unlike `dishTags` it is deliberately NOT backfilled on read. The two
+ * look like the same problem and are not: `Meal.dishTags` is a required
+ * array, so an old row's missing key is an `undefined` that crashes the
+ * first `.some()` downstream — a repair, not a default. `Meal.recipeId` is
+ * optional AND nullable, so a missing key is already one of its legal
+ * values and every reader treats it as such (`meal.recipeId ?? null` in
+ * src/domain/scoring.ts). Backfilling it would mean allocating a fresh
+ * object for every legacy row on every read to restate what the type
+ * already says. Rows written from here on always carry the key explicitly,
+ * so the ambiguity does not grow.
+ *
+ * `excludedFromCookProof` (0009's `meals.excluded_from_cook_proof`) rides
+ * on the same row again — "Deel deze niet", DESIGN-SOCIAL.md §3.5. It
+ * follows `recipeId`'s posture, not `dishTags`': optional and not
+ * backfilled on read, because a missing key is already one of its legal
+ * values. What it does NOT share with either is where the two setters
+ * below normalise it — see `getMealCookProofExclusion` for why an optional
+ * privacy flag whose absent reading is fail-open gets a dedicated reader
+ * rather than a `?? false` scattered across call sites.
+ *
+ * `dishMoods` (supabase/migrations/0010_dish_moods.sql's
+ * `meals.dish_moods`) is the second descriptive axis and rides the same
+ * row again — but it is the only one of these four written AFTER the meal
+ * exists, by a person, in the outcome moment. `addMealDishMood` below is
+ * its whole write path; nothing sets it at create time and no import
+ * screen may. It takes `recipeId`'s optional-and-not-backfilled posture
+ * rather than `dishTags`' repaired-on-read one, because a missing key is
+ * already one of its legal values — the normalisation that would be a
+ * repair for `dishTags` is just a read for this, and it lives in
+ * `readMealDishMoods` (src/domain/dishMoods.ts) so that the domain's
+ * filter and this file's setter agree by construction.
  */
 
 import type { CreateMealInput, MealIngredientInput, MealStepInput } from '../types';
+import { isDishMood, readMealDishMoods } from '@/domain/dishMoods';
+import { normalizeTag } from '@/domain/normalizeTag';
 import type { Meal, MealId, MealIngredient, MealStep } from '@/domain/types';
 import { generateLocalId } from '../id';
 import { nowIso } from '../clock';
@@ -108,12 +151,176 @@ function buildMealRow(input: CreateMealInput): Meal {
     // translation of "none" — never `undefined`, which is what every read
     // path downstream is entitled to assume it will never see.
     dishTags: input.dishTags ?? [],
+    // Same reading of an omitted optional as `dishTags` above, resting on
+    // the same stored/absent equivalence: a caller with no canonical
+    // recipe to point at is saying this meal is a copy of nothing, which
+    // is precisely what `null` means here (0006's `meals.recipe_id` is
+    // nullable for exactly that majority — seeded, curated, hand-entered).
+    // Written explicitly rather than left off the row so that every meal
+    // this app creates states its provenance one way or the other.
+    recipeId: input.recipeId ?? null,
     sourceUrl: input.sourceUrl,
     sourcePlatform: input.sourcePlatform,
+    // A meal is never born with a mood, and `CreateMealInput` deliberately
+    // has no counterpart field. Axis 2 is what a PERSON says after cooking
+    // the dish (see `Meal.dishMoods`); an import screen guessing at it
+    // would put a stranger's word in a household's mouth, and the LLM
+    // extraction path has no basis for the guess — nobody has eaten
+    // anything yet. Written explicitly for the same reason `recipeId` and
+    // `excludedFromCookProof` are: every row this app creates states its
+    // own answer rather than leaving a reader to infer one from silence.
+    dishMoods: [],
     thumbnailUrl: input.thumbnailUrl,
+    // Hard-coded rather than taken from the input, and `CreateMealInput`
+    // deliberately has no counterpart field: a meal is never born
+    // excluded. "Deel deze niet" (DESIGN-SOCIAL.md §3.5) is a later,
+    // deliberate act on a dish already in the library, taken because THIS
+    // dish says too much — a judgement nobody can have made at the moment
+    // they saved a video. Offering it as a create-time option would invite
+    // an import screen to guess, and a guessed exclusion is either a
+    // silence nobody asked for or, worse, a `false` that reads as consent.
+    // Written explicitly for the same reason `recipeId` above is: every
+    // row this app creates should state its own answer.
+    excludedFromCookProof: false,
     archivedAt: null,
     createdAt: nowIso(),
   };
+}
+
+/**
+ * DESIGN-SOCIAL.md §3.5 — is this meal withheld from cook proof?
+ *
+ * `?? false` here is the mirror of `getHouseholdCookSharing`'s, with the
+ * asymmetry worth naming: on the household side a missing key fails
+ * CLOSED (never asked, so shares nothing), while here it fails OPEN
+ * (nobody has ever asked for this dish to be withheld, so it is not
+ * withheld). Both readings are the honest one — 0009 defaults both
+ * columns to `false` and they mean opposite things — but only one of them
+ * is forgiving of a mistake, which is exactly why this normalisation lives
+ * at the seam instead of at each call site.
+ *
+ * An unknown meal id throws rather than answering `false`, because `false`
+ * is the sharing answer: a lookup failure must not be able to grant
+ * permission to share a dish nobody could even find.
+ */
+export async function getMealCookProofExclusion(tables: RepositoryTables, mealId: MealId): Promise<boolean> {
+  const meal = await getMeal(tables, mealId);
+  if (meal === null) {
+    throw new Error(`No meal found with id "${mealId}".`);
+  }
+  return meal.excludedFromCookProof ?? false;
+}
+
+/**
+ * DESIGN-SOCIAL.md §3.5 — sets or lifts "Deel deze niet" for one meal.
+ *
+ * Touches this meal row and nothing else. That is what makes 0009's
+ * promise true rather than merely intended: the exclusion never reads or
+ * writes `households.share_cooks_with_friends`, so it is independent of
+ * the global opt-in and survives it being toggled off and on, and a
+ * household that has not opted in at all can still mark a dish in advance.
+ * It also never touches `recipe_shares` or `recipe_ratings` — an excluded
+ * meal can still be SENT (a send is its own explicit act, aimed at one
+ * named person, withdrawn per-act with `Stop delen`), and a public vote is
+ * withdrawn only by deleting the vote.
+ *
+ * Setting `true` silences this meal's cook proof including THE PAST. That
+ * needs no work here and no history to rewrite: proof is assembled per
+ * read from `shared_cooks`, and nothing is stored on the friend's side, so
+ * the exclusion simply removes the meal from the next assembly and the
+ * back catalogue goes with it at their next open.
+ */
+export async function setMealCookProofExclusion(
+  tables: RepositoryTables,
+  mealId: MealId,
+  excludedFromCookProof: boolean,
+): Promise<Meal> {
+  return updateMeal(tables, mealId, (meal) => ({ ...meal, excludedFromCookProof }));
+}
+
+/**
+ * The outcome moment's public half — one person's mood for one dish, from
+ * dishMoods.ts's closed vocabulary.
+ *
+ * WHAT IT DOES NOT TOUCH, AND THAT IS THE POINT (PD-019). This writes one
+ * `meals` row. It never reads, copies or derives anything from
+ * `cook_events.rating` — the private grade given in the same breath — so
+ * there is no path by which the household's engine input becomes visible
+ * to anybody. The two answers travel to two tables through two calls, and
+ * this one is the only one that was ever meant to be public. Publishing it
+ * is safe because a mood carries no number and no mood outranks another:
+ * there is nothing here to inflate, which is the exact pressure PD-019
+ * protects the grade from.
+ *
+ * ADDITIVE AND IDEMPOTENT, never a replace. A dish is cooked more than
+ * once and by more than one person, and one mood per rating is the
+ * owner's own shape ("één van deze categorien"). Overwriting would let
+ * tonight's cook silently delete last month's honest description, and a
+ * stamppot genuinely is both `winters` and `soul-food`. Two cooks
+ * agreeing is still one description, so the union de-duplicates rather
+ * than counting — a count would be the first brick of a popularity number
+ * on a vocabulary that must never have one.
+ *
+ * VALIDATED HERE, AT THE SEAM, rather than trusted from the caller. The
+ * vocabulary is closed because a value outside it is unfilterable, and
+ * storing an unfilterable value is storing something nobody can ever ask
+ * for again. Normalizing first and rejecting second mirrors
+ * `setCookEventRating`'s posture on an off-scale grade: fail at the
+ * boundary rather than write a row that can never be pushed to Postgres
+ * (0010's `meals_dish_moods_closed_vocabulary` CHECK would refuse it).
+ * The mood is normalized before comparison, so a padded or capitalized
+ * value from a route param still lands as the one canonical spelling.
+ *
+ * An unknown meal id throws, via `updateMeal` — the same contract every
+ * setter in this file keeps.
+ */
+export async function addMealDishMood(
+  tables: RepositoryTables,
+  mealId: MealId,
+  mood: string,
+): Promise<Meal> {
+  const normalized = normalizeTag(mood);
+  if (!isDishMood(normalized)) {
+    throw new Error(`Dish mood "${mood}" is not part of the closed vocabulary in src/domain/dishMoods.ts.`);
+  }
+  return updateMeal(tables, mealId, (meal) => {
+    const existing = readMealDishMoods(meal);
+    return existing.includes(normalized) ? meal : { ...meal, dishMoods: [...existing, normalized] };
+  });
+}
+
+/**
+ * Read-modify-write for exactly one meal — the same shape as
+ * local/cookEvents.ts's `updateCookEvent` and local/household.ts's
+ * `updateHousehold`, so the "not found" contract and the immutable replace
+ * are stated once per table rather than once per setter. `change` must
+ * return a new object; nothing here mutates the row it is handed, and the
+ * surrounding array is rebuilt by `map` rather than spliced in place.
+ *
+ * The row is passed through `toMealRow` on the way in, so a setter can
+ * never write back a legacy row's missing `dishTags` as an explicit
+ * `undefined` — repairing on read and then spreading the unrepaired
+ * original would persist the very shape `toMealRow` exists to absorb.
+ */
+async function updateMeal(
+  tables: RepositoryTables,
+  mealId: MealId,
+  change: (meal: Meal) => Meal,
+): Promise<Meal> {
+  const meals = await tables.meals.list();
+  let updated: Meal | undefined;
+  const next = meals.map((meal) => {
+    if (meal.id !== mealId) {
+      return meal;
+    }
+    updated = change(toMealRow(meal));
+    return updated;
+  });
+  if (updated === undefined) {
+    throw new Error(`No meal found with id "${mealId}".`);
+  }
+  await tables.meals.replaceAll(next);
+  return updated;
 }
 
 export async function createMeal(tables: RepositoryTables, input: CreateMealInput): Promise<Meal> {

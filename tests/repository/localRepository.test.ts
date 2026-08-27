@@ -7,7 +7,10 @@ import {
   resolveRepeatSignal,
   toRepeatSignal,
 } from '@/domain/rating';
+import { readMealDishMoods } from '@/domain/dishMoods';
+import { toMealDraft } from '@/domain/import/toMealDraft';
 import type { Meal } from '@/domain/types';
+import { makeParsedRecipe } from '../import/fixtures';
 import { createInMemoryKeyValueStore, type KeyValueStore } from '@/lib/repository/keyValueStore';
 import { createLocalRepository } from '@/lib/repository/localRepository';
 import { createRepositoryTables } from '@/lib/repository/local/tables';
@@ -212,6 +215,67 @@ describe('localRepository — meals (+ ingredients, + steps)', () => {
     expect(withoutThumbnail.thumbnailUrl).toBeNull();
   });
 
+  /**
+   * `Meal.recipeId` and `meals.recipe_id` (0006) both existed for several
+   * migrations while no write path populated either: every test that
+   * looked like it covered the field built a `Meal` literal by hand, so
+   * the seam between an import and the stored row was never exercised and
+   * the omission was invisible. These assertions therefore go through
+   * `createMeal`, the only way a real meal is ever written.
+   */
+  test('createMeal stores the canonical recipeId, so a friend cook of that recipe can join to this household copy', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ recipeId: 'recipe-abc' }));
+
+    expect(created.recipeId).toBe('recipe-abc');
+    expect((await repository.getMeal(created.id))?.recipeId).toBe('recipe-abc');
+  });
+
+  test('createMeal stores an explicit null for a meal that is no copy of a canonical recipe, never undefined', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    expect(created.recipeId).toBeNull();
+    expect('recipeId' in created).toBe(true);
+  });
+
+  test('createMeal survives an app restart with its recipeId intact', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ recipeId: 'recipe-abc' }));
+
+    const restarted = createLocalRepository(store);
+    expect((await restarted.getMeal(created.id))?.recipeId).toBe('recipe-abc');
+  });
+
+  /**
+   * The whole path in one test: a draft as the import pipeline builds it,
+   * mapped into `CreateMealInput` the way src/app/import/confirm.tsx maps
+   * it, written, and read back. Both halves passed their own tests while
+   * the link died in between — which is the only place it could die.
+   *
+   * The mapping here is this test's own, not production code: confirm.tsx
+   * assembles `CreateMealInput` field by field from the draft and does not
+   * forward `recipeId` yet (it also has no id to forward — see
+   * toMealDraft.ts's header). What this pins down is that none of the
+   * three shapes drops the link once a caller does supply one.
+   */
+  test('a canonical recipe id survives the whole import write path: draft -> CreateMealInput -> stored meal', async () => {
+    const draft = toMealDraft(makeParsedRecipe(), {
+      householdId: HOUSEHOLD_ID,
+      sourceUrl: 'https://www.tiktok.com/@chefremy/video/123',
+      platform: 'tiktok',
+      thumbnailUrl: null,
+      recipeId: 'recipe-abc',
+    });
+
+    const created = await repository.createMeal({
+      ...draft,
+      // toMealDraft's steps carry no durationMinutes (no cook-mode timers
+      // on import) — filled in as null exactly as confirm.tsx does.
+      steps: draft.steps.map((step) => ({ ...step, durationMinutes: null })),
+    });
+
+    expect(created.recipeId).toBe('recipe-abc');
+    expect((await repository.getMeal(created.id))?.recipeId).toBe('recipe-abc');
+  });
+
   test("listHouseholdMeals includes the household's own meals and curated (null householdId) meals", async () => {
     // Matches real app ordering (src/app/_layout.tsx awaits ensureSeeded()
     // before any screen can write): seed first, then create.
@@ -232,6 +296,126 @@ describe('localRepository — meals (+ ingredients, + steps)', () => {
 
     const meals = await repository.listHouseholdMeals(HOUSEHOLD_ID);
     expect(meals.some((meal) => meal.title === 'Niet van mij')).toBe(false);
+  });
+});
+
+describe('localRepository — dish moods (the second axis, written at the outcome moment)', () => {
+  let repository: RemyRepository;
+  let store: KeyValueStore;
+
+  beforeEach(() => {
+    store = createInMemoryKeyValueStore();
+    repository = createLocalRepository(store);
+  });
+
+  test('a newly created meal starts with no moods — a dish is described by cooks, never at import', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+
+    expect(meal.dishMoods).toEqual([]);
+  });
+
+  test('addMealDishMood records the mood on the meal', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const updated = await repository.addMealDishMood(created.id, 'zomers');
+
+    expect(updated.dishMoods).toEqual(['zomers']);
+    expect((await repository.getMeal(created.id))?.dishMoods).toEqual(['zomers']);
+  });
+
+  /**
+   * One mood per rating, but a dish is cooked more than once and by more
+   * than one person. The meal accumulates the union rather than the last
+   * answer: a stamppot genuinely is both `winters` and `soul-food`, and
+   * overwriting would let each cook silently delete the previous one's
+   * honest description.
+   */
+  test('a second, different mood joins the first rather than replacing it', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    await repository.addMealDishMood(created.id, 'winters');
+    const updated = await repository.addMealDishMood(created.id, 'soul-food');
+
+    // Through the documented reader rather than the raw field: the field
+    // is optional by design, so reaching past `readMealDishMoods` is the
+    // one thing a caller is not supposed to do.
+    expect([...readMealDishMoods(updated)].sort()).toEqual(['soul-food', 'winters']);
+  });
+
+  test('adding the same mood twice is idempotent — two cooks agreeing is still one description', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    await repository.addMealDishMood(created.id, 'zomers');
+    const updated = await repository.addMealDishMood(created.id, 'zomers');
+
+    expect(updated.dishMoods).toEqual(['zomers']);
+  });
+
+  test('normalizes before storing, so a padded or capitalized value cannot fragment the vocabulary', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const updated = await repository.addMealDishMood(created.id, '  Zomers ');
+
+    expect(updated.dishMoods).toEqual(['zomers']);
+  });
+
+  /**
+   * The closed vocabulary's whole point, held at the write seam rather
+   * than at the caller: a value outside it is unfilterable, so storing it
+   * would be storing something nobody can ever ask for.
+   */
+  test('rejects a value outside the vocabulary rather than storing it', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    await expect(repository.addMealDishMood(created.id, 'herfstig')).rejects.toThrow();
+    expect((await repository.getMeal(created.id))?.dishMoods).toEqual([]);
+  });
+
+  test('rejects a dish tag — axis 1 is set at import and is not writable from here', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    await expect(repository.addMealDishMood(created.id, 'pasta')).rejects.toThrow();
+  });
+
+  /**
+   * PD-019's guarantee restated as behaviour at the one seam that could
+   * break it: describing a dish is not grading it. The mood write must
+   * never read, copy or derive anything from `cook_events.rating`.
+   */
+  test('never touches the private cook-event grade', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+    const cookEvent = await repository.createCookEvent({
+      householdId: HOUSEHOLD_ID,
+      mealId: created.id,
+      decisionId: null,
+      cookedOn: '2026-02-01',
+    });
+    await repository.setCookEventRating(cookEvent.id, 9);
+
+    await repository.addMealDishMood(created.id, 'soul-food');
+
+    const events = await repository.listCookEvents(HOUSEHOLD_ID);
+    expect(events[0]?.rating).toBe(9);
+    expect((await repository.getMeal(created.id))?.dishMoods).toEqual(['soul-food']);
+  });
+
+  /**
+   * Rows written before this field existed are already sitting in real
+   * installs' storage with no such key. Describing one must repair it,
+   * not spread an `undefined` back into the array.
+   */
+  test('a meal row that predates the field can still be described', async () => {
+    const tables = createRepositoryTables(store);
+    const legacy = makeCuratedMeal({ id: 'legacy-meal', householdId: HOUSEHOLD_ID });
+    await tables.meals.replaceAll([...(await tables.meals.list()), legacy]);
+
+    const updated = await repository.addMealDishMood('legacy-meal', 'licht');
+
+    expect(updated.dishMoods).toEqual(['licht']);
+  });
+
+  test('rejects an unknown meal id rather than silently doing nothing', async () => {
+    await expect(repository.addMealDishMood('meal-that-does-not-exist', 'licht')).rejects.toThrow();
   });
 });
 

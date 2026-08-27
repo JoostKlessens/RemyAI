@@ -57,7 +57,7 @@ function oembedFailureBody(reason: OembedErrorReason): string {
     case 'region_locked':
       return 'Deze video is niet beschikbaar in jouw regio.';
     case 'rate_limited':
-      return 'Even te veel verzoeken bij het platform — probeer het over een minuutje opnieuw.';
+      return 'Even te veel verzoeken bij het platform. Probeer het over een minuutje opnieuw.';
     case 'missing_credentials':
       return 'Instagram-links kan Remy op dit moment nog niet ophalen.';
     case 'invalid_url':
@@ -101,7 +101,7 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
       return {
         title: 'Geen recept gevonden in het bijschrift',
         body:
-          'Sommige makers vertellen het recept alleen hardop in de video, zonder het uit te typen. Remy leest alleen tekst, dus dit ontdekt Remy niet vanzelf — typ het recept zelf over, dan staat het net zo goed in je lijst.',
+          'Sommige makers vertellen het recept alleen hardop in de video en typen het niet uit. Remy leest alleen tekst, dus die vindt het recept dan niet. Typ het recept zelf over. Dan staat het net zo goed in je lijst.',
         quote: result.caption,
         canRetry: false,
         manualEntryIsPrimary: true,
@@ -125,9 +125,9 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
       return {
         title: `${platformLabel}-post gevonden, recept typ je zelf`,
         body:
-          `Van ${platformLabel} mag Remy de post en de maker laten zien, maar het bijschrift niet zelf overnemen. ` +
-          'Dat is een afspraak, geen storing — bij een tweede poging gebeurt hetzelfde. ' +
-          'De maker en het beeld blijven bewaard: typ het recept er zelf bij, dan staat het compleet in je lijst.',
+          `Van ${platformLabel} mag Remy de post en de maker laten zien. Het bijschrift mag Remy niet overnemen. ` +
+          'Dat is een afspraak, geen storing. Bij een tweede poging gebeurt hetzelfde. ' +
+          'De maker en het beeld blijven bewaard. Typ het recept er zelf bij, dan staat het compleet in je lijst.',
         quote: null,
         canRetry: false,
         manualEntryIsPrimary: true,
@@ -136,7 +136,7 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
     case 'llm_request_failed':
       return {
         title: 'Even niet gelukt',
-        body: 'Het verwerken van deze video lukte nu niet. Dit is meestal tijdelijk — probeer het opnieuw.',
+        body: 'Het verwerken van deze video lukte nu niet. Dit is meestal tijdelijk. Probeer het opnieuw.',
         quote: null,
         canRetry: true,
         manualEntryIsPrimary: false,
@@ -145,7 +145,7 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
       return {
         title: 'Waarschijnlijk geen uitgeschreven recept',
         body:
-          'Remy kreeg een antwoord terug dat niet als recept te lezen was — dat gebeurt meestal wanneer de tekst geen volledig recept bevat. Typ het recept zelf over als je het weet.',
+          'Remy kreeg een antwoord terug dat niet als recept te lezen was. Dat gebeurt meestal als de tekst geen volledig recept bevat. Typ het recept zelf over als je het weet.',
         quote: null,
         canRetry: true,
         manualEntryIsPrimary: true,

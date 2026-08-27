@@ -38,6 +38,28 @@
  * Accept/decline write real decision responses; the outcome overlay
  * (PD-003) reads/writes real cook_events.
  *
+ * One read on that path is NOT local: `loadFriendProof`
+ * (src/lib/friendProof.ts) asks the `shared_cooks` view which recipes this
+ * household's friends have cooked, and the assembled result travels to
+ * `decide()` as `friendProof`. That one map drives both halves of the
+ * Kiezen social reason (DESIGN-SOCIAL.md §2.1) — the scoring boost and the
+ * sentence naming the friend — and it is the only new input this screen
+ * supplies. It cannot fail loudly: see that module's header for why
+ * silence is the correct degradation, and for why it will stay silent
+ * until auth, real cook events and imported `recipeId`s all exist. Nothing
+ * about the layout changes; the reason block renders whatever `decide()`
+ * put in `reasonText`, exactly as it always has.
+ *
+ * The outcome overlay makes a SECOND non-local read, only while it is up:
+ * DESIGN-SOCIAL.md §3.1's first Sturen entry point must know whether any
+ * accepted friend exists before `OutcomeCard` may draw its `Stuur door`.
+ * That read, the send write and the sheet's whole state live in
+ * `useOutcomeSend` (src/lib/useOutcomeSend.ts), outside this file because
+ * a route module is unimportable in the test environment — which is
+ * exactly how the prop went unpassed for a phase. It degrades the way
+ * `loadFriendProof` does: silently, into no button, never into an error on
+ * a card asking how dinner was.
+ *
  * Known, documented limitation: this app doesn't persist
  * `decision_alternatives` (the swap history table) — see the top-level
  * report. A reload mid-swap-session resets `alternativesRemaining` back to
@@ -63,22 +85,27 @@ import { DecisionFilterBar } from '@/components/DecisionFilterBar';
 import { DeclineReasonRow } from '@/components/DeclineReasonRow';
 import { NoCandidateState } from '@/components/NoCandidateState';
 import { OutcomeCard } from '@/components/OutcomeCard';
+import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { VanavondActionRow } from '@/components/VanavondActionRow';
-import { decide } from '@/domain/decide';
+import { decide, type DecisionRequestWithProof } from '@/domain/decide';
+import { collectAvailableDishMoods } from '@/domain/dishMoods';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import type {
   CookEventId,
   Decision,
   DeclineReason,
   DecisionFilters,
-  DecisionRequest,
   DecisionResult,
   HouseholdId,
   Meal,
   MealId,
 } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { loadFriendProof } from '@/lib/friendProof';
 import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
+import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { supabase } from '@/lib/supabase';
+import { useOutcomeSend } from '@/lib/useOutcomeSend';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
@@ -97,7 +124,7 @@ interface LiveSession {
    * filter into `requestBase` would mean re-fetching the whole household to
    * un-tap a chip.
    */
-  readonly requestBase: Omit<DecisionRequest, 'excludedMealIds' | 'filters'>;
+  readonly requestBase: Omit<DecisionRequestWithProof, 'excludedMealIds' | 'filters'>;
   readonly decisionRow: Decision | null;
   readonly mealById: ReadonlyMap<MealId, Meal>;
   /**
@@ -106,6 +133,7 @@ interface LiveSession {
    * see DecisionFilterBar's header.
    */
   readonly availableDishTags: readonly string[];
+  readonly availableDishMoods: readonly string[];
 }
 
 async function loadLiveSession(): Promise<LiveSession> {
@@ -127,9 +155,20 @@ async function loadLiveSession(): Promise<LiveSession> {
   if (household === null) {
     throw new Error('Household not found after seeding.');
   }
-  const recentDecisions = await repository.listRecentDecisions(householdId, daysAgoIso(RECENT_DECISIONS_LOOKBACK_DAYS));
+  // In parallel: the last local read, and the one remote read this screen
+  // makes. `loadFriendProof` never rejects (see its header) so it cannot
+  // take the decision down with it, and it is handed the SUPABASE social
+  // repository deliberately — cook proof is a cross-household fact living
+  // in the `shared_cooks` view, and the local implementation answers `[]`
+  // by design ("there is no friend's kitchen in here to read"). Ranglijst
+  // already reaches for its own cross-household table this way while the
+  // rest of the app is local-first; this is the same seam.
+  const [recentDecisions, friendProof] = await Promise.all([
+    repository.listRecentDecisions(householdId, daysAgoIso(RECENT_DECISIONS_LOOKBACK_DAYS)),
+    loadFriendProof(createSupabaseSocialRepository(supabase), candidateMeals),
+  ]);
 
-  const requestBase: Omit<DecisionRequest, 'excludedMealIds' | 'filters'> = {
+  const requestBase: Omit<DecisionRequestWithProof, 'excludedMealIds' | 'filters'> = {
     household,
     members,
     restrictions,
@@ -139,6 +178,7 @@ async function loadLiveSession(): Promise<LiveSession> {
     pendingSomedaySaves: somedaySaves,
     recentDecisions,
     targetDate,
+    friendProof,
   };
 
   const existingDecision = await repository.getDecisionByDate(householdId, targetDate);
@@ -150,6 +190,7 @@ async function loadLiveSession(): Promise<LiveSession> {
     decisionRow,
     mealById: new Map(candidateMeals.map((meal) => [meal.id, meal])),
     availableDishTags: collectAvailableDishTags(candidateMeals),
+    availableDishMoods: collectAvailableDishMoods(candidateMeals),
   };
 }
 
@@ -166,7 +207,7 @@ function collectAvailableDishTags(candidateMeals: readonly Meal[]): readonly str
 
 async function createTodayDecisionIfSuggested(
   repository: ReturnType<typeof getAppRepository>,
-  requestBase: Omit<DecisionRequest, 'excludedMealIds' | 'filters'>,
+  requestBase: Omit<DecisionRequestWithProof, 'excludedMealIds' | 'filters'>,
   householdId: HouseholdId,
 ): Promise<Decision | null> {
   // PD-009, deliberately unfiltered: this is the household's offer *for the
@@ -250,6 +291,15 @@ export default function VanavondScreen(): JSX.Element {
   // is actually visible; reduced motion collapses the delay to 0 via
   // resolveDuration, same as the stroke animation itself.
   const [isAccepting, setIsAccepting] = useState(false);
+
+  /**
+   * §3.1's first Sturen entry point, on the second of PD-003's two outcome
+   * surfaces — see the file header for why none of its work is in here.
+   * Null while the overlay is down, so the friend read fires only when a
+   * card is actually up rather than for the whole life of a screen that
+   * keeps its finished meal in state.
+   */
+  const outcomeSend = useOutcomeSend(showOutcomeOverlay ? (pendingOutcomeMeal?.id ?? null) : null);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -434,6 +484,15 @@ export default function VanavondScreen(): JSX.Element {
     void getAppRepository().setCookEventRating(pendingCookEventId, rating);
   };
 
+  /** The public half of the same moment, keyed on the MEAL rather than on
+      `pendingCookEventId` like the grade above — see OutcomeCard's header. */
+  const handleOutcomeMood = (mood: string): void => {
+    if (pendingOutcomeMeal === null) {
+      return;
+    }
+    void getAppRepository().addMealDishMood(pendingOutcomeMeal.id, mood);
+  };
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {__DEV__ ? <DevScenarioRow active={devScenario} onSelect={setDevScenario} /> : null}
@@ -447,6 +506,7 @@ export default function VanavondScreen(): JSX.Element {
         <DecisionFilterBar
           filters={filters}
           availableDishTags={session?.availableDishTags ?? []}
+          availableDishMoods={session?.availableDishMoods ?? []}
           onChange={handleChangeFilters}
         />
       ) : null}
@@ -490,18 +550,45 @@ export default function VanavondScreen(): JSX.Element {
         ) : null}
       </View>
 
-      <Modal visible={showOutcomeOverlay && Boolean(pendingOutcomeMeal)} transparent animationType="fade">
-        <View style={[styles.outcomeOverlay, { backgroundColor: colors.overlay, paddingBottom: insets.bottom }]}>
-          {pendingOutcomeMeal ? (
-            <OutcomeCard
+      {/* Stays mounted while the sheet is up even after the card has gone:
+          §3.1's "the send opens while the card closes underneath" is one
+          gesture away — tap a chip, then `Stuur door` during the hold —
+          and without that term the dismissal would take the sheet with it
+          mid-send. The sheet is NESTED rather than made a sibling, because
+          two top-level modals fight over presentation. */}
+      <Modal
+        visible={(showOutcomeOverlay || outcomeSend.sheetVisible) && pendingOutcomeMeal !== null}
+        transparent
+        animationType="fade"
+      >
+        {pendingOutcomeMeal !== null ? (
+          <>
+            <View style={[styles.outcomeOverlay, { backgroundColor: colors.overlay, paddingBottom: insets.bottom }]}>
+              {showOutcomeOverlay ? (
+                <OutcomeCard
+                  dishTitle={pendingOutcomeMeal.title}
+                  onCooked={handleOutcomeCooked}
+                  onRate={handleOutcomeRate}
+                  onChooseMood={handleOutcomeMood}
+                  onSendRecipe={outcomeSend.onSendRecipe}
+                  onDismiss={() => setShowOutcomeOverlay(false)}
+                  reduceMotionEnabled={reduceMotionEnabled}
+                />
+              ) : null}
+            </View>
+            <SendRecipeSheet
+              visible={outcomeSend.sheetVisible}
               dishTitle={pendingOutcomeMeal.title}
-              onCooked={handleOutcomeCooked}
-              onRate={handleOutcomeRate}
-              onDismiss={() => setShowOutcomeOverlay(false)}
+              friends={outcomeSend.friends}
+              note={outcomeSend.note}
+              onChangeNote={outcomeSend.onChangeNote}
+              onSend={outcomeSend.onSend}
+              onRetryFriends={outcomeSend.onRetryFriends}
+              onDismiss={outcomeSend.onDismiss}
               reduceMotionEnabled={reduceMotionEnabled}
             />
-          ) : null}
-        </View>
+          </>
+        ) : null}
       </Modal>
     </SafeAreaView>
   );

@@ -105,7 +105,7 @@ function fitsTimeText(context: ReasonContext): string {
 function friendProofText(context: ReasonContext): string {
   const proof = context.friendProof;
   if (proof === null || proof.friendNames.length === 0) {
-    return 'Iemand uit je kring heeft dit ook gemaakt.';
+    return 'Iemand die je kent heeft dit ook gemaakt.';
   }
 
   const named = proof.friendNames.slice(0, FRIEND_PROOF_NAME_LIMIT);

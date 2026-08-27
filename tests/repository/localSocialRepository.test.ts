@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createInMemoryKeyValueStore, type KeyValueStore } from '@/lib/repository/keyValueStore';
 import { createLocalSocialRepository } from '@/lib/repository/social/localSocialRepository';
-import type { RemySocialRepository } from '@/lib/repository/social/types';
+import { SEND_NOTE_MAX_LENGTH, type RemySocialRepository } from '@/lib/repository/social/types';
 import { PROFILE_A, PROFILE_B, PROFILE_C } from '../social/fixtures';
 
 /**
@@ -209,6 +209,240 @@ describe('recipe ratings', () => {
 
   test('an unrated recipe lists nothing rather than failing', async () => {
     expect(await repository.listRecipeRatings('recipe-nobody-rated')).toHaveLength(0);
+  });
+});
+
+describe('directed sends', () => {
+  /**
+   * The second tier — het pannetje. These tests are about the promises a
+   * local store has no constraints to lean on: `unique (meal_id,
+   * recipient_profile_id)`, the note CHECK, `sender <> recipient`, and the
+   * one clause of 0009's insert policy this store can actually establish
+   * (the recipient is a friend — there is no auth.uid() here, and meals
+   * live in the other repository entirely).
+   */
+  const MEAL = 'meal-traybake';
+  const OTHER_MEAL = 'meal-ramen';
+
+  beforeEach(async () => {
+    await seedProfiles();
+    await repository.upsertProfile({ id: PROFILE_C, handle: 'joris', displayName: 'Joris', avatarUrl: null });
+    await repository.actOnFriendship(PROFILE_A, PROFILE_B, 'request');
+    await repository.actOnFriendship(PROFILE_B, PROFILE_A, 'accept');
+    await repository.actOnFriendship(PROFILE_A, PROFILE_C, 'request');
+    await repository.actOnFriendship(PROFILE_C, PROFILE_A, 'accept');
+  });
+
+  test('a send round-trips to the person it was addressed to', async () => {
+    const sent = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: 'Dit is echt jouw ding.',
+    });
+
+    expect(sent.mealId).toBe(MEAL);
+    expect(sent.senderProfileId).toBe(PROFILE_A);
+    expect(sent.recipientProfileId).toBe(PROFILE_B);
+    expect(sent.note).toBe('Dit is echt jouw ding.');
+    expect(await repository.listSendsToMe(PROFILE_B)).toEqual([{ ...sent, seen: false }]);
+  });
+
+  /** A send is addressed. Nobody standing next to it is a party to it. */
+  test('a send reaches nobody but its recipient — the sender included', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+
+    expect(await repository.listSendsToMe(PROFILE_C)).toEqual([]);
+    expect(await repository.listSendsToMe(PROFILE_A)).toEqual([]);
+  });
+
+  test('the note is optional, and a blank one is stored as no note at all', async () => {
+    const withoutNote = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: null,
+    });
+    const blank = await repository.sendRecipe({
+      mealId: OTHER_MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: '   ',
+    });
+
+    expect(withoutNote.note).toBeNull();
+    expect(blank.note).toBeNull();
+  });
+
+  /** Truncating would publish words the sender did not choose, under their name. */
+  test('rejects a note past the cap rather than cutting it short', async () => {
+    const send = (note: string) =>
+      repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note });
+
+    await expect(send('a'.repeat(SEND_NOTE_MAX_LENGTH + 1))).rejects.toThrow(/140/);
+    await expect(send('a'.repeat(SEND_NOTE_MAX_LENGTH))).resolves.toBeDefined();
+    expect(await repository.listSendsToMe(PROFILE_B)).toHaveLength(1);
+  });
+
+  /** `char_length` counts characters; JS `.length` counts UTF-16 units, and an emoji is two of those. */
+  test('measures a note in characters, the way the database does', async () => {
+    const sent = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: '\u{1F958}'.repeat(SEND_NOTE_MAX_LENGTH),
+    });
+
+    expect([...(sent.note ?? '')]).toHaveLength(SEND_NOTE_MAX_LENGTH);
+  });
+
+  test('refuses to send a dish to yourself', async () => {
+    await expect(
+      repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_A, note: null }),
+    ).rejects.toThrow(/yourself/i);
+  });
+
+  /** 0009's insert policy: sending is not a channel to strangers. */
+  test('refuses a recipient who is not an accepted friend', async () => {
+    await repository.actOnFriendship(PROFILE_B, PROFILE_C, 'request');
+
+    await expect(
+      repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_B, recipientProfileId: PROFILE_C, note: null }),
+    ).rejects.toThrow(/friend/i);
+  });
+
+  /** `unique (meal_id, recipient_profile_id)`: the same dish to the same person is one offer. */
+  test('re-sending the same dish to the same person replaces the offer instead of adding a card', async () => {
+    const first = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: 'Eerste poging',
+    });
+    const second = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: 'Nee, deze erbij',
+    });
+
+    const waiting = await repository.listSendsToMe(PROFILE_B);
+    expect(waiting).toHaveLength(1);
+    expect(second.id).toBe(first.id);
+    expect(waiting[0]?.note).toBe('Nee, deze erbij');
+    expect(waiting[0]?.sentAt).toBe(first.sentAt);
+  });
+
+  test('the same dish may go to two different friends', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_C, note: null });
+
+    expect(await repository.listSendsToMe(PROFILE_B)).toHaveLength(1);
+    expect(await repository.listSendsToMe(PROFILE_C)).toHaveLength(1);
+  });
+
+  test('a withdrawn send disappears from the recipient list', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.withdrawSend(PROFILE_A, MEAL, PROFILE_B);
+
+    expect(await repository.listSendsToMe(PROFILE_B)).toEqual([]);
+  });
+
+  /** Kept, not deleted — observable, because the re-send lands on the same row. */
+  test('withdrawal keeps the row, so a re-send revives it rather than minting a new card', async () => {
+    const first = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: null,
+    });
+    await repository.withdrawSend(PROFILE_A, MEAL, PROFILE_B);
+    const revived = await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: 'Toch weer',
+    });
+
+    expect(revived.id).toBe(first.id);
+    expect(await repository.listSendsToMe(PROFILE_B)).toHaveLength(1);
+  });
+
+  /** Otherwise a recipient silently un-sends somebody else's gesture. */
+  test('a recipient cannot withdraw the send aimed at them', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.withdrawSend(PROFILE_B, MEAL, PROFILE_B);
+
+    expect(await repository.listSendsToMe(PROFILE_B)).toHaveLength(1);
+  });
+
+  test('withdrawing twice, or withdrawing nothing, is a no-op rather than an error', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.withdrawSend(PROFILE_A, MEAL, PROFILE_B);
+
+    await expect(repository.withdrawSend(PROFILE_A, MEAL, PROFILE_B)).resolves.toBeUndefined();
+    await expect(repository.withdrawSend(PROFILE_A, 'meal-never-sent', PROFILE_B)).resolves.toBeUndefined();
+  });
+
+  test('opening the tab marks the waiting sends seen, and doing it again changes nothing', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+
+    await repository.markSendsSeen(PROFILE_B);
+    const afterFirst = await repository.listSendsToMe(PROFILE_B);
+    await repository.markSendsSeen(PROFILE_B);
+    const afterSecond = await repository.listSendsToMe(PROFILE_B);
+
+    expect(afterFirst[0]?.seen).toBe(true);
+    expect(afterSecond).toEqual(afterFirst);
+  });
+
+  test('opening my tab says nothing about anybody else', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_C, note: null });
+
+    await repository.markSendsSeen(PROFILE_B);
+
+    expect((await repository.listSendsToMe(PROFILE_C))[0]?.seen).toBe(false);
+  });
+
+  test('a send that arrives after the tab was opened is unseen', async () => {
+    await repository.markSendsSeen(PROFILE_B);
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+
+    expect((await repository.listSendsToMe(PROFILE_B))[0]?.seen).toBe(false);
+  });
+
+  /**
+   * §3.2: unseen "clears permanently on viewing, so there is no loop to
+   * run". If a re-send reset it, withdraw-and-resend would be a bell the
+   * sender could ring at will.
+   */
+  test('a re-sent card stays seen', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.markSendsSeen(PROFILE_B);
+    await repository.withdrawSend(PROFILE_A, MEAL, PROFILE_B);
+    await repository.sendRecipe({
+      mealId: MEAL,
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: 'Nog eens',
+    });
+
+    expect((await repository.listSendsToMe(PROFILE_B))[0]?.seen).toBe(true);
+  });
+
+  /** Recording "seen" against a card that was never shown is a false entry. */
+  test('a withdrawn send is not marked seen while it is away', async () => {
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+    await repository.withdrawSend(PROFILE_A, MEAL, PROFILE_B);
+    await repository.markSendsSeen(PROFILE_B);
+    await repository.sendRecipe({ mealId: MEAL, senderProfileId: PROFILE_A, recipientProfileId: PROFILE_B, note: null });
+
+    expect((await repository.listSendsToMe(PROFILE_B))[0]?.seen).toBe(false);
+  });
+
+  test('nobody has any sends waiting by default', async () => {
+    expect(await repository.listSendsToMe(PROFILE_B)).toEqual([]);
   });
 });
 

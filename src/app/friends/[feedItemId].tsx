@@ -37,6 +37,15 @@
  * this device's repository holds no row for any of them. See RecipeTile's
  * `onPress` header for the same seam on the other tab.
  *
+ * THE SENDER'S NOTE (DESIGN-SOCIAL.md §4.3) renders here in the card's own
+ * dress, and it is the one thing on this screen that is a private message
+ * rather than a republished recipe. It is quoted behind a left rule for
+ * that reason and carried undecorated by `FriendRecipeCardModel`, so the
+ * card and this screen add the quotation marks separately instead of one
+ * of them unpicking the other's string. A null note renders nothing at
+ * all: a send without one is ordinary, and a proof card opening this same
+ * screen never has one.
+ *
  * FIXTURES ONLY (./_fixtures.ts) — no fetch, no repository, no Supabase.
  */
 
@@ -161,6 +170,36 @@ function SharedRecipeBody(props: { readonly resolved: ResolvedSharedRecipe }): J
         {`Gedeeld door ${card.friendName}`}
       </Text>
       <Text style={[typeScale.title1, { color: colors.textPrimary }]}>{card.title}</Text>
+
+      {/* DESIGN-SOCIAL.md §4.3: the note "renders under the eyebrow with
+          the card's left-rule treatment". Kept in the same position
+          relative to the title that FriendRecipeCard gives it — eyebrow,
+          dish, then the sender's voice — because §4.3's whole ask is that
+          the words look like the same words on both surfaces, and a note
+          that jumped above the dish name here would read as a different
+          thing about a different subject.
+
+          DRESSED IDENTICALLY AND DELIBERATELY: `bodySmall` in
+          `textSecondary` behind a `borderStrong` left rule, quotation
+          marks added here. The rule is the quotation mark that works at
+          any text size, and it is how this product says "these are not our
+          words" — the same treatment §7's "DIT LAS REMY" evidence block
+          uses. The marks are added at render on both surfaces rather than
+          stored, so neither screen has to unpick a string the other
+          decorated.
+
+          NULL RENDERS NOTHING — no empty rule, no placeholder, no "geen
+          briefje" — for the card's reason: a send without a note is the
+          ordinary case, and a stub would make it look like a note failed
+          to load. A proof card routes here too and never carries one
+          (§4.3: "the same anatomy minus note and minus sender eyebrow"),
+          so the absent case is the common one, not the exception. */}
+      {card.note !== null ? (
+        <View style={[styles.note, { borderLeftColor: colors.borderStrong }]}>
+          <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]}>{`"${card.note}"`}</Text>
+        </View>
+      ) : null}
+
       {metaLine !== null ? (
         <Text style={[typeScale.numeral, styles.metaRow, { color: colors.textMuted }]}>{metaLine}</Text>
       ) : null}
@@ -267,6 +306,17 @@ const styles = StyleSheet.create({
   eyebrow: {
     textTransform: 'uppercase',
     marginBottom: spacing.space2,
+  },
+  note: {
+    marginTop: spacing.space3,
+    // Identical to FriendRecipeCard's rule, down to the padding: a rule of
+    // a different weight or inset would be the second treatment §4.3 is
+    // asking this screen not to invent. `space3` rather than the card's
+    // `space2` above it is the only difference, and it is the screen's own
+    // rhythm — everything on this page sits further apart than it does
+    // inside a 96pt-tall row.
+    borderLeftWidth: 2,
+    paddingLeft: spacing.space2,
   },
   metaRow: {
     marginTop: spacing.space2,

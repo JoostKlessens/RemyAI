@@ -27,6 +27,27 @@
  * 2. **No "meer filters" escape hatch.** The vocabulary is closed on
  *    purpose (dishTags.ts); a growing filter surface is how a decision
  *    screen turns into a search screen.
+ * 3. **Two axes, and only two.** The mood row (dishMoods.ts) is what
+ *    finally makes this file's own first sentence true: it has always
+ *    claimed to answer "hoeveel tijd heb ik" and "waar heb ik zin in",
+ *    and until it existed the second question was answered with a list of
+ *    ingredients. "Waarmee?" is a question about the pan; "waar heb je
+ *    zin in?" is a question about the person, and no amount of adding to
+ *    dishTags.ts could have turned one into the other. A THIRD axis
+ *    should have to argue against restraint 2 above, not merely be
+ *    useful — three rows of chips over the dish name is the catalogue
+ *    that restraint exists to prevent.
+ *
+ * WHAT THIS COSTS IN HEIGHT, STATED RATHER THAN DISCOVERED. Both chip
+ * rows wrap, and on a narrow phone at large Dynamic Type each can take
+ * two or three lines. That is why both are gated on the candidate pool
+ * actually carrying the values (restraint 1) rather than rendering their
+ * whole vocabulary: for a real library the tag row is short and the mood
+ * row is usually shorter, and a brand-new library shows neither. The
+ * worst case — a big, thoroughly described library on a small screen —
+ * pushes the hero down, and the honest fix if that lands badly on a real
+ * device is a shorter vocabulary, not a disclosure control (see
+ * restraint 1's rejected alternative).
  *
  * Visual language follows docs/DESIGN.md: mono `label` eyebrows in
  * `textMuted` ("timecode burned into the frame"), the same
@@ -37,6 +58,7 @@
  */
 
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { DISH_MOODS } from '@/domain/dishMoods';
 import { DISH_TAGS } from '@/domain/dishTags';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import { normalizeTag } from '@/domain/normalizeTag';
@@ -54,6 +76,19 @@ export interface DecisionFilterBarProps {
    * the chips don't rearrange themselves as the library grows.
    */
   readonly availableDishTags: readonly string[];
+  /**
+   * The second axis (src/domain/dishMoods.ts): moods at least one meal in
+   * the candidate pool has actually been described with, from
+   * `collectAvailableDishMoods`. Same narrowing rule as
+   * `availableDishTags` above, and it matters more here, because this axis
+   * starts EMPTY for every existing library — nobody has described
+   * anything yet — so an unconditional row of six chips would be six taps
+   * that could only ever produce `filtered_out`. An empty array hides the
+   * row entirely, which is the honest rendering of "there is nothing to
+   * filter on yet", and the row appears on its own once people start
+   * answering the outcome card.
+   */
+  readonly availableDishMoods: readonly string[];
   readonly onChange: (filters: DecisionFilters) => void;
 }
 
@@ -95,17 +130,20 @@ function toTimeChoice(maxMinutes: number | null): TimeChoice {
 }
 
 function hasAnyFilter(filters: DecisionFilters): boolean {
-  return filters.maxMinutes !== null || filters.requiredDishTags.length > 0;
+  return filters.maxMinutes !== null || filters.requiredDishTags.length > 0 || filters.anyDishMoods.length > 0;
 }
 
 export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
-  const { filters, availableDishTags, onChange } = props;
+  const { filters, availableDishTags, availableDishMoods, onChange } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
   const available = new Set(availableDishTags.map(normalizeTag));
   const visibleTags = DISH_TAGS.filter((entry) => available.has(entry.tag));
   const selectedTags = new Set(filters.requiredDishTags.map(normalizeTag));
+  const availableMoods = new Set(availableDishMoods.map(normalizeTag));
+  const visibleMoods = DISH_MOODS.filter((entry) => availableMoods.has(entry.mood));
+  const selectedMoods = new Set(filters.anyDishMoods.map(normalizeTag));
   const isActive = hasAnyFilter(filters);
 
   const handleTimeChange = (choice: TimeChoice): void => {
@@ -119,6 +157,20 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
       ? filters.requiredDishTags.filter((value) => normalizeTag(value) !== tag)
       : [...filters.requiredDishTags, tag];
     onChange({ ...filters, requiredDishTags: nextTags });
+  };
+
+  /**
+   * Multi-select like the tag row above it, and immutable the same way —
+   * but what several selections MEAN is the opposite (OR, not AND; see
+   * `DecisionFilters.anyDishMoods`). Nothing in the toggle itself encodes
+   * that; the difference lives entirely in `filterByDecisionFilters`, and
+   * is spoken out loud in each chip's accessibility label below.
+   */
+  const handleToggleMood = (mood: string): void => {
+    const nextMoods = selectedMoods.has(mood)
+      ? filters.anyDishMoods.filter((value) => normalizeTag(value) !== mood)
+      : [...filters.anyDishMoods, mood];
+    onChange({ ...filters, anyDishMoods: nextMoods });
   };
 
   return (
@@ -169,6 +221,47 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
                 />
               );
             })}
+          </ChipGroup>
+        </>
+      ) : null}
+
+      {visibleMoods.length > 0 ? (
+        <>
+          {/* The second axis, and the row that finally makes this bar's
+              own header true: it has always claimed to answer "hoeveel
+              tijd heb ik" and "waar heb ik zin in", and until now the
+              second question was answered with a list of ingredients.
+              "Waarmee?" is a question about the pan; this one is about
+              the person.
+
+              Rendered UNDER the tag row rather than above it, even though
+              it is arguably the more human question, because the time
+              control and the tag row are what people already know how to
+              use — a new row appearing above two familiar ones moves both
+              of them down the screen the first time somebody describes a
+              dish. It is also the row most likely to be absent (see
+              `availableDishMoods`), and an absent row at the bottom
+              changes nothing above it.
+
+              Multi-select, so `Chip`'s default checkbox role is right —
+              but choosing several means OR here, where the row above
+              means AND, so the label says which. A screen-reader user
+              cannot see a result set change and must not be left to infer
+              the difference from one. */}
+          <Text style={[typeScale.label, styles.eyebrow, styles.tagEyebrow, { color: colors.textMuted }]}>
+            WAAR HEB JE ZIN IN?
+          </Text>
+          <ChipGroup>
+            {visibleMoods.map((entry) => (
+              <Chip
+                key={entry.mood}
+                label={entry.label}
+                selected={selectedMoods.has(entry.mood)}
+                onPress={() => handleToggleMood(entry.mood)}
+                role="checkbox"
+                accessibilityLabel={`${entry.label}. Filtert op gerechten met een van de dingen die je hier kiest.`}
+              />
+            ))}
           </ChipGroup>
         </>
       ) : null}

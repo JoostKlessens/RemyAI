@@ -20,15 +20,35 @@
  * exact same editable screen with every field starting empty — deliberately
  * the same component, not a second screen, since "AI got it wrong" and "AI
  * found nothing" both resolve to "the user types it" here.
+ *
+ * ---
+ *
+ * THIS SCREEN IS ALSO THE END OF THE CANONICAL RECIPE'S JOURNEY (W-01b).
+ * The `recipes` id the edge function resolved — from its own insert, or
+ * from the stored row a cache hit served — travels here on the route
+ * params and is written to `meals.recipe_id`. That single column is what
+ * makes twenty households' copies of one TikTok the same dish rather than
+ * twenty unrelated dinners, and therefore the only thing a friend's cook
+ * can be joined to (`shared_cooks`, 0009). It is never re-derived here:
+ * `sourceUrl` is the row's deduplication key, not its id, and a meal
+ * pointed at one of those points at no row at all. A manual add honestly
+ * writes `null` — a copy of nothing.
+ *
+ * And it is the first surface to SPEND that link, in the smallest possible
+ * way: one mono footnote under the creator credit saying which friends
+ * have cooked this (W-14, DESIGN-SOCIAL.md §2.3). See
+ * `readFriendProofLine` for why one friend is already useful here when a
+ * ranked surface would need ten, and why no proof means no line at all.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { decodeImportConfirmParams, type ImportConfirmParams } from './routeParams';
 import { toMealDraft, type MealDraftInsert } from '@/domain/import/toMealDraft';
 import type { ParsedIngredient, ParsedRecipe } from '@/domain/import/types';
+import { buildReasonText } from '@/domain/reason';
 import type { AllergenTagStatus, HouseholdId, SaveIntent } from '@/domain/types';
 import { AllergenTaggingSection } from '@/components/AllergenTaggingSection';
 import { Button } from '@/components/Button';
@@ -37,7 +57,10 @@ import { buildImportCreator } from '@/components/creatorFromAttribution';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
 import { SaveIntentSheet } from '@/components/SaveIntentSheet';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
-import { getAppRepository, type CreateMealInput, type RemyRepository } from '@/lib/repository';
+import { loadFriendProofForRecipes } from '@/lib/friendProof';
+import { getAppRepository, todayIso, type CreateMealInput, type RemyRepository } from '@/lib/repository';
+import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { supabase } from '@/lib/supabase';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 let localIdCounter = 0;
@@ -125,6 +148,13 @@ function buildMealInputFromDraft(
     sourceUrl: draft.sourceUrl,
     sourcePlatform: draft.sourcePlatform,
     thumbnailUrl: draft.thumbnailUrl,
+    // The canonical `recipes` row this import is a household's private
+    // copy of. Carried straight off the draft — which took it from the
+    // route params, which took it from the function's answer — because
+    // this is the field `shared_cooks` (0009) joins a friend's cook to.
+    // Dropping it here is how the link stayed unwritten from 0006 until
+    // W-01b: every layer had the value, and every layer left it out.
+    recipeId: draft.recipeId,
     ingredients: draft.ingredients,
     steps: toMealStepInputs(draft),
   };
@@ -154,6 +184,12 @@ function buildManualMealInput(
     // keeps its post's image, and reaches this screen with a sourceUrl and
     // platform, so it takes the drafted path above rather than this one.
     thumbnailUrl: null,
+    // Stated rather than omitted, though `createMeal` reads the two the
+    // same way: a from-scratch add is a copy of nothing, permanently.
+    // Saying so out loud is what stops a later reader wondering whether
+    // the field was simply forgotten here — which is precisely how this
+    // link went unwritten everywhere else.
+    recipeId: null,
     ingredients: recipe.ingredients.map((ingredient, index) => ({
       name: ingredient.name,
       quantity: ingredient.quantity,
@@ -171,9 +207,9 @@ function buildMealInput(
   allergenTags: readonly string[],
   allergenStatus: AllergenTagStatus,
 ): CreateMealInput {
-  const { sourceUrl, platform, thumbnailUrl } = confirmParams;
+  const { sourceUrl, platform, thumbnailUrl, recipeId } = confirmParams;
   if (sourceUrl !== null && platform !== null) {
-    const draft = toMealDraft(recipe, { householdId, sourceUrl, platform, thumbnailUrl });
+    const draft = toMealDraft(recipe, { householdId, sourceUrl, platform, thumbnailUrl, recipeId });
     return buildMealInputFromDraft(draft, allergenTags, allergenStatus);
   }
   return buildManualMealInput(recipe, householdId, allergenTags, allergenStatus);
@@ -205,6 +241,124 @@ async function persistImportedMeal(
   });
 }
 
+/**
+ * W-14, DESIGN-SOCIAL.md §2.3 — cook proof at the moment of import.
+ *
+ * WHY THIS SCREEN IS WHERE ONE FRIEND IS ALREADY WORTH SOMETHING. Proof is
+ * expensive to show well: a ranked friend surface needs ten cooks before it
+ * has anything to rank, and a count without a name ("2 vrienden maakten
+ * dit") is a stranger-aggregate wearing a friendly tone, which §2.1 bans
+ * outright. Here the question is binary and the reader is already asking
+ * it — "is this worth keeping?" — so a single sentence naming a single
+ * friend answers it completely. This is the cheapest place proof earns its
+ * keep, and the reason it is one line and not a section.
+ *
+ * IT NEEDS W-01b TO EXIST AT ALL. Proof is keyed on the canonical
+ * `recipes` row, so a household's copy can only be matched to a friend's
+ * cook through `meals.recipe_id`. Before the id came home from the import
+ * there was nothing to look up, and this line could only ever have been
+ * assembled out of guesses.
+ *
+ * NO PROOF, NO LINE — never "nog niemand die je kent", never "0 vrienden".
+ * §2.3 is explicit that an empty answer would read as a verdict on the
+ * recipe, which is not a thing we know. Every way this can come up empty —
+ * no canonical id, no opted-in friend who cooked it, a friend whose
+ * profile row would not load, a signed-out or failing read — collapses to
+ * the same silence, and the screen is laid out identically either way.
+ *
+ * THE THREE READS ARE src/lib/friendProof.ts's, NOT THIS FILE'S. They
+ * lived here for one change, as a second copy of that module's shell,
+ * because `loadFriendProof` was keyed on `readonly Meal[]` and Bevestigen
+ * is the one surface where the meal does not exist yet — satisfying that
+ * signature would have meant fabricating a `Meal`, which is worse than a
+ * duplicate. `loadFriendProofForRecipes` is the recipe-id-keyed sibling
+ * that removes the dilemma, and both callers are on it now. What that
+ * buys here is not brevity: it is that every rule this line depends on —
+ * a profile that will not resolve being ABSENT rather than "iemand", a
+ * failed read degrading to silence rather than to an error, the narrow
+ * `FriendProofSource` that cannot reach the send tier's reader-state
+ * methods — is asserted in tests/friendProof.test.ts, where a route
+ * module's private copy could never be reached at all.
+ *
+ * ONE RECIPE, SO TWO ROUND TRIPS AND NOT THE LIBRARY'S WORTH. The set
+ * handed over is this import's canonical id alone, and that module narrows
+ * everything else to it before fetching a single name or vote.
+ *
+ * THE SENTENCE IS `buildReasonText`'s, DELIBERATELY NOT A SECOND COPY.
+ * Kiezen's `friend_proof` reason says exactly what §2.3 quotes ("Sanne en
+ * Joris hebben dit ook gemaakt."), and Dutch agreement — heeft/hebben,
+ * gaf/gaven, the "gemiddeld" a plural average has to say out loud — is
+ * fiddly enough that a second implementation would drift within a release.
+ * `targetDate` is required by `ReasonContext` and unused by this branch;
+ * it is filled with the real date rather than a sentinel, since an honest
+ * unused value cannot mislead a future reader the way "1970-01-01" would.
+ *
+ * That sentence gains a grade ("...en gaven het gemiddeld een 8,4.") when
+ * the friends being named have voted publicly, and that is the same line
+ * §2.1 defines rather than an extra affordance — it is still one sentence,
+ * still mono, still under the credit. Which number it may be is not this
+ * screen's decision to get wrong: `assembleFriendProof` reads
+ * `recipe_ratings`, the vote a person casts knowing it is public, and can
+ * never reach `cook_events.rating`, the decision engine's private input
+ * that must not cross a household boundary. Commonly there is no grade at
+ * all, and the line reads perfectly well without one.
+ */
+async function readFriendProofLine(recipeId: string): Promise<string | null> {
+  // The whole repository is handed over and `FriendProofSource` narrows it
+  // to three reads — that `Pick` is what keeps a decoration on an import
+  // screen from ever reaching `listSendsToMe` or `markSendsSeen`.
+  const proofByRecipe = await loadFriendProofForRecipes(createSupabaseSocialRepository(supabase), [recipeId]);
+
+  const proof = proofByRecipe.get(recipeId);
+  if (proof === undefined) {
+    // No friend cooked it, every cook of it was unnameable, or a read
+    // failed — all one answer, deliberately. §2.1: the persuasive thing is
+    // the name, so this is silence rather than "iemand".
+    return null;
+  }
+  return buildReasonText('friend_proof', {
+    targetDate: todayIso(),
+    savedAt: null,
+    estimatedMinutes: null,
+    friendProof: proof,
+  });
+}
+
+/**
+ * Nothing about this read may delay, block or break the import. It starts
+ * after the screen has rendered, its result only ever adds one line, and
+ * every failure — offline, signed out, an RLS refusal, a malformed row —
+ * is swallowed into the same "no line". A footnote that could fail an
+ * import would be a straightforwardly bad trade.
+ */
+function useFriendProofLine(recipeId: string | null): string | null {
+  const [line, setLine] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (recipeId === null) {
+      return;
+    }
+    // Guarded so a slow read cannot write into an unmounted screen.
+    let active = true;
+    readFriendProofLine(recipeId)
+      .then((text) => {
+        if (active) {
+          setLine(text);
+        }
+      })
+      .catch(() => {
+        // Deliberately silent: see this hook's header. There is no error
+        // state to render, because the absence of proof and the failure to
+        // read it look identical on the screen — and must.
+      });
+    return () => {
+      active = false;
+    };
+  }, [recipeId]);
+
+  return line;
+}
+
 function buildSaveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return `Opslaan is mislukt: ${error.message}`;
@@ -219,7 +373,8 @@ export default function ImportConfirmScreen(): JSX.Element {
   const reduceMotionEnabled = useReduceMotion();
   const params = useLocalSearchParams<{ data?: string }>();
   const [confirmParams] = useState(() => decodeImportConfirmParams(params.data));
-  const { mode, recipe, platform, authorName } = confirmParams;
+  const { mode, recipe, platform, authorName, recipeId } = confirmParams;
+  const friendProofLine = useFriendProofLine(recipeId);
 
   const [title, setTitle] = useState(recipe?.title ?? '');
   const [ingredients, setIngredients] = useState<EditableTextListItem[]>(() =>
@@ -300,9 +455,19 @@ export default function ImportConfirmScreen(): JSX.Element {
             : 'Automatisch gelezen uit het bijschrift — controleer of alles klopt voordat je opslaat.'}
         </Text>
 
-        {creator !== null ? (
+        {creator !== null || friendProofLine !== null ? (
           <View style={styles.creatorBlock}>
-            <CreatorAttribution creator={creator} />
+            {creator !== null ? <CreatorAttribution creator={creator} /> : null}
+            {/* §2.3: one quiet line directly under the credit — `caption`
+                mono, `textMuted`, because a derived fact should read as
+                burned-in metadata rather than as prose the app is telling
+                you. Nothing else on the screen moves for it, and when
+                there is no proof there is no line at all. */}
+            {friendProofLine !== null ? (
+              <Text style={[typeScale.caption, styles.proofFootnote, { color: colors.textMuted }]}>
+                {friendProofLine}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -446,6 +611,9 @@ const styles = StyleSheet.create({
   },
   creatorBlock: {
     marginBottom: spacing.space5,
+  },
+  proofFootnote: {
+    marginTop: spacing.space2,
   },
   field: {
     marginBottom: spacing.space5,

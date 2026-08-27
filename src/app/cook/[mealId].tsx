@@ -16,6 +16,15 @@
  * steps (a title-only seeded meal, or an imported recipe whose caption had
  * no clear step breakdown) is a real, common case now, not just a demo
  * limitation, so the empty state below describes it honestly.
+ *
+ * That same outcome card is DESIGN-SOCIAL.md §3.1's first entry point into
+ * Sturen, and this screen is one of its two hosts (Kiezen's overlay is the
+ * other). It owns none of the work: `useOutcomeSend` holds the state and
+ * `src/lib/sendRecipe.ts` makes the two repository calls, because a route
+ * module cannot be imported by the test suite and wiring nothing can
+ * assert on is exactly how §3.1's button spent a whole phase rendering
+ * nowhere. Sending is NOT conditional on the cook event this screen just
+ * wrote (PD-016) — proof is the tier you earn by cooking; a send is not.
  */
 
 import { useEffect, useState } from 'react';
@@ -26,11 +35,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { OutcomeCard } from '@/components/OutcomeCard';
 import { ProgressRule } from '@/components/ProgressRule';
+import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { StepView } from '@/components/StepView';
 import { TimerDisplay } from '@/components/TimerDisplay';
 import type { CookEventId, DecisionId, HouseholdId, Meal, MealStep } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
+import { useOutcomeSend } from '@/lib/useOutcomeSend';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 
 type CookPhase = 'steps' | 'outcome';
@@ -124,6 +135,27 @@ export default function CookModeScreen(): JSX.Element {
     );
   }, [stepIndex, phase, currentStep, steps.length]);
 
+  /**
+   * DESIGN-SOCIAL.md §3.1's first entry point, on Cook Mode's own terminus
+   * — the `Stuur door` the outcome card has always been able to draw and
+   * has never been handed a handler for. Every repository call behind it
+   * lives in src/lib/useOutcomeSend.ts and src/lib/sendRecipe.ts, for the
+   * reason this file cannot host them: a route module is unimportable in
+   * the test environment, so wiring written here is wiring nothing can
+   * assert on — which is how the prop stayed unpassed for a whole phase.
+   *
+   * Called above every early return below (Rules of Hooks), and passed
+   * null until the outcome phase so the friend read does not fire while
+   * somebody is still on step 3 of 7. The meal's OWN id, not the route
+   * param: a send names this household's `meals` row, and if the row did
+   * not load there is nothing to send.
+   *
+   * NOT GATED ON THE COOK EVENT, deliberately (PD-016). The write above
+   * may have failed and the affordance is offered regardless — a send is
+   * "ik moest aan jou denken", not a reward for having finished.
+   */
+  const outcomeSend = useOutcomeSend(phase === 'outcome' ? (meal?.id ?? null) : null);
+
   const handleCooked = (cooked: boolean): void => {
     if (!cooked || householdId === null || meal === null) {
       return;
@@ -148,6 +180,22 @@ export default function CookModeScreen(): JSX.Element {
       return;
     }
     void getAppRepository().setCookEventRating(cookEventId, rating);
+  };
+
+  /**
+   * The public half of the same moment (`Meal.dishMoods`). Deliberately
+   * gated on the MEAL rather than on `cookEventId`, unlike `handleRate`
+   * directly above: a mood describes the dish, not this particular cook,
+   * so it stays recordable even when the cook-event write failed — and it
+   * lands on a different row, which is what keeps PD-019's two
+   * instruments structurally apart rather than merely separate by
+   * convention. Nothing here reads the grade.
+   */
+  const handleChooseMood = (mood: string): void => {
+    if (meal === null) {
+      return;
+    }
+    void getAppRepository().addMealDishMood(meal.id, mood);
   };
 
   if (loadState === 'loading') {
@@ -217,10 +265,27 @@ export default function CookModeScreen(): JSX.Element {
             dishTitle={dishTitle}
             onCooked={handleCooked}
             onRate={handleRate}
+            onChooseMood={handleChooseMood}
+            onSendRecipe={outcomeSend.onSendRecipe}
             onDismiss={() => router.back()}
             reduceMotionEnabled={reduceMotionEnabled}
           />
         </View>
+        {/* Its own `Modal`, so it sits over the card rather than pushing
+            it — and mounted unconditionally with `visible`, because the
+            sheet owns its entry animation and a conditional mount would
+            replay it from scratch on every render of this branch. */}
+        <SendRecipeSheet
+          visible={outcomeSend.sheetVisible}
+          dishTitle={dishTitle}
+          friends={outcomeSend.friends}
+          note={outcomeSend.note}
+          onChangeNote={outcomeSend.onChangeNote}
+          onSend={outcomeSend.onSend}
+          onRetryFriends={outcomeSend.onRetryFriends}
+          onDismiss={outcomeSend.onDismiss}
+          reduceMotionEnabled={reduceMotionEnabled}
+        />
       </SafeAreaView>
     );
   }

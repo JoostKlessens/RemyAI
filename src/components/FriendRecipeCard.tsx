@@ -33,9 +33,28 @@
  * household actually finished (docs/DESIGN.md). The score renders as a
  * plain mono numeral beside the cook time, where it reads as measurement
  * rather than as praise.
+ *
+ * THE NOTE (DESIGN-SOCIAL.md §4.2) is the one thing on this card that is
+ * somebody else's voice, and it is dressed as a quotation for that reason:
+ * Archivo `bodySmall` in `textSecondary`, behind a `borderStrong` left
+ * rule, in quotation marks. The same treatment §7's "DIT LAS REMY"
+ * evidence block uses, and for the same purpose — a left rule is how this
+ * product says "these are not our words". It is what a send has and proof
+ * does not (PD-016), so it is also the clearest visual difference between
+ * the two card kinds.
+ *
+ * THE ENTRANCE (PD-020.1) belongs to this card and not to the list,
+ * because the list must not know which of its rows is which kind. An
+ * unseen send fades and rises once, on first render; every other card —
+ * every proof card included, always — is handed a null delay and renders
+ * already at rest. That asymmetry IS the announcement: §8 allows the band
+ * no header, no divider and no "NIEUW" label, so the motion is the only
+ * thing that says a letter arrived. Animating the whole list would say
+ * "everything here is new", which is the freshness claim this surface
+ * exists without.
  */
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getPlatformDisplayName } from './creatorPresentation';
 import {
@@ -51,6 +70,19 @@ export interface FriendRecipeCardProps {
   readonly onPress: () => void;
   /** Read once per screen and passed down, per docs/DESIGN.md "Global rules". */
   readonly reduceMotionEnabled: boolean;
+  /**
+   * PD-020.1's entrance: how long this card waits before fading and
+   * rising, or null for "already at rest".
+   *
+   * NULL IS THE DEFAULT AND THE COMMON CASE. A card with no delay renders
+   * at its final opacity and offset and never animates — not a zero-delay
+   * animation, no animation at all. `resolveUnseenEntranceDelay`
+   * (gekooktPresentation.ts) is the only thing that should compute this:
+   * it returns null for every card below the unseen band, and for every
+   * card under reduced motion, so this component needs no second opinion
+   * about either.
+   */
+  readonly entranceDelayMs?: number | null;
 }
 
 /** Matches Button's press feedback exactly, so a card and a button feel like the same product. */
@@ -59,15 +91,42 @@ const PRESS_SCALE = 0.98;
 /** 9:16, the same portrait ratio Bibliotheek's grid uses — a short-form video still, not a crop. */
 const THUMBNAIL_ASPECT_RATIO = 9 / 16;
 
+/** §8: `translateY` 8→0. Kiezen's reveal at a humbler distance — a card arriving, not a screen. */
+const ENTRANCE_RISE = 8;
+
 export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
   const { model, onPress, reduceMotionEnabled } = props;
+  const entranceDelayMs = props.entranceDelayMs ?? null;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const scale = useRef(new Animated.Value(1)).current;
+  // Starts at 1 rather than 0 when there is no entrance, so an ordinary
+  // card is visible on its very first frame. Beginning at 0 and correcting
+  // in an effect would flash every card in the list, which is the exact
+  // opposite of "only the band is announced".
+  const entrance = useRef(new Animated.Value(entranceDelayMs === null ? 1 : 0)).current;
 
   const metaLine = buildFriendRecipeMetaLine(model.estimatedMinutes, model.rating);
   const collisionLabel = buildAllergenCollisionLabel(model.collidingTags);
   const monogram = model.title.trim().charAt(0).toUpperCase() || '?';
+
+  useEffect(() => {
+    if (entranceDelayMs === null) {
+      // Includes the reduced-motion case, which `resolveUnseenEntranceDelay`
+      // has already turned into null: "everything lands instantly, no
+      // stagger". Set rather than animated, so a card that leaves the band
+      // on a later read does not fade a second time.
+      entrance.setValue(1);
+      return;
+    }
+    Animated.timing(entrance, {
+      toValue: 1,
+      delay: entranceDelayMs,
+      duration: resolveDuration(motion.durationNormal, reduceMotionEnabled),
+      easing: Easing.bezier(...motion.easingDecelerate),
+      useNativeDriver: true,
+    }).start();
+  }, [entrance, entranceDelayMs, reduceMotionEnabled]);
 
   const animateTo = (toValue: number): void => {
     Animated.timing(scale, {
@@ -79,7 +138,18 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
   };
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View
+      style={{
+        opacity: entrance,
+        transform: [
+          // The rise and the press scale share one transform list: two
+          // nested `Animated.View`s would each need their own native
+          // driver node for what is one object moving.
+          { translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [ENTRANCE_RISE, 0] }) },
+          { scale },
+        ],
+      }}
+    >
       <Pressable
         onPress={onPress}
         onPressIn={() => animateTo(PRESS_SCALE)}
@@ -121,6 +191,19 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
               prefers letting a row grow over clipping it, and a truncated
               dish name is unreadable at 200% Dynamic Type. */}
           <Text style={[typeScale.title3, { color: colors.textPrimary }]}>{model.title}</Text>
+
+          {/* The sender's own words, quoted (DESIGN-SOCIAL.md §4.2). Null
+              renders NOTHING — not an empty rule, not a placeholder, not
+              "geen bericht" — because a send without a note is the
+              ordinary case and a stub would make it look like a failure
+              to load one. The quotation marks are added here rather than
+              stored, so §4.3's recipe screen can show the same words in
+              its own dress without unpicking a decorated string. */}
+          {model.note !== null ? (
+            <View style={[styles.note, { borderLeftColor: colors.borderStrong }]}>
+              <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]}>{`"${model.note}"`}</Text>
+            </View>
+          ) : null}
 
           {model.keyIngredients !== null ? (
             <Text style={[typeScale.bodySmall, styles.ingredients, { color: colors.textSecondary }]}>
@@ -184,8 +267,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: spacing.space1,
   },
+  note: {
+    marginTop: spacing.space2,
+    // The rule is the quotation mark that works at any text size: it grows
+    // with the note instead of sitting beside a fixed glyph. `space2` of
+    // padding keeps the words off it at 200% Dynamic Type, where a
+    // one-unit gap closes up.
+    borderLeftWidth: 2,
+    paddingLeft: spacing.space2,
+  },
   ingredients: {
-    marginTop: spacing.space1,
+    marginTop: spacing.space2,
   },
   metaRow: {
     marginTop: spacing.space1,

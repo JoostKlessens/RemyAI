@@ -102,11 +102,32 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   if (!attribution.ok) {
     return null;
   }
+  // W-01b. Absent reads as `null` rather than failing the result, and the
+  // asymmetry with `attribution` above is deliberate: a function deployed
+  // before W-01b sends no such key, and "this response cannot tell me the
+  // canonical row" is a true, renderable statement — a meal that is a copy
+  // of nothing — where a missing creator is a legal problem worth a
+  // retryable failure. A key that is PRESENT but not a string is a
+  // different thing entirely (client/function version skew) and fails the
+  // whole result, same as a malformed attribution.
+  //
+  // The one thing this must never do is fall back to `raw.sourceUrl`. That
+  // is the `recipes` row's deduplication key, not its id, and a meal
+  // pointed at it points at no row at all.
+  const recipeId = readNullableString(raw.recipeId);
+  if (!recipeId.ok) {
+    return null;
+  }
   const base = {
     kind: 'parsed',
     recipe,
     sourceUrl: raw.sourceUrl.trim(),
     platform: raw.platform as ImportPlatform,
+    // Always stated, even as null — unlike `attribution` below, which is
+    // spread in only when present. One spelling of "no canonical row" is
+    // enough; a reader should never have to check both `undefined` and
+    // `null` to learn the same fact.
+    recipeId: recipeId.value,
   } as const;
   return attribution.value === undefined ? base : { ...base, attribution: attribution.value };
 }

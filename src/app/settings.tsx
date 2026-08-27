@@ -7,19 +7,46 @@
  * report). Reachable from Bibliotheek's header — never a gating wizard,
  * never shown before either tab is usable (docs/DESIGN.md's scope note).
  *
- * Three plain sections, each writing straight through `RemyRepository` as
+ * Four plain sections, each writing straight through `RemyRepository` as
  * the user interacts (no separate "Opslaan" step to forget): who eats
  * here ("aantal eters" — household members, reused from the old
  * onboarding's MemberRow/add-row pattern), the weeknight time budget
- * (SegmentedControl), and dislikes/allergens per person
- * (RestrictionTagInput, allergens in its closed-vocabulary EU_ALLERGENS
- * mode).
+ * (SegmentedControl), dislikes/allergens per person
+ * (MemberPreferencesSection), and the cook-proof opt-in
+ * (CookSharingSection).
  *
  * PD-005: allergen data is GDPR Article 9 special-category health data
  * and requires explicit, unbundled consent BEFORE collection. Each
  * member's allergen input stays gated behind their own consent toggle,
  * exactly like the old onboarding screen — removing onboarding does not
  * remove that requirement.
+ *
+ * THE FOURTH SECTION, AND WHY THE SCREEN IS NOW A COMPOSITION. W-12 added
+ * the household cook-proof opt-in (PD-015 / DESIGN-SOCIAL.md §5,
+ * `households.share_cooks_with_friends`), which needs four paragraphs of
+ * consequence above its control. Appending that to a 544-line screen
+ * would have pushed it toward the 800-line ceiling and buried two consent
+ * surfaces in one router file, so the dislikes/allergens section moved out
+ * to `src/components/MemberPreferencesSection.tsx` and the new one landed
+ * beside it. What is left here is data loading, write orchestration and
+ * composition — no section renders its own JSX in this file any more
+ * except the small "aantal eters" one, which owns a draft input.
+ *
+ * REJECTED: folding the opt-in into `updateHouseholdSettings`, the
+ * natural-looking home for "a settings field". `setHouseholdCookSharing`
+ * is deliberately its own method (see its comment in
+ * `src/lib/repository/types.ts`) so a consent cannot be flipped as a side
+ * effect of one careless spread of a stale settings object. This screen
+ * respects that seam rather than papering over it.
+ *
+ * THE OPT-IN'S READ CAN FAIL ON ITS OWN, and `null` is how that is
+ * carried. `getHouseholdCookSharing` rejects an unknown household instead
+ * of answering `false`, because at a call site the two are
+ * indistinguishable and one of them is a deliberate privacy choice. So
+ * `SettingsData.cookSharing` is `boolean | null`, never a `?? false`, and
+ * the section renders its own retry rather than taking the whole screen —
+ * with its members, allergens and time budget — to the error state over
+ * one field.
  *
  * Copy stays exclusion-framed throughout — "sluit uit wat je hebt
  * getagd" — never "veilig voor" (PD-006's liability boundary, not a copy
@@ -31,12 +58,12 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
+import { CookSharingSection } from '@/components/CookSharingSection';
+import { MemberPreferencesSection } from '@/components/MemberPreferencesSection';
 import { MemberRow } from '@/components/MemberRow';
-import { RestrictionTagInput } from '@/components/RestrictionTagInput';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { EU_ALLERGENS } from '@/domain/allergens';
 import type { Household, HouseholdId, Member, MemberId, Restriction } from '@/domain/types';
-import { ensureSeeded, getAppRepository, nowIso } from '@/lib/repository';
+import { type RemyRepository, ensureSeeded, getAppRepository, nowIso } from '@/lib/repository';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
@@ -53,6 +80,8 @@ interface SettingsData {
   readonly household: Household;
   readonly members: readonly Member[];
   readonly restrictionsByMember: ReadonlyMap<MemberId, readonly Restriction[]>;
+  /** PD-015's cook-proof opt-in. `null` = could not be read; never collapsed to `false`. */
+  readonly cookSharing: boolean | null;
 }
 
 function groupRestrictionsByMember(restrictions: readonly Restriction[]): ReadonlyMap<MemberId, readonly Restriction[]> {
@@ -65,19 +94,42 @@ function groupRestrictionsByMember(restrictions: readonly Restriction[]): Readon
   return grouped;
 }
 
+/**
+ * The one read allowed to fail without taking the screen down.
+ *
+ * This is not a swallowed error: the rejection is mapped to an explicit
+ * `null` that `CookSharingSection` surfaces to the user as "we konden deze
+ * instelling niet lezen", with a retry — rather than to a `false` that
+ * would render as a settled opt-out the household never chose.
+ */
+async function readCookSharing(repository: RemyRepository, householdId: HouseholdId): Promise<boolean | null> {
+  try {
+    return await repository.getHouseholdCookSharing(householdId);
+  } catch {
+    return null;
+  }
+}
+
 async function loadSettingsData(): Promise<SettingsData> {
   await ensureSeeded();
   const repository = getAppRepository();
   const householdId = await repository.getCurrentHouseholdId();
-  const [household, members, restrictions] = await Promise.all([
+  const [household, members, restrictions, cookSharing] = await Promise.all([
     repository.getHousehold(householdId),
     repository.listMembers(householdId),
     repository.listRestrictions(householdId),
+    readCookSharing(repository, householdId),
   ]);
   if (household === null) {
     throw new Error('Household not found after seeding.');
   }
-  return { householdId, household, members, restrictionsByMember: groupRestrictionsByMember(restrictions) };
+  return {
+    householdId,
+    household,
+    members,
+    restrictionsByMember: groupRestrictionsByMember(restrictions),
+    cookSharing,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +140,20 @@ async function loadSettingsData(): Promise<SettingsData> {
 
 function withHouseholdTimeBudget(data: SettingsData, minutes: number): SettingsData {
   return { ...data, household: { ...data.household, weeknightTimeBudgetMinutes: minutes } };
+}
+
+/**
+ * Keeps the cached `Household` row and the screen's own `cookSharing` in
+ * step, so nothing downstream can read a stale opt-in off the row. An
+ * unreadable state clears the row's field rather than writing `false`
+ * into it, for the same reason the screen carries `null` at all.
+ */
+function withCookSharing(data: SettingsData, cookSharing: boolean | null): SettingsData {
+  return {
+    ...data,
+    household: { ...data.household, shareCooksWithFriends: cookSharing ?? undefined },
+    cookSharing,
+  };
 }
 
 function withMemberAdded(data: SettingsData, member: Member): SettingsData {
@@ -135,6 +201,7 @@ interface SettingsController {
   readonly data: SettingsData | null;
   readonly refresh: () => void;
   readonly onChangeTimeBudget: (value: TimeBudgetOption) => void;
+  readonly onChangeCookSharing: (shareCooksWithFriends: boolean) => void;
   readonly onAddMember: (displayName: string) => void;
   readonly onRemoveMember: (memberId: MemberId) => void;
   readonly onToggleConsent: (member: Member) => void;
@@ -179,6 +246,28 @@ function useSettingsData(): SettingsController {
     // only means a reload shows the pre-change value — not worth blocking
     // the control over (same reasoning as (tabs)/index.tsx's handleAccept).
     getAppRepository().updateHouseholdSettings(data.householdId, { weeknightTimeBudgetMinutes: minutes }).catch(() => {});
+  };
+
+  /**
+   * Deliberately NOT optimistic, unlike the time budget above. Consent is
+   * the one field where showing a state we failed to persist is worse
+   * than showing nothing: a household that believes it revoked sharing
+   * and did not is still sharing. So the write goes first and the control
+   * reflects only what came back; a failure drops to `null`, which renders
+   * as the unreadable state with a retry rather than as either answer.
+   */
+  const onChangeCookSharing = (shareCooksWithFriends: boolean): void => {
+    if (data === null) {
+      return;
+    }
+    getAppRepository()
+      .setHouseholdCookSharing(data.householdId, shareCooksWithFriends)
+      .then((household) =>
+        setData((current) =>
+          current === null ? current : withCookSharing(current, household.shareCooksWithFriends ?? false),
+        ),
+      )
+      .catch(() => setData((current) => (current === null ? current : withCookSharing(current, null))));
   };
 
   const onAddMember = (displayName: string): void => {
@@ -229,6 +318,7 @@ function useSettingsData(): SettingsController {
     data,
     refresh,
     onChangeTimeBudget,
+    onChangeCookSharing,
     onAddMember,
     onRemoveMember,
     onToggleConsent,
@@ -250,7 +340,7 @@ export default function SettingsScreen(): JSX.Element {
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Sluiten, terug naar Bibliotheek"
+          accessibilityLabel="Sluiten, terug naar Mijn recepten"
           style={styles.closeButton}
         >
           <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Sluiten</Text>
@@ -306,25 +396,19 @@ function SettingsForm(props: SettingsFormProps): JSX.Element {
         />
       </View>
 
-      <View style={styles.section}>
-        <Text style={[typeScale.title3, styles.sectionTitle, { color: colors.textPrimary }]}>Dislikes en allergenen</Text>
-        {data.members.length === 0 ? (
-          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>
-            Voeg hierboven iemand toe om dislikes en allergenen in te stellen.
-          </Text>
-        ) : (
-          data.members.map((member) => (
-            <MemberPreferences
-              key={member.id}
-              member={member}
-              restrictions={data.restrictionsByMember.get(member.id) ?? []}
-              onToggleConsent={() => settings.onToggleConsent(member)}
-              onAddRestriction={(type, tag) => settings.onAddRestriction(member.id, type, tag)}
-              onRemoveRestriction={(restrictionId) => settings.onRemoveRestriction(member.id, restrictionId)}
-            />
-          ))
-        )}
-      </View>
+      <MemberPreferencesSection
+        members={data.members}
+        restrictionsByMember={data.restrictionsByMember}
+        onToggleConsent={settings.onToggleConsent}
+        onAddRestriction={settings.onAddRestriction}
+        onRemoveRestriction={settings.onRemoveRestriction}
+      />
+
+      <CookSharingSection
+        shareCooksWithFriends={data.cookSharing}
+        onChange={settings.onChangeCookSharing}
+        onRetry={settings.refresh}
+      />
     </ScrollView>
   );
 }
@@ -379,89 +463,6 @@ function EatersSection(props: EatersSectionProps): JSX.Element {
   );
 }
 
-interface MemberPreferencesProps {
-  readonly member: Member;
-  readonly restrictions: readonly Restriction[];
-  readonly onToggleConsent: () => void;
-  readonly onAddRestriction: (type: Restriction['type'], tag: string) => void;
-  readonly onRemoveRestriction: (restrictionId: string) => void;
-}
-
-function MemberPreferences(props: MemberPreferencesProps): JSX.Element {
-  const { member, restrictions, onToggleConsent, onAddRestriction, onRemoveRestriction } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-  const hasConsent = member.healthDataConsentAt !== null;
-
-  const dislikeTags = restrictions.filter((restriction) => restriction.type === 'dislike').map((r) => r.excludesTag);
-  const allergenTags = restrictions.filter((restriction) => restriction.type === 'allergen').map((r) => r.excludesTag);
-
-  const findRestrictionId = (type: Restriction['type'], tag: string): string | undefined =>
-    restrictions.find((restriction) => restriction.type === type && restriction.excludesTag === tag)?.id;
-
-  return (
-    <View style={styles.memberPreferences}>
-      <Text style={[typeScale.bodySmall, styles.memberName, { color: colors.textSecondary }]}>{member.displayName}</Text>
-
-      <RestrictionTagInput
-        label="Dislikes"
-        tags={dislikeTags}
-        onAddTag={(tag) => onAddRestriction('dislike', tag)}
-        onRemoveTag={(tag) => {
-          const restrictionId = findRestrictionId('dislike', tag);
-          if (restrictionId !== undefined) {
-            onRemoveRestriction(restrictionId);
-          }
-        }}
-        placeholder="Bijv. paddenstoelen"
-      />
-
-      <View style={styles.allergenSection}>
-        <Pressable
-          onPress={onToggleConsent}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: hasConsent }}
-          accessibilityLabel={`Toestemming om allergenen van ${member.displayName} op te slaan`}
-          style={styles.consentRow}
-        >
-          <View
-            style={[
-              styles.consentBox,
-              { borderColor: colors.border, backgroundColor: hasConsent ? colors.accentMuted : colors.surface },
-            ]}
-          >
-            {/* accentOnMuted, not accent: this glyph sits on an accentMuted
-                fill, where plain accent doesn't clear 4.5:1 (WCAG AA). */}
-            {hasConsent ? <Text style={{ color: colors.accentOnMuted }}>✓</Text> : null}
-          </View>
-          <Text style={[typeScale.bodySmall, styles.consentLabel, { color: colors.textSecondary }]}>
-            Ik geef toestemming om allergenen van {member.displayName} op te slaan.
-          </Text>
-        </Pressable>
-        {hasConsent ? (
-          <RestrictionTagInput
-            label="Allergenen"
-            helperText="Sluit uit wat je hebt getagd."
-            tags={allergenTags}
-            onAddTag={(tag) => onAddRestriction('allergen', tag)}
-            onRemoveTag={(tag) => {
-              const restrictionId = findRestrictionId('allergen', tag);
-              if (restrictionId !== undefined) {
-                onRemoveRestriction(restrictionId);
-              }
-            }}
-            vocabulary={EU_ALLERGENS}
-          />
-        ) : (
-          <Text style={[typeScale.caption, styles.consentHint, { color: colors.textMuted }]}>
-            Geef eerst toestemming hierboven om allergenen toe te voegen.
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -499,36 +500,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radii.radiusSm,
     paddingHorizontal: spacing.space3,
-  },
-  memberPreferences: {
-    marginBottom: spacing.space6,
-  },
-  memberName: {
-    marginBottom: spacing.space2,
-  },
-  allergenSection: {
-    marginTop: spacing.space1,
-  },
-  consentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space3,
-    minHeight: spacing.touchTargetMin,
-  },
-  consentBox: {
-    width: spacing.space6,
-    height: spacing.space6,
-    borderWidth: 1,
-    borderRadius: radii.radiusSm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  consentLabel: {
-    flex: 1,
-  },
-  consentHint: {
-    marginTop: spacing.space2,
-    marginLeft: spacing.space6 + spacing.space3,
   },
   errorState: {
     flex: 1,

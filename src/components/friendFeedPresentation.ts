@@ -1,8 +1,9 @@
 /**
- * Pure view-model + copy layer for the Vrienden tab (docs/DESIGN.md §8) —
- * the friend feed PD-010 settled: a card carrying a thumbnail, the recipe
- * name, its key ingredients, the cook time, the friend's score and the
- * original creator, which opens into the full recipe.
+ * Pure view-model + copy layer for the SEND card in the Vrienden tab
+ * (docs/DESIGN.md §8, PD-010) — the friend feed PD-010 settled: a card
+ * carrying a thumbnail, the recipe name, the sender's note, its key
+ * ingredients, the cook time, the friend's score and the original creator,
+ * which opens into the full recipe.
  *
  * No React Native imports here on purpose, so this is unit-testable
  * directly under vitest's `node` environment — the same split
@@ -14,7 +15,9 @@
  *
  * - **It does not rank.** Ordering is `rankFeedItems`'s job (src/domain/
  *   feed/ranking.ts) and the caller hands the result here already
- *   ordered. `buildFriendRecipeCardModels` preserves input order exactly.
+ *   ordered. `buildFriendRecipeCardModels` preserves input order exactly,
+ *   and PD-020.1's unseen band is a stable partition applied afterwards
+ *   by gekooktPresentation.ts — never a sort performed here.
  * - **It does not decide what collides.** `getCollidingTagsByFeedItem`
  *   (same module) owns that, is already tested, and its output is carried
  *   through verbatim onto `FriendRecipeCardModel.collidingTags`. A second
@@ -25,166 +28,79 @@
  *   no recency sort key anywhere. PD-004 measures this surface on
  *   save-to-cook and explicitly not on dwell time, and a freshness stamp
  *   is the cheapest possible way to smuggle "check back often" into a
- *   feed that exists to answer "what could I cook".
+ *   feed that exists to answer "what could I cook". Note that the unseen
+ *   band does not break that rule and is not an exception to it: unseen
+ *   is a BINARY reader state that clears permanently on viewing, not a
+ *   freshness gradient, and it never appears on the model.
  *
  * ON `FriendShare`: the household-to-household sharing model proper lives
  * in src/domain/social/**, owned by another agent and landing separately.
- * The shape below is the UI's minimal stand-in for exactly the two facts a
- * card needs — who sent this, and what they scored it — and should be
- * replaced by that module's real type the moment it exists, rather than
- * being grown here into a second source of truth.
+ * The shape below is the UI's minimal stand-in for exactly the three facts
+ * a card needs — who sent this, what they scored it, and what they wrote
+ * beside it — and should be replaced by that module's real type the moment
+ * it exists, rather than being grown here into a second source of truth.
+ *
+ * THIS FILE ONCE HELD BOTH CARD KINDS AND NO LONGER DOES. At 800 lines it
+ * was split along the seam its own header had named: the two kinds "share
+ * a vocabulary — key ingredients, the PD-007a label, the creator line —
+ * and share nothing else". The vocabulary moved to
+ * friendCardVocabulary.ts and the ambient PROOF card to
+ * friendProofPresentation.ts, both verbatim. Everything both files export
+ * is re-exported below, so no importer changed and no name moved out from
+ * under anybody; new code should prefer importing from the file that owns
+ * the symbol. Nothing here should ever grow a flag that turns one card
+ * kind into the other.
  */
 
-import { joinDutchList } from '@/domain/dutchText';
-import { describeAllergenTag } from './allergenTaggingCopy';
-import { formatGrade } from './ratingScaleCopy';
-import { getPlatformDisplayName } from './creatorPresentation';
+import { isValidRating, RATING_MAX } from '@/domain/rating';
 import { filterServableFeedItems } from '@/domain/feed/eligibility';
 import { getCollidingTagsByFeedItem, rankFeedItems, type FeedRankingRequest } from '@/domain/feed/ranking';
+import { formatGrade } from './ratingScaleCopy';
+import { getPlatformDisplayName } from './creatorPresentation';
+import {
+  META_SEPARATOR,
+  buildAllergenCollisionLabel,
+  summarizeKeyIngredients,
+  type KeyIngredientsSummary,
+} from './friendCardVocabulary';
 import type { Creator, CreatorId, CreatorPlatform, FeedItem, FeedItemId } from '@/domain/feed/types';
-import { isValidRating, RATING_MAX } from '@/domain/rating';
 import type { Household, IsoDateString, Meal, MealId, MealIngredient, Member, Restriction } from '@/domain/types';
 
 /**
- * How many ingredient names a card shows before collapsing the rest into
- * a count. Three fits on one line at the default text size on a narrow
- * phone, and PD-010 asks for "key ingredients", not the shopping list —
- * the full list is one tap away on the recipe itself.
- */
-export const KEY_INGREDIENT_LIMIT = 3;
-
-/** Between ingredient names — one space each side, tighter than the meta row's separator. */
-const INGREDIENT_SEPARATOR = ' · ';
-
-/** Between meta facts, matching DecisionCard's own meta row spacing exactly. */
-const META_SEPARATOR = '  ·  ';
-
-/**
- * Joins Dutch list items the way a person would say them: "a", "a en b",
- * "a, b en c". Used by both the ingredient summary's spoken form and the
- * PD-007a collision label, which is why it is exported and tested in its
- * own right rather than inlined twice.
- */
-export { joinDutchList } from '@/domain/dutchText';
-
-export interface KeyIngredientsSummary {
-  /** The names actually shown, already capped at the limit and in recipe order. */
-  readonly visible: readonly string[];
-  /** How many further ingredients the recipe has. Zero when everything fits. */
-  readonly hiddenCount: number;
-  /** What the card renders: "kipfilet · paprika · citroen · +2". */
-  readonly text: string;
-  /** What a screen reader says: "kipfilet, paprika, citroen en 2 andere ingrediënten". */
-  readonly spokenText: string;
-}
-
-/**
- * The first few ingredients of a recipe, in the order the recipe lists
- * them.
+ * THE FORWARDING BLOCK. Every symbol the two extracted modules export,
+ * re-exported under the name it had when it lived here.
  *
- * "Key" is first-listed, not most-important, and that is a deliberate
- * heuristic rather than a shortcut: recipes conventionally open with the
- * ingredient the dish is named after, and we hold no importance data to
- * do better. Two alternatives were rejected. Ranking by quantity would
- * promote water and flour over the chicken. Ranking by allergen tag would
- * quietly turn a "what is this dish" summary into a safety readout, which
- * is PD-007a's job and has its own, clearly-labelled place on the card.
- *
- * Returns null — not an empty summary, and never a "geen ingrediënten"
- * string — for a recipe with nothing recorded. A recipe whose ingredients
- * were never parsed has no ingredients *known*, which is not the same
- * claim as a recipe having none, and the card has to be able to render
- * that difference by saying nothing at all.
+ * This is not a convenience API and it is not meant to grow. It exists so
+ * that a file-size refactor cost zero call sites — `FriendProofCard.tsx`,
+ * `FriendRecipeCard.tsx`, `kringPresentation.ts`,
+ * `leaderboardPresentation.ts`, `[feedItemId].tsx`, `_fixtures.ts` and
+ * three test files all import from here and none of them had to move. New
+ * code should import from the module that owns the symbol; this block is
+ * for the code that predates the split.
  */
-export function summarizeKeyIngredients(
-  ingredients: readonly MealIngredient[],
-  limit: number = KEY_INGREDIENT_LIMIT,
-): KeyIngredientsSummary | null {
-  const names = [...ingredients]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((ingredient) => ingredient.name.trim())
-    .filter((name) => name.length > 0);
+export {
+  KEY_INGREDIENT_LIMIT,
+  META_SEPARATOR,
+  buildAllergenCollisionLabel,
+  buildCreatorLine,
+  formatIngredientLine,
+  joinDutchList,
+  summarizeKeyIngredients,
+  type KeyIngredientsSummary,
+  type SummarizableIngredient,
+} from './friendCardVocabulary';
 
-  if (names.length === 0) {
-    return null;
-  }
-
-  const visible = names.slice(0, limit);
-  const hiddenCount = names.length - visible.length;
-  const visibleParts = hiddenCount > 0 ? [...visible, `+${hiddenCount}`] : visible;
-  const spokenParts = hiddenCount > 0 ? [...visible, describeHiddenIngredients(hiddenCount)] : visible;
-
-  return {
-    visible,
-    hiddenCount,
-    text: visibleParts.join(INGREDIENT_SEPARATOR),
-    spokenText: joinDutchList(spokenParts),
-  };
-}
-
-function describeHiddenIngredients(hiddenCount: number): string {
-  return hiddenCount === 1 ? '1 ander ingrediënt' : `${hiddenCount} andere ingrediënten`;
-}
-
-/**
- * One ingredient as the recipe screen shows it: "400 g kipfilet", "2
- * paprika", "knoflook". A missing quantity or unit simply drops out —
- * extraction genuinely fails to capture them (`validateParsed.ts` stores
- * null rather than inventing a plausible number), and a line reading
- * "null g kipfilet" would be worse than one reading "kipfilet".
- *
- * KNOWN DUPLICATION, stated rather than hidden: src/app/import/confirm.tsx
- * has an equivalent private `toIngredientLine` for the import flow's
- * editable list. The two are not unified yet because that file is being
- * edited concurrently by the agent working on the import pipeline, and
- * quietly rewriting a file underneath another writer is a worse problem
- * than three duplicated lines. When that settles, confirm.tsx should call
- * this one and delete its own — this version is the better of the two
- * anyway: it treats a blank-string quantity as absent, where the private
- * one only checks for null and would emit a leading space.
- */
-export function formatIngredientLine(ingredient: Pick<MealIngredient, 'name' | 'quantity' | 'unit'>): string {
-  const measure = [ingredient.quantity, ingredient.unit]
-    .map((part) => part?.trim() ?? '')
-    .filter((part) => part.length > 0)
-    .join(' ');
-  const name = ingredient.name.trim();
-  return measure.length > 0 ? `${measure} ${name}` : name;
-}
-
-/**
- * PD-007a's on-card label: a statement of fact about the dish, never a
- * verdict about the person reading it. "bevat noten" — not "niet veilig
- * voor jou", not "let op", not an icon standing in for a word. The
- * exclusion framing is identical to every other allergen surface in the
- * app (PD-006, docs/DESIGN.md "Allergen copy"), and it matters most
- * exactly here: a friend's recipe is where a household is most likely to
- * tap through and cook straight from the creator's video, never passing
- * through `exclusions.ts` at all.
- *
- * Null for no collisions, so a card with nothing to say renders no chip.
- * That silence is NOT "checked and clean" and must never be styled as
- * reassurance — an untagged recipe produces the same null as a genuinely
- * non-colliding one, which is the whole point of PD-006's tri-state.
- *
- * Colliding tags can also come from a *dislike* rather than an allergen:
- * `collectExcludedTags` (exclusions.ts) is deliberately restriction-type
- * agnostic, so "bevat champignons" is a reachable label. That is factually
- * correct and worth showing — the household did exclude it — and telling
- * the two apart would mean a second collision resolver, which is the one
- * thing PD-007a's implementation note rules out.
- */
-export function buildAllergenCollisionLabel(collidingTags: readonly string[]): string | null {
-  const labels = collidingTags
-    .filter((tag) => tag.trim().length > 0)
-    .map(describeAllergenTag)
-    .filter((label) => label.length > 0);
-  const unique = [...new Set(labels)];
-  if (unique.length === 0) {
-    return null;
-  }
-  return `bevat ${joinDutchList(unique)}`;
-}
+export {
+  CLOSED_LOOP_CHIP_COPY,
+  FRIEND_PROOF_CARD_NAME_LIMIT,
+  assembleFriendProofCards,
+  buildFriendProofCardAccessibilityLabel,
+  buildFriendProofEyebrow,
+  buildFriendProofMetaLine,
+  type FriendProofCardModel,
+  type FriendProofFeedRequest,
+  type ProofRecipe,
+} from './friendProofPresentation';
 
 /**
  * The card's mono meta row: how long it takes, and what the friend gave
@@ -221,9 +137,9 @@ export function buildOriginalPostLinkLabel(platform: CreatorPlatform): string {
 }
 
 /**
- * Who shared a recipe into this household's feed, and what they thought
- * of it. See this file's header on why this shape lives here for now
- * rather than in src/domain/social/**.
+ * Who shared a recipe into this household's feed, what they thought of it,
+ * and what they wrote beside it. See this file's header on why this shape
+ * lives here for now rather than in src/domain/social/**.
  */
 export interface FriendShare {
   readonly feedItemId: FeedItemId;
@@ -231,6 +147,19 @@ export interface FriendShare {
   readonly friendName: string;
   /** The friend's score on src/domain/rating.ts's scale, or null when they never rated it. */
   readonly rating: number | null;
+  /**
+   * `recipe_shares.note` — one line in the sender's own words, at most
+   * `SEND_NOTE_MAX_LENGTH` characters (src/lib/repository/social/types.ts).
+   *
+   * REQUIRED AND NULLABLE RATHER THAN OPTIONAL, deliberately. The
+   * repository's `normalizeSendNote` already collapses a whitespace-only
+   * note to null, so "sent without a note" has exactly one spelling; an
+   * optional field would introduce a second (`undefined`) that every
+   * reader would then have to remember to check for. §1 calls a note "a
+   * post-it on a pan lid, not the opening of a chat" — one line, never
+   * threaded, never replied to.
+   */
+  readonly note: string | null;
 }
 
 /** Everything one card needs, resolved once, so the component itself does no lookups. */
@@ -243,6 +172,23 @@ export interface FriendRecipeCardModel {
   readonly servings: number | null;
   readonly rating: number | null;
   readonly friendName: string;
+  /**
+   * The sender's note, verbatim, or null (DESIGN-SOCIAL.md §4.2). Carried
+   * rather than formatted: the quotation marks and the `borderStrong` left
+   * rule are the card's, so a screen that wants to show the same words
+   * differently — §4.3's recipe screen does — is not fighting a string
+   * that has already been decorated.
+   *
+   * NOT NORMALIZED HERE. `normalizeSendNote` is the one place that decides
+   * what a storable note is, it runs at the repository boundary, and a
+   * second trim in the presentation layer would be a second opinion about
+   * the sender's words.
+   *
+   * `mealId` ABOVE IS WHAT PAIRS THIS CARD WITH ITS SEND — see
+   * `FriendProofCardModel`'s `mealId?: never` for the other half of that
+   * argument, and gekooktPresentation.ts for the band it makes possible.
+   */
+  readonly note: string | null;
   /** The original video's creator — carried whole, since PD-010 requires attribution on the card AND on the recipe. */
   readonly creator: Creator;
   readonly sourceUrl: string;
@@ -309,6 +255,7 @@ function buildCardModel(item: FeedItem, source: FriendFeedSource): FriendRecipeC
     servings: meal.servings,
     rating: share.rating,
     friendName: share.friendName,
+    note: share.note,
     creator,
     sourceUrl: item.sourceUrl,
     keyIngredients: summarizeKeyIngredients(source.ingredientsByMealId.get(meal.id) ?? []),
@@ -381,20 +328,27 @@ export function assembleFriendFeed(request: FriendFeedRequest): readonly FriendR
  * One spoken sentence per card. Assembled here rather than left to the
  * component because a card is a single tappable region: VoiceOver reads
  * one label for the whole thing, so every fact the sighted reader gets
- * from the layout — dish, sender, creator, platform, time, score, and any
- * PD-007a collision — has to be inside this string, or it is simply not
- * available to a screen-reader user.
+ * from the layout — dish, sender, her note, creator, platform, time,
+ * score, and any PD-007a collision — has to be inside this string, or it
+ * is simply not available to a screen-reader user.
+ *
+ * THE NOTE IS SPOKEN WHERE IT IS READ, straight after the sender, so the
+ * pronoun in "die erbij schreef" has the antecedent the sighted reader
+ * gets from the eyebrow sitting above it. Quoted, because the words are
+ * somebody else's and a screen reader gives no other cue that the voice
+ * has changed.
  *
  * The ingredient summary is read in its spoken form, never the visual
  * "+2", which VoiceOver pronounces as "plus two" with no noun attached.
  */
 export function buildFriendRecipeCardAccessibilityLabel(model: FriendRecipeCardModel): string {
   const platformName = getPlatformDisplayName(model.creator.platform);
-  const parts: string[] = [
-    model.title,
-    `gedeeld door ${model.friendName}`,
-    `van ${model.creator.handle} op ${platformName}`,
-  ];
+  const parts: string[] = [model.title, `gedeeld door ${model.friendName}`];
+
+  if (model.note !== null) {
+    parts.push(`die erbij schreef: "${model.note}"`);
+  }
+  parts.push(`van ${model.creator.handle} op ${platformName}`);
 
   if (model.keyIngredients !== null) {
     parts.push(`met ${model.keyIngredients.spokenText}`);

@@ -81,6 +81,34 @@ export interface CreateMealInput {
    * `[]`, never `undefined` (see local/meals.ts).
    */
   readonly dishTags?: readonly string[];
+  /**
+   * The canonical `recipes` row this meal is this household's private copy
+   * of (`meals.recipe_id`, 0006). It is what makes cook proof possible at
+   * all: a friend's cook and this copy are two unrelated rows without it,
+   * so `shared_cooks` (0009) has nothing to join on and scoring.ts's
+   * FRIEND_PROOF_BOOST can never fire. Set it whenever the caller actually
+   * knows the id — see src/domain/import/toMealDraft.ts, which carries one
+   * through from the import context.
+   *
+   * Optional here for the same reason `dishTags` above is, and it earns it
+   * the same way: the absent state and the stored state genuinely coincide.
+   * A caller that omits this is saying "this meal is a copy of nothing" —
+   * seeded, curated, or typed in by hand — which is exactly what the stored
+   * `null` means, so omitting is honest rather than lossy, and there is no
+   * fail-safe reading to lose (a missing link costs a social boost, never
+   * anyone's safety). `createMeal` substitutes `null`, never `undefined`
+   * (see local/meals.ts).
+   *
+   * Deliberately NOT modeled on `allergenTagStatus` above, which is
+   * required precisely because ITS absent state is dangerous — and note
+   * the one thing this field must never become: a channel for inheriting a
+   * canonical recipe's allergen state. There is none to inherit (0006's
+   * `recipes` deliberately has no allergen column), and the database
+   * resets any meal carrying a recipe_id to 'unknown' on insert whatever
+   * the caller passed (`meals_recipe_copy_starts_unverified`). Passing a
+   * recipeId is a statement about provenance and nothing else.
+   */
+  readonly recipeId?: string | null;
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
   /** oEmbed's thumbnail, carried through import — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Null for manual entries. */
@@ -146,6 +174,100 @@ export interface RemyRepository {
   getHousehold(householdId: HouseholdId): Promise<Household | null>;
   /** Settings screen: the household's weeknight time budget. Nothing else is writable there yet — see UpdateHouseholdSettingsInput. */
   updateHouseholdSettings(householdId: HouseholdId, input: UpdateHouseholdSettingsInput): Promise<Household>;
+  /**
+   * PD-010 / DESIGN-SOCIAL.md §5 — reads the household's cook-proof
+   * opt-in (`households.share_cooks_with_friends`, 0009) as a plain
+   * boolean.
+   *
+   * Its own method rather than "call getHousehold and look at the field"
+   * because `Household.shareCooksWithFriends` is optional (see its comment
+   * for why it has to be), so the field alone is `boolean | undefined` and
+   * every consent gate would have to remember its own `?? false`. One of
+   * them forgetting is not a rendering bug, it is a household sharing what
+   * it never agreed to share. Normalising here means the gate is written
+   * once, at the seam, and every screen gets an answer it can act on.
+   *
+   * REJECTS an unknown household id rather than returning `false`. The
+   * two are indistinguishable at the call site — both read as "this
+   * household has not opted in" — and quietly answering a lookup failure
+   * would let a bad id masquerade as a considered privacy choice.
+   */
+  getHouseholdCookSharing(householdId: HouseholdId): Promise<boolean>;
+  /**
+   * PD-010 / DESIGN-SOCIAL.md §5 — the settings-screen switch "Deel wat ik
+   * kook met vrienden", and the same switch offered once when a first
+   * friendship is accepted. Off is the default and revoking is a first-
+   * class use of this method, not an afterthought: passing `false` stops
+   * all ambient proof, and because proof is assembled per read it takes
+   * the household's whole past cook history off every friend surface at
+   * their next open.
+   *
+   * NOT folded into `updateHouseholdSettings` above, deliberately. That
+   * input is a bag of preferences a settings screen saves together; this
+   * is an unbundled, PD-005-style consent that has to be given by itself,
+   * with the consequence stated in full sentences beside it. Sharing one
+   * input object with the time budget would make it possible — in one
+   * careless spread of a stale object — to flip a household's consent as
+   * a side effect of saving something else.
+   *
+   * Returns the updated `Household`, matching setMemberHealthDataConsent.
+   */
+  setHouseholdCookSharing(householdId: HouseholdId, shareCooksWithFriends: boolean): Promise<Household>;
+  /**
+   * DESIGN-SOCIAL.md §5 — whether the one-time cook-proof question has
+   * already been PUT to this household. Not what they answered: that is
+   * `getHouseholdCookSharing` above, and the two are independent facts.
+   *
+   * §5 offers the opt-in "once, contextually, when the household's first
+   * friendship is accepted... the question is asked once, not
+   * campaigned". This method is what makes "once" true across app
+   * launches: it is the gate on
+   * `CookSharingAskSheet`'s `visible`, and without it a mounted-and-
+   * remounted screen re-asks a question whose "no" was supposed to be
+   * final — a campaign nobody decided to run.
+   *
+   * LOCAL-ONLY TODAY, and the seam says so rather than hiding it. There is
+   * no `households` column behind this yet; the local implementation keeps
+   * it on the stored row and
+   * src/lib/repository/local/household.ts's `LocallyStoredHousehold`
+   * documents both why and exactly what the eventual migration must do. A
+   * Supabase implementation of `RemyRepository` does not exist yet, and
+   * when it does, this method needs that column before it can answer
+   * honestly — answering `false` from a backend that simply has nowhere to
+   * look would re-ask everybody, once per device, forever.
+   *
+   * REJECTS an unknown household id rather than returning `false`, the
+   * same as `getHouseholdCookSharing` and with a sharper edge: `false`
+   * here means "put the question to them", so a lookup failure answered
+   * `false` would raise a consent sheet against a household that does not
+   * exist, and would do it again on the next read.
+   */
+  getHouseholdCookSharingAsked(householdId: HouseholdId): Promise<boolean>;
+  /**
+   * DESIGN-SOCIAL.md §5 — records that the question was put. One-way.
+   *
+   * NO BOOLEAN PARAMETER. The symmetric-looking
+   * `setHouseholdCookSharingAsked(id, false)` would be an "un-ask", and
+   * §5 describes no such act; a flag that can be cleared is a flag some
+   * later reset path clears, re-opening a question the product promised
+   * to ask exactly once. Idempotent, so a caller may mark twice without
+   * moving the record of the first asking.
+   *
+   * CALLED ON BOTH ANSWERS, from the single shared path
+   * `CookSharingAskSheet.onAnswer` deliberately gives its caller:
+   * `if (enabled) await setHouseholdCookSharing(id, true)` and then this,
+   * unconditionally. The enable goes first so that a failed write leaves
+   * the question unanswered rather than recorded-and-lost. Declining
+   * writes only this — the sharing flag is already `false`, and a
+   * redundant `false` would make a decline indistinguishable from a
+   * revocation.
+   *
+   * Returns `void` where its two siblings return the updated `Household`,
+   * because the field it writes is deliberately not on that type (see the
+   * local implementation): handing back a row that cannot show the change
+   * would be worse than handing back nothing.
+   */
+  markHouseholdCookSharingAsked(householdId: HouseholdId): Promise<void>;
 
   listMembers(householdId: HouseholdId): Promise<readonly Member[]>;
   createMember(input: CreateMemberInput): Promise<Member>;
@@ -171,6 +293,80 @@ export interface RemyRepository {
   getMealIngredients(mealId: MealId): Promise<readonly MealIngredient[]>;
   getMealSteps(mealId: MealId): Promise<readonly MealStep[]>;
   createMeal(input: CreateMealInput): Promise<Meal>;
+  /**
+   * DESIGN-SOCIAL.md §3.5 — reads "Deel deze niet"
+   * (`meals.excluded_from_cook_proof`, 0009) for one meal, as a plain
+   * boolean, so the long-press sheet can render either `Deel deze niet` or
+   * `Uitgezonderd van delen · Weer delen`.
+   *
+   * Normalises the optional `Meal.excludedFromCookProof` for the same
+   * reason getHouseholdCookSharing normalises its field, with one extra
+   * edge to it: this field's absent reading is fail-OPEN. `undefined`
+   * means "not excluded", i.e. share it, so a caller that forgets its
+   * `?? false` is right by accident and a caller that inverts the check is
+   * wrong in the direction that discloses. Hence also the REJECTION of an
+   * unknown meal id: answering `false` there would turn a lookup failure
+   * into permission to share a dish nobody could even find.
+   */
+  getMealCookProofExclusion(mealId: MealId): Promise<boolean>;
+  /**
+   * DESIGN-SOCIAL.md §3.5 — sets or lifts the per-meal cook-proof
+   * exclusion ("Deel deze niet" / "Weer delen").
+   *
+   * Independent of setHouseholdCookSharing by construction: this writes
+   * one meal row and nothing else, and the household flag is never
+   * consulted here. An exclusion therefore stands whether or not the
+   * household has opted in, survives the global switch being toggled off
+   * and on, and can be set in advance by a household that has not opted in
+   * at all. 0009's column comment states that independence as a contract;
+   * tests/repository/cookProofConsent.test.ts holds the code to it.
+   *
+   * Scope, stated so a future caller does not widen it by accident: this
+   * governs COOK PROOF only. It does not block a directed send
+   * (`recipe_shares`) — a send is a separate explicit act aimed at one
+   * named person, withdrawn per-act — and it has no effect on
+   * `recipe_ratings` votes, which are world-readable by design and
+   * withdrawn by deleting the vote.
+   *
+   * Not part of CreateMealInput: a meal is never born excluded. The
+   * exclusion is a later, deliberate act on a dish already in the library,
+   * so createMeal always writes `false` and this is the only way it
+   * becomes true.
+   */
+  setMealCookProofExclusion(mealId: MealId, excludedFromCookProof: boolean): Promise<Meal>;
+  /**
+   * The second descriptive axis (src/domain/dishMoods.ts) — one person's
+   * mood for one dish, added in the outcome moment after they cooked it.
+   * "Zomers", "soul-food", "high-protein": what a dish feels like, as
+   * opposed to `Meal.dishTags`, which is what it is made of.
+   *
+   * THE PUBLIC HALF OF THE OUTCOME MOMENT, and the private half —
+   * `setCookEventRating` below — is a DIFFERENT METHOD writing a
+   * DIFFERENT TABLE. That separation is PD-019 made structural rather
+   * than promised: there is no argument on this method that could carry a
+   * grade, and none on that one that could carry a mood, so no caller can
+   * republish one as the other even by accident. What makes this half
+   * safe to publish at all is that a mood carries no number and no mood
+   * outranks another — there is nothing in it to inflate, which is the
+   * pressure PD-019 keeps the private grade away from.
+   *
+   * ADDITIVE, IDEMPOTENT, AND NEVER A REPLACE: a dish is cooked by more
+   * than one person, and the meal accumulates the union of what they
+   * said. Adding a mood already present is a no-op rather than a second
+   * vote — this vocabulary must never acquire a count, because a count is
+   * a number and a number is the thing PD-019 is about.
+   *
+   * REJECTS a value outside the closed vocabulary rather than storing it,
+   * and rejects an unknown meal id rather than silently doing nothing.
+   * Both mirror `setCookEventRating`'s refusal to clamp an off-scale
+   * grade: an unfilterable value in storage is worse than a loud failure
+   * at the boundary, because nobody can ever ask for it again.
+   *
+   * Not part of `CreateMealInput`: a meal is never born with a mood. Axis
+   * 1 is set at import time by a model reading a caption; axis 2 is only
+   * ever set by somebody who actually ate the food.
+   */
+  addMealDishMood(mealId: MealId, mood: string): Promise<Meal>;
 
   /** Every save for this household, regardless of intent or whether it's still "pending" — what recipeScheduling.ts needs. */
   listSaves(householdId: HouseholdId): Promise<readonly Save[]>;

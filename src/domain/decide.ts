@@ -1,9 +1,9 @@
 /**
  * The decision engine's public entry point.
  *
- * `decide(request: DecisionRequest): DecisionResult` is a pure function:
- * no I/O, no `Date.now()`, no `Math.random()`. Every input the engine
- * needs travels in `request`; every output is derived from it
+ * `decide(request: DecisionRequestWithProof): DecisionResult` is a pure
+ * function: no I/O, no `Date.now()`, no `Math.random()`. Every input the
+ * engine needs travels in `request`; every output is derived from it
  * deterministically. This is what makes the same household + same
  * `targetDate` reproducible for debugging, and what lets both callers
  * (the scheduled Edge Function and the "Iets anders" swap endpoint,
@@ -42,6 +42,30 @@
  * the truthful answer. This also closes a loophole: were the order
  * reversed, toggling a chip could keep producing fresh `filtered_out`
  * states and, on relaxing it again, hand out swaps the cap already spent.
+ *
+ * ---
+ *
+ * Cook proof (docs/DESIGN-SOCIAL.md §2.1) enters at exactly one point.
+ *
+ * `request.friendProof` is a map from canonical recipe id to the friends
+ * who cooked it, assembled by `assembleFriendProof` (social/proof.ts) from
+ * the `shared_cooks` view. It is the single input behind BOTH halves of the
+ * social reason, and that is deliberate rather than economical:
+ *
+ *   - its KEYS become `scoreMeals`' `friendCookedRecipeIds`, which is what
+ *     lets FRIEND_PROOF_BOOST fire and `friend_proof` be picked as the
+ *     reason code (see `friendCookedRecipeIds` below for why the set is
+ *     derived and never supplied separately);
+ *   - its VALUES become the winner's `ReasonContext.friendProof`, which is
+ *     what turns that code into "Sanne heeft dit ook gemaakt en gaf het
+ *     een 8,5."
+ *
+ * The join is on `Meal.recipeId` and on nothing else. Proof is "we are
+ * talking about the same recipe", and a household's own meal row is not
+ * that object — so a meal with no canonical recipe (the seeded, curated
+ * and hand-entered majority) gets no boost and no social reason, however
+ * busy its friends' kitchens are. Matching on title instead would invent
+ * an agreement between two households that does not exist.
  */
 
 import {
@@ -57,11 +81,49 @@ import {
   selectNoveltyTier,
   type NoveltyTier,
 } from './novelty';
-import { buildReasonText, type ReasonContext } from './reason';
+import { buildReasonText, type FriendProofContext, type ReasonContext } from './reason';
 import { scoreMeals, type ScoredMeal } from './scoring';
 import type { DecisionRequest, DecisionResult, IsoDateTimeString, Meal, MealId, Save } from './types';
 
-export function decide(request: DecisionRequest): DecisionResult {
+/**
+ * What the engine actually reads: the shared `DecisionRequest` contract
+ * plus tonight's assembled cook proof.
+ *
+ * WHY THE FIELD IS NOT ON `DecisionRequest` ITSELF. src/domain/types.ts is
+ * the frozen contract every other agent builds against, and it has no
+ * imports at all — declarations depending on nothing. `FriendProofContext`
+ * belongs to reason.ts, which already imports types.ts, so putting the
+ * field there would point the contract file at a copy module and close a
+ * cycle around it. src/domain/social/types.ts makes the same call from the
+ * other side ("neither the decision engine nor the Vanavond screens have
+ * any dependency on the social vocabulary"). decide.ts is the one module
+ * that legitimately needs both halves and already imports both, so the
+ * join belongs here — and `extends` keeps it one shape at every call site,
+ * not a second request object to keep in step.
+ *
+ * WHY THE FIELD IS REQUIRED AND NOT `friendProof?:`. An optional input with
+ * a quiet default is precisely how FRIEND_PROOF_BOOST stayed dead code
+ * across three migrations: `scoreMeals` defaults `friendCookedRecipeIds` to
+ * an empty set, so nothing ever failed to compile while no caller passed
+ * one, and the weight's own tests stayed green throughout. Required, an
+ * empty map is something a builder has to write down — the same argument
+ * PD-009 records for `filters` on `DecisionRequest`, for the same reason.
+ */
+export interface DecisionRequestWithProof extends DecisionRequest {
+  /**
+   * Per canonical recipe, the friends who cooked it and the grade they
+   * publicly gave it. Keyed by `Meal.recipeId`, so the key type is the
+   * plain `string` the rest of the engine uses for ids (scoring.ts's set
+   * is `ReadonlySet<string>` for the same reason) rather than social/
+   * types.ts's `RecipeId` alias, which is that same string.
+   *
+   * Empty whenever nobody has opted in — the common case, and not an
+   * error. See docs/DESIGN-SOCIAL.md §5: the switch is off by default.
+   */
+  readonly friendProof: ReadonlyMap<string, FriendProofContext>;
+}
+
+export function decide(request: DecisionRequestWithProof): DecisionResult {
   const unarchived = filterUnarchived(request.candidateMeals);
   if (unarchived.length === 0) {
     // No unarchived meals at all -- nothing has ever been pasted/saved yet.
@@ -127,7 +189,7 @@ export function decide(request: DecisionRequest): DecisionResult {
  * set), the tier gate applies to the full scored list instead of
  * returning nothing -- there is still a "least bad" option to serve.
  */
-function selectWinner(swapEligible: readonly Meal[], request: DecisionRequest): ScoredMeal {
+function selectWinner(swapEligible: readonly Meal[], request: DecisionRequestWithProof): ScoredMeal {
   const scored = scoreMeals(
     swapEligible,
     request.household,
@@ -135,6 +197,7 @@ function selectWinner(swapEligible: readonly Meal[], request: DecisionRequest): 
     request.pendingThisWeekSaves,
     request.targetDate,
     request.pendingSomedaySaves,
+    friendCookedRecipeIds(request.friendProof),
   );
 
   const competitivePool = scored.filter((scoredMeal) => scoredMeal.score > 0);
@@ -185,17 +248,57 @@ function findSavedAt(mealId: MealId, pendingThisWeekSaves: readonly Save[]): Iso
   return match?.savedAt ?? null;
 }
 
+/**
+ * The recipes FRIEND_PROOF_BOOST may fire for: exactly the proof map's
+ * keys, derived here and never accepted as a second input.
+ *
+ * THAT IDENTITY IS LOAD-BEARING, NOT TIDINESS. `assembleFriendProof`
+ * (social/proof.ts) DROPS a recipe whose every cook is unnameable — a
+ * profile row that failed to load — because DESIGN-SOCIAL.md §2.1 bans a
+ * count without a name ("an anonymous count is a stranger-aggregate
+ * wearing a friendly tone"). Were the boosted set supplied separately, it
+ * could contain exactly those recipes: the meal would win on
+ * `friend_proof` and reason.ts would fall back to its defensive "Iemand
+ * uit je kring heeft dit ook gemaakt." — publishing the anonymous
+ * aggregate §2.1 refuses, in a friend's tone, on the highest-intent
+ * surface in the product. Deriving the set from the map makes "boosted"
+ * and "sayable" the same condition by construction, so no caller can put
+ * them out of step.
+ */
+function friendCookedRecipeIds(friendProof: ReadonlyMap<string, FriendProofContext>): ReadonlySet<string> {
+  return new Set(friendProof.keys());
+}
+
+/**
+ * The proof for one specific meal, matched on its canonical recipe and
+ * nothing else — see this file's header on why the join cannot be a title.
+ *
+ * `?? null` twice over, and both are real states: `recipeId` is optional on
+ * `Meal` (the column arrived after the type did, so an older row has no
+ * key at all), and a meal that does have one is usually absent from the
+ * map, because most recipes have no friend behind them.
+ */
+function findFriendProof(
+  meal: Meal,
+  friendProof: ReadonlyMap<string, FriendProofContext>,
+): FriendProofContext | null {
+  const recipeId = meal.recipeId ?? null;
+  if (recipeId === null) {
+    return null;
+  }
+  return friendProof.get(recipeId) ?? null;
+}
+
 /** Step 4: compose the winning meal's Dutch reason text. */
-function buildReasonTextFor(winner: ScoredMeal, request: DecisionRequest): string {
+function buildReasonTextFor(winner: ScoredMeal, request: DecisionRequestWithProof): string {
   const context: ReasonContext = {
     targetDate: request.targetDate,
     savedAt: findSavedAt(winner.meal.id, request.pendingThisWeekSaves),
     estimatedMinutes: winner.meal.estimatedMinutes,
-    // Null until the proof layer is wired: `scoring.ts` cannot emit
-    // 'friend_proof' yet, so a context carrying friends would be a
-    // promise no code keeps. It becomes a real lookup in the same change
-    // that gives scoreMeal its friend-cook argument.
-    friendProof: null,
+    // The winner's OWN proof, looked up per meal rather than passed down
+    // from selection: `scoreMeals` ranks the whole pool, and the friends
+    // behind some other candidate must never end up in this sentence.
+    friendProof: findFriendProof(winner.meal, request.friendProof),
   };
   return buildReasonText(winner.reasonCode, context);
 }

@@ -52,10 +52,30 @@
  * to the reader's. That is not decoration — it is the reason a friend's
  * card must never open cook mode (see RecipeTile's `onPress` header): the
  * reader's repository has no row for any of these ids.
+ *
+ * TWO MODES, ONE SCENARIO SWITCH. The Vrienden tab holds `Gekookt` and
+ * `Kring` (docs/DESIGN-SOCIAL.md §4.2) and the `__DEV__` row switches the
+ * source for both at once, so every scenario below has a kring half as
+ * well as a feed half — a scenario that demonstrated something in one
+ * mode and left the other blank would make design work on the kring
+ * impossible. The kring half deliberately reuses the same three dishes
+ * and the same two friends: one demo describes one circle, seen two ways,
+ * rather than two unrelated worlds behind one switch.
+ *
+ * WHY THE KRING HALF KEYS ON `RecipeId` AND THE FEED HALF ON `MealId`.
+ * That is not an inconsistency to tidy up — it is the two-tier model. A
+ * kring row ranks the canonical `recipes` row twenty households hold a
+ * copy of; a feed card opens a specific household's `meals` copy. The
+ * fixture keeps both ids and derives the kring row's title, thumbnail and
+ * tags from the matching meal, so the two views cannot drift into
+ * disagreeing about what a dish is called.
  */
 
 import type { FriendShare } from '@/components/friendFeedPresentation';
-import type { Creator, FeedItem } from '@/domain/feed/types';
+import type { KringRecipe, KringRequest } from '@/components/kringPresentation';
+import { collectExcludedTags } from '@/domain/exclusions';
+import type { Creator, CreatorPlatform, FeedItem } from '@/domain/feed/types';
+import type { ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
 import type { Household, Meal, MealId, MealIngredient, MealStep, Member, Restriction } from '@/domain/types';
 
 const FIXTURE_TIMESTAMP = '2026-08-01T09:00:00.000Z';
@@ -169,7 +189,7 @@ function makeSharedMeal(fields: SharedMealFields): Meal {
   };
 }
 
-const FIXTURE_MEALS: readonly Meal[] = [
+export const FIXTURE_MEALS: readonly Meal[] = [
   makeSharedMeal({
     id: 'meal-friend-traybake',
     householdId: 'household-sanne',
@@ -250,7 +270,7 @@ function makeSteps(mealId: MealId, instructions: readonly string[]): readonly Me
   }));
 }
 
-const FIXTURE_INGREDIENTS: ReadonlyMap<MealId, readonly MealIngredient[]> = new Map([
+export const FIXTURE_INGREDIENTS: ReadonlyMap<MealId, readonly MealIngredient[]> = new Map([
   [
     'meal-friend-traybake',
     makeIngredients('meal-friend-traybake', [
@@ -384,14 +404,184 @@ const FIXTURE_ITEMS: readonly FeedItem[] = [
   },
 ];
 
+/**
+ * The notes are deliberately uneven, for the same reason the rest of this
+ * module is: a real list is not three tidy cards.
+ *
+ * One send carries a short note, two carry none, and one carries a note
+ * near the full 140 (`SEND_NOTE_MAX_LENGTH`) so the card's longest
+ * realistic state can be looked at rather than imagined. §1 calls a note
+ * "a post-it on a pan lid, not the opening of a chat", and the way to keep
+ * that honest in design work is to see the longest post-it the schema
+ * allows sitting on a real card at 200% Dynamic Type.
+ *
+ * `null` is a first-class case here, not a gap to fill in later. §4.1's
+ * input is optional and its placeholder says so, `normalizeSendNote`
+ * collapses a whitespace-only note to null at the repository boundary,
+ * and a null note must render NOTHING — no empty rule, no placeholder,
+ * no "geen bericht".
+ */
 const FIXTURE_SHARES: readonly FriendShare[] = [
-  { feedItemId: 'feed-friend-1', friendName: 'Sanne', rating: 5 },
-  { feedItemId: 'feed-friend-2', friendName: 'Joris', rating: 4 },
+  { feedItemId: 'feed-friend-1', friendName: 'Sanne', rating: 5, note: 'die citroen aan het eind niet overslaan' },
+  // No note. The most common send, and the one that proves the left rule
+  // disappears with the words rather than leaving a stub behind.
+  { feedItemId: 'feed-friend-2', friendName: 'Joris', rating: 4, note: null },
   // Never scored it. The card then shows a cook time and no score, rather
   // than a zero — an unanswered question is not a low opinion (PD-008).
-  { feedItemId: 'feed-friend-3', friendName: 'Sanne', rating: null },
-  { feedItemId: 'feed-friend-4', friendName: 'Joris', rating: 3 },
-  { feedItemId: 'feed-friend-5', friendName: 'Sanne', rating: null },
+  // The long note rides on this one so the two awkward cases land on one
+  // card, which is where a layout actually breaks.
+  {
+    feedItemId: 'feed-friend-3',
+    friendName: 'Sanne',
+    rating: null,
+    note: 'ik heb de helft van de bouillon vervangen door kokosmelk en er limoen over gedaan, veel lekkerder dan het origineel',
+  },
+  { feedItemId: 'feed-friend-4', friendName: 'Joris', rating: 3, note: null },
+  { feedItemId: 'feed-friend-5', friendName: 'Sanne', rating: null, note: null },
+];
+
+/**
+ * Which of the fixture sends have not been looked at (PD-020.1).
+ *
+ * KEYED ON MEAL IDS, NOT ON FEED ITEMS, because that is what the real
+ * thing is keyed on: "unseen" is a fact about a `recipe_shares` row and
+ * `recipe_shares.meal_id` identifies the dish.
+ * `collectUnseenSendMealIds` (gekooktPresentation.ts) produces exactly
+ * this shape from a live `listSendsToMe`, so the fixture and the live path
+ * hand the band the same kind of set rather than two shapes somebody has
+ * to keep in step.
+ *
+ * ONE, not several, and deliberately not the top-ranked card. The band is
+ * only visible as a band when it MOVES something: a single unseen send
+ * that `rankFeedItems` had placed lower jumps to the top, and that jump is
+ * the whole design being demonstrated. Marking everything unseen would
+ * produce a list identical to the ranked one, with a stagger running down
+ * the entire screen — precisely the "everything here is new" claim §8
+ * refuses.
+ *
+ * NOTHING HERE IS EVER A PROOF RECIPE, and structurally cannot be: a proof
+ * card carries no meal id to put in this set. See `orderGekooktList`.
+ */
+const FIXTURE_UNSEEN_SEND_MEAL_IDS: ReadonlySet<MealId> = new Set(['meal-friend-pesto']);
+
+// ---------------------------------------------------------------------------
+// De kring — the same circle, ranked by what it scored (DESIGN-SOCIAL §2.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * The two friends, as *profiles* rather than as the bare display names
+ * the feed's `FriendShare` carries.
+ *
+ * A kring vote is cast by a person who exists outside any household
+ * (src/domain/social/types.ts on why `profiles` is not
+ * `household_members`), so the fixture has to hold an id per voter — the
+ * meta line resolves ids to names, and a nameless voter falls back to a
+ * count rather than disappearing. Same two people as the feed half, so
+ * "Sanne" means one person across both modes.
+ */
+export const FIXTURE_VOTER_NAMES: ReadonlyMap<ProfileId, string> = new Map([
+  ['profile-sanne', 'Sanne'],
+  ['profile-joris', 'Joris'],
+]);
+
+/**
+ * A canonical recipe as the kring renders it, derived from the meal of
+ * the same dish.
+ *
+ * Deriving rather than restating is the point: title, thumbnail and tags
+ * come from `FIXTURE_MEALS`, so the pesto cannot end up called one thing
+ * in `Gekookt` and another in `Kring`. Throwing on an unknown id is a
+ * typo guard for this module only — nothing outside it can reach this
+ * function.
+ */
+function makeKringRecipe(
+  recipeId: RecipeId,
+  mealId: MealId,
+  creatorHandle: string,
+  creatorPlatform: CreatorPlatform,
+): KringRecipe {
+  const meal = FIXTURE_MEALS.find((candidate) => candidate.id === mealId);
+  if (meal === undefined) {
+    throw new Error(`Kring fixture references an unknown meal: ${mealId}`);
+  }
+  return {
+    recipeId,
+    title: meal.title,
+    creatorHandle,
+    creatorPlatform,
+    thumbnailUrl: meal.thumbnailUrl,
+    // PD-006 tri-state: these are the tags we hold, good enough to state a
+    // presence and never good enough to imply an absence. A canonical
+    // `recipes` row carries none of these in production (see the Vrienden
+    // screen's header) — the fixture populates them so the collision chip
+    // has something real to fire on while designing.
+    allergenTags: meal.ingredientTags,
+  };
+}
+
+const FIXTURE_KRING_RECIPES: readonly KringRecipe[] = [
+  makeKringRecipe('recipe-friend-traybake', 'meal-friend-traybake', 'kokenmetkees', 'tiktok'),
+  makeKringRecipe('recipe-friend-ramen', 'meal-friend-ramen', 'kokenmetkees', 'tiktok'),
+  makeKringRecipe('recipe-friend-pesto', 'meal-friend-pesto', 'plantaardigpauline', 'instagram'),
+];
+
+/**
+ * What the circle actually scored, on src/domain/rating.ts's 1-10 scale.
+ *
+ * Chosen to make three separate rules visible at once rather than to look
+ * plausible:
+ *
+ * - **Two voters and one voter both produce a row.** The ramen rests on
+ *   Sanne's single vote, because `KRING_MIN_VOTES` is 1 and a fixture
+ *   where everything had two votes could not show that.
+ * - **No two averages are equal**, so the demo shows 1-2-3 rather than
+ *   the competition-ranking tie the kring also handles. A tie is real
+ *   behaviour but it reads as a bug in a screenshot.
+ * - **The colliding dish is not last because it collides.** The pesto
+ *   sits third because 7,5 is the lowest grade here. `rankKring` applies
+ *   no collision penalty at all — unlike the feed, which demotes — and a
+ *   demo that put the chip on the bottom row *by construction* would
+ *   teach the wrong rule.
+ *
+ * `ratedAt` is data and never copy: nothing on either mode of this tab
+ * renders a date, and DESIGN-SOCIAL §2.2 forbids one outright.
+ */
+export const FIXTURE_KRING_VOTES: readonly RecipeRating[] = [
+  {
+    id: 'rating-fixture-1',
+    recipeId: 'recipe-friend-traybake',
+    raterProfileId: 'profile-sanne',
+    rating: 9,
+    ratedAt: FIXTURE_TIMESTAMP,
+  },
+  {
+    id: 'rating-fixture-2',
+    recipeId: 'recipe-friend-traybake',
+    raterProfileId: 'profile-joris',
+    rating: 8,
+    ratedAt: FIXTURE_TIMESTAMP,
+  },
+  {
+    id: 'rating-fixture-3',
+    recipeId: 'recipe-friend-ramen',
+    raterProfileId: 'profile-sanne',
+    rating: 8,
+    ratedAt: FIXTURE_TIMESTAMP,
+  },
+  {
+    id: 'rating-fixture-4',
+    recipeId: 'recipe-friend-pesto',
+    raterProfileId: 'profile-joris',
+    rating: 8,
+    ratedAt: FIXTURE_TIMESTAMP,
+  },
+  {
+    id: 'rating-fixture-5',
+    recipeId: 'recipe-friend-pesto',
+    raterProfileId: 'profile-sanne',
+    rating: 7,
+    ratedAt: FIXTURE_TIMESTAMP,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -410,8 +600,19 @@ const FIXTURE_SHARES: readonly FriendShare[] = [
  *   collision for a household that never excluded nuts.
  * - `leeg` — nobody has shared anything yet, the honest first state for
  *   every new install.
+ *
+ * Each one switches BOTH modes of the tab at once; `getKringFixture`
+ * below is the kring half of the same three states.
  */
 export type FriendFeedScenario = 'gedeeld' | 'zonder_allergie' | 'leeg';
+
+/**
+ * The scenarios, in the order the `__DEV__` row offers them. Exported so
+ * that row and `KNOWN_SCENARIOS` below read from one list — mirrors
+ * `BOARD_SCENARIOS` in src/app/ranglijst/_fixtures.ts, so both list tabs
+ * offer their demo sources the same way.
+ */
+export const FRIEND_FEED_SCENARIOS: readonly FriendFeedScenario[] = ['gedeeld', 'zonder_allergie', 'leeg'];
 
 export interface FriendFeedFixture {
   readonly household: Household;
@@ -458,10 +659,59 @@ export function getFriendFeedFixture(scenario: FriendFeedScenario): FriendFeedFi
   }
 }
 
+/**
+ * The kring half of one scenario — the same circle, ranked by what it
+ * scored rather than listed by what it cooked.
+ *
+ * The excluded tags are DERIVED from the same household and restrictions
+ * the feed half uses, never restated. That is what makes
+ * `zonder_allergie` mean one thing in both modes: dropping the household's
+ * restriction removes the chip from the feed card and from the kring row
+ * in the same edit, and nobody has to remember to keep two lists of
+ * allergens in step. `collectExcludedTags` is the same function
+ * `assembleFriendFeed` reaches through `rankFeedItems`, so the two modes
+ * cannot disagree about what the household excludes.
+ *
+ * Spreads rather than mutates, exactly as `getFriendFeedFixture` does:
+ * re-reading a scenario always returns what it returned the first time.
+ */
+export function getKringFixture(scenario: FriendFeedScenario): KringRequest {
+  const feed = getFriendFeedFixture(scenario);
+  return {
+    // `leeg` has no shares and no votes: an empty circle is the honest
+    // first state here too, and it is what makes the kring's own empty
+    // state reachable on device.
+    votes: scenario === 'leeg' ? [] : FIXTURE_KRING_VOTES,
+    recipes: FIXTURE_KRING_RECIPES,
+    voterNames: FIXTURE_VOTER_NAMES,
+    excludedAllergenTags: [...collectExcludedTags(feed.members, feed.restrictions)],
+  };
+}
+
+/**
+ * The unseen half of one scenario (PD-020.1) — which sends this demo
+ * treats as not yet looked at.
+ *
+ * A SEPARATE FUNCTION RATHER THAN A FIELD ON `FriendFeedFixture`, and the
+ * reason is the same one that keeps it off the card model: unseen is a
+ * fact about a `recipe_shares` row, not about a dish or a feed item. The
+ * live screen gets it from `listSendsToMe` — a different read from the one
+ * that produces the cards — so a fixture that bundled the two into one
+ * object would be modelling a join the real path does not have.
+ *
+ * `leeg` has no shares, so nothing can be unseen there; the empty state is
+ * reachable with the tab count at zero, which is the honest pairing. The
+ * other two scenarios share one unseen send, so flipping between them
+ * changes the collision label and nothing else.
+ */
+export function getUnseenSendMealIds(scenario: FriendFeedScenario): ReadonlySet<MealId> {
+  return scenario === 'leeg' ? new Set() : FIXTURE_UNSEEN_SEND_MEAL_IDS;
+}
+
 /** What every non-`__DEV__` build renders, stated once so both Vrienden screens agree. */
 export const DEFAULT_FRIEND_FEED_SCENARIO: FriendFeedScenario = 'gedeeld';
 
-const KNOWN_SCENARIOS: ReadonlySet<string> = new Set<FriendFeedScenario>(['gedeeld', 'zonder_allergie', 'leeg']);
+const KNOWN_SCENARIOS: ReadonlySet<string> = new Set<FriendFeedScenario>(FRIEND_FEED_SCENARIOS);
 
 /**
  * Narrows a route param to a scenario, falling back to the default for

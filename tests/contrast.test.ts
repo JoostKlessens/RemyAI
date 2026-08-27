@@ -137,6 +137,21 @@ const TEXT_ON_FILL: readonly OnFillCase[] = [
    * should become hard to read.
    */
   { text: 'warning', fill: 'warningMuted' },
+  /**
+   * PD-020.2's closed-loop chip — `positiveMuted` fill with `positive`
+   * `caption` text, reading exactly "gemaakt". The green counterpart of
+   * the amber row above, and the same kind of gap it closed: the three
+   * `positiveMuted` rows further up guard the neutral TEXT tokens that sit
+   * on that wash during OutcomeCard's completion moment, and none of them
+   * says anything about `positive` used as text on its own muted fill.
+   *
+   * Worth a gate even though it clears comfortably (5.19:1 light,
+   * 6.97:1 dark). This is the ONE chip on the Vrienden surface allowed to
+   * be green — DESIGN.md §8's "no `positive` anywhere, with exactly one
+   * exception" — so it is the one place a retune of the green scale has no
+   * neighbouring usage to fail first and warn us.
+   */
+  { text: 'positive', fill: 'positiveMuted' },
 ];
 
 interface BoundaryOnFillCase {

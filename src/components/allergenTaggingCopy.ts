@@ -54,8 +54,8 @@ export function describeAllergenTag(tag: string): string {
 /** Summary shown once the user has confirmed (status: 'verified') — never worded as a safety guarantee. */
 export function buildAllergenConfirmedSummary(confirmedTags: readonly string[]): string {
   if (confirmedTags.length === 0) {
-    return 'Gecontroleerd — geen van de 14 allergenen getagd.';
+    return 'Gecontroleerd. Geen van de 14 allergenen getagd.';
   }
   const labels = confirmedTags.map(describeAllergenTag);
-  return `Gecontroleerd — sluit uit: ${labels.join(', ')}.`;
+  return `Gecontroleerd. Sluit uit: ${labels.join(', ')}.`;
 }

@@ -23,7 +23,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import { BOARD_RATING_ROW_CEILING } from '@/lib/repository/social/types';
+import { BOARD_RATING_ROW_CEILING, SEND_NOTE_MAX_LENGTH } from '@/lib/repository/social/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface FakeResponse {
@@ -46,12 +46,21 @@ class FakeQuery implements PromiseLike<FakeResponse> {
     this.log.push(`upsert(${JSON.stringify(values)},${JSON.stringify(options ?? {})})`);
     return this;
   }
+  update(values: unknown): this {
+    this.log.push(`update(${JSON.stringify(values)})`);
+    return this;
+  }
   delete(): this {
     this.log.push('delete()');
     return this;
   }
   eq(column: string, value: unknown): this {
     this.log.push(`eq(${column},${String(value)})`);
+    return this;
+  }
+  /** PostgREST's null test. `eq(col, null)` is a different filter and matches no null row. */
+  is(column: string, value: unknown): this {
+    this.log.push(`is(${column},${String(value)})`);
     return this;
   }
   or(filter: string): this {
@@ -260,6 +269,194 @@ describe('reading canonical recipes', () => {
     expect(await repository.listCanonicalRecipes(['r-1'])).toEqual([
       { recipeId: 'r-1', title: 'Ramen', platform: 'tiktok', authorName: 'noedelnoah', thumbnailUrl: null },
     ]);
+  });
+});
+
+const shareRow = (overrides: Record<string, unknown> = {}) => ({
+  id: 'rs-1',
+  meal_id: 'm-1',
+  sender_profile_id: 'p-1',
+  recipient_profile_id: 'p-2',
+  note: 'Dit is echt jouw ding.',
+  created_at: PG_TIME,
+  seen_at: null,
+  withdrawn_at: null,
+  ...overrides,
+});
+
+const SEND = { mealId: 'm-1', senderProfileId: 'p-1', recipientProfileId: 'p-2', note: 'Dit is echt jouw ding.' };
+
+describe('directed sends', () => {
+  test('maps every column onto its domain name and normalizes the timestamp', async () => {
+    const fake = makeClient([ok(shareRow())]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    expect(await repository.sendRecipe(SEND)).toEqual({
+      id: 'rs-1',
+      mealId: 'm-1',
+      senderProfileId: 'p-1',
+      recipientProfileId: 'p-2',
+      note: 'Dit is echt jouw ding.',
+      sentAt: DOMAIN_TIME,
+    });
+    expect(fake.tables).toEqual(['recipe_shares']);
+  });
+
+  /**
+   * The row the sender gets back carries `seen_at`, because RLS lets both
+   * parties read it. Putting it on the returned shape would make the one
+   * method every send goes through a read receipt (DESIGN-SOCIAL.md §8).
+   */
+  test('a send never hands the sender the recipient’s seen state', async () => {
+    const fake = makeClient([ok(shareRow({ seen_at: PG_TIME }))]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    expect('seen' in (await repository.sendRecipe(SEND))).toBe(false);
+  });
+
+  /** `unique (meal_id, recipient_profile_id)` is the conflict target: the same dish to the same person is one offer. */
+  test('upserts on the (meal, recipient) pair rather than inserting a second card', async () => {
+    const fake = makeClient([ok(shareRow())]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.sendRecipe(SEND);
+    expect(fake.log.join(' ')).toContain('meal_id,recipient_profile_id');
+  });
+
+  /** Otherwise withdraw-and-resend would make a read card unread — a bell the sender could ring at will. */
+  test('a send writes no seen_at, so re-sending cannot reset the reader state', async () => {
+    const fake = makeClient([ok(shareRow())]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.sendRecipe(SEND);
+    expect(fake.log.join(' ')).not.toContain('seen_at');
+  });
+
+  /** A re-send after "Stop delen" has to revive the row it lands on, or the card stays hidden. */
+  test('a send clears any earlier withdrawal', async () => {
+    const fake = makeClient([ok(shareRow())]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.sendRecipe(SEND);
+    expect(fake.log.join(' ')).toContain('"withdrawn_at":null');
+  });
+
+  test('refuses a note past the cap before it reaches the network', async () => {
+    const fake = makeClient([]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await expect(repository.sendRecipe({ ...SEND, note: 'a'.repeat(SEND_NOTE_MAX_LENGTH + 1) })).rejects.toThrow(/140/);
+    expect(fake.tables).toEqual([]);
+  });
+
+  test('refuses a send to yourself before it reaches the network', async () => {
+    const fake = makeClient([]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await expect(repository.sendRecipe({ ...SEND, recipientProfileId: 'p-1' })).rejects.toThrow(/yourself/i);
+    expect(fake.tables).toEqual([]);
+  });
+
+  /** The recipient-facing index is `where withdrawn_at is null`: absence from the list IS withdrawal. */
+  test('withdrawal is an update on the row, never a delete', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.withdrawSend('p-1', 'm-1', 'p-2');
+    const log = fake.log.join(' ');
+    expect(log).toContain('update(');
+    expect(log).toContain('withdrawn_at');
+    expect(log).not.toContain('delete()');
+  });
+
+  test('withdrawal is scoped to the sender’s own send', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.withdrawSend('p-1', 'm-1', 'p-2');
+    const log = fake.log.join(' ');
+    expect(log).toContain('eq(sender_profile_id,p-1)');
+    expect(log).toContain('eq(meal_id,m-1)');
+    expect(log).toContain('eq(recipient_profile_id,p-2)');
+  });
+
+  /** Withdrawing twice must not overwrite the first withdrawal's time — it is the auditable one. */
+  test('withdrawal touches only a live row', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.withdrawSend('p-1', 'm-1', 'p-2');
+    expect(fake.log.join(' ')).toContain('is(withdrawn_at,null)');
+  });
+
+  /** Idempotence lives in the filter: a second call finds nothing left to stamp. */
+  test('marking seen stamps only the sends that are still unseen', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.markSendsSeen('p-2');
+    const log = fake.log.join(' ');
+    expect(log).toContain('update(');
+    expect(log).toContain('eq(recipient_profile_id,p-2)');
+    expect(log).toContain('is(seen_at,null)');
+  });
+
+  /** "Seen" against a card the recipient was never shown is a false entry in the one attention column there is. */
+  test('marking seen leaves withdrawn sends alone', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.markSendsSeen('p-2');
+    expect(fake.log.join(' ')).toContain('is(withdrawn_at,null)');
+  });
+
+  /**
+   * §3.2: "no per-card read tracking, because per-card tracking is the
+   * first brick of a read-receipt system". The query cannot name one send
+   * because the signature has nowhere to put its id.
+   */
+  test('marking seen names no single send', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.markSendsSeen('p-2');
+    expect(fake.log.join(' ')).not.toContain('eq(id,');
+  });
+
+  test('the recipient list drops withdrawn sends at the query, not in memory', async () => {
+    const fake = makeClient([ok([shareRow()])]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.listSendsToMe('p-2');
+    const log = fake.log.join(' ');
+    expect(log).toContain('eq(recipient_profile_id,p-2)');
+    expect(log).toContain('is(withdrawn_at,null)');
+  });
+
+  test('a stamped seen_at reads as seen, and a null one as unseen', async () => {
+    const fake = makeClient([ok([shareRow({ id: 'unseen' }), shareRow({ id: 'seen', seen_at: PG_TIME })])]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    const waiting = await repository.listSendsToMe('p-2');
+    expect(waiting.map((send) => [send.id, send.seen])).toEqual([
+      ['unseen', false],
+      ['seen', true],
+    ]);
+  });
+
+  test('a missing note stays null rather than becoming an empty line', async () => {
+    const fake = makeClient([ok([shareRow({ note: null })])]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    expect((await repository.listSendsToMe('p-2'))[0]?.note).toBeNull();
+  });
+
+  /** An RLS refusal — a recipient who is not a friend, a meal that is not yours — has to stay legible. */
+  test('a database error keeps its Postgres code', async () => {
+    const fake = makeClient([{ data: null, error: { message: 'permission denied', code: '42501' } }]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await expect(repository.sendRecipe(SEND)).rejects.toThrow(/42501/);
   });
 });
 

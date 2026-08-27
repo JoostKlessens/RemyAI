@@ -89,6 +89,7 @@ import type {
   Member,
   Restriction,
 } from './types';
+import { readMealDishMoods } from './dishMoods';
 import { normalizeTag } from './normalizeTag';
 
 /**
@@ -218,8 +219,12 @@ export function filterByRestrictionsAndTimeBudget(
  */
 export function filterByDecisionFilters(meals: readonly Meal[], filters: DecisionFilters): readonly Meal[] {
   const requiredTags = filters.requiredDishTags.map(normalizeTag);
+  const requestedMoods = filters.anyDishMoods.map(normalizeTag);
   return meals.filter(
-    (meal) => isWithinMaxMinutes(meal, filters.maxMinutes) && hasEveryRequiredDishTag(meal, requiredTags),
+    (meal) =>
+      isWithinMaxMinutes(meal, filters.maxMinutes) &&
+      hasEveryRequiredDishTag(meal, requiredTags) &&
+      hasAnyRequestedDishMood(meal, requestedMoods),
   );
 }
 
@@ -235,6 +240,7 @@ export function filterByDecisionFilters(meals: readonly Meal[], filters: Decisio
 export const NO_DECISION_FILTERS: DecisionFilters = {
   maxMinutes: null,
   requiredDishTags: [],
+  anyDishMoods: [],
 };
 
 /**
@@ -292,6 +298,34 @@ function hasEveryRequiredDishTag(meal: Meal, requiredTags: readonly string[]): b
   }
   const mealTags = new Set(meal.dishTags.map(normalizeTag));
   return requiredTags.every((tag) => mealTags.has(tag));
+}
+
+/**
+ * ANY, where `hasEveryRequiredDishTag` above is EVERY. The two predicates
+ * sit next to each other precisely so the disagreement is impossible to
+ * miss; the argument for it lives on `DecisionFilters.anyDishMoods` in
+ * types.ts, and the short version is that a composition is one dish with
+ * several properties while a craving is several dishes any of which would
+ * do. The mood vocabulary is built in opposing pairs, so EVERY across a
+ * pair would be empty by construction rather than merely strict.
+ *
+ * Between the two axes it stays AND: `filterByDecisionFilters` conjoins
+ * them, so "pasta" and ("zomers" or "licht") is one narrowing, not two.
+ *
+ * Reads `Meal.dishMoods` through `readMealDishMoods` and NEVER
+ * `meal.dishTags` or `meal.ingredientTags` — three fields of identical
+ * shape on one row, and the whole point of keeping them apart is that no
+ * predicate reaches across. Both sides go through `normalizeTag` for the
+ * same defensive reason the tag predicate does: a stray un-normalized
+ * value from legacy data or a caller that bypassed `sanitizeDishMoods`
+ * must still compare rather than silently matching nothing.
+ */
+function hasAnyRequestedDishMood(meal: Meal, requestedMoods: readonly string[]): boolean {
+  if (requestedMoods.length === 0) {
+    return true;
+  }
+  const mealMoods = new Set(readMealDishMoods(meal).map(normalizeTag));
+  return requestedMoods.some((mood) => mealMoods.has(mood));
 }
 
 /** A swap must never repeat a meal already offered today (original or a prior swap). */

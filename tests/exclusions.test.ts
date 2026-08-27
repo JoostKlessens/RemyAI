@@ -418,6 +418,107 @@ describe('filterByDecisionFilters — requiredDishTags (PD-009)', () => {
   });
 });
 
+describe('filterByDecisionFilters — anyDishMoods (the second axis)', () => {
+  test('an empty anyDishMoods applies no mood filter', () => {
+    const meals = [
+      makeMeal({ id: 'meal-undescribed', dishMoods: [] }),
+      makeMeal({ id: 'meal-zomers', dishMoods: ['zomers'] }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: [] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-undescribed', 'meal-zomers']);
+  });
+
+  test('keeps only meals carrying the requested mood', () => {
+    const meals = [
+      makeMeal({ id: 'meal-zomers', dishMoods: ['zomers'] }),
+      makeMeal({ id: 'meal-winters', dishMoods: ['winters'] }),
+      makeMeal({ id: 'meal-undescribed', dishMoods: [] }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: ['zomers'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-zomers']);
+  });
+
+  /**
+   * THE DELIBERATE ASYMMETRY WITH `requiredDishTags` ABOVE. Axis 1 asks a
+   * composition question, where two chips are one request ("een
+   * vegetarische pasta"). Axis 2 asks what somebody is in the mood for,
+   * where two chips are two alternatives — "iets zomers of iets lichts" is
+   * a real request and "iets dat tegelijk zomers en winters is" is a
+   * request for nothing. A mood also arrives one at a time (one per
+   * rating), so most dishes carry exactly one: AND across two moods would
+   * empty the pool on almost every second tap.
+   */
+  test('matches ANY listed mood, not all of them', () => {
+    const meals = [
+      makeMeal({ id: 'meal-zomers', dishMoods: ['zomers'] }),
+      makeMeal({ id: 'meal-licht', dishMoods: ['licht'] }),
+      makeMeal({ id: 'meal-winters', dishMoods: ['winters'] }),
+    ];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: ['zomers', 'licht'] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-zomers', 'meal-licht']);
+  });
+
+  /**
+   * OR *within* axis 2, AND *between* the axes: "iets met pasta, en dan
+   * iets zomers of iets lichts" is one coherent sentence, and it is the
+   * one this pair of predicates has to mean.
+   */
+  test('combines with requiredDishTags as AND across the two axes', () => {
+    const meals = [
+      makeMeal({ id: 'meal-pasta-zomers', dishTags: ['pasta'], dishMoods: ['zomers'] }),
+      makeMeal({ id: 'meal-pasta-winters', dishTags: ['pasta'], dishMoods: ['winters'] }),
+      makeMeal({ id: 'meal-soep-zomers', dishTags: ['soep'], dishMoods: ['zomers'] }),
+    ];
+
+    const result = filterByDecisionFilters(
+      meals,
+      makeDecisionFilters({ requiredDishTags: ['pasta'], anyDishMoods: ['zomers'] }),
+    );
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-pasta-zomers']);
+  });
+
+  test('a meal that predates the field is simply undescribed, never a crash', () => {
+    const meals = [makeMeal({ id: 'meal-legacy' })];
+
+    expect(filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: ['zomers'] }))).toHaveLength(0);
+    expect(filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: [] }))).toHaveLength(1);
+  });
+
+  test('matches through normalizeTag, so a stray capitalized or padded value still compares', () => {
+    const meals = [makeMeal({ id: 'meal-zomers', dishMoods: ['zomers'] })];
+
+    const result = filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: ['  Zomers '] }));
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-zomers']);
+  });
+
+  test('never reads ingredientTags or dishTags — the mood axis is its own vocabulary', () => {
+    const meals = [
+      makeMeal({ id: 'meal-elsewhere', dishMoods: [], dishTags: ['zomers'], ingredientTags: ['zomers'] }),
+    ];
+
+    expect(filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: ['zomers'] }))).toHaveLength(0);
+  });
+
+  test('does not mutate the input array', () => {
+    const meals = [
+      makeMeal({ id: 'meal-zomers', dishMoods: ['zomers'] }),
+      makeMeal({ id: 'meal-winters', dishMoods: ['winters'] }),
+    ];
+
+    filterByDecisionFilters(meals, makeDecisionFilters({ anyDishMoods: ['zomers'] }));
+
+    expect(meals.map((meal) => meal.id)).toEqual(['meal-zomers', 'meal-winters']);
+  });
+});
+
 describe('filterByDecisionFilters — deliberately NOT folded into filterByRestrictionsAndTimeBudget (PD-006 boundary)', () => {
   test('carries no allergen exclusion of its own — a meal tagged with an allergen still passes here', () => {
     // Not an oversight: this function's single job is "narrow what the

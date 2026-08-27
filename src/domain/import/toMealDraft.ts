@@ -36,6 +36,36 @@
  * `ingredientTags: []` and `allergenTagStatus: 'unknown'` below stay
  * hardcoded literals precisely so that adding dishTags here could not
  * quietly become a precedent for populating them too.
+ *
+ * ---
+ *
+ * `recipeId` IS THE ONE THING THIS FUNCTION ASKS FOR RATHER THAN DERIVES.
+ * It is the canonical `recipes` row this draft is a household's private
+ * copy of (`meals.recipe_id`, 0006) — the only object two households have
+ * in common, and therefore the only thing a friend's cook can be joined to
+ * (`shared_cooks` in 0009, `FRIEND_PROOF_BOOST` in src/domain/scoring.ts).
+ * The id is database-generated, so it arrives on `MealDraftContext` beside
+ * the other facts only the caller can know (the resolved URL, the
+ * thumbnail). Deriving it here from the URL is not an option and not a
+ * shortcut worth wanting: the normalized URL is that row's deduplication
+ * KEY, not its id, and the two are not interchangeable.
+ *
+ * NO CALLER SUPPLIES ONE TODAY, and pretending otherwise would be worse
+ * than saying so. supabase/functions/parse-recipe/index.ts holds the id —
+ * `insertCanonicalRecipe` reads it straight back off the insert — but
+ * `ImportResult` (types.ts) has no field to carry it home in, so neither
+ * the fresh path nor a cache hit (`parseStoredRecipe`, which never reads
+ * the stored row's `id`) hands it to the client. The parameter is threaded
+ * through regardless, so the write path is continuous and supplying an id
+ * later is a one-line change at the call site rather than another pass
+ * over three files. It is emphatically NOT threaded through with a
+ * fabricated or URL-derived value, which would point a household's meal at
+ * a recipe row that does not exist.
+ *
+ * `null` is therefore not a placeholder for "id pending". It is the
+ * permanent, honest state of every seeded, curated and hand-entered meal —
+ * a copy of nothing — and the draft always states it explicitly rather
+ * than omitting the key.
  */
 
 import type { HouseholdId } from '../types';
@@ -54,6 +84,15 @@ export interface MealDraftContext {
    * fallback for that case, never a broken image.
    */
   readonly thumbnailUrl: string | null;
+  /**
+   * The canonical `recipes` row (0006) this import came from, when the
+   * caller knows it. Optional because no caller can know it yet — see the
+   * file header — and because a caller with nothing to say here is saying
+   * something true and permanent ("this meal is a copy of nothing"), not
+   * withholding something. A missing key and an explicit `null` therefore
+   * mean exactly the same thing, and both become `null` on the draft.
+   */
+  readonly recipeId?: string | null;
 }
 
 export interface MealIngredientDraft {
@@ -90,6 +129,17 @@ export interface MealDraftInsert {
    * in the shape and must never be mixed with it — see the file header.
    */
   readonly dishTags: readonly string[];
+  /**
+   * Required here while `MealDraftContext`'s is optional, and the
+   * asymmetry runs the opposite way to `dishTags`' for a reason: a draft
+   * is the shape that actually gets written, and a write path allowed to
+   * leave this out is how the link went unwritten from 0006 until now —
+   * the column existed, the domain type had the field, and every test
+   * built its `Meal` by hand and so never noticed. Stating it always, even
+   * as `null`, makes dropping it a compile error instead of a social
+   * feature that silently never fires.
+   */
+  readonly recipeId: string | null;
   readonly sourceUrl: string;
   readonly sourcePlatform: 'tiktok' | 'reels';
   /** See MealDraftContext.thumbnailUrl — carried straight through. */
@@ -140,6 +190,10 @@ export function toMealDraft(recipe: ParsedRecipe, context: MealDraftContext): Me
     // it (see its own comment); `[]` is the right reading of a missing
     // one — no categories — never a reason to go guessing at some.
     dishTags: recipe.dishTags ?? [],
+    // `?? null` and never a fallback id: an import that does not know its
+    // canonical recipe is a meal that is a copy of nothing, which is a
+    // real answer. See the file header for why no caller knows one yet.
+    recipeId: context.recipeId ?? null,
     sourceUrl: context.sourceUrl,
     sourcePlatform: toMealSourcePlatform(context.platform),
     thumbnailUrl: context.thumbnailUrl,

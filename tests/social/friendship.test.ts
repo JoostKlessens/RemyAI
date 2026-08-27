@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   applyFriendshipAction,
   areFriends,
+  collectAcceptedFriendIds,
   friendshipPairKey,
   friendshipRoleOf,
   isLegalFriendshipTransition,
@@ -350,5 +351,106 @@ describe('nextFriendshipFields', () => {
   test('leaving blocked clears the blocker', () => {
     const blocked = makeFriendship({ status: 'blocked', blockedBy: PROFILE_B });
     expect(nextFriendshipFields(blocked, PROFILE_B, PROFILE_A, 'declined', NOW).blockedBy).toBeNull();
+  });
+});
+
+/**
+ * The friend set three route modules used to hold a private copy of.
+ *
+ * These are the assertions those copies could never carry: a route module
+ * drags expo-router and react-native through Vite and will not parse in
+ * the test environment, so twelve lines deciding who may see a
+ * household's dishes sat unasserted in two files at once. The move into
+ * this module is what makes the questions below askable at all, which is
+ * why they are worth spelling out rather than trusting to the fact that
+ * the loop is short.
+ */
+describe('collectAcceptedFriendIds — who may see a household, as a set', () => {
+  test('returns the other side of an accepted pair, whichever side the reader is on', () => {
+    const friendships = [makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B, status: 'accepted' })];
+
+    expect(collectAcceptedFriendIds(friendships, PROFILE_A)).toEqual(new Set([PROFILE_B]));
+    expect(collectAcceptedFriendIds(friendships, PROFILE_B)).toEqual(new Set([PROFILE_A]));
+  });
+
+  /**
+   * The whole point of the set. Pending is a question nobody answered,
+   * declined is a no, blocked is an emphatic one — and every one of them
+   * gates a send target and a kring vote, so a status leaking in here
+   * hands a stranger both in one step.
+   */
+  test.each<FriendshipStatus>(['pending', 'declined', 'blocked'])(
+    'a %s pair is not a friendship and contributes nobody',
+    (status) => {
+      const friendships = [makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B, status })];
+
+      expect(collectAcceptedFriendIds(friendships, PROFILE_A).size).toBe(0);
+    },
+  );
+
+  test('collects every accepted friend, and only the accepted ones', () => {
+    const friendships = [
+      makeFriendship({ id: 'f-1', requesterId: PROFILE_A, addresseeId: PROFILE_B, status: 'accepted' }),
+      makeFriendship({ id: 'f-2', requesterId: PROFILE_C, addresseeId: PROFILE_A, status: 'accepted' }),
+      makeFriendship({ id: 'f-3', requesterId: PROFILE_A, addresseeId: 'someone-else', status: 'pending' }),
+    ];
+
+    expect(collectAcceptedFriendIds(friendships, PROFILE_A)).toEqual(new Set([PROFILE_B, PROFILE_C]));
+  });
+
+  /**
+   * 0007_social.sql's CHECK refuses a self-pair and `friendshipPairKey`
+   * returns null for one, so this row should not exist — but if it ever
+   * did, the reader would become their own friend: their own dishes in
+   * their own kring, and themselves offered as a send target.
+   */
+  test('a self-pair never puts the reader in their own friend set', () => {
+    const friendships = [makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_A, status: 'accepted' })];
+
+    expect(collectAcceptedFriendIds(friendships, PROFILE_A).size).toBe(0);
+  });
+
+  /**
+   * THE PRECONDITION, PINNED. This does not filter to pairs the reader is
+   * party to, and must not be handed a list that is not already narrowed:
+   * `listFriendships(profileId)` returns exactly the reader's own rows,
+   * which is the only input every caller passes. Given somebody else's
+   * accepted pair it reports the REQUESTER as a friend, because `other`
+   * falls through to `requesterId` when the reader is neither side.
+   *
+   * Asserted rather than fixed, deliberately. Adding a party check here
+   * would be a second, weaker copy of a narrowing RLS already performs on
+   * the read, and it would hide a caller that passed the wrong list
+   * instead of making it fail loudly and visibly. This test is what makes
+   * the assumption findable if such a caller ever appears.
+   */
+  test('trusts its input to be the reader own rows, and says so', () => {
+    const friendships = [makeFriendship({ requesterId: PROFILE_B, addresseeId: PROFILE_C, status: 'accepted' })];
+
+    expect(collectAcceptedFriendIds(friendships, PROFILE_A)).toEqual(new Set([PROFILE_B]));
+  });
+
+  test('no friendships at all is an empty set, never a throw', () => {
+    expect(collectAcceptedFriendIds([], PROFILE_A)).toEqual(new Set());
+  });
+
+  /** A set, so the same friend reached through two rows is one send target, not two. */
+  test('the same friend twice collapses to one entry', () => {
+    const friendships = [
+      makeFriendship({ id: 'f-1', requesterId: PROFILE_A, addresseeId: PROFILE_B, status: 'accepted' }),
+      makeFriendship({ id: 'f-2', requesterId: PROFILE_B, addresseeId: PROFILE_A, status: 'accepted' }),
+    ];
+
+    expect(collectAcceptedFriendIds(friendships, PROFILE_A)).toEqual(new Set([PROFILE_B]));
+  });
+
+  /** Immutability: the input rows are read, never rewritten. */
+  test('leaves the friendships it was handed untouched', () => {
+    const friendship = makeFriendship({ requesterId: PROFILE_A, addresseeId: PROFILE_B, status: 'accepted' });
+    const before = { ...friendship };
+
+    collectAcceptedFriendIds([friendship], PROFILE_A);
+
+    expect(friendship).toEqual(before);
   });
 });

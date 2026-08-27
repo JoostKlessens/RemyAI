@@ -17,6 +17,18 @@
  * sign-in screen and the token arrives afterwards. Without the
  * subscription the app would sit on the sign-in screen holding a perfectly
  * valid session.
+ *
+ * AND IT SUBSCRIBES TO A SECOND CHANNEL, because `onAuthStateChange` is not
+ * enough. The other thing this hook resolves against is a `profiles` row,
+ * and inserting one is not an auth event — no token is issued and nothing
+ * in the auth store moves — so claiming a handle used to leave the app on
+ * the claim screen until Supabase happened to fire a scheduled token
+ * refresh, roughly half a minute later. `@/lib/sessionRevalidation` carries
+ * that missing signal, and its header carries the full account. The channel
+ * is module-scoped rather than per-hook on purpose: every caller of
+ * `useSession()` holds its own state, and the copy that decides which
+ * screen is correct — the root layout's `AuthGate` — is a SIBLING of the
+ * screen that finishes onboarding, not an ancestor of it.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -28,6 +40,11 @@ import {
   type SessionSnapshot,
   type SessionState,
 } from '@/domain/social/session';
+import {
+  getSessionRevalidationToken,
+  requestSessionRevalidation,
+  subscribeToSessionRevalidation,
+} from '@/lib/sessionRevalidation';
 import { supabase } from '@/lib/supabase';
 
 export interface SessionInfo {
@@ -37,7 +54,16 @@ export interface SessionInfo {
   readonly handle: string | null;
   /** True only until the first resolution settles. Never a reason to block a render — see the file header. */
   readonly isResolving: boolean;
-  /** Re-runs the whole resolution, including a fresh sign-in attempt. */
+  /**
+   * Re-runs the whole resolution, including a fresh sign-in attempt — in
+   * THIS hook and in every other one open in the app, because it goes
+   * through the module-scoped channel rather than this instance's state.
+   *
+   * The profile claim does not call this: it calls
+   * `requestSessionRevalidation` directly from `@/lib/claimProfile`, since
+   * a route module cannot hold the only copy of that wire and still be
+   * testable. This stays for a caller that already has the hook in hand.
+   */
   readonly refresh: () => void;
 }
 
@@ -95,7 +121,14 @@ async function resolveIdentity(): Promise<ResolvedIdentity> {
 export function useSession(): SessionInfo {
   const [identity, setIdentity] = useState<ResolvedIdentity>(NO_IDENTITY);
   const [isResolving, setIsResolving] = useState(true);
-  const [attempt, setAttempt] = useState(0);
+  // Seeded from the channel rather than from 0, so a request that landed
+  // between this mount and the subscription below is not lost: the effect
+  // keyed on `attempt` is already running against the newer value.
+  const [attempt, setAttempt] = useState(getSessionRevalidationToken);
+
+  // A profile insert is not an auth event, so this is the only thing that
+  // tells an already-mounted session to look again. See the file header.
+  useEffect(() => subscribeToSessionRevalidation(setAttempt), []);
 
   useEffect(() => {
     let isMounted = true;
@@ -127,7 +160,10 @@ export function useSession(): SessionInfo {
     };
   }, [attempt]);
 
-  const refresh = useCallback(() => setAttempt((previous) => previous + 1), []);
+  // Broadcast rather than local: a re-resolve that only reached the caller
+  // would leave the root layout — which is what actually decides the
+  // screen — sitting on the identity it read before the change.
+  const refresh = useCallback(() => requestSessionRevalidation(), []);
 
   const state = resolveSessionState(identity);
   return {

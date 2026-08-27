@@ -9,19 +9,19 @@ describe('ALLERGEN_TAGGING_HEADING', () => {
 });
 
 describe('buildAllergenConfirmedSummary', () => {
-  test('confirms zero tags as a real, honest outcome — not phrased as unresolved', () => {
-    expect(buildAllergenConfirmedSummary([])).toBe('Gecontroleerd — geen van de 14 allergenen getagd.');
+  test('confirms zero tags as a real, honest outcome, not phrased as unresolved', () => {
+    expect(buildAllergenConfirmedSummary([])).toBe('Gecontroleerd. Geen van de 14 allergenen getagd.');
   });
 
   test('lists a single confirmed tag by its display label', () => {
-    expect(buildAllergenConfirmedSummary(['noten'])).toBe('Gecontroleerd — sluit uit: noten.');
+    expect(buildAllergenConfirmedSummary(['noten'])).toBe('Gecontroleerd. Sluit uit: noten.');
   });
 
   test('lists multiple confirmed tags, comma-separated', () => {
-    expect(buildAllergenConfirmedSummary(['noten', 'gluten'])).toBe('Gecontroleerd — sluit uit: noten, gluten.');
+    expect(buildAllergenConfirmedSummary(['noten', 'gluten'])).toBe('Gecontroleerd. Sluit uit: noten, gluten.');
   });
 
   test('falls back to the raw tag when it is outside the known vocabulary', () => {
-    expect(buildAllergenConfirmedSummary(['onbekend'])).toBe('Gecontroleerd — sluit uit: onbekend.');
+    expect(buildAllergenConfirmedSummary(['onbekend'])).toBe('Gecontroleerd. Sluit uit: onbekend.');
   });
 });

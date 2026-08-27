@@ -49,10 +49,10 @@ const META_SEPARATOR = '  ·  ';
 export const KRING_VOTER_NAME_LIMIT = 2;
 
 /** §2.2 pins this. The list ends, and says so, exactly as the board and the feed do. */
-export const KRING_END_COPY = 'Dat is de hele kring.';
+export const KRING_END_COPY = 'Dat is alles van je vrienden.';
 
 /** §2.2's empty state. States a fact and promises nothing — never a zero, never a placeholder row. */
-export const KRING_EMPTY_TITLE = 'Nog geen cijfers uit je kring';
+export const KRING_EMPTY_TITLE = 'Nog geen cijfers van je vrienden';
 export const KRING_EMPTY_BODY = 'Geeft een vriend een recept een cijfer, dan staat het hier.';
 
 /** What the kring needs to render a canonical recipe, as opposed to what `kring.ts` needs to rank one. */

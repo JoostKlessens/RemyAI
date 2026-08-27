@@ -1,5 +1,8 @@
 /**
- * Fixture data for Ranglijst (PD-014, docs/DESIGN.md §9).
+ * Fixture data for Trending's global scope (PD-014, docs/DESIGN.md §9).
+ * The tab read "Ranglijst" when this was written; only the label changed,
+ * and the route segment is still `ranglijst`, so this file's name and
+ * location are correct as they stand.
  *
  * WHY THIS SURFACE SHIPS ON FIXTURES, AND WHAT IS ACTUALLY MISSING.
  * The board is the first surface in the app that needs data no client can

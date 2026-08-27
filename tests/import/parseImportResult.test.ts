@@ -15,6 +15,8 @@ const VALID_ATTRIBUTION = {
   thumbnailUrl: 'https://example.test/thumb.jpg',
 };
 
+const RECIPE_ID = '11111111-2222-3333-4444-555555555555';
+
 function parsedResponse(overrides: Record<string, unknown> = {}): unknown {
   return {
     kind: 'parsed',
@@ -22,6 +24,7 @@ function parsedResponse(overrides: Record<string, unknown> = {}): unknown {
     sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/123',
     platform: 'tiktok',
     attribution: VALID_ATTRIBUTION,
+    recipeId: RECIPE_ID,
     ...overrides,
   };
 }
@@ -53,6 +56,36 @@ describe('parseImportResult — parsed', () => {
     expect(result).toMatchObject({
       attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
     });
+  });
+
+  /**
+   * W-01b. The id is the canonical `recipes` row this import deduplicated
+   * to, and it is the only thing a friend's cook can later be joined to.
+   */
+  test('carries the canonical recipeId through from the function response', () => {
+    const result = parseImportResult(parsedResponse());
+    expect(result?.kind === 'parsed' && result.recipeId).toBe(RECIPE_ID);
+  });
+
+  /**
+   * A function deployed before W-01b sends no such key. That is a real
+   * "we do not know one", which is exactly what null means — and it must
+   * NEVER be papered over by deriving something from `sourceUrl`, which
+   * is the row's deduplication key and not its id.
+   */
+  test('reads an absent or null recipeId as null rather than deriving one from the sourceUrl', () => {
+    const response = parsedResponse() as Record<string, unknown>;
+    delete response.recipeId;
+    const withoutKey = parseImportResult(response);
+    expect(withoutKey?.kind === 'parsed' && withoutKey.recipeId).toBeNull();
+
+    const explicitNull = parseImportResult(parsedResponse({ recipeId: null }));
+    expect(explicitNull?.kind === 'parsed' && explicitNull.recipeId).toBeNull();
+  });
+
+  test('rejects a parsed result whose recipeId is present but not a string', () => {
+    expect(parseImportResult(parsedResponse({ recipeId: 42 }))).toBeNull();
+    expect(parseImportResult(parsedResponse({ recipeId: { id: 'x' } }))).toBeNull();
   });
 
   test('rejects a parsed result whose recipe does not validate', () => {

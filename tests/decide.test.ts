@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { decide, isSwapExhausted, SWAP_EXHAUSTED_EVENT } from '@/domain/decide';
+import type { FriendProofContext } from '@/domain/reason';
+import { assembleFriendProof } from '@/domain/social/proof';
 import type { DecisionResult } from '@/domain/types';
 import {
   makeCookEvent,
@@ -11,6 +13,7 @@ import {
   makeRestriction,
   makeSave,
 } from './fixtures';
+import { PROFILE_A, PROFILE_B, makeRecipeRating } from './social/fixtures';
 
 describe('decide — hard exclusions', () => {
   test('excludes meals containing an allergen tagged by any household member', () => {
@@ -488,5 +491,232 @@ describe('decide — filtered_out is its own reason, never all_excluded (PD-009)
     const result = decide(request);
 
     expect(result).toEqual({ kind: 'no_candidate', reason: 'empty_rotation' });
+  });
+});
+
+/**
+ * The Kiezen social reason (docs/DESIGN-SOCIAL.md §2.1), asserted where it
+ * is actually assembled.
+ *
+ * WHY THESE LIVE HERE AND NOT IN scoring.test.ts. There is already a suite
+ * proving `FRIEND_PROOF_BOOST` moves a score, written against hand-built
+ * `Meal` literals — and it passed happily for three migrations while
+ * `decide.ts` hardcoded `friendProof: null` and never handed `scoreMeals`
+ * a set at all. A weight nothing passes is dead code with a green test
+ * beside it. Every assertion below therefore goes through `decide()`, the
+ * actual caller, and lands on what the screen renders: the reason code and
+ * the Dutch sentence. Unplug either half of the wiring and these fail even
+ * though the weight itself still works.
+ */
+
+const PROOF_RECIPE = 'recipe-traybake';
+const OTHER_PROOF_RECIPE = 'recipe-pasta';
+
+const proofOf = (friendNames: readonly string[], grade: number | null): FriendProofContext => ({
+  friendNames,
+  grade,
+});
+
+const proofMap = (
+  entries: readonly (readonly [string, FriendProofContext])[],
+): ReadonlyMap<string, FriendProofContext> => new Map(entries);
+
+describe('decide — the proof map reaches the reason text (DESIGN-SOCIAL.md §2.1)', () => {
+  test('the winner names the friend who cooked it and the grade she publicly gave it', () => {
+    const request = makeDecisionRequest({
+      candidateMeals: [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })],
+      friendProof: proofMap([[PROOF_RECIPE, proofOf(['Sanne'], 8.5)]]),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.reasonCode).toBe('friend_proof');
+    expect(result.kind === 'suggestion' && result.reasonText).toBe(
+      'Sanne heeft dit ook gemaakt en gaf het een 8,5.',
+    );
+  });
+
+  test('two friends get the plural sentence — the map values travel, not just its keys', () => {
+    const request = makeDecisionRequest({
+      candidateMeals: [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })],
+      friendProof: proofMap([[PROOF_RECIPE, proofOf(['Sanne', 'Joris'], 8.4)]]),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.reasonText).toBe(
+      'Sanne en Joris hebben dit ook gemaakt en gaven het gemiddeld een 8,4.',
+    );
+  });
+
+  test('no public vote, no number — the common case still reads as a sentence', () => {
+    const request = makeDecisionRequest({
+      candidateMeals: [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })],
+      friendProof: proofMap([[PROOF_RECIPE, proofOf(['Sanne'], null)]]),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.reasonText).toBe('Sanne heeft dit ook gemaakt.');
+  });
+
+  test('the sentence is about the WINNING meal, not whatever the map happens to list first', () => {
+    // Both meals carry proof; the first was already offered today, so the
+    // second has to win — and its sentence must name its own recipe's
+    // cooks. A lookup that grabbed the map's first entry would pass every
+    // other test here and print the wrong friend on a real screen.
+    const request = makeDecisionRequest({
+      candidateMeals: [
+        makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE }),
+        makeMeal({ id: 'meal-2', recipeId: OTHER_PROOF_RECIPE }),
+      ],
+      excludedMealIds: ['meal-1'],
+      friendProof: proofMap([
+        [PROOF_RECIPE, proofOf(['Sanne'], null)],
+        [OTHER_PROOF_RECIPE, proofOf(['Joris'], null)],
+      ]),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-2');
+    expect(result.kind === 'suggestion' && result.reasonText).toBe('Joris heeft dit ook gemaakt.');
+  });
+});
+
+describe('decide — the proof map reaches the scoring weight (FRIEND_PROOF_BOOST)', () => {
+  test('a dish a friend cooked beats an otherwise identical dish nobody you know has made', () => {
+    const request = makeDecisionRequest({
+      candidateMeals: [
+        makeMeal({ id: 'meal-plain', recipeId: OTHER_PROOF_RECIPE }),
+        makeMeal({ id: 'meal-proven', recipeId: PROOF_RECIPE }),
+      ],
+      friendProof: proofMap([[PROOF_RECIPE, proofOf(['Sanne'], null)]]),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.mealId).toBe('meal-proven');
+  });
+
+  /** §2.1, verbatim: ranked above the novelty reason — a named person beats a calendar fact. */
+  test('a named person outranks the calendar reason when both apply', () => {
+    const household = makeHousehold();
+    const candidateMeals = [makeMeal({ id: 'meal-1', householdId: household.id, recipeId: PROOF_RECIPE })];
+    // Cooked well outside the recency window, so `not_recent` is a real
+    // positive contribution competing with the friend's cook.
+    const recentCookEvents = [makeCookEvent({ mealId: 'meal-1', cookedOn: '2026-06-01' })];
+
+    const withoutProof = decide(
+      makeDecisionRequest({ household, candidateMeals, recentCookEvents, targetDate: '2026-08-22' }),
+    );
+    const withProof = decide(
+      makeDecisionRequest({
+        household,
+        candidateMeals,
+        recentCookEvents,
+        targetDate: '2026-08-22',
+        friendProof: proofMap([[PROOF_RECIPE, proofOf(['Sanne'], null)]]),
+      }),
+    );
+
+    expect(withoutProof.kind === 'suggestion' && withoutProof.reasonCode).toBe('not_recent');
+    expect(withProof.kind === 'suggestion' && withProof.reasonCode).toBe('friend_proof');
+  });
+});
+
+describe('decide — what cook proof deliberately does NOT do', () => {
+  /**
+   * The honest constraint this wiring ships under: proof joins a friend's
+   * cook to your meal through `recipeId` and through nothing else. A meal
+   * with no canonical recipe — the seeded, curated and hand-entered
+   * majority — has no shared object to be talked about, so it gets no
+   * boost and no social reason even while friends are cooking. Matching on
+   * title instead would invent an agreement that does not exist.
+   */
+  test('a meal with no canonical recipe gets neither the boost nor the reason', () => {
+    const request = makeDecisionRequest({
+      candidateMeals: [makeMeal({ id: 'meal-1', recipeId: null })],
+      friendProof: proofMap([[PROOF_RECIPE, proofOf(['Sanne'], 8.5)]]),
+    });
+
+    const result = decide(request);
+
+    expect(result.kind === 'suggestion' && result.reasonCode).toBe('variety');
+    expect(result.kind === 'suggestion' && result.reasonText).toBe('Nog niet eerder geprobeerd');
+  });
+
+  test('proof about a recipe nobody in this library owns changes nothing', () => {
+    const candidateMeals = [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })];
+
+    const quiet = decide(makeDecisionRequest({ candidateMeals }));
+    const noisy = decide(
+      makeDecisionRequest({
+        candidateMeals,
+        friendProof: proofMap([[OTHER_PROOF_RECIPE, proofOf(['Sanne'], 9)]]),
+      }),
+    );
+
+    expect(noisy).toEqual(quiet);
+  });
+
+  test('an empty proof map reproduces the pre-social result exactly', () => {
+    const candidateMeals = [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })];
+
+    const result = decide(makeDecisionRequest({ candidateMeals, friendProof: new Map() }));
+
+    expect(result.kind === 'suggestion' && result.reasonCode).toBe('variety');
+  });
+});
+
+describe('decide — assembleFriendProof feeds it directly (the seam)', () => {
+  const cooked = (profileId: string, recipeId: string) => ({ profileId, recipeId });
+  const names = new Map([
+    [PROFILE_A, 'Sanne'],
+    [PROFILE_B, 'Joris'],
+  ]);
+
+  test('the map proof.ts assembles is the map decide reads', () => {
+    const friendProof = assembleFriendProof(
+      [cooked(PROFILE_A, PROOF_RECIPE), cooked(PROFILE_B, PROOF_RECIPE)],
+      names,
+      [
+        makeRecipeRating({ id: 'r-1', recipeId: PROOF_RECIPE, raterProfileId: PROFILE_A, rating: 8.5 }),
+        makeRecipeRating({ id: 'r-2', recipeId: PROOF_RECIPE, raterProfileId: PROFILE_B, rating: 8.3 }),
+      ],
+    );
+
+    const result = decide(
+      makeDecisionRequest({ candidateMeals: [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })], friendProof }),
+    );
+
+    expect(result.kind === 'suggestion' && result.reasonCode).toBe('friend_proof');
+    // Joris before Sanne: proof.ts sorts names with Dutch collation so the
+    // line does not reshuffle between renders, and that sort survives the
+    // trip through decide() rather than being re-imposed anywhere.
+    expect(result.kind === 'suggestion' && result.reasonText).toBe(
+      'Joris en Sanne hebben dit ook gemaakt en gaven het gemiddeld een 8,4.',
+    );
+  });
+
+  /**
+   * The invariant that makes deriving the scored id set from the map's
+   * KEYS load-bearing rather than merely tidy. `assembleFriendProof` drops
+   * a recipe whose every cook is unnameable (a profile row that failed to
+   * load), because §2.1 bans a count without a name. Because the boost
+   * comes from that same map, an unsayable proof cannot quietly win on
+   * `friend_proof` and fall back to "Iemand uit je kring heeft dit ook
+   * gemaakt." — the anonymous aggregate §2.1 refuses, wearing a friend's
+   * tone.
+   */
+  test('a cook whose name never resolved produces no boost and no sentence', () => {
+    const friendProof = assembleFriendProof([cooked('profile-unknown', PROOF_RECIPE)], names, []);
+
+    const result = decide(
+      makeDecisionRequest({ candidateMeals: [makeMeal({ id: 'meal-1', recipeId: PROOF_RECIPE })], friendProof }),
+    );
+
+    expect(friendProof.size).toBe(0);
+    expect(result.kind === 'suggestion' && result.reasonCode).toBe('variety');
   });
 });

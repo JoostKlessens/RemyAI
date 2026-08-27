@@ -146,6 +146,44 @@ export type ImportResult =
        * become required.
        */
       readonly attribution?: ImportAttribution;
+      /**
+       * The canonical `recipes` row (0006) this import resolved to — the
+       * shared object every household's private copy of this dish points
+       * at (`meals.recipe_id`), and therefore the ONLY thing a friend's
+       * cook can be joined to (`shared_cooks` in 0009, `FRIEND_PROOF_BOOST`
+       * in src/domain/scoring.ts). Without it a live import writes a meal
+       * that is a copy of nothing, and the social half of the product can
+       * never fire for it — which is exactly what happened between 0006
+       * and W-01b, invisibly, because nothing type-checked the absence.
+       *
+       * NEVER DERIVED, ONLY REPORTED. Both producers read it off a real
+       * row: the fresh path takes it from the `recipes` insert's own
+       * RETURNING (or, when it lost the upsert race, from a lookup of the
+       * winning row), and the cache path takes it from the stored row's
+       * `id` column (`parseStoredRecipe`). `sourceUrl` sits right beside
+       * this field and looks like it would do just as well — it must
+       * never be used that way. The normalized URL is that row's
+       * deduplication KEY, unique and stable, but it is not its identity;
+       * a meal pointed at a URL-shaped id points at no row at all.
+       *
+       * Both paths therefore report the SAME id for the same URL, which is
+       * the entire point: the twentieth household to import a link joins
+       * the same canonical recipe as the first, so their cooks are proof
+       * to each other rather than twenty unrelated dinners.
+       *
+       * `null` is a real, permanent answer, not "pending": it means this
+       * import genuinely has no canonical row (the write failed, or the
+       * stored row is unusable), and a caller must write it through
+       * unchanged rather than substituting something plausible.
+       *
+       * Optional for exactly the reason `attribution` above is: object
+       * literals that predate this field live in src/app/import/
+       * _fixtures.ts, outside this module's ownership. Treat `undefined`
+       * as identical to `null` — the same "no canonical row known" — never
+       * as a third state. Whichever agent owns src/app should give that
+       * fixture a real value and let this become required.
+       */
+      readonly recipeId?: string | null;
     }
   /**
    * The post resolved, and we deliberately never asked the model to read

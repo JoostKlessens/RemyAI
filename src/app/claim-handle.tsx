@@ -28,6 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { HANDLE_MAX_LENGTH, HANDLE_MIN_LENGTH, parseHandle } from '@/domain/social/handle';
 import { createProfile, type ProfileCreationResult } from '@/lib/auth';
+import { claimProfile } from '@/lib/claimProfile';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 type ClaimPhase = 'idle' | 'saving' | 'handle_taken' | 'invalid_handle' | 'unknown_error';
@@ -55,11 +56,19 @@ export default function ClaimHandleScreen(): JSX.Element {
       return;
     }
     setPhase('saving');
-    createProfile(parsedHandle, trimmedName).then((result: ProfileCreationResult) => {
+    claimProfile(createProfile, parsedHandle, trimmedName).then((result: ProfileCreationResult) => {
       if (result.kind === 'created') {
-        // No navigation here: useSession re-resolves to `ready` and the root
-        // layout moves on. One rule, one place — a push from here would be a
-        // second, racing authority over which screen is correct.
+        // Still no navigation here: useSession re-resolves to `ready` and
+        // the root layout moves on. One rule, one place — a push from here
+        // would be a second, racing authority over which screen is correct.
+        //
+        // WHAT CHANGED IS THAT THE RE-RESOLVE NOW HAPPENS. This comment
+        // used to describe something nobody had built: an insert into
+        // `profiles` is not an auth event, so `onAuthStateChange` never
+        // fired for it and no session had any reason to look again. People
+        // waited about thirty seconds, until Supabase's next scheduled
+        // token refresh. `claimProfile` sends the missing signal — see its
+        // header and @/lib/sessionRevalidation's for the whole account.
         AccessibilityInfo.announceForAccessibility('Account compleet.');
         return;
       }

@@ -133,6 +133,48 @@ describe('toMealDraft — field mapping', () => {
   });
 });
 
+/**
+ * The link that makes cook proof possible at all (`meals.recipe_id`,
+ * 0006): without it a friend's cook of a recipe and this household's copy
+ * of it are two unrelated rows, `shared_cooks` has nothing to join on, and
+ * scoring.ts's FRIEND_PROOF_BOOST can never fire. Asserted at the draft
+ * boundary — where the id enters the write path — rather than on a `Meal`
+ * literal, since a hand-built `Meal` proves only that the type has a
+ * field, which was true for two migrations while nothing ever wrote it.
+ */
+describe('toMealDraft — canonical recipe link (meals.recipe_id, 0006)', () => {
+  test('carries the canonical recipeId from context straight through', () => {
+    const draft = toMealDraft(makeParsedRecipe(), { ...TIKTOK_CONTEXT, recipeId: 'recipe-abc' });
+    expect(draft.recipeId).toBe('recipe-abc');
+  });
+
+  test('never derives the recipe id from anything in the recipe or the URL', () => {
+    const draft = toMealDraft(makeParsedRecipe({ title: 'Traybake' }), {
+      ...TIKTOK_CONTEXT,
+      sourceUrl: 'https://www.tiktok.com/@chefremy/video/123',
+      recipeId: 'recipe-abc',
+    });
+    expect(draft.recipeId).toBe('recipe-abc');
+    expect(draft.sourceUrl).toBe('https://www.tiktok.com/@chefremy/video/123');
+  });
+
+  /**
+   * An import that knows no canonical recipe (today: every one of them —
+   * the edge function stores the row but never returns its id) must draft
+   * an explicit `null`: the same "this meal is nobody's copy of anything"
+   * a seeded or hand-entered meal stores. An `undefined` travelling on
+   * would be a third state nothing downstream distinguishes.
+   */
+  test('drafts an explicit null — never undefined — when no canonical recipe is known', () => {
+    const omitted = toMealDraft(makeParsedRecipe(), TIKTOK_CONTEXT);
+    expect(omitted.recipeId).toBeNull();
+    expect('recipeId' in omitted).toBe(true);
+
+    const explicitlyNull = toMealDraft(makeParsedRecipe(), { ...TIKTOK_CONTEXT, recipeId: null });
+    expect(explicitlyNull.recipeId).toBeNull();
+  });
+});
+
 describe('toMealDraft — sourcePlatform bridging (0001_init.sql vocabulary)', () => {
   test('maps a tiktok platform to the "tiktok" meals.source_platform value', () => {
     const draft = toMealDraft(makeParsedRecipe(), { ...TIKTOK_CONTEXT, platform: 'tiktok' });

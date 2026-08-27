@@ -30,6 +30,7 @@ const RECIPE_ID = '11111111-2222-3333-4444-555555555555';
  */
 function makeStoredRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    id: RECIPE_ID,
     normalized_url: 'https://www.tiktok.com/@chefremy/video/123',
     platform: 'tiktok',
     title: 'Traybake met kip en citroen',
@@ -187,6 +188,7 @@ describe('parseStoredRecipe — a cache hit is indistinguishable from a fresh im
         servings: 4,
         dishTags: ['kip'],
       },
+      recipeId: RECIPE_ID,
       sourceUrl: 'https://www.tiktok.com/@chefremy/video/123',
       platform: 'tiktok',
       attribution: {
@@ -195,6 +197,30 @@ describe('parseStoredRecipe — a cache hit is indistinguishable from a fresh im
         thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
       },
     });
+  });
+
+  /**
+   * W-01b, and the whole reason the cache exists at all for the social
+   * half of the product: the twentieth household to import a link must
+   * end up pointing at the SAME `recipes` row as the first, because that
+   * shared row is the only object a friend's cook can be joined to
+   * (`shared_cooks`, 0009). A hit that returned the recipe but not its id
+   * would silently produce a meal that is a copy of nothing.
+   */
+  test('carries the stored row own id home as recipeId', () => {
+    const result = parseStoredRecipe(makeStoredRow());
+    expect(result?.kind === 'parsed' && result.recipeId).toBe(RECIPE_ID);
+  });
+
+  test('takes recipeId from the id column, never from the normalized_url that keys the row', () => {
+    const result = parseStoredRecipe(makeStoredRow({ id: 'a-different-row', normalized_url: 'https://x.test/1' }));
+    expect(result?.kind === 'parsed' && result.recipeId).toBe('a-different-row');
+  });
+
+  test('gives two separate reads of one row the same canonical id', () => {
+    const first = parseStoredRecipe(makeStoredRow());
+    const second = parseStoredRecipe(makeStoredRow());
+    expect(first?.kind === 'parsed' && first.recipeId).toBe(second?.kind === 'parsed' ? second.recipeId : null);
   });
 
   test('takes sourceUrl from normalized_url — the deduplication key itself', () => {
@@ -286,6 +312,20 @@ describe('parseStoredRecipe — any structural doubt degrades to a cache miss', 
     expect(parseStoredRecipe(undefined)).toBeNull();
   });
 
+  /**
+   * A `recipes` row always has an id — it is the primary key — so a row
+   * arriving without one means the SELECT forgot to ask for it. Rejecting
+   * the row makes that a loud, self-correcting cache miss; carrying a null
+   * recipeId instead would hand every importer of that URL a meal linked
+   * to nothing, forever, with nothing to notice.
+   */
+  test('returns null when the id column is missing, blank, or not a string', () => {
+    expect(parseStoredRecipe(makeStoredRow({ id: undefined }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ id: '   ' }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ id: null }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ id: 42 }))).toBeNull();
+  });
+
   test('returns null when normalized_url is missing or blank', () => {
     expect(parseStoredRecipe(makeStoredRow({ normalized_url: undefined }))).toBeNull();
     expect(parseStoredRecipe(makeStoredRow({ normalized_url: '   ' }))).toBeNull();
@@ -365,6 +405,13 @@ describe('canonicalRecipe — the write and read halves agree', () => {
     const steps = buildRecipeStepRows(RECIPE_ID, recipe);
 
     const roundTripped = parseStoredRecipe({
+      // `id` is database-generated, so it is absent from `parent` by
+      // design and supplied here the way PostgREST supplies it on the way
+      // back out. The children above were written against that same id —
+      // which is precisely the claim this round trip is making: the id a
+      // fresh import inserted under is the id a later cache hit hands the
+      // next household.
+      id: RECIPE_ID,
       ...parent,
       recipe_ingredients: ingredients.map(({ recipe_id: _recipeId, ...rest }) => rest),
       recipe_steps: steps.map(({ recipe_id: _recipeId, ...rest }) => rest),
@@ -373,5 +420,6 @@ describe('canonicalRecipe — the write and read halves agree', () => {
     expect(roundTripped?.kind === 'parsed' && roundTripped.recipe).toEqual(recipe);
     expect(roundTripped?.kind === 'parsed' && roundTripped.sourceUrl).toBe(CONTEXT.normalizedUrl);
     expect(roundTripped?.kind === 'parsed' && roundTripped.attribution).toEqual(ATTRIBUTION);
+    expect(roundTripped?.kind === 'parsed' && roundTripped.recipeId).toBe(RECIPE_ID);
   });
 });

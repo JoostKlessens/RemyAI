@@ -8,8 +8,8 @@
  *    "Niet koken" — there's nothing to decline yet when nothing has ever
  *    been offered.
  *  - `all_excluded`: restrictions filtered everything — explained with
- *    exclusion framing, never "safety" framing, and offers Bibliotheek as
- *    an alternative.
+ *    exclusion framing, never "safety" framing, and offers Mijn recepten
+ *    as an alternative.
  *  - `filtered_out` (PD-009): the household's own filters for tonight
  *    emptied the pool. Deliberately worded and actioned differently from
  *    `all_excluded` above: that one is about standing settings the user
@@ -30,7 +30,7 @@ export interface NoCandidateStateProps {
   readonly reason: NoCandidateReason;
   /** empty_rotation only: "Recept plakken" -> the Plakken screen. */
   readonly onOpenImport: () => void;
-  /** all_excluded / filtered_out / swaps_exhausted: "Kies zelf" / "Ik kies zelf" -> Bibliotheek. */
+  /** all_excluded / filtered_out / swaps_exhausted: "Kies zelf" / "Ik kies zelf" -> Mijn recepten. */
   readonly onOpenRecipes: () => void;
   /**
    * filtered_out only (PD-009): clears tonight's `DecisionFilters` back to
@@ -86,7 +86,7 @@ export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
               label={reason === 'swaps_exhausted' ? 'Ik kies zelf' : 'Kies zelf'}
               variant="secondary"
               onPress={onOpenRecipes}
-              accessibilityLabel="Open Bibliotheek om zelf te kiezen"
+              accessibilityLabel="Open Mijn recepten om zelf te kiezen"
             />
             <Button label="Niet koken" variant="tertiary" onPress={onDecline} accessibilityLabel="Niet koken vanavond" />
           </>
@@ -106,7 +106,7 @@ function getCopyForReason(reason: NoCandidateReason): ReasonCopy {
     case 'all_excluded':
       return {
         title: 'Niks voor de hand liggends vanavond',
-        body: 'Je instellingen sluiten alle gerechten in je bibliotheek uit voor vanavond.',
+        body: 'Je instellingen sluiten alle gerechten in je recepten uit voor vanavond.',
       };
     case 'filtered_out':
       // Names the filter as the cause, not the library and certainly not
@@ -115,7 +115,7 @@ function getCopyForReason(reason: NoCandidateReason): ReasonCopy {
       // there just isn't a dish for it tonight.
       return {
         title: 'Niets binnen deze filters',
-        body: 'Je filters voor vanavond zijn te streng. Wis ze en Remy kijkt weer in je hele bibliotheek.',
+        body: 'Je filters voor vanavond zijn te streng. Wis ze en Remy kijkt weer in al je recepten.',
       };
     case 'swaps_exhausted':
       return {

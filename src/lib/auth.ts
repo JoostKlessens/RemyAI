@@ -101,6 +101,14 @@ export async function requestMagicLink(rawEmail: string): Promise<MagicLinkResul
  * A taken handle arrives here as a unique violation, which
  * `classifyProfileCreationFailure` turns into a specific outcome rather than
  * a generic failure: it is the one error the person can actually act on.
+ *
+ * CALL IT THROUGH `claimProfile` (./claimProfile.ts), NEVER DIRECTLY. This
+ * function writes the row and stops there, which is correct in itself and
+ * was also the whole of the thirty-second bug: an insert into `profiles` is
+ * not an auth event, so `onAuthStateChange` never fires and no `useSession`
+ * has any reason to re-resolve. A caller that awaits this and does nothing
+ * else leaves somebody staring at a finished form. `claimProfile` is the
+ * one place the write is paired with the signal that has to follow it.
  */
 export async function createProfile(handle: string, displayName: string): Promise<ProfileCreationResult> {
   try {

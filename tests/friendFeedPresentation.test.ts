@@ -47,7 +47,13 @@ function makeIngredients(...names: readonly string[]): readonly MealIngredient[]
 }
 
 function makeShare(overrides: Partial<FriendShare> = {}): FriendShare {
-  return { feedItemId: 'feed-item-1', friendName: 'Sanne', rating: 4, ...overrides };
+  // `note: null` is the ordinary case — §4.1's input is optional — and it
+  // is spelled rather than omitted because `FriendShare.note` is required
+  // and nullable on purpose: `normalizeSendNote` gives "sent without a
+  // note" exactly one representation, and an optional field would add a
+  // second. The note's own behaviour is covered in
+  // tests/gekooktPresentation.test.ts.
+  return { feedItemId: 'feed-item-1', friendName: 'Sanne', rating: 4, note: null, ...overrides };
 }
 
 interface SourceParts {

@@ -8,11 +8,11 @@
  * every invocation returns a fresh object.
  */
 
+import type { DecisionRequestWithProof } from '@/domain/decide';
 import type {
   CookEvent,
   Decision,
   DecisionFilters,
-  DecisionRequest,
   Household,
   Meal,
   Member,
@@ -144,7 +144,18 @@ export function makeDecisionFilters(overrides: Partial<DecisionFilters> = {}): D
   };
 }
 
-export function makeDecisionRequest(overrides: Partial<DecisionRequest> = {}): DecisionRequest {
+/**
+ * `friendProof` defaults to an empty map — the state of every household
+ * before anybody opts in (docs/DESIGN-SOCIAL.md §5: the switch is off by
+ * default), so a test that says nothing about friends exercises exactly
+ * the pre-social behaviour, the same posture `makeDecisionFilters` takes.
+ * It is written out rather than omitted because the field is required on
+ * `DecisionRequestWithProof`: an optional one with a quiet default is how
+ * FRIEND_PROOF_BOOST stayed dead code across three migrations.
+ */
+export function makeDecisionRequest(
+  overrides: Partial<DecisionRequestWithProof> = {},
+): DecisionRequestWithProof {
   const household = overrides.household ?? makeHousehold();
   return {
     household,
@@ -158,6 +169,7 @@ export function makeDecisionRequest(overrides: Partial<DecisionRequest> = {}): D
     targetDate: '2026-08-22',
     excludedMealIds: [],
     filters: NO_DECISION_FILTERS,
+    friendProof: new Map(),
     ...overrides,
   };
 }

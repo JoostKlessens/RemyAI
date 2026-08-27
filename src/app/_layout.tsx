@@ -42,8 +42,11 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { Archivo_400Regular, Archivo_600SemiBold, Archivo_700Bold } from '@expo-google-fonts/archivo';
 import { IBMPlexMono_500Medium, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
+import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '@/hooks/useSession';
+import { startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
+import { getAppHouseholdSyncEnvironment } from '@/lib/repository/createRepository';
 
 // Must run once, at module scope, before the first render — calling this
 // inside the component body can race the initial paint on some platforms.
@@ -78,6 +81,7 @@ export default function RootLayout(): JSX.Element | null {
   return (
     <SafeAreaProvider>
       <AuthGate />
+      <HouseholdBootstrapGate />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cook/[mealId]" options={{ presentation: 'fullScreenModal' }} />
@@ -86,6 +90,19 @@ export default function RootLayout(): JSX.Element | null {
             kitchen, not another view of your own library, and leaving the
             Vrienden tab lit underneath would suggest otherwise. Same
             full-screen treatment as Cook Mode and the import flow. */}
+        {/* §4.4's handle exchange, "full-screen over the tabs" — the same
+            treatment as the shared recipe below it, and for a related
+            reason: it is somewhere you go to do one thing and come back
+            from, not a fifth view of your own kitchen.
+
+            IT IS DECLARED BEFORE THE DYNAMIC SIBLING, which is presentation
+            rather than routing. expo-router resolves a static segment ahead
+            of a dynamic one regardless of declaration order, so
+            `/friends/add` reaches this screen and never `[feedItemId]` with
+            the id "add"; the ordering here is so a reader meets the
+            specific route before the catch-all, the way the file system
+            lists them. */}
+        <Stack.Screen name="friends/add" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="friends/[feedItemId]" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/paste" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/confirm" options={{ presentation: 'fullScreenModal' }} />
@@ -142,6 +159,56 @@ function AuthGate(): null {
       router.replace('/');
     }
   }, [session.isResolving, session.capability, segments, router]);
+
+  return null;
+}
+
+/**
+ * Makes this household exist in Postgres, then sends anything the mirror
+ * has been holding.
+ *
+ * NOTHING IS DECIDED HERE. The order, the preconditions, the choice of
+ * member, the once-guard and the retry all live in
+ * `@/lib/householdSync`, because this file is a route module and a route
+ * module cannot be imported by a test in this repo at all — expo-router
+ * and react-native internals fail to parse under Vite. That is the same
+ * split `useOutcomeSend`/`sendRecipe` and `friendProof` already keep, and
+ * it is why this component is nine lines.
+ *
+ * A SIBLING OF `AuthGate`, NOT A WRAPPER, AND NEVER A GATE ON ANYTHING.
+ * The name says "bootstrap gate" because it gates POSTGRES, not the UI:
+ * it renders null, blocks nothing, shows no spinner and holds no error
+ * state. The app was local-first before any of this existed and is exactly
+ * as usable with the whole network missing — a failed bootstrap is a
+ * report nobody reads and a backlog that waits.
+ *
+ * WHY IT DOES NOT LIVE INSIDE `AuthGate`. That component decides which
+ * screen a person is allowed on, which is a decision with a visible
+ * consequence in the very next frame. This one has none, and folding a
+ * fire-and-forget network effect into a redirect guard would make the
+ * redirect's dependency list carry reasons that have nothing to do with
+ * routing.
+ *
+ * THE FOREGROUND SUBSCRIPTION IS THIS APP'S "CONNECTIVITY RETURNED".
+ * `AppState` is already installed with react-native; netinfo is a native
+ * module and would oblige the whole team to rebuild the dev client. See
+ * householdSync.ts's header for the full argument. The effect re-runs on
+ * the three session values only — `capability.canUseApp` rather than the
+ * `capability` object, which `describeSessionCapability` rebuilds on every
+ * render — so the listener is not churned on unrelated repaints.
+ */
+function HouseholdBootstrapGate(): null {
+  const { isResolving, capability, userId } = useSession();
+  const canUseApp = capability.canUseApp;
+
+  useEffect(() => {
+    const environment = getAppHouseholdSyncEnvironment();
+    const session = { isResolving, canUseApp, userId };
+    // Not awaited, and there is nothing here to await it with: `start`
+    // returns void by design.
+    startHouseholdSync(environment, session);
+    return subscribeToForeground(AppState, () => startHouseholdSync(environment, session));
+  }, [isResolving, canUseApp, userId]);
 
   return null;
 }

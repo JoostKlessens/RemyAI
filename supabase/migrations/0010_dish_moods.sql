@@ -1,0 +1,131 @@
+-- Remy — dish moods, the second descriptive axis (additive only; touches
+-- no existing column, no existing policy, and no existing table)
+--
+-- The owner's request, in his words: "blokjes toevoegen voor categorien,
+-- zoals ... high-protein, veggies, soul-food, zomers, winters ... op het
+-- moment dat ze een rating geven aan een gerecht ... zodat anderen hier
+-- vervolgens op kunnen filteren."
+--
+-- `dish_tags` (0004) cannot carry these. It answers "waarmee?" — what a
+-- dish is made of and what form it takes — and it is written once at
+-- IMPORT time by a model reading a caption. These answer "waar heb ik zin
+-- in?", they are facts about the occasion rather than the ingredients,
+-- and they are written by a PERSON after they cooked the thing. Two
+-- questions, two write moments, two filter semantics (see below), so two
+-- columns. The vocabulary lives in src/domain/dishMoods.ts and is
+-- asserted to share no value with either `dish_tags` or the allergen
+-- vocabulary (tests/dishMoods.test.ts).
+--
+-- ---
+--
+-- WHY THIS COLUMN IS SAFE TO MAKE VISIBLE, AND `cook_events.rating` IS
+-- NOT. PD-019 is the standing condition here, and this migration is where
+-- it becomes structural rather than intended.
+--
+-- The outcome moment now produces TWO answers, and they go to two
+-- different tables through two different write paths:
+--
+--   the grade -> cook_events.rating   PRIVATE. The decision engine's
+--                                     input. Never crosses a household
+--                                     boundary, never enters a
+--                                     projection, and is untouched by
+--                                     this migration.
+--   the mood  -> meals.dish_moods     Descriptive. Meant to be seen.
+--
+-- A grade whose author knows others can see it is a grade that gets
+-- inflated, and an inflated grade feeding the engine corrupts every later
+-- suggestion — PD-008's own logic under the one pressure PD-008 did not
+-- face. A mood carries NO NUMBER and no mood outranks another, so there
+-- is nothing in it to inflate. That is the whole reason it can be
+-- published from the same moment the private grade is given without
+-- dragging the grade along with it.
+--
+-- Nothing in the app derives one from the other. `addMealDishMood` writes
+-- this column and reads no cook event; `setCookEventRating` writes that
+-- one and reads no meal. They are separate methods with separate
+-- arguments, so there is no signature through which one could be passed
+-- as the other.
+--
+-- ---
+--
+-- WHAT IS DELIBERATELY NOT IN THIS MIGRATION: a `recipe_moods` table.
+--
+-- The obvious next step is a cross-household (recipe_id, profile_id,
+-- mood) table, so a mood recorded by one household annotates the
+-- canonical recipe every other household imported — the full meaning of
+-- "zodat anderen hier vervolgens op kunnen filteren". It is not here, and
+-- the reason is 0007's own standing lesson: `recipe_ratings` shipped in
+-- that migration with four readers and ZERO writers, and it has stayed
+-- empty ever since, which is why Ranglijst and de kring cannot populate.
+-- A second table shipped ahead of its writer would repeat that exactly.
+--
+-- The precondition for creating it is concrete rather than a matter of
+-- scheduling: meals do not sync to Postgres at all today
+-- (src/lib/repository/** is the source of truth), and there is no
+-- reachable auth.uid() on the write path — RemySocialRepository is
+-- deliberately absent from src/lib/repository/index.ts for that reason.
+-- When meals sync, `recipe_moods` lands in the SAME migration as the code
+-- that writes it, with RLS mirroring `recipe_ratings`' (world-readable to
+-- authenticated users; insert/update/delete only your own row) and a
+-- `unique (recipe_id, profile_id)` so one person's description of one
+-- recipe stays one row.
+--
+-- Two boundaries to carry over unchanged when that happens. It must never
+-- acquire a count or a score column: a count of how many people called a
+-- dish `soul-food` is a number, and a number on a social surface is a
+-- public vote subject to every PD-019 argument this vocabulary was built
+-- to sidestep. And it is NOT governed by
+-- `meals.excluded_from_cook_proof` or
+-- `households.share_cooks_with_friends` — those gate cook PROOF, the
+-- claim that you personally cooked something. A mood is a statement about
+-- the recipe, like a `recipe_ratings` vote, and is withdrawn by deleting
+-- it.
+--
+-- ---
+--
+-- `text[] not null default '{}'`, mirroring `dish_tags` and
+-- `ingredient_tags`: a dish nobody has described yet is the normal case
+-- and the overwhelming majority, not a missing-data case, so a nullable
+-- column would express nothing an empty array does not. Existing rows
+-- adopt the default; no backfill is needed and none is run.
+--
+-- The array accumulates the UNION across cooks rather than holding one
+-- value, even though a person picks exactly one mood per rating. A dish
+-- is cooked more than once and by more than one person, a stamppot
+-- genuinely is both `winters` and `soul-food`, and a single-value column
+-- would let tonight's cook silently delete last month's honest
+-- description. `addMealDishMood` de-duplicates, so two cooks agreeing
+-- stays one entry — this array must never become a tally.
+--
+-- Deliberately NO GIN index, for 0004's reason restated: the mood filter
+-- runs client-side over an already-fetched candidate pool
+-- (src/domain/exclusions.ts), so nothing queries this column in SQL yet,
+-- and an unused index is write cost for no read benefit. Add
+-- `create index ... using gin (dish_moods)` in the same migration as the
+-- first query that needs it.
+
+alter table meals
+  add column dish_moods text[] not null default '{}';
+
+-- The closed vocabulary, enforced at the last possible boundary.
+--
+-- src/domain/dishMoods.ts already refuses an unknown value, and
+-- `addMealDishMood` refuses it again at the repository's write seam. This
+-- is the third guard and the only one that survives a client which skips
+-- the other two — a future sync job, a manual fix-up, a second app. A
+-- value outside this list is unfilterable by construction, so storing one
+-- means storing something nobody can ever ask for again; failing the
+-- write is strictly cheaper than discovering that later.
+--
+-- Stated as a CHECK rather than an enum type, for the reason `dish_tags`
+-- has no enum either: the vocabulary's home is the TypeScript module,
+-- this is a mirror of it, and a mirror editable in one statement is
+-- easier to keep honest than a type with dependent columns. Adding a mood
+-- is therefore an edit in two places, on purpose — see dishMoods.ts's
+-- header for the argument a seventh member has to make.
+alter table meals
+  add constraint meals_dish_moods_closed_vocabulary
+  check (dish_moods <@ array['zomers', 'winters', 'high-protein', 'veel-groente', 'soul-food', 'licht']::text[]);
+
+comment on column meals.dish_moods is
+  'The second descriptive axis (src/domain/dishMoods.ts): what a dish FEELS like and what occasion it belongs to — zomers, soul-food, high-protein. Written by a person in the outcome moment after cooking, one mood per rating, accumulated as a de-duplicated union across cooks. NEVER merged with ingredient_tags (allergens, PD-006 exclusion gate) or dish_tags (composition, set at import). Filter semantics differ from dish_tags on purpose: ALL of the chosen dish_tags must match, ANY of the chosen dish_moods. Carries no number and no ranking, which is what makes it the socially visible half of the outcome moment while cook_events.rating stays private (PD-019).';

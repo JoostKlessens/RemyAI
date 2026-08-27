@@ -320,3 +320,67 @@ export function nextFriendshipFields(
     respondedAt: opening ? null : now,
   };
 }
+
+/**
+ * Everyone this profile is mutually accepted friends with, as a set of ids.
+ *
+ * WHY IT LIVES HERE AND NOT BESIDE ITS CALLERS. Three surfaces need the
+ * same answer — Bibliotheek's send list, Gekookt's kring narrowing, and
+ * the Vrienden tab — and all three are route modules, whose only export is
+ * a screen component. There was nothing to import from any of them, so the
+ * twelve lines were copied instead, verbatim, twice. Two copies of a
+ * predicate that decides who may see a household's dishes is exactly the
+ * drift `areFriends` above exists to prevent, and the copies were
+ * unreachable from `npm test` for the same reason they were copies: a
+ * route module cannot be imported by a test at all. The duplication was
+ * the visible symptom; the missing coverage was the defect.
+ *
+ * ONLY 'accepted' COUNTS, for `areFriends`'s reasons exactly: pending is a
+ * question nobody answered, declined is a no, blocked is an emphatic one.
+ * A set built from any wider status would hand a stranger the friend list
+ * that gates sending and the kring's vote narrowing in one step.
+ *
+ * THE SELF-GUARD IS NOT DEFENSIVE PADDING. 0007_social.sql's CHECK refuses
+ * a self-pair and `friendshipPairKey` returns null for one, so a row whose
+ * two sides are the same person should not exist — but if one ever did,
+ * the `other` computed below would be the reader's own id, and every
+ * caller would then treat the reader as their own friend: their own dishes
+ * would appear in their kring and they would be offered to themselves as a
+ * send target. Dropping it costs nothing and removes that class of bug.
+ *
+ * IT TRUSTS ITS INPUT TO BE THE READER'S OWN ROWS, and does not verify
+ * it. `listFriendships(profileId)` returns exactly those, which is what
+ * all three callers pass; handed somebody else's accepted pair it would
+ * report that pair's REQUESTER as a friend, because `other` falls through
+ * to `requesterId` when the reader is neither side. A party check here was
+ * rejected: it would be a second, weaker copy of the narrowing RLS already
+ * performs on the read, and it would quietly absorb a caller passing the
+ * wrong list rather than letting that fail somewhere visible. The
+ * behaviour is pinned in tests/social/friendship.test.ts so the assumption
+ * is findable rather than folklore.
+ *
+ * IDS ARE COMPARED RAW, DELIBERATELY NOT CANONICALISED the way
+ * `friendshipRoleOf` above does it. Every caller feeds this rows straight
+ * out of Postgres, where a uuid renders lowercase, alongside a `profileId`
+ * that is the session's `auth.uid()` — rendered by the same rules. There
+ * is no case to normalise away, and lowercasing here would only look like
+ * the ordered-pair rule (which genuinely needs it, because it compares two
+ * ids for ORDER against a generated column) applied where it is not.
+ * Moved verbatim from the two call sites so the move changes nothing.
+ */
+export function collectAcceptedFriendIds(
+  friendships: readonly Friendship[],
+  profileId: ProfileId,
+): ReadonlySet<ProfileId> {
+  const friendIds = new Set<ProfileId>();
+  for (const friendship of friendships) {
+    if (friendship.status !== 'accepted') {
+      continue;
+    }
+    const other = friendship.requesterId === profileId ? friendship.addresseeId : friendship.requesterId;
+    if (other !== profileId) {
+      friendIds.add(other);
+    }
+  }
+  return friendIds;
+}

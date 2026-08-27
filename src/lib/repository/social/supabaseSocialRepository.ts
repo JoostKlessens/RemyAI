@@ -48,145 +48,50 @@ import {
   resolveActorRole,
 } from '@/domain/social/friendship';
 import { parseHandle } from '@/domain/social/handle';
-import type { CreatorPlatform } from '@/domain/feed/types';
-import type {
-  Friendship,
-  FriendshipAction,
-  FriendshipStatus,
-  Profile,
-  ProfileId,
-  RecipeId,
-  RecipeRating,
-} from '@/domain/social/types';
+import type { Friendship, FriendshipAction, Profile, ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
+import type { MealId } from '@/domain/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   BOARD_RATING_ROW_CEILING,
-  type CanonicalRecipeSummary,
+  normalizeSendNote,
   type FriendCook,
+  type IncomingSend,
+  type CanonicalRecipeSummary,
   type RateRecipeInput,
+  type RecipeShare,
   type RemySocialRepository,
+  type SendRecipeInput,
+  type SentMeal,
   type UpsertProfileInput,
 } from './types';
+// The Postgres/domain boundary: row shapes, converters, and `fail`. Split
+// out when this file passed 800 lines; see that module's header on why the
+// seam sits exactly there.
+import {
+  SENT_MEAL_COLUMNS,
+  SENT_MEAL_INGREDIENT_COLUMNS,
+  fail,
+  toCanonicalRecipe,
+  toFriendship,
+  toIncomingSend,
+  toProfile,
+  toRecipeRating,
+  toRecipeShare,
+  toSentMeal,
+  type FriendshipRow,
+  type ProfileRow,
+  type RecipeRatingRow,
+  type RecipeRow,
+  type RecipeShareRow,
+  type SentMealIngredientRow,
+  type SentMealRow,
+  type SentShareRow,
+  type SharedCookRow,
+} from './supabaseRowMapping';
 
 /** How many rows one PostgREST page asks for. Supabase caps a single response well below the ceiling, so a whole-table read has to page. */
 const PAGE_SIZE = 1000;
 
-/**
- * Postgres row shapes, written out rather than inferred. `supabase.ts`
- * deliberately leaves the client untyped until `supabase gen types` is
- * run, so these are the only description of the columns this file touches
- * — and being explicit means a column rename fails in review rather than
- * becoming `undefined` at runtime.
- */
-interface ProfileRow {
-  readonly id: string;
-  readonly handle: string;
-  readonly display_name: string;
-  readonly avatar_url: string | null;
-  readonly created_at: string;
-}
-
-interface FriendshipRow {
-  readonly id: string;
-  readonly requester_id: string;
-  readonly addressee_id: string;
-  readonly status: string;
-  readonly blocked_by: string | null;
-  readonly created_at: string;
-  readonly responded_at: string | null;
-}
-
-interface RecipeRatingRow {
-  readonly id: string;
-  readonly recipe_id: string;
-  readonly rater_profile_id: string;
-  readonly rating: number | string;
-  readonly rated_at: string;
-}
-
-interface SharedCookRow {
-  readonly profile_id: string;
-  readonly recipe_id: string;
-}
-
-interface RecipeRow {
-  readonly id: string;
-  readonly title: string;
-  readonly platform: string;
-  readonly author_name: string | null;
-  readonly thumbnail_url: string | null;
-}
-
-/**
- * Postgres time to this codebase's fixed-width UTC string. See the header:
- * ratings.ts compares these lexically, so the format cannot vary.
- */
-function toIsoDateTime(value: string): string {
-  return new Date(value).toISOString();
-}
-
-function toProfile(row: ProfileRow): Profile {
-  return {
-    id: row.id,
-    handle: row.handle,
-    displayName: row.display_name,
-    avatarUrl: row.avatar_url,
-    createdAt: toIsoDateTime(row.created_at),
-  };
-}
-
-function toFriendship(row: FriendshipRow): Friendship {
-  return {
-    id: row.id,
-    requesterId: row.requester_id,
-    addresseeId: row.addressee_id,
-    // The CHECK in 0007 constrains this column to the same set the domain
-    // type names, so the cast asserts a guarantee the database already
-    // keeps rather than hoping about a free-text field.
-    status: row.status as FriendshipStatus,
-    blockedBy: row.blocked_by,
-    createdAt: toIsoDateTime(row.created_at),
-    respondedAt: row.responded_at === null ? null : toIsoDateTime(row.responded_at),
-  };
-}
-
-/** Null for a row this scale cannot read, so the caller drops it rather than ranking a repaired number. */
-function toRecipeRating(row: RecipeRatingRow): RecipeRating | null {
-  const rating = Number(row.rating);
-  if (!isValidRating(rating)) {
-    return null;
-  }
-  return {
-    id: row.id,
-    recipeId: row.recipe_id,
-    raterProfileId: row.rater_profile_id,
-    rating,
-    ratedAt: toIsoDateTime(row.rated_at),
-  };
-}
-
-function toCanonicalRecipe(row: RecipeRow): CanonicalRecipeSummary {
-  return {
-    recipeId: row.id,
-    title: row.title,
-    // Same argument as `status` above: 0006 CHECKs this column to exactly
-    // these two values.
-    platform: row.platform as CreatorPlatform,
-    authorName: row.author_name,
-    thumbnailUrl: row.thumbnail_url,
-  };
-}
-
-/**
- * Turns a PostgREST error into something readable, keeping the Postgres
- * code — the code is what distinguishes "you are not allowed" (RLS) from
- * "that already exists" (unique violation), and a message that swallows it
- * makes both look like one generic failure.
- */
-function fail(operation: string, error: { message: string; code?: string } | null): never {
-  const code = error?.code === undefined ? '' : ` [${error.code}]`;
-  throw new Error(`${operation} failed${code}: ${error?.message ?? 'unknown error'}`);
-}
 
 export function createSupabaseSocialRepository(client: SupabaseClient): RemySocialRepository {
   return {
@@ -460,6 +365,203 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
         profileId: row.profile_id,
         recipeId: row.recipe_id,
       }));
+    },
+
+    async sendRecipe(input: SendRecipeInput): Promise<RecipeShare> {
+      // Both of these mirror CHECKs the database also keeps, and both are
+      // here for the reason the header gives: a readable sentence at the
+      // call site beats a constraint-violation code after a round trip.
+      // Note the two clauses that are NOT here — the recipient being a
+      // friend and the meal being your household's. Those are permission
+      // rules, RLS refuses the write outright, and a pre-flight copy of a
+      // permission rule is the copy that drifts. There is deliberately no
+      // cook check of any kind either; 0009's header explains why the
+      // gate was removed.
+      if (input.senderProfileId === input.recipientProfileId) {
+        throw new Error('Sending a dish to yourself is not a share.');
+      }
+      const note = normalizeSendNote(input.note);
+
+      // `unique (meal_id, recipient_profile_id)` is the conflict target,
+      // exactly as (recipe, rater) is for a rating: re-sending the same
+      // dish to the same person amends the one offer rather than adding a
+      // second card.
+      //
+      // WHAT IS ABSENT FROM THE PAYLOAD IS LOAD-BEARING. PostgREST's
+      // merge updates only the columns present, so leaving out `seen_at`
+      // is what keeps a re-send from marking a read card unread — the
+      // withdraw-and-resend bell §3.2 refuses. `created_at` is left out
+      // for the same mechanical reason plus one of its own: the database
+      // defaults it on insert, and a client has no business minting a
+      // timestamp the server already owns. `withdrawn_at` IS sent, as
+      // null, because reviving a withdrawn row is the point of having
+      // kept it.
+      const { data, error } = await client
+        .from('recipe_shares')
+        .upsert(
+          {
+            meal_id: input.mealId,
+            sender_profile_id: input.senderProfileId,
+            recipient_profile_id: input.recipientProfileId,
+            note,
+            withdrawn_at: null,
+          },
+          { onConflict: 'meal_id,recipient_profile_id' },
+        )
+        .select()
+        .single();
+
+      if (error) {
+        // No special-casing of 23505 here, unlike `upsertProfile`: the
+        // unique key IS the conflict target, so a duplicate is resolved
+        // by the merge rather than raised. What does arrive is 42501 when
+        // RLS refuses — not a friend, not your meal — and `fail` keeps
+        // that code, because it is the only thing that distinguishes the
+        // two.
+        fail('Sending a recipe', error);
+      }
+      return toRecipeShare(data as RecipeShareRow);
+    },
+
+    async withdrawSend(senderProfileId: ProfileId, mealId: MealId, recipientProfileId: ProfileId): Promise<void> {
+      // AN UPDATE, NOT A DELETE, and 0009 makes that a schema fact rather
+      // than a preference: the recipient-facing index is `where
+      // withdrawn_at is null`, so the row's disappearance from that index
+      // is what withdrawal means. Contrast `removeRecipeRating` above,
+      // which really does DELETE — a withdrawn vote has to be
+      // indistinguishable from no vote, while a withdrawn send has to
+      // stay auditable and has to be the row a later re-send lands on.
+      //
+      // Three filters and a null test, each doing a job: `sender_profile_id`
+      // is the application half of 0009's update policy (Postgres admits
+      // both parties there because it cannot split the policy per column,
+      // and says the application decides which side writes which) — a
+      // recipient must not be able to un-send somebody else's gesture.
+      // `is('withdrawn_at', null)` makes a second withdrawal match
+      // nothing, so the first one's timestamp survives.
+      const { error } = await client
+        .from('recipe_shares')
+        .update({ withdrawn_at: new Date().toISOString() })
+        .eq('meal_id', mealId)
+        .eq('recipient_profile_id', recipientProfileId)
+        .eq('sender_profile_id', senderProfileId)
+        .is('withdrawn_at', null);
+
+      if (error) {
+        fail('Withdrawing a send', error);
+      }
+    },
+
+    async markSendsSeen(recipientProfileId: ProfileId): Promise<void> {
+      // No share id anywhere in this statement, because there is none in
+      // the signature to put here. §3.2: "no per-card read tracking,
+      // because per-card tracking is the first brick of a read-receipt
+      // system."
+      //
+      // `is('seen_at', null)` is where idempotence lives — a second call
+      // matches no row and rewrites no stamp. `is('withdrawn_at', null)`
+      // keeps the statement to exactly the rows `listSendsToMe` would
+      // have returned: recording that somebody saw a card that was pulled
+      // before they could is a false entry in the one column this system
+      // keeps about their attention.
+      const { error } = await client
+        .from('recipe_shares')
+        .update({ seen_at: new Date().toISOString() })
+        .eq('recipient_profile_id', recipientProfileId)
+        .is('seen_at', null)
+        .is('withdrawn_at', null);
+
+      if (error) {
+        fail('Marking sends as seen', error);
+      }
+    },
+
+    async listSendsToMe(recipientProfileId: ProfileId): Promise<readonly IncomingSend[]> {
+      // `.is('withdrawn_at', null)`, never `.eq('withdrawn_at', null)` —
+      // PostgREST's `eq` against null is not a null test and matches
+      // nothing, which here would empty the Vrienden tab while every
+      // other sign said the query had worked.
+      //
+      // The recipient filter is scoping, not permission: 0009's select
+      // policy already limits this table to the two parties, so RLS is
+      // what makes the answer safe and this is what makes it the right
+      // answer. No `.order()` — see the interface: §3.2 owns the ordering
+      // and has inputs this layer does not.
+      const { data, error } = await client
+        .from('recipe_shares')
+        .select('*')
+        .eq('recipient_profile_id', recipientProfileId)
+        .is('withdrawn_at', null);
+
+      if (error) {
+        fail('Reading the sends waiting for you', error);
+      }
+      return ((data ?? []) as RecipeShareRow[]).map(toIncomingSend);
+    },
+
+    async listMealsSentToMe(recipientProfileId: ProfileId): Promise<readonly SentMeal[]> {
+      // THREE READS, IN THIS ORDER, AND THE ORDER IS THE PERMISSION MODEL.
+      // The first one is the only place a meal id can enter this method:
+      // it comes out of a live `recipe_shares` row addressed to the
+      // reader, never out of an argument, because the signature has none
+      // to offer. Everything after it is `in (<those ids>)`.
+      //
+      // Note what the `in` filters are NOT doing. They are not the
+      // permission — `has_active_send_to_me` in 0009's added select
+      // policies is, and it is asked per row, so a meal id smuggled into
+      // that list would still come back empty. They are the SCOPING, the
+      // same division of labour `listSendsToMe` explains. The reason to
+      // get the client-side half right anyway is that the same code runs
+      // against the local store, where there is no RLS to fall back on.
+      const { data: shareData, error: shareError } = await client
+        .from('recipe_shares')
+        .select('id, meal_id, sender_profile_id')
+        .eq('recipient_profile_id', recipientProfileId)
+        // `.is`, never `.eq(col, null)` — the latter is not a null test and
+        // would return nothing at all while every other sign said the query
+        // had worked. Same trap `listSendsToMe` documents.
+        .is('withdrawn_at', null);
+
+      if (shareError) {
+        fail('Reading the dishes sent to you', shareError);
+      }
+
+      const shares = (shareData ?? []) as SentShareRow[];
+      if (shares.length === 0) {
+        // Answered here rather than by a query, because `in.()` with an
+        // empty list is a PostgREST syntax error rather than an empty
+        // result — the same edge `listCanonicalRecipes` below guards.
+        return [];
+      }
+
+      const mealIds = [...new Set(shares.map((share) => share.meal_id))];
+      const [mealResult, ingredientResult] = await Promise.all([
+        client.from('meals').select(SENT_MEAL_COLUMNS).in('id', mealIds),
+        client.from('meal_ingredients').select(SENT_MEAL_INGREDIENT_COLUMNS).in('meal_id', mealIds),
+      ]);
+
+      if (mealResult.error) {
+        fail('Reading a dish somebody sent you', mealResult.error);
+      }
+      if (ingredientResult.error) {
+        fail('Reading the ingredients of a dish somebody sent you', ingredientResult.error);
+      }
+
+      const mealsById = new Map((mealResult.data as SentMealRow[] | null ?? []).map((meal) => [meal.id, meal]));
+      const ingredientRows = (ingredientResult.data as SentMealIngredientRow[] | null) ?? [];
+
+      return shares.flatMap((share): readonly SentMeal[] => {
+        const meal = mealsById.get(share.meal_id);
+        if (meal === undefined) {
+          // RLS declined the meal, or it was deleted underneath the share
+          // — a race with a withdrawal is the realistic case. Dropped
+          // rather than half-built: PD-010 promises a card that opens a
+          // FULL recipe, so a partial one is a broken promise, not a
+          // lesser card.
+          return [];
+        }
+        return [toSentMeal(share, meal, ingredientRows.filter((row) => row.meal_id === meal.id))];
+      });
     },
 
     async listCanonicalRecipes(recipeIds: readonly RecipeId[]): Promise<readonly CanonicalRecipeSummary[]> {

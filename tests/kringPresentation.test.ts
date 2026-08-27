@@ -202,11 +202,11 @@ describe('buildKringRowAccessibilityLabel', () => {
 describe('the copy', () => {
   /** The list ends and says so — the structural form of PD-004 that §8 and §9 already use. */
   test('says the circle has ended, without implying more is coming', () => {
-    expect(KRING_END_COPY).toBe('Dat is de hele kring.');
+    expect(KRING_END_COPY).toBe('Dat is alles van je vrienden.');
   });
 
   test('the empty state states a fact and promises nothing', () => {
-    expect(KRING_EMPTY_TITLE).toBe('Nog geen cijfers uit je kring');
+    expect(KRING_EMPTY_TITLE).toBe('Nog geen cijfers van je vrienden');
     expect(KRING_EMPTY_BODY).toBe('Geeft een vriend een recept een cijfer, dan staat het hier.');
   });
 });

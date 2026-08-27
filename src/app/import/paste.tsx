@@ -117,6 +117,21 @@ interface ConfirmNavigationContext {
   readonly platform: ImportPlatform | null;
   /** oEmbed's thumbnail, when one was found — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Always null for manual entry. */
   readonly thumbnailUrl: string | null;
+  /**
+   * The canonical `recipes` row the import resolved to
+   * (`ImportResult.recipeId`), carried straight through so the
+   * confirmation screen can write `meals.recipe_id` — the link a friend's
+   * cook is later matched on (`shared_cooks`, 0009). Never re-derived
+   * here: `normalizedUrl` above is that row's deduplication key, not its
+   * id.
+   *
+   * Optional exactly as `MealDraftContext.recipeId` is: every path that
+   * omits it — manual entry, an unsupported link, a display-only post
+   * (PD-011 stores no canonical row) — is stating something true and
+   * permanent rather than withholding something, so a missing key and an
+   * explicit `null` mean the same thing and both travel as `null`.
+   */
+  readonly recipeId?: string | null;
 }
 
 export default function ImportPasteScreen(): JSX.Element {
@@ -152,6 +167,10 @@ export default function ImportPasteScreen(): JSX.Element {
           platform: context.platform,
           authorName: context.authorName,
           thumbnailUrl: context.thumbnailUrl,
+          // `?? null` and never a fallback id: a navigation that does not
+          // know its canonical recipe is carrying a meal that is a copy of
+          // nothing, which is a real answer.
+          recipeId: context.recipeId ?? null,
         }),
       },
     });
@@ -181,6 +200,10 @@ export default function ImportPasteScreen(): JSX.Element {
           normalizedUrl: attempt.result.sourceUrl,
           platform: attempt.result.platform,
           thumbnailUrl: attempt.thumbnailUrl,
+          // The one place a real canonical id enters the app. Straight off
+          // the function's answer — the row it inserted, or the stored row
+          // a cache hit served — never rebuilt from `sourceUrl`.
+          recipeId: attempt.result.recipeId,
         });
         return;
       }
