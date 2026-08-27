@@ -500,7 +500,7 @@ and the conditions that keep the other two rules true rather than merely outvote
 
 **The fourth question.** "Wat is hier echt goed?" — a question about the population's verdict, which
 genuinely has an answer no existing tab holds. Kiezen answers what to eat tonight and shows one
-dish. Bibliotheek answers what you kept. Vrienden answers what people you know made. None of them
+dish. Mijn recepten answers what you kept. Vrienden answers what people you know made. None of them
 can tell you that a recipe you have never seen is the best-rated thing in the app, because each is
 scoped to a household or a friend graph by design.
 
@@ -578,9 +578,366 @@ constants, `LEADERBOARD_MIN_VOTES` and `LEADERBOARD_PRIOR_VOTES`, both stated on
   reader. **If either policy ever narrows, the aggregate has to move server-side in the same
   change** — otherwise this module quietly ranks a subset while presenting itself as the world.
 
-**Naming.** The tab reads "Ranglijst" and the screen header reads "Best beoordeeld" — the one place
+**Naming.** The tab reads "Trending" and the screen header reads "Trending recipes" — the one place
 in the app where the two differ, because tab labels share a monospace caption line with three other
-words and "Best beoordeeld" does not fit it.
+words and the longer form does not fit it. Both words are the owner's own, chosen over the Dutch
+alternatives after he asked what "Ranglijst" was meant to convey; the tab read "Ranglijst" and the
+header "Best beoordeeld" until then. The route segment is still `/ranglijst`, which is not
+user-facing.
+
+---
+
+## PD-015 — Sharing becomes two-tier: ambient cook proof, and the directed send
+
+**The decision.** PD-010's user-facing sharing model is replaced. Sharing is no longer one act per
+meal; it is two tiers that do not resemble each other.
+
+1. **Cook proof** — ambient, derived, nobody acts. One household switch, *"Deel wat ik kook met
+   vrienden"*, off by default. While it is on, every cook event on a meal linked to a canonical
+   recipe yields one fact to mutually accepted friends: *Sanne maakte dit*. A per-dish exclusion,
+   `Deel deze niet`, narrows it.
+2. **The directed send** — *het pannetje*. One person sends one dish out of their library to one
+   named friend, with one optional line in their own words. High intent, low volume, per act.
+
+The full design is docs/DESIGN-SOCIAL.md; §5 is the privacy analysis this decision rests on and
+should be read as part of it.
+
+**PD-010.3 is what changes, and only that.** It read: "`meals.visibility` governs, defaulting to
+`private`. Sharing is an act, never a default." The act is now the global opt-in — one deliberate,
+revocable consent to name your cooking to friends — narrowed per dish by the exclusion, or a
+per-recipe send. The second sentence survives its own amendment intact: you still act, once
+globally or once per recipe; `meals.visibility` still defaults to `private` and still has no
+`public` member; and nothing is ever shared by a migration. `0009_cook_proof_and_sends.sql` ships
+both new flags at their non-sharing value and an empty `recipe_shares`, so running it shares
+nothing. All five of PD-010's mitigations — attribution on card and recipe, the original-post link
+sitting with the recipe, visibility defaulting to private, the PD-007 creator opt-out, video never
+re-hosted — carry over unchanged and are not reopened here.
+
+**Why proof is the floor and the send is only the ornament.** An earlier draft of the social design
+made the directed send the foundation, so that every social act required a human. That model has no
+supply: a week in which nobody sends you anything is a week in which the social layer is empty, and
+an empty social layer cannot help anybody decide what to eat, which is the only job a Remy surface
+has. A messenger needs correspondents; a food app needs food. Proof needs neither a sender nor an
+occasion — it falls out of cooking that was going to happen anyway — so it can annotate the
+surfaces that already supply recipes instead of waiting for a friend to be chatty. The send is the
+high-intent moment proof can never manufacture, and it sits on top.
+
+**The proof layer never reads a meal.** It reads `shared_cooks`, a projection of cook events onto
+canonical recipes, which are already world-readable (`recipes`, per PD-014's own argument). The
+projection carries exactly two columns, profile and recipe id. A third is a privacy decision rather
+than a convenience: a timestamp turns proof into a feed with recency, a count turns it into a
+leaderboard of your friends' kitchens, and the rating column is the decision engine's private input
+(PD-019). `cook_events.rating` is not protected there by a policy — it is **absent from the
+projection**, which is the stronger of the two guarantees and the reason no RLS mistake can leak a
+private grade through this path.
+
+**What turning the switch on exposes, exactly:** the link between your display name and a canonical
+recipe id — *that* you cooked it. Nothing else is new; the recipe's content, its creator and its
+public votes were already readable by any authenticated user. **What is never exposed, opt-in or
+not:** restrictions and allergens (`member_restrictions` stays the only Article 9 table and no
+social path reads it), household members, your private `cook_events.rating`, your library, your
+schedule, and anything you did not cook. No timestamps travel — a proof is "Sanne maakte dit",
+never "gisteren" and never "4x".
+
+**The honest risk, stated rather than buried.** A list of named cooks is a dietary pattern. Friends
+who see every dish you make can infer halal, vegan, or an avoidance — Article-9-adjacent inference
+drawn from facts that are not themselves Article 9 data. That is why the switch is off by default,
+why the consent copy names the inference plainly ("vrienden zien welke gerechten je maakt"), why
+the per-dish exclusion exists, and why the audience is only ever mutually accepted friends. The
+switch lives in household settings as its own section, with the consequence stated in full
+sentences before the control, PD-005-style — and it is offered once contextually, when a first
+friendship is accepted, asked with the control visibly off and no pre-selection. Declining there is
+final until the household goes to settings itself: the question is asked once, not campaigned.
+
+**The per-dish exclusion is part of the consent model, not a footnote to it.** A global switch
+alone forces an all-or-nothing disclosure, and a household happy to share its cooking in general
+may have one dish that says too much — a medical diet, a religious observance week. `Deel deze
+niet` silences all cook proof for that meal, past included, at the next read; it survives the
+global switch being toggled off and on; and it is **not a share tier**, because an excluded meal
+can still be *sent*, a send being its own explicit act aimed at one named person. One boundary
+stated plainly: the exclusion governs cook proof, never public votes. A `recipe_ratings` vote is
+world-readable by design and is withdrawn by deleting the vote, which is a different instrument.
+
+**Leaving.** Proof is assembled per read and nothing is stored on the receiving side, so turning
+the switch off removes your entire cook history from every friend surface, past included, at their
+next open. Sends are separate and per-act: `Stop delen` withdraws those. Withdrawal un-publishes;
+it does not reach into someone else's kitchen and take a pan back — a receiver's already-saved copy
+is theirs, and it started at `allergenTagStatus: 'unknown'` exactly as PD-010 requires.
+
+**Where the shipped model reads differently from the design's own summary, and which one governs.**
+DESIGN-SOCIAL.md §6.1 proposed that `meals.visibility` would "remain as the fail-closed gate for
+send-shared meals". Migration 0009 does not do that, and the shape it shipped is the one that
+binds: a send is read through its own predicate, `has_active_send_to_me`, added as an *additional*
+permissive policy on `meals`, `meal_ingredients` and `meal_steps`. A send therefore never requires
+flipping a meal to `visibility = 'friends'`. That is the narrower and better shape — `'friends'`
+would grant the read to the sender's whole friend list in order to hand one dish to one person —
+and it leaves 0007's broadcast path exactly as it was. `meals.visibility` remains what PD-010 made
+it: the gate for the broadcast surface, defaulting to private, mirrored fail-closed in
+`src/domain/social/visibility.ts`.
+
+**Rejected alternatives, recorded so they are not rebuilt.** *Counts without names* ("2 vrienden
+maakten dit") — the persuasive thing is the name; an anonymous count is a stranger-aggregate
+wearing a friendly tone, unverifiable by the reader and the first step toward global engagement
+numbers. *A per-meal opt-in for proof*, which is today's visibility model applied to the new tier —
+it is the supply problem again, because per-meal acts happen at message frequency rather than at
+cooking frequency; a per-meal *exclusion* over a global opt-in keeps the supply and moves the
+per-dish act to the rare case that actually needs it. *A global strangers aggregate* ("1.204 mensen
+maakten dit") — the board already carries the population's verdict in vote form, and a per-recipe
+stranger count on a decision surface is pure engagement dressing.
+
+---
+
+## PD-016 — Reversed: a send does not require a cook event
+
+**Decided, built, and then overruled by the owner. Recorded rather than deleted, because this is
+the kind of rule a later version will propose again.** Anything in a household's library may be
+sent to a friend. There is no cook gate.
+
+**The rule that was reversed, and its case.** The draft rule was "you can only send what you have
+cooked", on two arguments: it made the feed's promise — that these are dishes people actually made
+— structurally true rather than merely stated, and it capped spam as a product rule instead of as
+infrastructure. Both are real arguments, which is why they are written down here rather than
+paraphrased away.
+
+**Why it was wrong.** It asked the send tier to carry an authenticity guarantee the proof tier
+already provides. Proof is the thing that has to be earned, and proof is `shared_cooks` — derived
+from real cook events, gated on a real opt-in, and completely unaffected by who may send what. The
+gate charged the send feature its whole point to buy a guarantee it did not need: a send is *"ik
+moest aan jou denken"*, and requiring evidence before somebody may say that turns a generous
+impulse into an errand. The spam case was also thinner than it read. A send reaches only a mutually
+accepted friend, so the blast radius is the sender's own friend list, and the remedy is the one
+every social graph already has.
+
+**What this costs, accepted knowingly.** Somebody can now send a friend a dish they merely found,
+so a send is a suggestion and not evidence. Two consequences follow. The card must never dress an
+unmade dish as a made one — a send card carries its sender and their note, and never borrows the
+language of cook proof (DESIGN.md §8, and PD-020 for the colour reserved for a real completion).
+And if volume ever becomes a real problem, the honest instrument is a rate limit rather than a rule
+that claims to be about authenticity while actually being about frequency. **No rate limit is set
+today**, and none should be invented before there is something to measure.
+
+**Where the reversal lives in the code, so it is not silently restored.** `recipe_shares`' insert
+policy in 0009 has three clauses — the sender is you, the recipient is a friend, the meal belongs
+to your household — and a comment saying there is deliberately no fourth. Adding one is this
+decision being retaken, not a tightening.
+
+---
+
+## PD-017 — The social reason on Kiezen, and a named friend-proof weight
+
+**An extension of PD-002's reason hierarchy, not an amendment to it.** A friend's cook becomes a
+stated reason on the decision surface, and the strongest concrete one this product can produce.
+Rule 2 of the three that override everything says every suggestion carries a stated reason; a named
+person the reader actually knows is the best filling that rule has ever had, and it lands on the
+one surface measured by acceptance.
+
+**The copy, exactly.** *"Sanne heeft dit ook gemaakt en gaf het een 8,5."* Without a public vote:
+*"Sanne heeft dit ook gemaakt."* Two friends: *"Sanne en Joris hebben dit ook gemaakt."* Beyond
+two, the overflow still carries names beside the count ("Sanne, Joris en 2 anderen"), because a
+count *without* a name is the stranger-aggregate this design refuses everywhere — the persuasive
+thing is the name. A plural average says "gemiddeld" out loud, because it is one. This is the only
+reason in the vocabulary that is a full sentence and takes a full stop; every other reason is a
+fragment, and a fragment does not take a period.
+
+**The grade is a public vote and never a private one.** It comes from `recipe_ratings` and never
+from `cook_events.rating`, and it is averaged over exactly the friends being named — "*gaven het*
+een 8,4" has to be true of the people in that sentence, not of a wider pool. See PD-019, which this
+reason is the first consumer of.
+
+**Where it sits in the hierarchy: above a calendar fact, below your own kitchen.** `friend_proof`
+outranks `fits_time`, `not_recent` and `variety`, and sits under `saved_this_week` and
+`household_favourite`. A named person beats a calendar fact; a save and your own cook history are
+*decisions*, where a friend's cook is *evidence*, and evidence must never outrank you having asked
+for something.
+
+**`FRIEND_PROOF_BOOST` is a named constant beside the engine's existing weights, and it is 20** —
+deliberately between `VARIETY_BOOST` (15) and `HOUSEHOLD_FAVOURITE_BOOST` (30), which is the same
+ordering the reason hierarchy states, expressed in the currency that actually selects the dish.
+
+**Why this personalisation does not touch PD-014.6.** The board's "no personalisation, ever" exists
+because a per-viewer ordering there creates an unaccountable private reality out of the one list
+whose whole meaning is that every reader sees the same thing. Kiezen is per-household *by
+definition* and always has been — it already reads your restrictions, your history, your time
+budget. And the boost is a cookability signal in PD-004's own currency rather than a social
+ornament: a dish somebody you know actually produced is more likely to convert into a cook than one
+nobody you know has. Trending's global scope is untouched by this decision, and stating that
+absence is the point.
+
+---
+
+## PD-018 — De kring: the circle's verdict, with its own arithmetic, and the board left alone
+
+**The decision.** A second friend-scoped list: canonical recipes ranked by the `recipe_ratings`
+votes cast by accepted friends, answering *"wat vindt mijn kring goed?"*. It is a new list rather
+than an amendment to an existing one.
+
+**AMENDED — WHERE IT LIVES, AND ONLY THAT.** It shipped as the second mode of Vrienden, behind a
+`SegmentedControl` (`Gekookt` | `Kring`). It now lives on Trending (DESIGN.md §9) as that tab's
+`Vrienden` scope, beside the global list. The owner asked for it there in as many words: *"I want
+the top ranking recipes from my friends on the ranking tab, not in that 'kring' list."* Everything
+below this paragraph — the arithmetic, the naming of voters, the refusal to pad, the refusal to
+rank people — is unchanged and was carried across without a line of it being rewritten.
+
+**PD-014 is still not amended and its sixth condition is still not spent.** The global list stays
+global, identical for every reader, untouched. An earlier draft put an `Iedereen | Vrienden` toggle
+on the board; that was wrong in a way worth recording, because it **mutated the protected object** —
+re-ordering the one list whose entire meaning is that everybody sees the same thing — and then
+needed an accountability argument to excuse itself.
+
+**The switch that exists now is not that switch, and the difference is the whole of it.** It
+selects between two SEPARATE lists rather than re-ordering one: `Iedereen` is byte-for-byte the
+board PD-014 protects, produced by `rankRecipes` from a read that never sees the household, and
+`Vrienden` is this decision's list, produced by `rankKring`. Nothing personalises the global
+ordering; the two are never merged, never interleaved and never backfilled from each other. The
+protected object is still simply left alone — it is now sitting next to something rather than
+underneath a toggle that moved it.
+
+**It is a different question, and the more useful one.** A stranger's 9,0 and a friend's 9,0 are
+not the same information: one is a statistic, the other is Sanne. The reason social proof works at
+all is that you have grounds to trust these particular people's taste.
+
+**Its arithmetic is deliberately the board's inverted, which is why it is its own module.** The
+board's devices exist to tame anonymous strangers, and none of them survives contact with five
+named people. `src/domain/social/kring.ts` sits beside `leaderboard.ts` rather than inside it: a
+shared file would invite a shared constant, and a shared constant is how one list quietly starts
+behaving like the other.
+
+1. **A floor of one vote** (`KRING_MIN_VOTES`), not `LEADERBOARD_MIN_VOTES`. The global floor keeps
+   anonymous noise off a page that presents itself as a verdict; a friend's single vote is not
+   anonymous noise, because you know exactly whose opinion it is, which is the entire evidentiary
+   point of the list. With four friends, almost nothing would ever clear the global floor. The
+   tests assert this stays strictly below the board's floor, so the two cannot converge unnoticed.
+2. **No Bayesian shrinkage.** Shrinking toward a population mean is a device for thin evidence from
+   unknown voters. With named voters the honest number is what they actually said.
+3. **A plain average to one decimal**, comma, trailing zero kept — and the number shown is the
+   number that sorted the list, the same rule PD-014 arrived at for a different number. Two
+   decimals on a handful of known votes is false precision wearing the board's clothes.
+4. **Voters are named while they fit:** "8,5 · Sanne en Joris", falling back to "8,2 · 4 stemmen"
+   past two. This is the one place a bare count is permitted, and the difference from PD-017's ban
+   is worth stating: in the Kiezen reason the whole sentence exists to say *who*, so a count
+   replaces the persuasion entirely; here the grade is already the message and the voters are its
+   provenance, so past two names the honest summary is how many.
+5. **Ties break on evidence, then on the dish.** More votes first, then alphabetically by title in
+   Dutch collation — the board falls back to an opaque recipe id, but this list shows dish names,
+   so it falls back to something a reader can actually see. Recipes showing the identical rounded
+   grade share a rank rather than being separated by a difference nobody can see.
+
+**The thin list is the honest list, and it will be thin for a long time.** A kring of two rows is
+the expected state for months, not a failure state to paper over, so it is designed as a small
+dinner table rather than an embarrassed leaderboard: rows render identically whether there are two
+or twenty, the list ends with its own end line ("Dat is de hele kring."), and it is **never
+padded** — no global rows blended in to make it look fuller, which would rebuild the refused
+*Ontdekken* surface out of spare parts, and no skeleton implying more is coming. Empty state: "Nog
+geen cijfers uit je kring" over "Geeft een vriend een recept een cijfer, dan staat het hier." Never
+a zero, never a placeholder row.
+
+**Why it is a scope of Trending and not a fifth tab.** DESIGN.md's rule is that a tab exists for a
+distinct *question a household asks*, never for a distinct kind of content. "Wat vindt mijn kring
+goed" is not a fourth question — it is Trending's own question, "wat is hier echt goed", asked of
+the people you know instead of everybody. That is a scope, and a scope selector is exactly the
+control for it.
+
+**This paragraph originally argued it belonged on Vrienden instead, and that argument was wrong.**
+It reasoned that the kring was Vrienden's question "answered in aggregate rather than event by
+event", so it should be a mode there. Two modes on Vrienden answered genuinely DIFFERENT questions
+— what friends cooked, and what friends rated — which meant half that tab's purpose sat behind a
+control most people never tapped, and it left the ranking question split across two tabs. The old
+worry about putting it on the board was that it "would compete with the board and keep inviting
+somebody to merge the two back into the toggle this decision just removed"; the merge is what is
+forbidden, not the adjacency, and it is forbidden structurally — `assembleKring` has no parameter
+that could pad a list, two separate assemblers produce two separate lists, and a thin kring renders
+thin. The rule that survives is the one that was always doing the work: **never re-order or
+backfill the protected global list.**
+
+**The kring ranks recipes by friends' votes, never friends by anything.** No trophy shelf, no
+most-cooked leaderboard of people. The moment cooking earns a person a persistent number, people
+cook for the number.
+
+---
+
+## PD-019 — Every socially visible number is a public vote; `cook_events.rating` never leaves the household
+
+**Restated as a standing condition, because the two-tier social model makes it load-bearing on
+surfaces PD-008 never had to think about.** There are two rating instruments in this product and
+they are not interchangeable:
+
+- **`cook_events.rating`** — the household's private grade for its own cook. It is the decision
+  engine's input: PD-008's middle band, `HOUSEHOLD_FAVOURITE_BOOST`, `WOULD_NOT_REPEAT_PENALTY`.
+- **`recipe_ratings`** — a public vote on a canonical recipe, cast in the knowledge that it is
+  public. It already feeds Trending's global scope (PD-014) and now also the friend-proof reason
+  (PD-017), de kring (PD-018, Trending's `Vrienden` scope), and the proof line on Bevestigen.
+
+**The private grade never crosses a household boundary, and the public vote is the only number a
+social surface may print.** This is what makes showing a grade safe at all. A grade the proud cook
+knows her friends can see is a grade that gets inflated, and an inflated grade feeding the engine
+would quietly corrupt every later suggestion — PD-008's own logic, applied to the one pressure
+PD-008 did not yet face. The private grade stays honest because it stays private.
+
+**Any future surface that wants a number takes it from the public instrument or shows none.**
+"None" is a perfectly good answer and it is the common one: a friend who cooked a dish but never
+voted on it renders as "Sanne heeft dit ook gemaakt.", with no number and no apology for the
+absence of one.
+
+**The guarantee is structural wherever it can be.** `shared_cooks` carries (profile, recipe) and
+the rating column is not in it — absent, not policy-protected. That projection is a view rather
+than a table for a related reason: written as a table it would need triggers on four separate
+sources, and one missed trigger keeps serving proof for a household that opted out, a failure
+invisible precisely because the stale rows look perfectly ordinary.
+
+**Precision follows the instrument, not the screen.** A single vote carries one decimal (PD-008a).
+A proof grade and a kring average carry one, because they average a handful of named people. The
+board carries two, because an average of hundreds genuinely holds that much information. Three
+answers to the same question about how much evidence there is, not three house styles.
+
+---
+
+## PD-020 — DESIGN.md §8 amended twice: the unseen band for sends, and `positive` on the closed loop
+
+Both amendments are applied in docs/DESIGN.md §8. They are recorded here because each narrows a ban
+that section states absolutely, and a narrowed ban that lives only in a screen spec is a ban the
+next reader widens back.
+
+**1. The unseen band and the tab count exist, for directed sends only.** §8's bans on timestamps,
+"nieuw" badges and recency ordering all stand. What is added is a binary reader state.
+
+- The tab label carries a mono count while unseen sends exist — `Vrienden · 2`, in the
+  `typeScale.caption` line the tab already uses. A burned-in frame counter, not a red badge: no
+  dot, no colour, no animation.
+- **Ambient cook proof never feeds the count.** That boundary is the whole amendment. A count fed
+  by other people's ordinary dinners is "check back often" by another name; a count of letters
+  addressed to you, bounded by how often friends actually cook *and* bother to send, is mail.
+- It clears when the tab is opened, and there is **no per-card read tracking** — per-card tracking
+  is the first brick of a read-receipt system, and this product refuses read receipts outright.
+  `recipe_shares.seen_at` is set on opening the tab and is never shown to the sender.
+- Unseen sends group at the top of the Gekookt list, ordered by cookability within the group, after
+  which the list continues in its ordinary ranked order. Unseen is not a freshness gradient: it
+  clears permanently on viewing, so there is no loop for anybody to run.
+- The entrance motion is the only announcement. No "NIEUW" divider.
+
+**2. `positive` may appear on the closed-loop card, and only there.** §8's "no `positive` anywhere"
+was written against dressing a friend's *opinion* as a completion, and against that it still holds
+absolutely — a friend's 8,5 is still a plain mono numeral beside the cook time. But when an
+opted-in friend cooks a recipe you sent her, what the card reports genuinely *is* a completion,
+which is the exact event the colour is reserved for: it happened at her stove, and the loop it
+closes is yours. One chip, `positiveMuted` fill with `positive` caption text reading exactly
+`gemaakt`, plus the hairline `positive` stroke under the dish name — the completion mirror of
+Kiezen's `accent` stroke. Nothing else on the surface is green.
+
+**The closed loop is a costume, not a pipeline.** An earlier draft built a dedicated "Sanne heeft
+jouw recept gemaakt" mechanism, because the sender was otherwise starved of any signal. Under the
+proof layer that is redundant: an opted-in friend's cook already surfaces as ordinary ambient
+proof, and the only special thing left is presentation. A friend who has **not** opted in reports
+nothing to anybody, including the person who sent her the dish. That is an accepted cost rather
+than an oversight — one switch governs all naming of your cooking, and a second consent path
+("sending implies echo-consent") is exactly how a privacy model rots: two doors to the same
+exposure, each defended by half an argument.
+
+**The dress is read once**, reverting to an ordinary proof card in ranked order on the next visit,
+with one success haptic at most once per tab open. No trophy shelf and no "door 3 vrienden gemaakt"
+counter anywhere: the moment a send earns a persistent number, people start cooking for the number.
+**No push notification accompanies any of this** — deferred, not refused, and recorded at decision
+level so that it takes a decision rather than drift to appear. The first push this product sends
+should be its best one, and that argument deserves its own day.
 
 ---
 

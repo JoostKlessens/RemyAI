@@ -98,9 +98,9 @@ re-weighted via `fontWeight` like the OS system font, hence `sansBold`/
 
 ## Navigation: three tabs
 
-**Kiezen** (was "Vanavond"), **Bibliotheek** (was "Mijn recepten"),
-**Vrienden** (added in Fase 5b) and **Ranglijst** (added in Fase 6,
-PD-014), in that order. No tab icons — text-only labels in
+**Kiezen** (was "Vanavond"), **Mijn recepten** (was "Bibliotheek"),
+**Vrienden** (added in Fase 5b) and **Trending** (added in Fase 6,
+PD-014; was "Ranglijst"), in that order. No tab icons — text-only labels in
 `typeScale.caption` (monospace), matching each other exactly.
 
 **This document said "no third tab" until PD-010, and it was right to.**
@@ -109,7 +109,7 @@ and that a third tab is how a decision tool turns into a browsing app.
 That argument still holds against the tab it was written about: an
 "Ontdekken" surface of algorithmic strangers would be exactly the
 high-browsing, low-cooking failure PD-004 exists to prevent, and it is
-still not being built. Ranglijst is not that surface and does not reopen
+still not being built. Trending is not that surface and does not reopen
 it: it ranks *recipes* by explicit 1,0-10,0 votes, with no personalisation and
 no per-viewer ordering — every reader sees the identical board. PD-014
 makes "no personalisation, ever" a condition of it existing, precisely so
@@ -119,7 +119,7 @@ the two cannot be confused later.
 PD-010 settles that friends see a real card — thumbnail, recipe name, key
 ingredients — that opens the full recipe with the creator's original video
 linked below it. That content cannot live in either existing tab without
-damaging it. Bibliotheek is defined as *your* rotation (it filters to
+damaging it. Mijn recepten is defined as *your* rotation (it filters to
 `householdId` on purpose, and every tile promises "Deze week"/"Al gekookt"
 scheduling that a friend's recipe has no claim to), and Kiezen is one dish
 with no list at all. Putting somebody else's kitchen inside either one
@@ -127,12 +127,12 @@ would blur a surface whose meaning is currently exact.
 
 **The rule that replaces "no third tab":** a tab may exist for a distinct
 *question a household actually asks*, never for a distinct kind of
-content. Kiezen answers "wat eten we vanavond". Bibliotheek answers "wat
+content. Kiezen answers "wat eten we vanavond". Mijn recepten answers "wat
 heb ik bewaard". Vrienden answers "wat hebben mensen die ik ken gemaakt" —
 a question that genuinely has more than one answer, which is why it is
 allowed to be a list where Kiezen is not.
 
-**A fourth tab needed a fourth question, and PD-014 claims one.** Ranglijst
+**A fourth tab needed a fourth question, and PD-014 claims one.** Trending
 answers "wat is hier echt goed" — the population's verdict, which no other
 tab can hold, because each of the three is scoped to a household or a
 friend graph by design. That claim was made over a stated objection to this
@@ -157,7 +157,7 @@ card anywhere carries a timestamp or a "nieuw" badge (§8).
 **Purpose**: the hero screen. One dish, one stated reason, three actions.
 No list, no scroll, no browse affordance — PD-001/PD-002 govern this
 screen unchanged. "Iets anders" caps at two swaps, then becomes "Ik kies
-zelf" (opens Bibliotheek). "Niet koken" is always legitimate, lowest
+zelf" (opens Mijn recepten). "Niet koken" is always legitimate, lowest
 visual weight, never a cancel action.
 
 **Layout** (vertically centered as a group):
@@ -181,7 +181,7 @@ visual weight, never a cancel action.
   Plakken (§3). No "Niet koken" — nothing to decline yet.
 - *Filtered/exhausted* (`all_excluded`/`swaps_exhausted` — a real rotation
   exists but is filtered or swapped out): unchanged behavior — explain why,
-  offer `Kies zelf` → Bibliotheek, keep `Niet koken` available.
+  offer `Kies zelf` → Mijn recepten, keep `Niet koken` available.
 - *Declined*: `title2` "Niet gekookt vanavond. Genoteerd.", optional
   ignorable reason chips (afhalen/restjes/uit eten, PD-002) below.
 - *Error*: `title2` "Kon geen suggestie ophalen", `bodySmall` detail, one
@@ -217,16 +217,20 @@ never has to re-find the buttons. Reduced motion: instant cut throughout.
 
 ---
 
-## 2. Bibliotheek — the library
+## 2. Mijn recepten — the library
 
 **Purpose**: saved social-video recipes. This is a library of *video*, not
 a plain recipe box — thumbnails, creators and source matter here in a way
 the old strict-instrument style deliberately avoided. Adding via link is
 always one tap away, never buried in a menu.
 
-**Layout**: header with `title2` "Bibliotheek" and a persistent `+ Link
-plakken` button (secondary, top-right, always visible, not just in the
-empty state) → Plakken. Below, a two-column thumbnail grid (`space3`
+**Layout**: header with `title2` "Mijn recepten" and a persistent `+ Link
+plakken` button (secondary, right-aligned under the title, always visible,
+not just in the empty state) → Plakken. `Instellingen` sits on the title
+line itself, right-aligned, as quiet `bodySmall`/`textMuted` text — the
+household door, deliberately not shaped like the screen's own action and
+not stacked beneath it. That is this document's one header rule, applied
+on every tab: a name, then exactly one control of the screen's own. Below, a two-column thumbnail grid (`space3`
 gutter), "deze week" first (existing `sortMealsByScheduling` order,
 unchanged). Each tile: portrait (9:16) thumbnail with a `videoScrim` wash
 across the bottom third, creator handle in `caption` (mono) and dish title
@@ -254,7 +258,8 @@ image or a stock placeholder.
 
 ```
 ┌───────────────────────────────────┐
-│ Bibliotheek        [+ Link plakken]│ title2 · button
+│ Mijn recepten          Instellingen│ title2 · text link
+│                    [+ Link plakken]│ button
 │ ┌───────────────┐ ┌───────────────┐│
 │ │   thumbnail   │ │   thumbnail   ││
 │ │▓▓▓▓▓▓▓▓▓▓scrim│ │▓▓▓▓▓▓▓▓▓▓scrim││
@@ -492,10 +497,27 @@ tertiary exit.
 
 ## 8. Vrienden — what people you know cooked
 
-**Purpose**: PD-010's friend feed. A card per shared recipe that *opens*
-into the full recipe, with the creator's original post linked underneath
-it. Not a discovery surface, not an algorithmic feed — the only things
-here are recipes a specific person you know deliberately sent you.
+**Purpose**: PD-010's friend feed, made two-tier by PD-015. A card per
+recipe that *opens* into the full recipe, with the creator's original post
+linked underneath it. Not a discovery surface, not an algorithmic feed —
+every card originates with a mutually accepted friend, either because she
+cooked the dish (an ambient **proof card**, eyebrow "SANNE MAAKTE DIT") or
+because she deliberately sent it to you (a **send card**, eyebrow "GEDEELD
+DOOR JORIS", carrying her note). The two are never dressed alike: proof
+says a kitchen made this, a send says a person thought of you — and PD-016
+is why a send may never borrow the other's language.
+
+**Everything in this section stands, and Vrienden is one list again.**
+It briefly carried a `Gekookt` | `Kring` `SegmentedControl` (specced in
+docs/DESIGN-SOCIAL.md §4.2), with de kring's ranked list (PD-018) behind
+the second segment. **De kring now lives on Trending (§9)**, as the
+`Vrienden` scope of that tab beside the global one; the ranking, the
+copy and the row are unchanged, only its address is. The two modes here
+answered *different* questions, which is the wrong thing to hide behind a
+switch; the two scopes on Trending answer the *same* question, which is
+the right thing. What is left on this tab is the list this section always
+described, plus the header's `+ Vriend toevoegen`, the revised empty
+states, and the two amendments PD-020 records against this section.
 
 **Layout**: header `title2` "Vrienden" over a `bodySmall`/`textMuted`
 line, "Wat vrienden echt gekookt hebben." Below it, a single-column list
@@ -516,6 +538,44 @@ pagination, no infinite scroll, no pull-for-more, no autoplay, no
 timestamps, no "nieuw" badge. PD-004 measures this surface on
 save-to-cook; a feed that visibly ends is the structural version of that.
 
+**PD-020.1 — the unseen band and the tab count, for directed sends only.**
+None of the bans above moves: still no timestamps, still no "nieuw" badge,
+still ordered by cookability and never by recency. What is added is a
+binary reader state, and its whole discipline is that it is scoped to
+sends.
+
+- **The tab label carries a mono count while unseen sends exist**:
+  `Vrienden · 2`, appended to the tab's existing `typeScale.caption`
+  label in `src/app/(tabs)/_layout.tsx`. A burned-in frame counter, not a
+  badge — no dot, no `danger` red, no colour of any kind, no animation.
+  With no unseen sends the label is exactly "Vrienden", unchanged. The
+  spoken `tabBarAccessibilityLabel` states the count in words rather than
+  leaving a reader to hear a middot; keep it a plain statement of fact,
+  never an alarm.
+- **Only directed sends feed the count. Ambient cook proof never does** —
+  not one proof card, ever, however many friends cooked something today.
+  A count fed by other people's ordinary dinners is "check back often" by
+  another name; a count of letters addressed to you is mail. Concretely,
+  the count is the number of `recipe_shares` rows where the reader is the
+  recipient, `withdrawn_at is null` and `seen_at is null`. `shared_cooks`
+  takes no part in it and structurally cannot: it carries no reader state
+  there could be an unseen half of.
+- **It clears when the tab is opened**, by stamping `seen_at` on exactly
+  those rows, once. There is **no per-card read tracking** — per-card
+  tracking is the first brick of a read-receipt system — and `seen_at` is
+  never shown to the sender.
+- **Unseen sends group at the top of the list**, ordered by
+  `rankFeedItems` cookability *within the group*; below them the list
+  continues in its ordinary ranked order, proof cards and already-seen
+  sends interleaved as usual. The band is not a section: no header, no
+  divider, no "NIEUW" label. Unseen is binary and clears permanently on
+  viewing, so it is not a freshness gradient and there is no loop to run.
+- **The entrance motion is the only announcement**: unseen cards fade and
+  rise on first render — `opacity` 0→1, `translateY` 8→0,
+  `durationNormal`, `easingDecelerate` — staggered 40ms per card and
+  capped at four. Kiezen's reveal at a humbler duration. Reduced motion:
+  everything lands instantly, no stagger.
+
 **PD-007a — the collision label**: a recipe colliding with a household
 restriction is ranked to the bottom AND labelled, never hidden. On the
 card that's a small chip, `warningMuted` fill with `warning` `caption`
@@ -530,10 +590,27 @@ never "checked and clean", which is why the recipe screen also carries a
 permanent `caption` caveat that a shared recipe's tags come from whoever
 shared it.
 
-**Card colour discipline**: no `positive` anywhere. A friend's 8,5/10 is an
-opinion, not a completion, so it sets as a plain mono numeral beside the
-cook time. `accent` stays absent too — nothing on this screen is the
-moment a choice gets made.
+**Card colour discipline**: no `positive` anywhere, with exactly one
+exception, below. A friend's 8,5/10 is an opinion, not a completion, so it
+sets as a plain mono numeral beside the cook time. `accent` stays absent
+too — nothing on this screen is the moment a choice gets made.
+
+**PD-020.2 — the exception: the closed-loop card.** When an opted-in
+friend's cook event matches a recipe you sent her, that proof card dresses
+as the closed loop, and it is the only place `positive` may appear on this
+surface. The eyebrow reads `SANNE MAAKTE JOUW RECEPT` in place of `SANNE
+MAAKTE DIT`; a chip sits with the dish, `positiveMuted` fill with
+`positive` `caption` text reading exactly `gemaakt`; and once the entrance
+settles, a hairline `positive` stroke draws under the dish name (`scaleX`
+0→1, transform-origin left, `durationFast`, `easingDecelerate`) — the
+completion mirror of Kiezen's `accent` stroke: blue when you choose, green
+when what you sent got cooked. One success haptic, at most once per tab
+open. Reduced motion: chip and stroke appear instantly and the haptic
+stays, because a haptic is feedback rather than motion. **The dress is
+read once** — on the next visit the card reverts to an ordinary proof card
+in ranked order. Nothing else here is ever green, and nothing accumulates:
+no trophy shelf, no "door 3 vrienden gemaakt" counter. The moment a send
+earns a persistent number, people start cooking for the number.
 
 **Empty state** (the common first run — sharing needs two households):
 `title2` "Nog niets gedeeld", `bodySmall` "Stuurt iemand je een recept,
@@ -576,7 +653,7 @@ applies to this surface too.
 │ ┌─────────────────────────────────┐│
 │ │┌────┐ GEDEELD DOOR JORIS        ││
 │ ││ P  │ Romige pasta pesto        ││ monogram fallback
-│ │└────┘ 20 min  ·  4/5            ││
+│ │└────┘ 20 min  ·  8,0/10         ││
 │ │       [bevat noten]             ││ warningMuted + warning
 │ └─────────────────────────────────┘│
 │    Dat is alles wat er gedeeld is. │ caption, centered
@@ -585,19 +662,38 @@ applies to this surface too.
 
 ---
 
-## 9. Ranglijst — the global board
+## 9. Trending — best-rated, at two scopes
 
-**Purpose**: PD-014's fourth surface. One ordered board of canonical
-recipes, ranked by what every household that cooked them thought. Not
-personalised, not a feed, identical for every reader.
+**Purpose**: PD-014's fourth surface. Ordered boards of canonical recipes,
+ranked by what the people who cooked them thought. The `Iedereen` scope is
+not personalised, not a feed, and identical for every reader.
 
-**The tab reads "Ranglijst"; the header reads "Best beoordeeld".** The one
+**It answers one question at two scopes.** `Iedereen` | `Vrienden`, a
+`SegmentedControl` in the header, defaulting to `Iedereen` and never
+persisted. De kring (PD-018) is the `Vrienden` scope; it moved here from
+§8 because the two lists ask the same question — "wat is hier echt goed" —
+of two different populations, which is what a scope selector is for,
+whereas the pair it used to sit in on Vrienden asked two different
+questions. The rankings stay separate modules and separate lists:
+`rankRecipes` with its prior, shrinkage and vote floor for `Iedereen`,
+`rankKring` with plain averages and named voters for `Vrienden`. **Neither
+list is ever padded, backfilled or topped up from the other** — a thin
+kring stays visibly thin (DESIGN-SOCIAL.md §2.2), and blending in
+strangers' rows to fill it would rebuild the refused "Ontdekken" surface
+out of spare parts. One consequence worth expecting: because only
+`Iedereen` has a floor, it can be empty while `Vrienden` is full.
+
+**The tab reads "Trending"; the header reads "Trending recipes".** The one
 place in the app where a tab label and its header differ, and the reason is
 mechanical: the tab label shares a monospace `caption` line with three
-other words and the header does not fit it.
+other words and the longer form does not fit it. The route segment is
+still `/ranglijst` — not user-facing, and renaming a route breaks deep
+links and history entries for a word nobody sees.
 
-**Layout**: header `title2` "Best beoordeeld" over a `bodySmall`/`textMuted`
-line, "Wat over alle keukens heen het hoogst scoort." Below it, a
+**Layout**: header `title2` "Trending recipes" over the scope
+`SegmentedControl` and a `bodySmall`/`textMuted` line — "Wat over alle
+keukens heen het hoogst scoort." for `Iedereen`, "Wat de mensen die je
+kent het hoogst beoordelen." for `Vrienden`. Below it, a
 single-column list of rows, `space3` apart, each a `surface` panel with a
 `border` hairline and `radiusSm` — the same proof-sheet strip as §8, so the
 two list surfaces read as siblings rather than as two different products.
@@ -647,7 +743,7 @@ something is new is a feed wearing a ranking's clothes.
 **Tapping a row opens the recipe**, which can be saved and scheduled from
 there. That is condition 4 of PD-014 and it is what keeps this surface
 measurable on save-to-cook: a row that led only to more browsing would make
-Ranglijst the thing PD-004 exists to prevent.
+Trending the thing PD-004 exists to prevent.
 
 **PD-007a — the collision label, and the one way it differs from §8.**
 A colliding recipe is **labelled but not ranked down here**, which is the
@@ -674,6 +770,137 @@ verdict that `average: null` makes in the domain.
 
 ---
 
+## 10. Hoe was het? — the rating slider
+
+**Purpose**: PD-008/PD-008a's outcome question, and the only control in the
+app that takes a *number* from a person. It is not a screen. It renders
+inside `OutcomeCard` — the "Gemaakt?" → "Hoe was het?" card — on PD-003's
+two earned surfaces and nowhere else: the last step of Kookmodus (§6), and
+the next app open after an accepted decision with no recorded outcome
+(Kiezen, §1). Never pushed, never a destination, dismissible at any time
+via the `×`.
+
+**The scale**: the Dutch report card, 1,0–10,0, to one decimal — 91
+expressible grades. "Een 7,5" is how people here already say whether
+something was any good, so it needs no legend, where "4 out of 5" is a
+rating-site convention borrowed from English apps. Every bound lives in
+`src/domain/rating.ts` (`RATING_MIN`, `RATING_MAX`, `RATING_STEP`,
+`RATING_DECIMALS`); no screen writes a bound down, which is why the move
+off the old five-point scale cost one file plus one CHECK constraint.
+Grades are written through `formatGrade` — comma, never a point, trailing
+zero kept ("8,0", never "8"), because a decimal point reads here as a typo
+or a thousands separator and a column of grades must hold one width.
+
+**Why a slider, and why nothing on it is a glyph.** PD-008 specified
+"numbered mono chips, not stars", and on a five-point scale that was
+right. Ninety-one grades cannot be chips, and even a whole-numbers row of
+ten needs about 440pt at the 44pt touch minimum — wider than a phone. What
+PD-008 actually objected to was borrowed rating-site idiom, and that
+survives intact: a star row is still out under the global icon rule, and
+this control renders no glyph at all. The grade sets large in
+`timerDisplay` mono above the track, the same treatment Kookmodus gives
+its timer, because anything measured in this product reads as timecode
+burned into the frame.
+
+**Layout**: the grade centered in `timerDisplay`; below it a 4pt
+`surfaceSunken` track at `radiusFull`, its filled portion `accent`, with a
+28pt `radiusFull` thumb in `accent` ringed 2pt in `surface`. The touch
+area around the track clears `spacing.touchTargetMin` on its own, so the
+thumb never has to be the target, and a tap anywhere on the track jumps
+there rather than making the finger find a 28pt disc first. Under it the
+anchor row, `caption`/`textMuted`, in consequence terms rather than taste
+terms: `Nooit meer` left, `Graag weer` right. Then the way out, a
+full-width secondary `Klaar`.
+
+**It does not open pre-filled.** The thumb rests mid-track and the numeral
+shows an en dash, `–`, in `textMuted` until first touch. A slider sitting
+on 5,5 with "5,5" above it has already put an opinion in the cook's mouth
+that they would then have to correct, which is the nag PD-008 forbids in a
+quieter voice. Every other resting place argues too: hard left reads as a
+1,0 already given, hard right as a 10,0. Mid-track plus an en dash reads
+as "nothing chosen yet", which is what is true.
+
+**One gesture, and skipping costs exactly one tap.** The grade commits on
+release — drag and let go — with no confirm step, because a confirm would
+make rating cost double what walking away costs, which is precisely the
+thumb on the scale PD-008 forbids. The exit is labelled `Klaar` and
+deliberately not "Sla over" or "Nee, dank je": the outcome is already
+fully recorded on the card above, and calling this a skip would imply
+something was left unfinished. It is a secondary button, not a tertiary
+link — the way out has to look like a real button beside a real question,
+not like something one hopes will go unnoticed.
+
+**Motion**: the thumb scales to 1.15 while a finger is on it
+(`durationFast`, `easingStandard`) — the press feedback `Chip` gives, in
+the one form a slider can. On commit the card holds for `durationNormal`,
+long enough that the chosen grade is genuinely seen and short enough that
+it never reads as a loading state, then leaves at
+`durationFast`/`easingAccelerate`. Reduced motion: both legs collapse to
+zero and the card cuts away rather than merely leaving faster.
+
+**Accessibility**: `accessibilityRole="adjustable"`, labelled "Hoe was
+het, optioneel" — "optioneel" arrives *before* the first number rather
+than after the last, so a screen-reader user knows they may leave before
+working through the scale, not after. `accessibilityValue` carries min,
+max, the current grade and the text "7,5 van 10". **Increments are half a
+grade, not `RATING_STEP`**: ninety swipes to cross the scale is a
+technically-conformant control rather than an accessible one, and eighteen
+lands on the grades people actually give. The cost is that a 7,3 is
+reachable by touch and not by swiping; if that ever matters to a real
+user, the fix is a way to type the grade, not a finer increment. The big
+numeral and the anchor row are both hidden from assistive tech, because
+the slider already reports the grade and the scale's meaning, and saying
+either twice is how a screen reader turns one number into two. The card
+morphs in place and then dismisses itself, so there is no confirmation
+surface a reader would land on: commit fires an
+`announceForAccessibility` stating what was recorded *and what it means* —
+"7,5 van 10. Dit gerecht komt vaker terug." / "… komt minder vaak terug."
+/ "… Genoteerd." for the middle band. That clause is read off
+`toRepeatSignal` and never re-derived from the thresholds, so a shrug is
+never announced as enthusiasm.
+
+**The middle band produces no signal, and the copy never pretends
+otherwise.** A grade at or below 4 is a genuine "not again" and a grade at
+or above 8 is properly good; between them the scale records the number and
+scores nothing at all, exactly as an unanswered question would. That is
+the whole reason the scale has a middle, and it is why the middle band's
+announcement promises nothing.
+
+**States**: the control freezes the moment a grade commits, so a second
+gesture during the exit beat cannot quietly record a different one. A
+failed write renders under the card in `bodySmall`/`danger` and the card
+stays put. An untouched control has no error state, because leaving
+without answering is a complete, permitted end — never a validation
+failure.
+
+**Where it appears, and where it deliberately does not.** `OutcomeCard`
+only. There is no public-vote control anywhere in the app yet: the
+`recipe_ratings` vote that Trending's two scopes (§9) rank on is a
+different act on a different object (PD-019), and it has a repository
+seam, `rateRecipe`, with no screen behind it. When it does get one it uses
+this same scale, because `rating.ts` owns the scale for both instruments —
+but nothing here should be reused as though a private grade and a public
+vote were one control.
+
+```
+┌───────────────────────────────────┐
+│                                 ×  │
+│           Gemaakt!                 │ title1
+│           Hoe was het?             │ body, textSecondary
+│                                     │
+│              7,5                   │ timerDisplay · mono
+│  ──────────────●──────────────     │ accent fill · surfaceSunken track
+│  Nooit meer          Graag weer    │ caption, textMuted
+│ ┌─────────────────────────────────┐│
+│ │             Klaar               ││ secondary
+│ └─────────────────────────────────┘│
+└───────────────────────────────────┘
+
+untouched:      –        thumb mid-track, track in border, not accent
+```
+
+---
+
 ## Scope note: what's no longer part of this document
 
 The old Rotation Seeding onboarding (quick-pick grid of 10–15 meals) is
@@ -682,6 +909,6 @@ setup (members, dislikes, time budget) and PD-006's household-level
 allergen *restriction* entry (distinct from a meal's own allergen *tags*,
 which now happen per-recipe on Bevestigen, §4, replacing the old seed-time
 batch-tagging screen entirely) still need to live somewhere — as a
-lightweight settings surface reachable from Bibliotheek, not a gating
+lightweight settings surface reachable from Mijn recepten, not a gating
 wizard. That surface isn't one of the seven screens in the brief, so its
 layout isn't specced here; keep it out of the way of both tabs' first run.
