@@ -22,6 +22,20 @@ describe('isDisplayOnlyPlatform', () => {
   test('tiktok is not display-only — its oEmbed is public and extraction is unaffected', () => {
     expect(isDisplayOnlyPlatform('tiktok')).toBe(false);
   });
+
+  /**
+   * SRC-02/SRC-03. YouTube's oEmbed endpoint carries the same
+   * embedding-only restriction Instagram's does — but this pipeline is not
+   * meant to read YouTube via oEmbed. The YouTube Data API's
+   * `videos.list` (part=snippet) is a separate, documented endpoint that
+   * explicitly licenses reading a video's title/description for uses
+   * beyond embedding, so YouTube gets full extraction, not display_only.
+   * See displayOnlyPolicy.ts's file header for the full comparison across
+   * all three platforms.
+   */
+  test('youtube is not display-only — the Data API (a different endpoint than oEmbed) licenses full extraction', () => {
+    expect(isDisplayOnlyPlatform('youtube')).toBe(false);
+  });
 });
 
 describe('buildDisplayOnlyResult', () => {

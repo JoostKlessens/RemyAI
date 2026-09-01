@@ -32,7 +32,23 @@ import type { OembedErrorReason } from '../../lib/oembed';
 import type { ImportAttribution, ImportPlatform, ImportResult } from './types';
 import { validateParsedRecipe } from './validateParsed';
 
-const PLATFORMS: ReadonlySet<string> = new Set<ImportPlatform>(['tiktok', 'instagram']);
+/**
+ * Must stay in lockstep with `ImportPlatform` (types.ts) and with
+ * urlParsing.ts's own host-recognition Sets — this is the CLIENT-side
+ * mirror of "which platform values are real," so a value this Set doesn't
+ * recognise fails the whole result rather than passing a client/function
+ * version-skew platform through untyped. SRC-02/SRC-03 add `'youtube'`
+ * here in the same commit that adds it to `ImportPlatform` and to
+ * urlParsing.ts's `YOUTUBE_HOSTS`/`YOUTUBE_SHORT_LINK_HOSTS`, for the same
+ * reason those two must not drift apart from each other either.
+ *
+ * (canonicalRecipe.ts, elsewhere in this directory, keeps a THIRD,
+ * independent copy of this same vocabulary — `isImportPlatform` — for the
+ * canonical-recipe cache row shape. That module is outside this change's
+ * scope; whoever wires up YouTube's actual extraction pipeline needs to
+ * widen that guard too before a YouTube import can be cached.)
+ */
+const PLATFORMS: ReadonlySet<string> = new Set<ImportPlatform>(['tiktok', 'instagram', 'youtube']);
 
 const OEMBED_ERROR_REASONS: ReadonlySet<string> = new Set<OembedErrorReason>([
   'invalid_url',
@@ -162,6 +178,28 @@ function parseDisplayOnlyVariant(raw: Record<string, unknown>): ImportResult | n
   };
 }
 
+/**
+ * IMP-02. Unlike `parsed` (where an absent `attribution` is a real,
+ * renderable "this response cannot tell me the creator" — see
+ * `parseParsedVariant`'s own comment on that asymmetry), attribution is
+ * REQUIRED here, exactly as strictly as on `display_only`: the function
+ * only ever constructs this variant after oEmbed has already resolved, so
+ * there is no legitimate "not fetched yet" reading of an absent
+ * attribution — only client/function version skew, which this file's own
+ * header says is worth failing the whole result over, not papering over.
+ */
+function parseNoRecipeInCaptionVariant(raw: Record<string, unknown>): ImportResult | null {
+  const caption = readNullableString(raw.caption);
+  if (!caption.ok) {
+    return null;
+  }
+  const attribution = readAttribution(raw.attribution);
+  if (!attribution.ok || attribution.value === undefined) {
+    return null;
+  }
+  return { kind: 'no_recipe_in_caption', caption: caption.value, attribution: attribution.value };
+}
+
 /** The single entry point: takes the parsed JSON body of a parse-recipe response and narrows it, or returns null. */
 export function parseImportResult(raw: unknown): ImportResult | null {
   if (!isRecord(raw) || typeof raw.kind !== 'string') {
@@ -173,10 +211,8 @@ export function parseImportResult(raw: unknown): ImportResult | null {
       return parseParsedVariant(raw);
     case 'display_only':
       return parseDisplayOnlyVariant(raw);
-    case 'no_recipe_in_caption': {
-      const caption = readNullableString(raw.caption);
-      return caption.ok ? { kind: 'no_recipe_in_caption', caption: caption.value } : null;
-    }
+    case 'no_recipe_in_caption':
+      return parseNoRecipeInCaptionVariant(raw);
     case 'oembed_failed':
       return typeof raw.reason === 'string' && OEMBED_ERROR_REASONS.has(raw.reason)
         ? { kind: 'oembed_failed', reason: raw.reason as OembedErrorReason }

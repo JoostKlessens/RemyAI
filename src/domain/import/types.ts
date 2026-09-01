@@ -38,8 +38,22 @@ import type { OembedErrorReason } from '../../lib/oembed';
  * this module should not depend on feed/types.ts's lifetime. One-line
  * duplication is cheaper than a cross-feature coupling to code that may
  * not exist much longer.
+ *
+ * SRC-02/SRC-03 add `'youtube'`. Unlike Instagram (PD-011, licensed for
+ * embedding only), the YouTube Data API's `videos.list` endpoint is
+ * documented and intended for reading a video's `snippet` (title,
+ * description) for uses beyond mere embedding — so YouTube gets full
+ * extraction, not `display_only`; see displayOnlyPolicy.ts's header for
+ * the licensing comparison across all three platforms now. This union is
+ * widened here ONLY — this change is the URL-recognition/typing layer,
+ * not the Data API call itself. Nothing in this file, urlParsing.ts,
+ * parseImportResult.ts or displayOnlyPolicy.ts makes a network request for
+ * YouTube; supabase/functions/parse-recipe/index.ts still needs a real
+ * YouTube resolver (a Data API call, replacing/supplementing
+ * `resolveOembedFor`) wired in before a pasted YouTube link can produce
+ * anything but an honest "we don't know how to fetch this yet" failure.
  */
-export type ImportPlatform = 'tiktok' | 'instagram';
+export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube';
 
 export interface ParsedIngredient {
   readonly name: string;
@@ -232,8 +246,28 @@ export type ImportResult =
    * when there was no caption/title text at all, in which case the LLM
    * was never even called — see the edge function) so the UI can, if it
    * chooses, show the user what we actually read.
+   *
+   * IMP-02. `attribution` is REQUIRED here, unlike `parsed`'s optional
+   * field. `parsed`'s optionality exists purely as fixture backward-
+   * compatibility (see its own doc comment) — the real edge function
+   * always populates it. This variant has no equivalent excuse: index.ts
+   * only ever constructs it AFTER `resolveOembedFor` has already resolved
+   * successfully (both the "caption was empty, the model was never
+   * called" short-circuit and the model's own explicit "no recipe here"
+   * answer happen strictly after that call), so an `OembedPayload` — and
+   * therefore an attribution built from it — is always genuinely in hand
+   * by the time either `return` in the pipeline reaches this variant.
+   * Making the field required says that plainly, rather than leaving a
+   * caller to wonder whether an absent attribution here would mean "not
+   * available" or "not populated yet."
+   *
+   * This closes the gap src/lib/importRecipe.ts's file header used to
+   * document: a user who fell back to manual entry from this variant used
+   * to reach the confirmation screen with no creator attached, even
+   * though the function had already resolved one via oEmbed to build its
+   * extraction prompt.
    */
-  | { readonly kind: 'no_recipe_in_caption'; readonly caption: string | null }
+  | { readonly kind: 'no_recipe_in_caption'; readonly caption: string | null; readonly attribution: ImportAttribution }
   /** The pasted text isn't a recognizable TikTok/Instagram post URL at all — see urlParsing.ts. Rejected before any network call. */
   | { readonly kind: 'unsupported_url' }
   /** oEmbed itself failed (404, rate limited, missing Instagram credentials, ...) — reason carried through verbatim from src/lib/oembed.ts's own typed failure vocabulary, so the UI can reuse its copy/recovery mapping. */

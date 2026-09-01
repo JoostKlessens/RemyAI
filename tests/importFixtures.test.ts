@@ -54,6 +54,23 @@ describe('buildFixtureImportAttempt', () => {
     }
   });
 
+  /**
+   * IMP-02. Before this, `result` itself carried no attribution at all on
+   * this scenario — only the sidecar fields did, which made the __DEV__
+   * demo look right while hiding the real gap the backend had. This
+   * asserts the fixture's `result.attribution` matches its own sidecars,
+   * not just that a sidecar happens to be present.
+   */
+  test('"no_recipe_in_caption" carries a real attribution on result itself, matching its sidecars', () => {
+    const attempt = buildFixtureImportAttempt('no_recipe_in_caption', 'tiktok', 'https://www.tiktok.com/@x/video/geen-recept');
+    if (attempt.result.kind === 'no_recipe_in_caption') {
+      expect(attempt.result.attribution.authorName).toBe(attempt.authorName);
+      expect(attempt.result.attribution.thumbnailUrl).toBe(attempt.thumbnailUrl);
+    } else {
+      throw new Error('expected no_recipe_in_caption');
+    }
+  });
+
   test('"oembed_failed" never carries an author — oEmbed itself never succeeded', () => {
     const attempt = buildFixtureImportAttempt('oembed_failed', 'instagram', 'https://www.instagram.com/reel/2');
     expect(attempt.result.kind).toBe('oembed_failed');

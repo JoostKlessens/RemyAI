@@ -332,8 +332,21 @@ describe('parseStoredRecipe — any structural doubt degrades to a cache miss', 
   });
 
   test('returns null for a platform outside the import vocabulary', () => {
+    // 'reels' is the social layer's meal_source_platform vocabulary, not the
+    // importer's — a stored row carrying it is a row written by the wrong
+    // writer, which is exactly what this guard exists to catch.
     expect(parseStoredRecipe(makeStoredRow({ platform: 'reels' }))).toBeNull();
-    expect(parseStoredRecipe(makeStoredRow({ platform: 'youtube' }))).toBeNull();
+    // Deliberately NOT 'youtube', which this test used to assert against:
+    // youtube joined ImportPlatform when YouTube URLs became importable, so
+    // it now belongs in the accepted case below. These two are the platforms
+    // a stored row could plausibly name that we still do not import.
+    expect(parseStoredRecipe(makeStoredRow({ platform: 'pinterest' }))).toBeNull();
+    expect(parseStoredRecipe(makeStoredRow({ platform: 'facebook' }))).toBeNull();
+  });
+
+  test('accepts youtube, now that it is part of the import vocabulary', () => {
+    const result = parseStoredRecipe(makeStoredRow({ platform: 'youtube' }));
+    expect(result?.kind === 'parsed' && result.platform).toBe('youtube');
   });
 
   test('returns null when the title is missing or blank', () => {

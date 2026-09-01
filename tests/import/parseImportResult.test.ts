@@ -93,7 +93,13 @@ describe('parseImportResult — parsed', () => {
   });
 
   test('rejects a parsed result with an unknown platform', () => {
-    expect(parseImportResult(parsedResponse({ platform: 'youtube' }))).toBeNull();
+    expect(parseImportResult(parsedResponse({ platform: 'pinterest' }))).toBeNull();
+  });
+
+  /** SRC-02/SRC-03: youtube joined the vocabulary — parseImportResult.ts's PLATFORMS Set must stay in sync with ImportPlatform (types.ts) and urlParsing.ts's host recognition. */
+  test('accepts a parsed result for the youtube platform', () => {
+    const result = parseImportResult(parsedResponse({ platform: 'youtube', sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }));
+    expect(result?.kind === 'parsed' && result.platform).toBe('youtube');
   });
 
   test('rejects a parsed result with a blank sourceUrl', () => {
@@ -110,25 +116,64 @@ describe('parseImportResult — parsed', () => {
   });
 });
 
-describe('parseImportResult — failure variants', () => {
-  test('accepts no_recipe_in_caption with a caption', () => {
-    expect(parseImportResult({ kind: 'no_recipe_in_caption', caption: 'POV: zondagavond' })).toEqual({
+describe('parseImportResult — no_recipe_in_caption (IMP-02: attribution required)', () => {
+  function noRecipeResponse(overrides: Record<string, unknown> = {}): unknown {
+    return {
       kind: 'no_recipe_in_caption',
       caption: 'POV: zondagavond',
+      attribution: VALID_ATTRIBUTION,
+      ...overrides,
+    };
+  }
+
+  test('accepts no_recipe_in_caption with a caption and an attribution', () => {
+    expect(parseImportResult(noRecipeResponse())).toEqual({
+      kind: 'no_recipe_in_caption',
+      caption: 'POV: zondagavond',
+      attribution: VALID_ATTRIBUTION,
     });
   });
 
-  test('accepts no_recipe_in_caption with a null caption', () => {
-    expect(parseImportResult({ kind: 'no_recipe_in_caption', caption: null })).toEqual({
+  test('accepts a null caption alongside a real attribution — oEmbed can succeed with no title at all', () => {
+    expect(parseImportResult(noRecipeResponse({ caption: null }))).toEqual({
       kind: 'no_recipe_in_caption',
       caption: null,
+      attribution: VALID_ATTRIBUTION,
     });
   });
 
   test('rejects no_recipe_in_caption whose caption is not a string', () => {
-    expect(parseImportResult({ kind: 'no_recipe_in_caption', caption: 12 })).toBeNull();
+    expect(parseImportResult(noRecipeResponse({ caption: 12 }))).toBeNull();
   });
 
+  test('accepts an attribution whose fields are all null — a creator we cannot name is a real state', () => {
+    const result = parseImportResult(
+      noRecipeResponse({ attribution: { authorName: null, authorUrl: null, thumbnailUrl: null } }),
+    );
+    expect(result).toMatchObject({ attribution: { authorName: null, authorUrl: null, thumbnailUrl: null } });
+  });
+
+  /**
+   * Unlike `parsed`, attribution is REQUIRED here: the function only ever
+   * constructs this variant after oEmbed has already resolved, so there is
+   * no legitimate "not fetched yet" reading of an absent attribution —
+   * only client/function version skew, which the file header's own note on
+   * malformed attribution says is worth failing the whole result over.
+   */
+  test('rejects no_recipe_in_caption with no attribution at all', () => {
+    const response = noRecipeResponse() as Record<string, unknown>;
+    delete response.attribution;
+    expect(parseImportResult(response)).toBeNull();
+    expect(parseImportResult(noRecipeResponse({ attribution: null }))).toBeNull();
+  });
+
+  test('rejects no_recipe_in_caption whose attribution is malformed rather than dropping the creator', () => {
+    expect(parseImportResult(noRecipeResponse({ attribution: { authorName: 42 } }))).toBeNull();
+    expect(parseImportResult(noRecipeResponse({ attribution: 'kokenmetkees' }))).toBeNull();
+  });
+});
+
+describe('parseImportResult — failure variants', () => {
   test('accepts oembed_failed for every reason in the vocabulary', () => {
     for (const reason of ['invalid_url', 'missing_credentials', 'not_found', 'rate_limited', 'unknown_error']) {
       expect(parseImportResult({ kind: 'oembed_failed', reason })).toEqual({ kind: 'oembed_failed', reason });
@@ -193,7 +238,7 @@ describe('parseImportResult — display_only', () => {
   });
 
   test('rejects a display_only result with an unknown platform or a blank sourceUrl', () => {
-    expect(parseImportResult(displayOnlyResponse({ platform: 'youtube' }))).toBeNull();
+    expect(parseImportResult(displayOnlyResponse({ platform: 'pinterest' }))).toBeNull();
     expect(parseImportResult(displayOnlyResponse({ sourceUrl: '   ' }))).toBeNull();
   });
 

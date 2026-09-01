@@ -14,32 +14,41 @@
  * screens changes.
  *
  * `authorName`/`thumbnailUrl` are carried as sidecars alongside
- * `ImportResult`, mostly: the real edge function's HTTP response is
- * `ImportResult` exactly, and every non-`parsed`, non-`display_only`
- * variant has no creator/attribution field at all (oEmbed's authorName is
- * consumed server-side only, to build the extraction prompt — see
- * buildExtractionRequest.ts).
- * A real client wiring would get both the same way this fixture models
- * them: from its own oEmbed-shaped resolution step, independent of the
- * parse-recipe call — see src/components/creatorFromAttribution.ts for
+ * `ImportResult`, always: the real edge function's HTTP response is
+ * `ImportResult` exactly, and `unsupported_url`, `oembed_failed`,
+ * `llm_request_failed` and `parse_failed` have no creator/attribution
+ * field at all — oEmbed's authorName either was never fetched
+ * (`unsupported_url`), the fetch itself is what failed (`oembed_failed`),
+ * or (a real, currently out-of-scope gap — see src/lib/importRecipe.ts's
+ * file header) the function has one in hand by the time it returns
+ * `llm_request_failed`/`parse_failed` but does not yet send it.
+ * A real client wiring would get the sidecars the same way this fixture
+ * models them: from its own oEmbed-shaped resolution step, independent of
+ * the parse-recipe call — see src/components/creatorFromAttribution.ts for
  * where `authorName` is used. Both are only ever non-null once (simulated)
  * oEmbed succeeded, matching supabase/functions/parse-recipe/index.ts's
  * real ordering (oEmbed resolves before the LLM is ever called) —
  * `unsupported_url` and `oembed_failed` never carry either.
  *
- * `display_only` (PD-011) is the second exception, and a stricter one: it
- * REQUIRES an attribution, because showing an Instagram post we may not
- * extract from is only defensible while its creator's name travels with
- * it. Its fixture carries no caption anywhere, matching the real function.
- *
- * The `parsed` variant is the first exception: `ImportResult.parsed`
- * DOES carry an `attribution?: ImportAttribution` field (src/domain/
- * import/types.ts), and that field's own doc comment says a future
- * `_fixtures.ts` update should populate it for real rather than leaving it
- * `undefined` — this is that update. `authorName`/`thumbnailUrl` stay
- * available as sidecars too (paste.tsx already reads them uniformly across
- * every scenario, success or failure), so nothing downstream needs two
- * different code paths for "where did this come from."
+ * THREE VARIANTS ARE THE EXCEPTION, AND THIS FIXTURE MUST MATCH THE REAL
+ * FUNCTION ON EACH, NOT JUST SUPPLY A SIDECAR THAT LOOKS RIGHT ON THE
+ * SCREEN. `ImportResult.parsed` carries an `attribution?: ImportAttribution`
+ * field (optional, for the fixture-compat reason documented on the field
+ * itself); `display_only` (PD-011) carries a REQUIRED one, because showing
+ * an Instagram post we may not extract from is only defensible while its
+ * creator's name travels with it; and `no_recipe_in_caption` (IMP-02) now
+ * carries a REQUIRED one too, because the real function only ever
+ * constructs that variant after oEmbed has already resolved, so it always
+ * has an attribution in hand. This fixture used to fake the *sidecar*
+ * `authorName` on `no_recipe_in_caption` while leaving `result` itself with
+ * no attribution at all — which happened to make the confirm screen look
+ * right in the __DEV__ demo while silently hiding the real gap the real
+ * backend had (a manual-entry fallback from that variant reaching the
+ * confirm screen with no creator, closed by IMP-02). All three now build
+ * their `attribution` object from the SAME `authorName`/`thumbnailUrl`
+ * local variables the sidecar fields use, so the two can no longer drift:
+ * "what this fixture returns" and "what it claims the response contained"
+ * are the same values, not independently-plausible guesses.
  */
 
 import type { ImportAttribution, ImportPlatform, ImportResult, ParsedRecipe } from '@/domain/import/types';
@@ -94,6 +103,12 @@ const SAMPLE_CAPTION_WITHOUT_RECIPE = 'POV: zondagavond eten bij oma 🍝✨ dit
 const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
   tiktok: 'kokenmetkees',
   instagram: 'plantaardigpauline',
+  // Present so this exhaustive record compiles, not because a YouTube
+  // fixture is reachable: the edge function has no YouTube fetch path yet,
+  // so nothing produces a YouTube ImportResult to demo. Written as a
+  // channel name rather than an @handle because that is what the Data
+  // API's `snippet.channelTitle` actually returns.
+  youtube: 'De Kookkanaal',
 };
 
 /**
@@ -109,6 +124,11 @@ const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
 const SAMPLE_THUMBNAIL_BY_PLATFORM: Readonly<Record<ImportPlatform, string | null>> = {
   tiktok: 'https://p16-sign.tiktokcdn.com/traybake-kip-citroen~tplv-thumb.jpg',
   instagram: null,
+  // Unreachable for the same reason as the author name above. Given a
+  // thumbnail rather than null because YouTube's API always returns one —
+  // if this fixture ever does become reachable, the honest default is the
+  // common case, not the fallback-demoing exception Instagram carries.
+  youtube: 'https://i.ytimg.com/vi/fixture-video-id/hqdefault.jpg',
 };
 
 /**
@@ -200,12 +220,22 @@ export function buildFixtureImportAttempt(
         thumbnailUrl: SAMPLE_DISPLAY_ONLY_THUMBNAIL,
       };
     }
-    case 'no_recipe_in_caption':
+    /**
+     * IMP-02. The real function reaches this after a successful oEmbed
+     * call, exactly like `display_only` above and `parsed` before it, so
+     * this fixture's `result` now carries the same `attribution` object
+     * its own `authorName`/`thumbnailUrl` sidecars already implied — see
+     * the file header on why building both from the same local variables
+     * is the point, not a redundancy.
+     */
+    case 'no_recipe_in_caption': {
+      const attribution: ImportAttribution = { authorName, authorUrl: buildAuthorUrl(platform, authorName), thumbnailUrl };
       return {
-        result: { kind: 'no_recipe_in_caption', caption: SAMPLE_CAPTION_WITHOUT_RECIPE },
+        result: { kind: 'no_recipe_in_caption', caption: SAMPLE_CAPTION_WITHOUT_RECIPE, attribution },
         authorName,
         thumbnailUrl,
       };
+    }
     case 'oembed_failed':
       return {
         result: { kind: 'oembed_failed', reason: platform === 'instagram' ? 'missing_credentials' : 'not_found' },

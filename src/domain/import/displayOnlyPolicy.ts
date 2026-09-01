@@ -20,9 +20,34 @@
  *
  * TikTok is untouched by any of this: its oEmbed is publicly documented
  * with no equivalent restriction, and full caption extraction continues
- * exactly as before. This module is the single place where that difference
- * is decided, so "which platforms may we extract from" is one function to
- * read rather than a condition scattered across the pipeline.
+ * exactly as before.
+ *
+ * YOUTUBE (SRC-02/SRC-03) IS THE THIRD PLATFORM, AND IT IS NOT DISPLAY-ONLY
+ * EITHER — but for a different reason than TikTok's "no restriction exists
+ * at all." YouTube's oEmbed endpoint (`youtube.com/oembed`) carries the
+ * same embedding-only restriction Instagram's does, and extracting from
+ * ITS response would be exactly the prohibited use PD-011 rules out for
+ * Instagram. The reason YouTube still gets full extraction is that this
+ * pipeline is not meant to read YouTube via oEmbed at all: the YouTube
+ * Data API's `videos.list` endpoint (`part=snippet`), a SEPARATE,
+ * documented API, is explicitly licensed for reading a video's title and
+ * description for purposes beyond embedding — the same class of use
+ * Meta's oEmbed endpoint forbids. So "does this platform license
+ * extraction" still resolves per-platform, exactly as it does for
+ * Instagram; YouTube's answer is just "yes, through a different endpoint
+ * than the one that says no." `isDisplayOnlyPlatform` below is written
+ * against that conclusion, not against "every platform besides Instagram
+ * defaults to yes" — see its own doc comment.
+ *
+ * NOTHING IN THIS FILE CALLS THE YOUTUBE DATA API. That call, and the
+ * client that makes it, do not exist yet — see `ImportPlatform`'s doc
+ * comment in types.ts and this repo's SRC-02/SRC-03 scope note. Until it
+ * is built, a YouTube URL normalizes and reaches this policy correctly,
+ * but the edge function still has no way to actually fetch it.
+ *
+ * This module is the single place where the per-platform extraction
+ * decision is made, so "which platforms may we extract from" is one
+ * function to read rather than a condition scattered across the pipeline.
  *
  * WHY THIS IS A DOMAIN MODULE RATHER THAN AN `if` IN THE EDGE FUNCTION.
  * supabase/functions/parse-recipe/index.ts is Deno code, deliberately
@@ -42,11 +67,25 @@ import type { ImportPlatform, ImportResult } from './types';
 export type DisplayOnlyImportResult = Extract<ImportResult, { readonly kind: 'display_only' }>;
 
 /**
- * A plain comparison, not a configurable set: there are exactly two
- * platforms, and the answer for each follows from a specific published
- * policy rather than from a preference someone might want to tune. A config
- * flag would invite switching Instagram extraction back on without the
- * approval PD-011 describes — the one change this must not make easy.
+ * A plain comparison, not a configurable set: there are three platforms,
+ * and the answer for each follows from a specific published policy rather
+ * than from a preference someone might want to tune. A config flag would
+ * invite switching Instagram extraction back on without the approval
+ * PD-011 describes — the one change this must not make easy.
+ *
+ * Written as `platform === 'instagram'` rather than `platform !==
+ * 'tiktok'` on purpose. The latter reads as "display-only is the default,
+ * and TikTok is the one carve-out" — which happens to give YouTube the
+ * right answer today (`false`, full extraction) but for the wrong reason:
+ * it would do so by accident, because YouTube isn't TikTok, not because
+ * anyone confirmed the Data API licenses it. The next platform added here
+ * should have to be looked at and explicitly decided, not silently
+ * inherit "not display-only" by failing to match a growing exclusion list.
+ * `platform === 'instagram'` names the one platform this policy actually
+ * restricts, so a fourth platform defaults to full extraction only in the
+ * sense that someone has to add its own `||` branch to make it
+ * display-only — the safer direction to default in, but still a decision
+ * this function forces into the open rather than making silently.
  */
 export function isDisplayOnlyPlatform(platform: ImportPlatform): boolean {
   return platform === 'instagram';

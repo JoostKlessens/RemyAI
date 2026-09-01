@@ -18,13 +18,57 @@
  * not assert real Feed opt-in.
  */
 
-import type { Creator } from '@/domain/feed/types';
+import type { Creator, CreatorPlatform } from '@/domain/feed/types';
 import type { ImportPlatform } from '@/domain/import/types';
 
-function buildProfileUrl(platform: ImportPlatform, authorName: string): string {
-  return platform === 'tiktok'
-    ? `https://www.tiktok.com/@${authorName}`
-    : `https://www.instagram.com/${authorName}`;
+/**
+ * WHY THIS NARROWING EXISTS, AND WHY IT IS NOT A WIDENING.
+ *
+ * `ImportPlatform` gained `'youtube'` when YouTube URLs became importable.
+ * `CreatorPlatform` did NOT, and must not be widened to match: it is the
+ * social layer's vocabulary, not the importer's. Adding a member there
+ * ripples into `creatorPresentation.ts`'s exhaustive display-name map,
+ * `buildCreatorLine`, `buildOriginalPostLinkLabel`, every
+ * `creatorPlatform` field on the kring/proof/leaderboard presenters, and —
+ * the part that makes it a migration rather than a refactor —
+ * `mealStub.ts`'s `toMealSourcePlatform`, which maps onto a database enum
+ * whose only values are `'tiktok'` and `'reels'`.
+ *
+ * So a YouTube import has no `Creator` to build, and this returns null
+ * rather than inventing one. That is currently unreachable in practice:
+ * the edge function has no YouTube fetch path, so no YouTube import can
+ * arrive at confirm.tsx. Before it can, YouTube needs its own attribution
+ * route — PD-007 makes crediting the creator an obligation, not a nicety,
+ * so shipping YouTube extraction while this still returns null would be a
+ * regression, not a gap.
+ */
+function toCreatorPlatform(platform: ImportPlatform): CreatorPlatform | null {
+  switch (platform) {
+    case 'tiktok':
+      return 'tiktok';
+    case 'instagram':
+      return 'instagram';
+    case 'youtube':
+      return null;
+  }
+}
+
+/**
+ * A `switch` rather than the ternary this replaced. That ternary read
+ * `platform === 'tiktok' ? tiktok : instagram`, which was correct only
+ * while the union had exactly two members — the moment `'youtube'` joined
+ * it, it would have minted an instagram.com profile URL for a YouTube
+ * channel and credited the wrong platform entirely. An exhaustive switch
+ * turns the next platform addition into a compiler error instead of a
+ * silent mislabel.
+ */
+function buildProfileUrl(platform: CreatorPlatform, authorName: string): string {
+  switch (platform) {
+    case 'tiktok':
+      return `https://www.tiktok.com/@${authorName}`;
+    case 'instagram':
+      return `https://www.instagram.com/${authorName}`;
+  }
 }
 
 /**
@@ -32,14 +76,23 @@ function buildProfileUrl(platform: ImportPlatform, authorName: string): string {
  * (confirm.tsx) only invoke this when one is present, matching
  * CreatorAttribution's own precedent of omitting attribution entirely
  * rather than rendering a placeholder for data that isn't there.
+ *
+ * Returns null for a platform the social layer has no `Creator` shape for
+ * — see `toCreatorPlatform` above. confirm.tsx already renders nothing
+ * when its `creator` is null, so this is the same omission it performs for
+ * a missing author name, not a new failure path.
  */
-export function buildImportCreator(authorName: string, platform: ImportPlatform): Creator {
+export function buildImportCreator(authorName: string, platform: ImportPlatform): Creator | null {
+  const creatorPlatform = toCreatorPlatform(platform);
+  if (creatorPlatform === null) {
+    return null;
+  }
   return {
-    id: `import-creator-${platform}-${authorName}`,
+    id: `import-creator-${creatorPlatform}-${authorName}`,
     handle: authorName,
     displayName: authorName,
-    platform,
-    profileUrl: buildProfileUrl(platform, authorName),
+    platform: creatorPlatform,
+    profileUrl: buildProfileUrl(creatorPlatform, authorName),
     optedInAt: null,
     optedOutAt: null,
   };

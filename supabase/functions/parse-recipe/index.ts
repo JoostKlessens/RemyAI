@@ -79,11 +79,21 @@
  * specifically because it is Deno code, not Node/Metro code, so using
  * Deno's own import convention here doesn't conflict with `npx tsc
  * --noEmit` or `npm run lint`. This works transitively without every
- * downstream file also needing an extension: every cross-file reference
- * inside src/domain/import/*.ts is `import type`-only (erased entirely
- * before Deno's loader ever resolves a module graph), and src/lib/
- * oembed.ts / src/domain/types.ts have zero imports of their own to chase.
- * It does NOT extend to this function's own two sibling modules
+ * downstream file needing to think about it on this repo's behalf: most
+ * cross-file references inside src/domain/import/*.ts are `import
+ * type`-only (erased entirely before Deno's loader ever resolves a module
+ * graph, so no extension is needed for them), and src/lib/oembed.ts has
+ * zero imports of its own to chase. Where a domain file DOES make a real,
+ * non-type-only import of a sibling — displayOnlyPolicy.ts importing
+ * `buildAttribution` from buildAttribution.ts, or
+ * resolveShortLinkTarget.ts importing `normalizeRecipeUrl` from
+ * urlParsing.ts — that file already spells out its own `.ts` extension for
+ * exactly this reason, so the chain stays resolvable one hop further
+ * without index.ts needing to know or care that the hop exists.
+ * `allowImportingTsExtensions` (tsconfig.json) is what keeps that legal
+ * under `tsc --noEmit` too, since those two files ARE included in the
+ * Node/Metro build. It does NOT extend to this function's own two sibling
+ * modules
  * (canonicalRecipeStore.ts, env.ts): those are real runtime imports Deno
  * resolves for itself, so they spell out `.ts` too. Dropping an extension
  * there fails nothing locally — neither `tsc --noEmit` nor `npm run lint`
@@ -101,6 +111,11 @@ declare const Deno: {
 };
 
 import { normalizeRecipeUrl } from '../../../src/domain/import/urlParsing.ts';
+import {
+  MAX_SHORT_LINK_REDIRECT_HOPS,
+  resolveRedirectTarget,
+  validateShortLinkTarget,
+} from '../../../src/domain/import/resolveShortLinkTarget.ts';
 import { validateParsedRecipe } from '../../../src/domain/import/validateParsed.ts';
 import { buildExtractionEndpoint, buildExtractionRequest } from '../../../src/domain/import/buildExtractionRequest.ts';
 import { parseExtractionResponse } from '../../../src/domain/import/parseExtractionResponse.ts';
@@ -169,21 +184,103 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * short link, not the canonical `www.tiktok.com/@user/video/...` form
  * oEmbed requires (see urlParsing.ts's file header). Resolving that needs
  * a real network round trip, so it lives here, not in the pure domain
- * layer. HEAD-only, body never read: this resolves the redirect target,
- * it does not fetch the video or any page content — no video is
+ * layer.
+ *
+ * IMP-01. This used to hand the whole job to `redirect: 'follow'` and
+ * trust whatever `response.url` came back with — which is exactly the
+ * shape of request that should never be handed to an outbound fetch whose
+ * ultimate destination is not one this function chose: an unbounded
+ * redirect chain can hang the function on a slow or misbehaving
+ * redirector, and an unvalidated destination hands oEmbed a URL nobody
+ * here ever decided to trust. This now follows the chain manually, one hop
+ * at a time, so it can enforce all three of IMP-01's constraints:
+ *
+ *  - a BOUNDED hop count (`MAX_SHORT_LINK_REDIRECT_HOPS`,
+ *    resolveShortLinkTarget.ts) that THIS repo controls and a test can
+ *    assert against, rather than whatever cap the runtime's own `fetch`
+ *    happens to apply for `redirect: 'follow'`;
+ *  - a per-hop TIMEOUT (`SHORT_LINK_HOP_TIMEOUT_MS` below), so a hanging
+ *    third-party redirect cannot hang this function; and
+ *  - VALIDATION of the URL the chain ends on (`validateShortLinkTarget`,
+ *    resolveShortLinkTarget.ts) — re-run through the exact same
+ *    `normalizeRecipeUrl` gate a pasted URL itself has to pass — before it
+ *    is ever treated as resolved and handed to oEmbed.
+ *
+ * The hop-counting, Location-header and final-URL decisions are pure and
+ * live in resolveShortLinkTarget.ts (src/domain/import/), where they are
+ * unit-tested directly; this function is the thin, untestable-by-necessity
+ * loop that actually makes the requests — see that file's header for the
+ * full split, and for what is deliberately NOT attempted here (DNS-level
+ * SSRF hardening of intermediate hops).
+ *
+ * HEAD-only, body never read, on every hop: this resolves the redirect
+ * target, it does not fetch the video or any page content — no video is
  * downloaded anywhere in this function, matching the file header's scope
- * note. Best-effort: any failure here just falls through to calling
- * oEmbed with the original short link, which fails honestly with its own
- * typed `invalid_url` reason (mapped to `oembed_failed` below) rather
- * than this function throwing.
+ * note. Best-effort: ANY failure here (a timed-out or failed hop, too many
+ * hops, an unfetchable Location header, or a final URL that fails
+ * validation) simply returns null and falls through to calling oEmbed with
+ * the original short link, which fails honestly with its own typed
+ * `invalid_url` reason (mapped to `oembed_failed` below) rather than this
+ * function throwing. No new `ImportResult` variant was needed to close
+ * IMP-01 — every failure this can produce already had an honest typed
+ * home.
  */
-async function expandShortLink(shortUrl: string): Promise<string | null> {
+const SHORT_LINK_HOP_TIMEOUT_MS = 4000;
+
+/**
+ * One HEAD request for one hop, with its own timeout. Returns the response
+ * status and `Location` header, or null for ANY failure — a network error,
+ * a DNS failure, or the timeout firing — deliberately indistinguishable
+ * from each other here, since every one of them means the same thing to
+ * the caller: give up on this hop.
+ */
+async function fetchRedirectHop(
+  url: string,
+): Promise<{ readonly status: number; readonly location: string | null } | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SHORT_LINK_HOP_TIMEOUT_MS);
   try {
-    const response = await fetch(shortUrl, { method: 'HEAD', redirect: 'follow' });
-    return response.url !== shortUrl ? response.url : null;
+    const response = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: controller.signal });
+    return { status: response.status, location: response.headers.get('location') };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Manually follows a short link's redirect chain to a BOUNDED depth,
+ * timing out any single hop that hangs. Returns the terminal URL (the one
+ * a non-redirect response was returned for) with no validation performed
+ * yet — `resolveEffectiveUrl` below is what validates it — or null for any
+ * failure along the way, including never having redirected at all (a
+ * non-redirect response on the very first hop means this "short link"
+ * never actually pointed anywhere else).
+ */
+async function expandShortLink(shortUrl: string): Promise<string | null> {
+  let currentUrl = shortUrl;
+  for (let hop = 0; hop < MAX_SHORT_LINK_REDIRECT_HOPS; hop += 1) {
+    const hopResult = await fetchRedirectHop(currentUrl);
+    if (hopResult === null) {
+      return null;
+    }
+    const isRedirectStatus = hopResult.status >= 300 && hopResult.status < 400;
+    if (!isRedirectStatus) {
+      return currentUrl !== shortUrl ? currentUrl : null;
+    }
+    if (hopResult.location === null) {
+      return null;
+    }
+    const nextUrl = resolveRedirectTarget(currentUrl, hopResult.location);
+    if (nextUrl === null) {
+      return null;
+    }
+    currentUrl = nextUrl;
+  }
+  // Exhausted MAX_SHORT_LINK_REDIRECT_HOPS without reaching a terminal
+  // response — a bounded depth means this is a failure, not a longer wait.
+  return null;
 }
 
 async function resolveEffectiveUrl(
@@ -198,11 +295,8 @@ async function resolveEffectiveUrl(
   if (expanded === null) {
     return { normalizedUrl, platform };
   }
-  const reNormalized = normalizeRecipeUrl(expanded);
-  if (reNormalized.kind !== 'ok') {
-    return { normalizedUrl, platform };
-  }
-  return { normalizedUrl: reNormalized.normalizedUrl, platform: reNormalized.platform };
+  const validated = validateShortLinkTarget(expanded);
+  return validated ?? { normalizedUrl, platform };
 }
 
 /** One place that knows how this function calls oEmbed, so its two call sites cannot drift apart. */
@@ -338,11 +432,21 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
     return { kind: 'oembed_failed', reason: oembedResult.reason };
   }
 
+  // Built once, right after oEmbed resolves, and reused by every return
+  // below this point — including both `no_recipe_in_caption` branches
+  // (IMP-02). See buildAttribution.ts: this is attribution, not PD-007 Feed
+  // opt-in consent. Moving this up from just before the `parsed` return is
+  // the whole fix for IMP-02: an `OembedPayload` is unconditionally in hand
+  // by this line (resolveOembedFor already returned successfully above),
+  // so there is no reason left for a later `return` in this function to
+  // omit the creator it already resolved.
+  const attribution = buildAttribution(oembedResult.payload);
+
   const caption = oembedResult.payload.title;
   if (caption === null || caption.trim().length === 0) {
     // Nothing to send the model: no LLM call, no cost, and just as honest
     // an outcome as the model reading a caption and finding no recipe.
-    return { kind: 'no_recipe_in_caption', caption: null };
+    return { kind: 'no_recipe_in_caption', caption: null, attribution };
   }
 
   const llmResult = await callExtractionModel(caption, oembedResult.payload.authorName);
@@ -355,18 +459,13 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
     return { kind: 'parse_failed' };
   }
   if (extraction.kind === 'no_recipe') {
-    return { kind: 'no_recipe_in_caption', caption };
+    return { kind: 'no_recipe_in_caption', caption, attribution };
   }
 
   const recipe = validateParsedRecipe(extraction.rawRecipe);
   if (recipe === null) {
     return { kind: 'parse_failed' };
   }
-
-  // Reuses the OembedPayload already fetched above to read the caption
-  // -- no second oEmbed round trip. See buildAttribution.ts: this is
-  // attribution, not PD-007 Feed opt-in consent.
-  const attribution = buildAttribution(oembedResult.payload);
 
   // Only a fully validated recipe is ever stored — the failure branches
   // above all returned already, so nothing half-parsed can become the

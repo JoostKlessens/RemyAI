@@ -23,19 +23,28 @@
  * reason: an unrecognized shape means we did not get a usable answer, and
  * retrying is the right advice.
  *
- * KNOWN GAP — creator attribution on the remaining failure paths.
- * `authorName` and `thumbnailUrl` are read off `attribution`, which the
- * function returns on exactly two variants: `parsed` and `display_only`
- * (PD-011, where crediting the creator is the entire point and the
- * attribution is mandatory rather than optional). The other failure
- * variants still carry none, so a user who falls back to manual entry
- * after `no_recipe_in_caption` reaches the confirm screen with no creator
- * attached, even though the function resolved one via oEmbed to build the
- * prompt. src/app/import/_fixtures.ts fakes a creator on those paths, so
- * this is a real behavioural difference from the fixture flow rather than
- * a regression in the screens. Closing what is left means returning
- * attribution on `no_recipe_in_caption` too — a change to the function and
- * to `ImportResult`, deliberately not smuggled in here.
+ * ATTRIBUTION ACROSS FAILURE PATHS (IMP-02). `authorName` and
+ * `thumbnailUrl` are read off `attribution`, which the function now
+ * returns on three variants: `parsed`, `display_only` (PD-011, where
+ * crediting the creator is the entire point and the attribution is
+ * mandatory rather than optional) and, as of IMP-02, `no_recipe_in_caption`
+ * — required there too, since the function only ever constructs that
+ * variant after oEmbed has already resolved (see its own doc comment in
+ * types.ts). A user who falls back to manual entry after
+ * `no_recipe_in_caption` now reaches the confirm screen with the same
+ * creator the function already had in hand to build its extraction prompt.
+ *
+ * WHAT IS STILL LEFT, DELIBERATELY OUT OF THIS CHANGE'S SCOPE.
+ * `llm_request_failed` and `parse_failed` are both returned AFTER oEmbed
+ * has resolved too (`callExtractionModel`/`parseExtractionResponse` run on
+ * an already-fetched caption), so the function technically has an
+ * attribution in hand there as well — but IMP-02 only asked for
+ * `no_recipe_in_caption`, and widening those two was not part of it. This
+ * is a real, structurally identical gap on those two variants, not a
+ * stale note; `unsupported_url` and `oembed_failed` are different in
+ * kind — the first never reaches oEmbed at all, and the second is defined
+ * by oEmbed itself having failed, so neither has a payload to build an
+ * attribution from even in principle.
  */
 
 import { parseImportResult } from '@/domain/import/parseImportResult';
@@ -46,7 +55,7 @@ const PARSE_RECIPE_FUNCTION = 'parse-recipe';
 
 export interface ImportAttempt {
   readonly result: ImportResult;
-  /** From the `parsed` or `display_only` variant's attribution — see the file header's KNOWN GAP note for the variants that still carry none. */
+  /** From the `parsed`, `display_only`, or `no_recipe_in_caption` variant's attribution (IMP-02) — see the file header's "WHAT IS STILL LEFT" note for the variants that still carry none. */
   readonly authorName: string | null;
   readonly thumbnailUrl: string | null;
 }
@@ -65,11 +74,14 @@ function toAttempt(result: ImportResult): ImportAttempt {
       thumbnailUrl: result.attribution?.thumbnailUrl ?? null,
     };
   }
-  if (result.kind === 'display_only') {
-    // Not optional-chained, unlike `parsed` above: this variant's
-    // attribution is required by the type, because showing a post we may
-    // not extract from is only defensible with its creator attached
-    // (PD-011). Reading it directly is the point, not an oversight.
+  if (result.kind === 'display_only' || result.kind === 'no_recipe_in_caption') {
+    // Not optional-chained, unlike `parsed` above: on both of these
+    // variants attribution is required by the type — on `display_only`
+    // because showing a post we may not extract from is only defensible
+    // with its creator attached (PD-011), and on `no_recipe_in_caption`
+    // because the function never constructs it before oEmbed has already
+    // resolved (IMP-02, types.ts). Reading it directly is the point on
+    // both, not an oversight.
     return {
       result,
       authorName: result.attribution.authorName,

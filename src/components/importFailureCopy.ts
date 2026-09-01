@@ -48,6 +48,7 @@ export interface ImportFailureCopy {
 const PLATFORM_LABELS: Readonly<Record<ImportPlatform, string>> = {
   tiktok: 'TikTok',
   instagram: 'Instagram',
+  youtube: 'YouTube',
 };
 
 function oembedFailureBody(reason: OembedErrorReason): string {
@@ -84,7 +85,15 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
     case 'unsupported_url':
       return {
         title: 'Onbekende link',
-        body: 'Remy herkent alleen TikTok- en Instagram-links. Controleer de link hierboven, of voer het recept zelf in.',
+        // Names every platform we accept, and must be updated whenever
+        // ImportPlatform gains one. It said "alleen TikTok- en Instagram-"
+        // until YouTube joined the union, at which point the copy was
+        // telling users we reject links we accept — the failure mode a
+        // hardcoded list invites. PLATFORM_LABELS is deliberately not
+        // interpolated here: the labels exist for naming the platform a
+        // specific post came from, and a sentence assembled from a Record's
+        // value order would read as machine-generated rather than written.
+        body: 'Remy herkent links van TikTok, Instagram en YouTube. Controleer de link hierboven, of voer het recept zelf in.',
         quote: null,
         canRetry: false,
         manualEntryIsPrimary: false,

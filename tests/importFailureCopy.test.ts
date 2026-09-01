@@ -13,6 +13,19 @@ const DISPLAY_ONLY_RESULT: ImportFailureResult = {
   },
 };
 
+/**
+ * IMP-02. `no_recipe_in_caption` now carries a required `attribution` —
+ * the function only ever constructs it after oEmbed has already resolved
+ * (see types.ts's doc comment on that variant), so every test literal of
+ * this kind needs one, exactly like `DISPLAY_ONLY_RESULT` above already
+ * does for its own variant.
+ */
+const NO_RECIPE_ATTRIBUTION = {
+  authorName: 'kokenmetkees',
+  authorUrl: 'https://www.tiktok.com/@kokenmetkees',
+  thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
+};
+
 describe('buildImportFailureCopy', () => {
   test('unsupported_url: no retry (no URL context), manual entry not elevated', () => {
     const copy = buildImportFailureCopy({ kind: 'unsupported_url' });
@@ -22,7 +35,11 @@ describe('buildImportFailureCopy', () => {
   });
 
   test('no_recipe_in_caption: manual entry elevated, carries the caption through as a quote', () => {
-    const result: ImportFailureResult = { kind: 'no_recipe_in_caption', caption: 'POV: lekker eten vanavond' };
+    const result: ImportFailureResult = {
+      kind: 'no_recipe_in_caption',
+      caption: 'POV: lekker eten vanavond',
+      attribution: NO_RECIPE_ATTRIBUTION,
+    };
     const copy = buildImportFailureCopy(result);
     expect(copy.manualEntryIsPrimary).toBe(true);
     expect(copy.canRetry).toBe(false);
@@ -30,7 +47,7 @@ describe('buildImportFailureCopy', () => {
   });
 
   test('no_recipe_in_caption: a null caption (nothing to read) surfaces no quote', () => {
-    const copy = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null });
+    const copy = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null, attribution: NO_RECIPE_ATTRIBUTION });
     expect(copy.quote).toBeNull();
   });
 
@@ -81,7 +98,7 @@ describe('buildImportFailureCopy', () => {
     const results: readonly ImportFailureResult[] = [
       { kind: 'unsupported_url' },
       { kind: 'oembed_failed', reason: 'not_found' },
-      { kind: 'no_recipe_in_caption', caption: null },
+      { kind: 'no_recipe_in_caption', caption: null, attribution: NO_RECIPE_ATTRIBUTION },
       { kind: 'llm_request_failed' },
       { kind: 'parse_failed' },
       DISPLAY_ONLY_RESULT,
@@ -129,7 +146,7 @@ describe('buildImportFailureCopy — display_only', () => {
 
   test('does not reuse no_recipe_in_caption copy — a different reason deserves different words', () => {
     const displayOnly = buildImportFailureCopy(DISPLAY_ONLY_RESULT);
-    const noRecipe = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null });
+    const noRecipe = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null, attribution: NO_RECIPE_ATTRIBUTION });
     expect(displayOnly.title).not.toBe(noRecipe.title);
     expect(displayOnly.body).not.toBe(noRecipe.body);
   });

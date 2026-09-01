@@ -253,7 +253,7 @@ function readAttribution(row: Record<string, unknown>): ImportAttribution | null
 }
 
 function isImportPlatform(value: unknown): value is ImportPlatform {
-  return value === 'tiktok' || value === 'instagram';
+  return value === 'tiktok' || value === 'instagram' || value === 'youtube';
 }
 
 /**
