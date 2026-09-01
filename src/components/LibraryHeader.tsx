@@ -45,10 +45,11 @@ import { Button } from './Button';
 export interface LibraryHeaderProps {
   readonly onPasteLink: () => void;
   readonly onOpenSettings: () => void;
+  readonly onOpenShoppingList: () => void;
 }
 
 export function LibraryHeader(props: LibraryHeaderProps): JSX.Element {
-  const { onPasteLink, onOpenSettings } = props;
+  const { onPasteLink, onOpenSettings, onOpenShoppingList } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -56,6 +57,23 @@ export function LibraryHeader(props: LibraryHeaderProps): JSX.Element {
     <View style={styles.header}>
       <View style={styles.titleRow}>
         <Text style={[typeScale.title2, styles.title, { color: colors.textPrimary }]}>Mijn recepten</Text>
+        {/*
+         * Boodschappen rides the title line for exactly the reason
+         * Instellingen does, argued above: it is a door out of this screen,
+         * not something you do to it, so it is not shaped like the action
+         * slot's button. It sits BEFORE Instellingen because it is the one
+         * a household reaches for weekly, where Instellingen is reached for
+         * roughly never after setup — nearest the title is the more
+         * travelled door.
+         */}
+        <Pressable
+          onPress={onOpenShoppingList}
+          accessibilityRole="button"
+          accessibilityLabel="Boodschappen, de lijst voor wat je deze week gepland hebt"
+          style={styles.settingsLink}
+        >
+          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Boodschappen</Text>
+        </Pressable>
         <Pressable
           onPress={onOpenSettings}
           accessibilityRole="button"
@@ -71,7 +89,11 @@ export function LibraryHeader(props: LibraryHeaderProps): JSX.Element {
             label="+ Link plakken"
             variant="secondary"
             onPress={onPasteLink}
-            accessibilityLabel="Nieuw recept importeren via een TikTok- of Instagram-link"
+            // Named the platforms until YouTube joined ImportPlatform and
+            // made the sentence false. Kept deliberately open-ended now:
+            // a label that lists platforms has to be found and updated
+            // every time the union grows, and this one was already missed.
+            accessibilityLabel="Nieuw recept importeren via een gedeelde link"
           />
         </View>
       </View>

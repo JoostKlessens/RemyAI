@@ -618,7 +618,11 @@ export default function RecipesScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-      <LibraryHeader onPasteLink={() => router.push('/import/paste')} onOpenSettings={() => router.push('/settings')} />
+      <LibraryHeader
+        onPasteLink={() => router.push('/import/paste')}
+        onOpenSettings={() => router.push('/settings')}
+        onOpenShoppingList={() => router.push('/boodschappen')}
+      />
 
       {phase === 'loading' ? <LoadingGrid /> : null}
 
