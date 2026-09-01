@@ -80,16 +80,75 @@
  * tile renders the flag, so a refetch would be a loading state over an
  * identical screen. It becomes necessary the day a tile shows an
  * "uitgezonderd" mark, and belongs in that change.
+ *
+ * SEARCH AND FILTER (LIB-01/LIB-03) ADD NO REPOSITORY CALLS OF THEIR OWN.
+ * `loadRows` above already fetches every meal the household owns and
+ * returns it fully sorted, "deze week" first; `search` state
+ * (`LibrarySearchState`, src/domain/recipeSearch.ts) narrows that same
+ * array client-side, in `useMemo`, after the fact. That ordering is what
+ * keeps "deze week first" true of the visible rows without this screen
+ * re-deriving or re-asserting it: filtering a sorted array never reorders
+ * what survives it. ALL of the matching logic — the title match, and the
+ * dishTags-AND / dishMoods-OR / time-cap semantics reused from the
+ * decision engine's own `filterByDecisionFilters` — lives in
+ * recipeSearch.ts; this screen only holds the `LibrarySearchState` and
+ * calls `filterLibraryRows`. THE ZERO-RESULTS STATE IS NOT THE FIRST-RUN
+ * EMPTY STATE ABOVE, on purpose: a household with forty recipes and a
+ * mistyped search term is not a household that needs to be told to paste a
+ * link, so a search producing nothing renders `LibrarySearchEmptyState`
+ * with copy from librarySearchCopy.ts, gated on `rows.length > 0` — the
+ * branch below it, never the one above.
+ *
+ * SORT (LIB-04) COMPOSES AFTER FILTER, AND ADDS NO REPOSITORY CALLS OF ITS
+ * OWN EITHER. `filteredRows` narrows `rows`; `visibleRows` then reorders
+ * whatever survived, via `sortLibraryRows` (src/domain/librarySort.ts) —
+ * the one place on this screen allowed to change row order, and only while
+ * `sort` is not `'default'`. `cookEvents`, which `nog_nooit_gekookt` needs,
+ * is kept in state alongside `rows` purely because `loadRows` already
+ * fetches it for `sortMealsByScheduling`; nothing new is read from the
+ * repository to support it.
+ *
+ * REMOVE (LIB-04) ARCHIVES, NEVER HARD-DELETES. "Verwijderen" on the
+ * long-press sheet calls `RemyRepository.archiveMeal` — see that method's
+ * own comment in src/lib/repository/types.ts for why: `decisions.meal_id`
+ * and `cook_events.meal_id` are declared `on delete restrict` in
+ * 0001_init.sql precisely so a real delete cannot silently corrupt a
+ * household's cook history, and `meals.archived_at` already existed,
+ * already documented as "removing a meal from rotation", before this
+ * screen wrote to it for the first time. A successful archive filters the
+ * meal out of `rows` locally (no `refresh()` needed — an archived meal
+ * would be excluded by the next `listHouseholdMeals` read regardless) and
+ * closes the sheet; the confirm step itself lives entirely in
+ * libraryRemovalCopy.ts's state machine, rendered through the same
+ * `LibraryTileActionSheet` §3.1 already uses, never a second modal.
  */
 
-import { useCallback, useReducer, useRef, useState } from 'react';
+import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { AccessibilityInfo, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, FlatList, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { collectAvailableDishMoods } from '@/domain/dishMoods';
+import { DEFAULT_LIBRARY_SORT, sortLibraryRows, type LibrarySortOption } from '@/domain/librarySort';
+import {
+  NO_LIBRARY_SEARCH,
+  collectAvailableDishTags,
+  filterLibraryRows,
+  type LibrarySearchState,
+} from '@/domain/recipeSearch';
 import { collectAcceptedFriendIds } from '@/domain/social/friendship';
 import type { ProfileId } from '@/domain/social/types';
-import type { HouseholdId, Meal, MealId } from '@/domain/types';
+import type { CookEvent, HouseholdId, Meal, MealId } from '@/domain/types';
 import { Button } from '@/components/Button';
+import { LibraryHeader } from '@/components/LibraryHeader';
+import { LibrarySearchBar } from '@/components/LibrarySearchBar';
+import { LibrarySearchEmptyState } from '@/components/LibrarySearchEmptyState';
+import { describeLibrarySearchEmpty } from '@/components/librarySearchCopy';
+import {
+  INITIAL_LIBRARY_REMOVAL,
+  LIBRARY_REMOVE_FAILED_ANNOUNCEMENT,
+  describeLibraryRemovedAnnouncement,
+  reduceLibraryRemoval,
+} from '@/components/libraryRemovalCopy';
 import { LibraryTileActionSheet } from '@/components/LibraryTileActionSheet';
 import {
   COOK_PROOF_WRITE_FAILED_ANNOUNCEMENT,
@@ -119,7 +178,20 @@ type ScreenPhase = 'loading' | 'error' | 'ready';
 const GRID_COLUMNS = 2;
 const LOADING_TILE_COUNT = 6;
 
-async function loadRows(householdId: HouseholdId): Promise<readonly ScheduledMealRow[]> {
+interface LoadedLibraryRows {
+  readonly rows: readonly ScheduledMealRow[];
+  /**
+   * Kept alongside `rows` rather than discarded once scheduling is
+   * resolved — LIB-04's `nog_nooit_gekookt` sort needs the raw events, not
+   * `ScheduledMealRow.scheduling.state`, per librarySort.ts's own header
+   * (that module stays domain-pure and never imports the components-layer
+   * `RecipeSchedulingInfo` type this screen already has on hand). No extra
+   * repository call: `loadRows` already fetched this for scheduling.
+   */
+  readonly cookEvents: readonly CookEvent[];
+}
+
+async function loadRows(householdId: HouseholdId): Promise<LoadedLibraryRows> {
   const repository = getAppRepository();
   const [meals, saves, cookEvents] = await Promise.all([
     repository.listHouseholdMeals(householdId),
@@ -130,7 +202,7 @@ async function loadRows(householdId: HouseholdId): Promise<readonly ScheduledMea
   // are excluded here even though listHouseholdMeals returns both,
   // matching this screen's own file header.
   const ownMeals = meals.filter((meal) => meal.householdId === householdId);
-  return sortMealsByScheduling(ownMeals, saves, cookEvents);
+  return { rows: sortMealsByScheduling(ownMeals, saves, cookEvents), cookEvents };
 }
 
 /**
@@ -175,6 +247,33 @@ export default function RecipesScreen(): JSX.Element {
 
   const [phase, setPhase] = useState<ScreenPhase>('loading');
   const [rows, setRows] = useState<readonly ScheduledMealRow[]>([]);
+  // See `LoadedLibraryRows`'s own comment above — kept only for LIB-04's sort.
+  const [cookEvents, setCookEvents] = useState<readonly CookEvent[]>([]);
+
+  // LIB-01/LIB-03. `rows` above stays the full, repository-fetched set —
+  // see this file's header for why filtering never touches it and instead
+  // derives a view. `availableDishTags`/`availableDishMoods` are computed
+  // from the FULL set, not `visibleRows`, so a chip a household has
+  // already selected never disappears out from under them just because
+  // their current query also narrowed the pool to nothing that carries it.
+  const [search, setSearch] = useState<LibrarySearchState>(NO_LIBRARY_SEARCH);
+  // LIB-04. A standing choice independent of `search` — see
+  // LibrarySearchBar.tsx's header on why it is not a `LibrarySearchState`
+  // field, and librarySort.ts's header on why "deze week first" (the order
+  // `rows` already arrives in) only survives while this stays `default`.
+  const [sort, setSort] = useState<LibrarySortOption>(DEFAULT_LIBRARY_SORT);
+  const availableDishTags = useMemo(() => collectAvailableDishTags(rows.map((row) => row.meal)), [rows]);
+  const availableDishMoods = useMemo(() => collectAvailableDishMoods(rows.map((row) => row.meal)), [rows]);
+  // Filter first, then sort — narrowing the pool never depends on its
+  // eventual order, and this composition is what keeps "filtering never
+  // reorders survivors" (this file's header) true of the FILTER step
+  // specifically, while the sort step is exactly the one place that is
+  // allowed to reorder, and only when the household asked for it.
+  const filteredRows = useMemo(() => filterLibraryRows(rows, search), [rows, search]);
+  const visibleRows = useMemo(
+    () => sortLibraryRows(filteredRows, sort, cookEvents),
+    [filteredRows, sort, cookEvents],
+  );
 
   const [actionSheetMeal, setActionSheetMeal] = useState<Meal | null>(null);
   const [exclusion, dispatchExclusion] = useReducer(reduceCookProofExclusion, INITIAL_COOK_PROOF_EXCLUSION);
@@ -187,6 +286,14 @@ export default function RecipesScreen(): JSX.Element {
    * boolean per call would cover the close but not the switch.
    */
   const exclusionMealRef = useRef<MealId | null>(null);
+
+  // LIB-04 — "Verwijderen". Same shape as `exclusion`/`exclusionMealRef`
+  // above, for the same reason: `openActionSheet` resets both to a fresh
+  // dish's starting state, and `removalMealRef` guards `commitRemoval`'s
+  // async resolution against landing on a dish the household has since
+  // closed or switched away from.
+  const [removal, dispatchRemoval] = useReducer(reduceLibraryRemoval, INITIAL_LIBRARY_REMOVAL);
+  const removalMealRef = useRef<MealId | null>(null);
 
   const [sendSheetMeal, setSendSheetMeal] = useState<Meal | null>(null);
   const [sendState, dispatchSend] = useReducer(reduceSendSheet, INITIAL_SEND_SHEET);
@@ -206,11 +313,12 @@ export default function RecipesScreen(): JSX.Element {
     ensureSeeded()
       .then(() => getAppRepository().getCurrentHouseholdId())
       .then((householdId) => loadRows(householdId))
-      .then((nextRows) => {
+      .then((loaded) => {
         if (cancelled) {
           return;
         }
-        setRows(nextRows);
+        setRows(loaded.rows);
+        setCookEvents(loaded.cookEvents);
         setPhase('ready');
       })
       .catch(() => {
@@ -246,6 +354,11 @@ export default function RecipesScreen(): JSX.Element {
       exclusionMealRef.current = meal.id;
       setActionSheetMeal(meal);
       loadExclusion(meal.id);
+      // LIB-04: a freshly opened sheet always starts at "Verwijderen" idle
+      // — see libraryRemovalCopy.ts's header on why there is nothing to
+      // read here, unlike the exclusion above.
+      removalMealRef.current = meal.id;
+      dispatchRemoval({ type: 'reset' });
     },
     [loadExclusion],
   );
@@ -253,6 +366,8 @@ export default function RecipesScreen(): JSX.Element {
   const closeActionSheet = useCallback((): void => {
     exclusionMealRef.current = null;
     setActionSheetMeal(null);
+    removalMealRef.current = null;
+    dispatchRemoval({ type: 'reset' });
   }, []);
 
   /**
@@ -313,6 +428,62 @@ export default function RecipesScreen(): JSX.Element {
     }
     void commitExclusion(actionSheetMeal.id, !exclusion.excluded);
   }, [actionSheetMeal, exclusion, loadExclusion, commitExclusion]);
+
+  // -------------------------------------------------------------------------
+  // Verwijderen (LIB-04) — the third thing the long-press sheet offers, and
+  // the only one that removes a dish from the grid rather than changing how
+  // it is shared. See libraryRemovalCopy.ts's header for why archiving
+  // (never a hard delete) and why a two-button in-place confirm.
+  // -------------------------------------------------------------------------
+
+  const handleRequestRemoval = useCallback((): void => {
+    dispatchRemoval({ type: 'request-removal' });
+  }, []);
+
+  const handleCancelRemoval = useCallback((): void => {
+    dispatchRemoval({ type: 'cancel-removal' });
+  }, []);
+
+  /**
+   * Unlike `commitExclusion`, there is no re-read after the write and no
+   * rollback on the row: `archiveMeal` either lands or throws, and a
+   * confirmed removal has nowhere to roll back TO — the sheet closes and
+   * the tile leaves the grid the moment the write succeeds. On failure the
+   * sheet stays open and the row itself becomes the retry (`failed` phase),
+   * matching `describeLibraryRemovalRow`'s contract.
+   */
+  const commitRemoval = useCallback(async (meal: Meal): Promise<void> => {
+    dispatchRemoval({ type: 'confirm-removal' });
+
+    try {
+      await getAppRepository().archiveMeal(meal.id);
+    } catch {
+      if (removalMealRef.current === meal.id) {
+        dispatchRemoval({ type: 'removal-failed' });
+        AccessibilityInfo.announceForAccessibility(LIBRARY_REMOVE_FAILED_ANNOUNCEMENT);
+      }
+      return;
+    }
+
+    if (removalMealRef.current !== meal.id) {
+      return;
+    }
+    // The tile leaves the grid immediately — an archived meal would be
+    // filtered out by the next `listHouseholdMeals` read regardless (this
+    // file's header: `archivedAt === null`), so updating `rows` locally
+    // rather than a full `refresh()` is the cheaper way to the same result,
+    // and it avoids a loading flash over a grid that mostly did not change.
+    setRows((current) => current.filter((row) => row.meal.id !== meal.id));
+    closeActionSheet();
+    AccessibilityInfo.announceForAccessibility(describeLibraryRemovedAnnouncement(meal.title));
+  }, [closeActionSheet]);
+
+  const handleConfirmRemoval = useCallback((): void => {
+    if (actionSheetMeal === null || removal.phase !== 'confirming') {
+      return;
+    }
+    void commitRemoval(actionSheetMeal);
+  }, [actionSheetMeal, removal, commitRemoval]);
 
   // -------------------------------------------------------------------------
   // Sturen (DESIGN-SOCIAL.md §3.1 / §4.1) — the second thing the long-press
@@ -479,9 +650,29 @@ export default function RecipesScreen(): JSX.Element {
         </View>
       ) : null}
 
+      {/* The search bar stays mounted regardless of how many rows match —
+          see this file's header — so a query or filter that narrows the
+          grid to nothing still leaves the household somewhere to change
+          its mind, rather than disappearing along with the results it
+          produced. */}
       {phase === 'ready' && rows.length > 0 ? (
+        <LibrarySearchBar
+          search={search}
+          availableDishTags={availableDishTags}
+          availableDishMoods={availableDishMoods}
+          onChange={setSearch}
+          sort={sort}
+          onChangeSort={setSort}
+        />
+      ) : null}
+
+      {phase === 'ready' && rows.length > 0 && visibleRows.length === 0 ? (
+        <LibrarySearchEmptyState copy={describeLibrarySearchEmpty(search)} onClear={() => setSearch(NO_LIBRARY_SEARCH)} />
+      ) : null}
+
+      {phase === 'ready' && visibleRows.length > 0 ? (
         <FlatList
-          data={rows}
+          data={visibleRows}
           keyExtractor={(row: ScheduledMealRow) => row.meal.id}
           numColumns={GRID_COLUMNS}
           columnWrapperStyle={styles.gridRow}
@@ -501,6 +692,10 @@ export default function RecipesScreen(): JSX.Element {
           cookProofExclusion={exclusion}
           onPressCookProofRow={handleCookProofRowPress}
           onSturen={() => openSendSheet(actionSheetMeal)}
+          removal={removal}
+          onRequestRemoval={handleRequestRemoval}
+          onCancelRemoval={handleCancelRemoval}
+          onConfirmRemoval={handleConfirmRemoval}
           onDismiss={closeActionSheet}
           reduceMotionEnabled={reduceMotionEnabled}
         />
@@ -526,72 +721,6 @@ export default function RecipesScreen(): JSX.Element {
   );
 }
 
-interface LibraryHeaderProps {
-  readonly onPasteLink: () => void;
-  readonly onOpenSettings: () => void;
-}
-
-/**
- * The screen's name, the household door, and the one thing this screen
- * does — in that order, and never again as a stack of three.
- *
- * WHY IT WAS REARRANGED. The owner said he did not understand "the menu at
- * the top of the screen while you also have a menu at the bottom". There is
- * no top menu by design, but there was one by accident: `+ Link plakken`
- * and `Instellingen` sat right-aligned in a column under the title, two
- * unlike controls in a stack, which is exactly what a menu looks like.
- * Meanwhile Vrienden had one control, Trending had none and Kiezen has no
- * header at all, so nothing about the top of a screen told you what to
- * expect from the next one.
- *
- * ONE RULE, EVERY TAB. The title line names the screen; beneath it sits
- * exactly one control, and it is that screen's own — here the only way the
- * library grows, on Vrienden the door to a new friend, on Trending the
- * scope switch. Kiezen is the exception the design already made, and it
- * remains untouched: it has no header, because the dish IS the screen.
- *
- * INSTELLINGEN IS THE ONE THING THAT IS NOT A SCREEN ACTION, so it is not
- * shaped like one and does not stand in the action slot. It rides on the
- * title line, right-aligned, as quiet muted text — a door out of this
- * screen rather than something you do to it, which is where a reader
- * already expects to find one. It stays on this tab because it is the only
- * route to household dislikes and allergens (PD-006), and moving up beside
- * the title makes it easier to find than it was underneath a 200-point
- * button, not harder. A drawer or a hamburger would bury it behind a
- * gesture nobody asked for.
- */
-function LibraryHeader(props: LibraryHeaderProps): JSX.Element {
-  const { onPasteLink, onOpenSettings } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.header}>
-      <View style={styles.titleRow}>
-        <Text style={[typeScale.title2, styles.title, { color: colors.textPrimary }]}>Mijn recepten</Text>
-        <Pressable
-          onPress={onOpenSettings}
-          accessibilityRole="button"
-          accessibilityLabel="Instellingen, huishoud-voorkeuren aanpassen"
-          style={styles.settingsLink}
-        >
-          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Instellingen</Text>
-        </Pressable>
-      </View>
-      <View style={styles.headerActions}>
-        <View style={styles.pasteButton}>
-          <Button
-            label="+ Link plakken"
-            variant="secondary"
-            onPress={onPasteLink}
-            accessibilityLabel="Nieuw recept importeren via een TikTok- of Instagram-link"
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
 /** Loading state: a grid of flat surfaceSunken tiles, no shimmer — docs/DESIGN.md §2. */
 function LoadingGrid(): JSX.Element {
   const scheme = useColorScheme();
@@ -610,37 +739,6 @@ function LoadingGrid(): JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-  },
-  header: {
-    paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space4,
-    paddingBottom: spacing.space4,
-    gap: spacing.space2,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.space3,
-  },
-  title: {
-    // Takes the space, so a long screen name pushes the settings link right
-    // rather than being pushed off its own line by it.
-    flexShrink: 1,
-  },
-  headerActions: {
-    alignItems: 'flex-end',
-  },
-  pasteButton: {
-    alignSelf: 'flex-end',
-    minWidth: 200,
-  },
-  settingsLink: {
-    minHeight: spacing.touchTargetMin,
-    justifyContent: 'center',
-    // Only on the outer side: the tap target reaches the screen edge
-    // padding without the label drifting away from it.
-    paddingLeft: spacing.space2,
   },
   gridContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,

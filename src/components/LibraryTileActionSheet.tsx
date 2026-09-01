@@ -24,6 +24,20 @@
  * why the separator logic below keys off `index < rows.length - 1` rather
  * than naming a row.
  *
+ * HOW THE THIRD ROW LANDED (LIB-04's `Verwijderen`), and where it stopped
+ * being pure data. Its label, explainer, and disabled/error states follow
+ * the exact same `LibraryTileActionRow` contract as the first two rows —
+ * nothing here needed to change to render them. What it added to that
+ * contract, generically rather than by row name, is `tone` (this row's
+ * label renders in `colors.danger` instead of `textPrimary`, so a
+ * destructive action never reads as the app's ordinary decision colour —
+ * theme/tokens.ts's own reasoning for keeping `danger` a different hue
+ * family from `accent`) and `cancelAction` (a second `Pressable`, rendered
+ * only while the row is asking to be confirmed). Both are read below in
+ * `ActionRow`, and neither is specific to removal — any future row needing
+ * the same colour or the same two-step confirm reuses them rather than the
+ * sheet growing a `row.key === 'remove'` special case.
+ *
  * THE ROWS THEMSELVES LIVE IN libraryTileActionRows.ts, not here, and are
  * re-exported below so this file stays the one address for the sheet's
  * contract. That move is not tidying: this `.tsx` cannot be imported by a
@@ -180,6 +194,12 @@ function ActionRow(props: ActionRowProps): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
+  // `disabled` still wins over `tone` — a greyed-out row must read as
+  // inactive first, matching every other row's existing rule, and a
+  // disabled destructive row (mid-write, LIB-04's `pending` phase) should
+  // not glow red while it cannot be pressed.
+  const labelColor = row.disabled ? colors.textMuted : row.tone === 'danger' ? colors.danger : colors.textPrimary;
+
   return (
     <View>
       <Pressable
@@ -190,13 +210,25 @@ function ActionRow(props: ActionRowProps): JSX.Element {
         accessibilityLabel={row.accessibilityLabel}
         style={styles.pressableRow}
       >
-        <Text style={[typeScale.body, { color: row.disabled ? colors.textMuted : colors.textPrimary }]}>
-          {row.label}
-        </Text>
+        <Text style={[typeScale.body, { color: labelColor }]}>{row.label}</Text>
         {row.explainer !== null ? (
           <Text style={[typeScale.bodySmall, styles.explainer, { color: colors.textMuted }]}>{row.explainer}</Text>
         ) : null}
       </Pressable>
+      {/* LIB-04's confirm step: a second, separate tap target beside the
+          row's own, only while `cancelAction` is present — see
+          libraryTileActionRows.ts's header for why a confirm needs two
+          named actions rather than a second tap on the same row. */}
+      {row.cancelAction !== null ? (
+        <Pressable
+          onPress={row.cancelAction.onPress}
+          accessibilityRole="button"
+          accessibilityLabel={row.cancelAction.accessibilityLabel}
+          style={styles.cancelRow}
+        >
+          <Text style={[typeScale.body, { color: colors.textSecondary }]}>{row.cancelAction.label}</Text>
+        </Pressable>
+      ) : null}
       {row.errorNote !== null ? (
         <Text style={[typeScale.bodySmall, styles.note, { color: colors.danger }]}>{row.errorNote}</Text>
       ) : null}
@@ -244,6 +276,12 @@ const styles = StyleSheet.create({
     minHeight: spacing.touchTargetMin + spacing.space1,
     justifyContent: 'center',
     paddingVertical: spacing.space3,
+  },
+  /** LIB-04's "Annuleren" — a separate, lighter-weight tap target under the confirm row, never styled to compete with it. */
+  cancelRow: {
+    minHeight: spacing.touchTargetMin,
+    justifyContent: 'center',
+    paddingBottom: spacing.space2,
   },
   explainer: {
     marginTop: spacing.space1,

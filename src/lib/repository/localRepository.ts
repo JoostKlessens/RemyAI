@@ -46,7 +46,7 @@
  * would be failing a save because a phone is in a lift.
  *
  * WHICH METHODS, AND THE ONE DELIBERATE ABSENCE. Meals (`createMeal`,
- * `setMealCookProofExclusion`, `addMealDishMood`), cook events
+ * `setMealCookProofExclusion`, `archiveMeal`, `addMealDishMood`), cook events
  * (`createCookEvent`, `setCookEventRepeat`, `setCookEventRating`) and
  * cook-sharing consent (`setHouseholdCookSharing`) — exactly the rows the
  * social surfaces read. NOT `updateHouseholdSettings`: consent was kept
@@ -78,6 +78,7 @@ import {
 } from './local/household';
 import {
   addMealDishMood,
+  archiveMeal,
   createMeal,
   getMeal,
   getMealCookProofExclusion,
@@ -198,6 +199,11 @@ export function createLocalRepository(store: KeyValueStore, mirror: MirrorJobSin
     getMealCookProofExclusion: (mealId) => getMealCookProofExclusion(tables, mealId),
     setMealCookProofExclusion: async (mealId, excludedFromCookProof) => {
       const meal = await setMealCookProofExclusion(tables, mealId, excludedFromCookProof);
+      announceMeal(meal);
+      return meal;
+    },
+    archiveMeal: async (mealId) => {
+      const meal = await archiveMeal(tables, mealId);
       announceMeal(meal);
       return meal;
     },

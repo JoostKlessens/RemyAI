@@ -335,6 +335,46 @@ export interface RemyRepository {
    */
   setMealCookProofExclusion(mealId: MealId, excludedFromCookProof: boolean): Promise<Meal>;
   /**
+   * LIB-04 — "Verwijderen" on a Mijn recepten tile's long-press sheet. Sets
+   * `meals.archived_at` (0001_init.sql) to now; there is no way back through
+   * this interface, matching the row's own comment there: "Soft-delete:
+   * removing a meal from rotation must not orphan decision / cook_event
+   * history that references it."
+   *
+   * A SOFT DELETE, NOT A REAL ONE, AND NOT A CHOICE THIS METHOD MAKES —
+   * 0001 already made it. `decisions.meal_id`, `decisions.initial_meal_id`
+   * and `cook_events.meal_id` are all declared `on delete restrict`
+   * ("cook history must survive a meal edit/removal attempt", per
+   * cook_events' own column comment), so a real `DELETE FROM meals` is not
+   * merely undesirable, it is refused outright by Postgres the moment a
+   * household has ever cooked or been offered the dish. Archiving is
+   * therefore the only removal that can work uniformly — for a dish with
+   * history and one without — and it is the one docs/ARCHITECTURE.md and
+   * this repository already agreed on before this method existed:
+   * `listHouseholdMeals` has filtered `archivedAt === null` since before
+   * anything wrote it.
+   *
+   * DOES NOT CONFLICT WITH PD-004a. "Everything saved must eventually be
+   * suggested" is a rule against a silent bookmark-only graveyard where a
+   * household never has to decide anything about a saved dish. It is not a
+   * rule against ever taking a dish out of rotation once the household HAS
+   * decided — an archive is that decision, made explicitly, on one dish, by
+   * the people who saved it. What keeps that decision honest rather than
+   * punitive is that nothing here purges the ingredients, steps or cook
+   * history, even though this interface exposes no way back in yet.
+   *
+   * ONLY TOUCHES THIS MEAL ROW. Its ingredients, steps, cook events, saves
+   * and decisions are all untouched — a friend who was sent this dish
+   * earlier keeps whatever they were sent (`recipe_shares` reads the meal
+   * row directly, and archiving does not change `visibility`), and
+   * `cook_events`/`decisions` keep pointing at a real, readable row so a
+   * household's own history never shows a reference to nothing.
+   *
+   * Rejects an unknown meal id rather than silently doing nothing, matching
+   * every other single-meal setter in this file.
+   */
+  archiveMeal(mealId: MealId): Promise<Meal>;
+  /**
    * The second descriptive axis (src/domain/dishMoods.ts) — one person's
    * mood for one dish, added in the outcome moment after they cooked it.
    * "Zomers", "soul-food", "high-protein": what a dish feels like, as

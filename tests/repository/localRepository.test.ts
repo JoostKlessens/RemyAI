@@ -299,6 +299,60 @@ describe('localRepository — meals (+ ingredients, + steps)', () => {
   });
 });
 
+/**
+ * LIB-04's "Verwijderen" — see `archiveMeal`'s comment on `RemyRepository`
+ * (src/lib/repository/types.ts) for why this is a soft delete (`archived_at`)
+ * rather than a real one, and why `on delete restrict` on `decisions` and
+ * `cook_events` makes a real one impossible once a dish has any history.
+ */
+describe('localRepository — archiving (LIB-04)', () => {
+  let repository: RemyRepository;
+  let store: KeyValueStore;
+
+  beforeEach(() => {
+    store = createInMemoryKeyValueStore();
+    repository = createLocalRepository(store);
+  });
+
+  test('archiveMeal stamps archivedAt on the meal it is given', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+    expect(created.archivedAt).toBeNull();
+
+    const archived = await repository.archiveMeal(created.id);
+
+    expect(archived.archivedAt).not.toBeNull();
+    expect((await repository.getMeal(created.id))?.archivedAt).toBe(archived.archivedAt);
+  });
+
+  test('an archived meal disappears from listHouseholdMeals — the candidate-pool contract every screen relies on', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ householdId: HOUSEHOLD_ID }));
+    await repository.archiveMeal(created.id);
+
+    const meals = await repository.listHouseholdMeals(HOUSEHOLD_ID);
+    expect(meals.some((meal) => meal.id === created.id)).toBe(false);
+  });
+
+  test('archiveMeal touches only archivedAt — the rest of the row, including its dishTags, survives untouched', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: ['pasta'] }));
+    const archived = await repository.archiveMeal(created.id);
+
+    expect(archived.title).toBe(created.title);
+    expect(archived.dishTags).toEqual(['pasta']);
+  });
+
+  test('archiveMeal rejects an unknown meal id rather than silently doing nothing', async () => {
+    await expect(repository.archiveMeal('does-not-exist')).rejects.toThrow();
+  });
+
+  test('an archived meal survives an app restart', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+    await repository.archiveMeal(created.id);
+
+    const restarted = createLocalRepository(store);
+    expect((await restarted.getMeal(created.id))?.archivedAt).not.toBeNull();
+  });
+});
+
 describe('localRepository — dish moods (the second axis, written at the outcome moment)', () => {
   let repository: RemyRepository;
   let store: KeyValueStore;

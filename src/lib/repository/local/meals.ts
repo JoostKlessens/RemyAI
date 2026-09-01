@@ -239,6 +239,18 @@ export async function setMealCookProofExclusion(
 }
 
 /**
+ * LIB-04's "Verwijderen" — see `archiveMeal`'s comment on `RemyRepository`
+ * (src/lib/repository/types.ts) for the full argument on why this is a
+ * soft delete rather than a real one. One line, on purpose: it is the same
+ * read-modify-write every other single-field setter in this file already
+ * uses, writing a column (`archived_at`) `buildMealRow` has stamped `null`
+ * on every meal since before anything set it to anything else.
+ */
+export async function archiveMeal(tables: RepositoryTables, mealId: MealId): Promise<Meal> {
+  return updateMeal(tables, mealId, (meal) => ({ ...meal, archivedAt: nowIso() }));
+}
+
+/**
  * The outcome moment's public half — one person's mood for one dish, from
  * dishMoods.ts's closed vocabulary.
  *

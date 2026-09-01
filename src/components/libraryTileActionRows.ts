@@ -32,6 +32,7 @@
  * rows the other way round without a single constant changing.
  */
 
+import { describeLibraryRemovalRow, type LibraryRemovalState } from './libraryRemovalCopy';
 import {
   COOK_PROOF_SCOPE_NOTE,
   LIBRARY_TILE_SEND_ACCESSIBILITY_LABEL,
@@ -61,6 +62,22 @@ export interface LibraryTileActionRow {
   /** Rendered in `caption`/`textMuted` under the row: the scope this row does NOT cover. */
   readonly footnote: string | null;
   readonly onPress: () => void;
+  /**
+   * Text colour for the row's own label. `'danger'` is LIB-04's
+   * "Verwijderen"/"Ja, verwijderen" alone — theme/tokens.ts's `danger` is a
+   * deliberately different hue family from `accent` so a destructive action
+   * never reads as the app's ordinary decision colour. Every other row
+   * keeps `'default'`.
+   */
+  readonly tone: 'default' | 'danger';
+  /**
+   * Present only while this row is asking to be confirmed — a second,
+   * separate action rendered beside the row's own (which becomes the
+   * confirm). Null for every row that is not mid-confirmation, which is
+   * what lets the sheet render a single Pressable the rest of the time —
+   * see LibraryTileActionSheet.tsx's `ActionRow`.
+   */
+  readonly cancelAction: { readonly label: string; readonly accessibilityLabel: string; readonly onPress: () => void } | null;
 }
 
 /**
@@ -89,20 +106,50 @@ export interface LibraryTileActionRowInput {
    * removed the gate on purpose.
    */
   readonly onSturen?: () => void;
+  /**
+   * LIB-04 — "Verwijderen". Owned by the screen, exactly like
+   * `cookProofExclusion` above: the state lives with the repository call
+   * (`RemyRepository.archiveMeal`), this row only renders it. Unlike
+   * `onSturen` it is never optional — every dish in this library can be
+   * removed, so there is no call site that mounts this sheet without it.
+   */
+  readonly removal: LibraryRemovalState;
+  /** Idle/failed -> confirming. */
+  readonly onRequestRemoval: () => void;
+  /** Confirming -> idle, the way back. */
+  readonly onCancelRemoval: () => void;
+  /** Confirming -> pending -> the repository call. */
+  readonly onConfirmRemoval: () => void;
 }
 
 /**
  * Rows are data, not JSX: the sheet renders this array through one
  * `ActionRow`, and every per-row concern — separator, disabled state, error
- * note, footnote — is driven off `LibraryTileActionRow`. A third row costs
- * one optional prop, one entry here, and its copy in
- * libraryTileActionCopy.ts; no JSX changed for `Sturen`, and none should
- * for the next one either.
+ * note, footnote — is driven off `LibraryTileActionRow`. That is still true
+ * for the third row, LIB-04's "Verwijderen": its copy lives in
+ * libraryRemovalCopy.ts and its confirm state travels through
+ * `input.removal`, and no JSX below changed to add it.
+ *
+ * WHERE IT STOPPED BEING PURELY DATA-SHAPED, AND WHY THAT IS STILL THE
+ * SMALLEST CHANGE. A confirm needs two actions where every other row needed
+ * one, so `LibraryTileActionRow` gained `cancelAction` (null outside
+ * `confirming`) and `tone` (this row's only `'danger'`). Both are generic,
+ * not name-specific to removal — a future row needing the same two-step
+ * confirm, or the same colour, reuses them rather than inventing a fourth
+ * shape — which is what keeps this still "data drives the sheet" rather
+ * than a row the sheet has to special-case by key.
+ *
+ * ALWAYS PRESENT, UNLIKE `Sturen`. `onSturen` is optional because some call
+ * sites cannot send at all (see its own comment above); every meal in this
+ * library can be archived, so `removal` and its three handlers are
+ * required, and `removalRow` is never conditionally omitted.
  *
  * THE ORDER IS THE POINT. §3.1 puts `Sturen` at the head, before the
- * sharing rows — which is also why the sheet's separator keys off
+ * sharing rows; `Verwijderen` goes LAST, after both, for the same logic one
+ * more step out — sending is why you long-press, withholding is rarer,
+ * removing rarer still. This is also why the sheet's separator keys off
  * `index < rows.length - 1` rather than naming a row: with the order owned
- * here, one row or two both render correctly, and a third would too.
+ * here, any count of rows renders correctly.
  */
 export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): readonly LibraryTileActionRow[] {
   const cookProof = describeCookProofExclusionRow(input.cookProofExclusion);
@@ -130,8 +177,39 @@ export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): re
             errorNote: null,
             footnote: null,
             onPress: onSturen,
+            tone: 'default',
+            cancelAction: null,
           },
         ];
+
+  const removal = describeLibraryRemovalRow(input.removal);
+  /**
+   * LIB-04's third row, LAST — rarer than withholding, which §3.1 already
+   * put after sending. `onPress` reads the row's own event out of
+   * `input.removal.phase`: while idle or failed it REQUESTS the confirm
+   * (the same tap that turns this row into a question), while confirming it
+   * IS the confirm. One row, one Pressable, in every phase but one — the
+   * second Pressable only `cancelAction` below adds while confirming.
+   */
+  const removalRow: LibraryTileActionRow = {
+    key: 'remove',
+    label: removal.label,
+    explainer: removal.explainer,
+    accessibilityLabel: removal.accessibilityLabel,
+    disabled: removal.disabled,
+    errorNote: removal.errorNote,
+    footnote: null,
+    onPress: input.removal.phase === 'confirming' ? input.onConfirmRemoval : input.onRequestRemoval,
+    tone: 'danger',
+    cancelAction:
+      removal.cancelLabel === null
+        ? null
+        : {
+            label: removal.cancelLabel,
+            accessibilityLabel: removal.cancelAccessibilityLabel ?? removal.cancelLabel,
+            onPress: input.onCancelRemoval,
+          },
+  };
 
   return [
     ...sturenRow,
@@ -144,6 +222,9 @@ export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): re
       errorNote: cookProof.errorNote,
       footnote: COOK_PROOF_SCOPE_NOTE,
       onPress: input.onPressCookProofRow,
+      tone: 'default',
+      cancelAction: null,
     },
+    removalRow,
   ];
 }
