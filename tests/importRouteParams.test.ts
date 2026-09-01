@@ -17,6 +17,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
       platform: 'tiktok',
       authorName: 'kokenmetkees',
+      authorUrl: 'https://www.tiktok.com/@kokenmetkees',
       thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
       recipeId: RECIPE_ID,
     };
@@ -31,6 +32,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
     };
@@ -44,6 +46,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
     });
@@ -61,6 +64,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
     });
     expect(decodeImportConfirmParams(raw).mode).toBe('manual');
@@ -80,6 +84,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
       platform: 'tiktok',
       authorName: 'kokenmetkees',
+      authorUrl: 'https://www.tiktok.com/@kokenmetkees',
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
     });
@@ -93,6 +98,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
     });
@@ -106,6 +112,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
     });
     expect(decodeImportConfirmParams(withoutKey).mode).toBe('manual');
@@ -116,6 +123,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
       recipeId: 42,
     });
@@ -123,13 +131,43 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
     expect(decodeImportConfirmParams(wrongType).recipeId).toBeNull();
   });
 
+  /**
+   * THIS TEST USED TO ASSERT THE BUG. It pinned down that `platform:
+   * 'youtube'` decoded to the safe empty shape — which was the decoder
+   * listing two of the three platforms that existed, so a YouTube import
+   * round-tripped from paste.tsx to a BLANK confirmation screen with the
+   * recipe, the URL and the creator all silently discarded. The list is
+   * now derived from an exhaustive `Record<ImportPlatform, true>`, and
+   * this asserts every member survives the hop rather than the two someone
+   * happened to remember.
+   */
+  test('carries every platform in the import vocabulary across the hop', () => {
+    for (const platform of ['tiktok', 'instagram', 'youtube', 'web'] as const) {
+      const raw = encodeImportConfirmParams({
+        mode: 'parsed',
+        recipe: null,
+        sourceUrl: 'https://example.test/recept',
+        platform,
+        authorName: 'kokenmetkees',
+        authorUrl: null,
+        thumbnailUrl: null,
+        recipeId: RECIPE_ID,
+      });
+      const decoded = decodeImportConfirmParams(raw);
+      expect(decoded.platform).toBe(platform);
+      expect(decoded.mode).toBe('parsed');
+      expect(decoded.sourceUrl).toBe('https://example.test/recept');
+    }
+  });
+
   test('decodes to the safe empty shape when platform is outside the known union', () => {
     const raw = JSON.stringify({
       mode: 'manual',
       recipe: null,
       sourceUrl: null,
-      platform: 'youtube',
+      platform: 'pinterest',
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
     });
@@ -139,8 +177,72 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       sourceUrl: null,
       platform: null,
       authorName: null,
+      authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
     });
+  });
+
+  /**
+   * `authorUrl` travels for the same reason `recipeId` does: the far side
+   * cannot rebuild it. A YouTube channel URL is keyed on a channel id the
+   * display name does not contain, and a recipe site's author page follows
+   * no pattern at all — so a confirm screen that tried to reconstruct one
+   * would link the credit to the wrong person, or to nobody.
+   */
+  test('carries the creator page URL across the paste -> confirm hop', () => {
+    const raw = encodeImportConfirmParams({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: 'https://www.leukerecepten.nl/recepten/traybake-kip/',
+      platform: 'web',
+      authorName: 'Sanne Bakker',
+      authorUrl: 'https://www.leukerecepten.nl/over-sanne',
+      thumbnailUrl: null,
+      recipeId: null,
+    });
+    expect(decodeImportConfirmParams(raw).authorUrl).toBe('https://www.leukerecepten.nl/over-sanne');
+  });
+
+  test('keeps an explicitly null authorUrl null — a creator we can name but not link to is a real state', () => {
+    const raw = encodeImportConfirmParams({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      platform: 'youtube',
+      authorName: 'De Kookkanaal',
+      authorUrl: null,
+      thumbnailUrl: null,
+      recipeId: null,
+    });
+    const decoded = decodeImportConfirmParams(raw);
+    expect(decoded.authorName).toBe('De Kookkanaal');
+    expect(decoded.authorUrl).toBeNull();
+  });
+
+  test('decodes to the safe empty shape when authorUrl is missing or is not a string', () => {
+    const withoutKey = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      thumbnailUrl: null,
+      recipeId: null,
+    });
+    expect(decodeImportConfirmParams(withoutKey).mode).toBe('manual');
+
+    const wrongType = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: null,
+      platform: null,
+      authorName: null,
+      authorUrl: 42,
+      thumbnailUrl: null,
+      recipeId: null,
+    });
+    expect(decodeImportConfirmParams(wrongType).mode).toBe('manual');
+    expect(decodeImportConfirmParams(wrongType).authorUrl).toBeNull();
   });
 });

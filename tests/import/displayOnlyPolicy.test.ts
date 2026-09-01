@@ -36,6 +36,29 @@ describe('isDisplayOnlyPlatform', () => {
   test('youtube is not display-only — the Data API (a different endpoint than oEmbed) licenses full extraction', () => {
     expect(isDisplayOnlyPlatform('youtube')).toBe(false);
   });
+
+  /**
+   * The fourth platform, decided explicitly rather than inherited — which
+   * is what `isDisplayOnlyPlatform`'s own doc comment demands of every new
+   * member. A page's schema.org/Recipe JSON-LD is published by the site so
+   * that machines will read it (that is what the vocabulary is for), so
+   * there is no counterpart to Meta's embedding-only clause to respect.
+   */
+  test('web is not display-only — a page publishes its JSON-LD precisely so machines read it', () => {
+    expect(isDisplayOnlyPlatform('web')).toBe(false);
+  });
+
+  /**
+   * Instagram is the ONLY member that answers true, pinned down as a whole
+   * rather than one platform at a time: a future widening that
+   * accidentally made another platform display-only would stop extraction
+   * for it silently, since display-only is a working path rather than an
+   * error.
+   */
+  test('instagram is the only display-only platform in the whole vocabulary', () => {
+    const displayOnly = (['tiktok', 'instagram', 'youtube', 'web'] as const).filter(isDisplayOnlyPlatform);
+    expect(displayOnly).toEqual(['instagram']);
+  });
 });
 
 describe('buildDisplayOnlyResult', () => {

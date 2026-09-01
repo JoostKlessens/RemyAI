@@ -29,26 +29,41 @@
  */
 
 import type { OembedErrorReason } from '../../lib/oembed';
-import type { ImportAttribution, ImportPlatform, ImportResult } from './types';
+import type { ImportAttribution, ImportPlatform, ImportResult, SourceFetchFailureReason } from './types';
 import { validateParsedRecipe } from './validateParsed';
 
 /**
- * Must stay in lockstep with `ImportPlatform` (types.ts) and with
- * urlParsing.ts's own host-recognition Sets — this is the CLIENT-side
- * mirror of "which platform values are real," so a value this Set doesn't
- * recognise fails the whole result rather than passing a client/function
- * version-skew platform through untyped. SRC-02/SRC-03 add `'youtube'`
- * here in the same commit that adds it to `ImportPlatform` and to
- * urlParsing.ts's `YOUTUBE_HOSTS`/`YOUTUBE_SHORT_LINK_HOSTS`, for the same
- * reason those two must not drift apart from each other either.
+ * The CLIENT-side mirror of "which platform values are real": a value this
+ * set doesn't recognise fails the whole result rather than passing a
+ * client/function version-skew platform through untyped.
  *
- * (canonicalRecipe.ts, elsewhere in this directory, keeps a THIRD,
- * independent copy of this same vocabulary — `isImportPlatform` — for the
- * canonical-recipe cache row shape. That module is outside this change's
- * scope; whoever wires up YouTube's actual extraction pipeline needs to
- * widen that guard too before a YouTube import can be cached.)
+ * DERIVED FROM AN EXHAUSTIVE RECORD, NOT WRITTEN AS A LIST, and that is a
+ * deliberate change rather than a flourish. The previous version was a
+ * hand-written `new Set<ImportPlatform>([...])`, which type-checks
+ * perfectly well while MISSING a member — so "must stay in lockstep with
+ * `ImportPlatform`" was a comment asking a reader to remember something,
+ * and the widening that added `'web'` had to find three such lists by
+ * hand, two of which a previous widening had already left stale. A
+ * `Record<ImportPlatform, true>` cannot be missing a key: the next member
+ * added to the union stops this file from compiling, which is the only
+ * form of "stay in lockstep" that actually holds.
+ *
+ * Two sibling copies of this vocabulary exist on purpose, each guarding a
+ * different trust boundary, and both are now forced the same way:
+ * `isImportPlatform` in canonicalRecipe.ts (a stored database row) and
+ * `decodeImportConfirmParams` in src/app/import/routeParams.ts (a router
+ * param round-tripping through the UI). Merging them into one shared
+ * export was considered and rejected for the same reason this directory
+ * already keeps three copies of `readNullableString`: tightening the rule
+ * for one boundary must not silently move the other two.
  */
-const PLATFORMS: ReadonlySet<string> = new Set<ImportPlatform>(['tiktok', 'instagram', 'youtube']);
+const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
+  tiktok: true,
+  instagram: true,
+  youtube: true,
+  web: true,
+};
+const PLATFORMS: ReadonlySet<string> = new Set(Object.keys(PLATFORM_MEMBERS));
 
 const OEMBED_ERROR_REASONS: ReadonlySet<string> = new Set<OembedErrorReason>([
   'invalid_url',
@@ -60,6 +75,39 @@ const OEMBED_ERROR_REASONS: ReadonlySet<string> = new Set<OembedErrorReason>([
   'network_error',
   'unknown_error',
 ]);
+
+/**
+ * `SourceFetchFailureReason`'s vocabulary (types.ts), held to exactly the
+ * same posture as `OEMBED_ERROR_REASONS` above: a reason this client does
+ * not recognise fails the WHOLE result rather than being downgraded to a
+ * generic fetch failure. A newer function that learned a new reason is
+ * telling us something we cannot render honestly, and the retry the user
+ * gets from `llm_request_failed` (src/lib/importRecipe.ts's transport
+ * fallback) is a better answer than copy written for a different failure.
+ */
+const SOURCE_FETCH_FAILURE_REASONS: ReadonlySet<string> = new Set<SourceFetchFailureReason>([
+  'refused',
+  'not_found',
+  'server_error',
+  'too_large',
+  'not_html',
+  'network_error',
+  'missing_credentials',
+]);
+
+/**
+ * What an absent `attribution` on a `parsed` response decodes to.
+ *
+ * The field is required on the type as of the `'web'` widening, but a
+ * function deployed before that change sends no key at all, and rejecting
+ * those responses would break every client during a rollout for no gain.
+ * All-null is not an invention: types.ts has always defined `undefined`
+ * here as "equivalent to a populated but all-null `ImportAttribution`",
+ * and this constant is that sentence in code. A MALFORMED attribution is a
+ * different matter entirely and still fails the result — see the file
+ * header on why a creator we mis-read is worse than one we cannot name.
+ */
+const UNNAMED_CREATOR: ImportAttribution = { authorName: null, authorUrl: null, thumbnailUrl: null };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -134,18 +182,21 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   if (!recipeId.ok) {
     return null;
   }
-  const base = {
+  return {
     kind: 'parsed',
     recipe,
     sourceUrl: raw.sourceUrl.trim(),
     platform: raw.platform as ImportPlatform,
-    // Always stated, even as null — unlike `attribution` below, which is
-    // spread in only when present. One spelling of "no canonical row" is
-    // enough; a reader should never have to check both `undefined` and
-    // `null` to learn the same fact.
+    // Both of these are now ALWAYS stated, even when the response said
+    // nothing about them. That is the whole point of the two fields having
+    // become required on the type: one spelling of "we do not know the
+    // creator" and one spelling of "there is no canonical row", so no
+    // reader downstream has to check `undefined` and `null` to learn the
+    // same fact. See `UNNAMED_CREATOR` for why filling one in is a reading
+    // of the old contract rather than a fabrication.
+    attribution: attribution.value ?? UNNAMED_CREATOR,
     recipeId: recipeId.value,
-  } as const;
-  return attribution.value === undefined ? base : { ...base, attribution: attribution.value };
+  };
 }
 
 /**
@@ -216,6 +267,17 @@ export function parseImportResult(raw: unknown): ImportResult | null {
     case 'oembed_failed':
       return typeof raw.reason === 'string' && OEMBED_ERROR_REASONS.has(raw.reason)
         ? { kind: 'oembed_failed', reason: raw.reason as OembedErrorReason }
+        : null;
+    // Nothing to check beyond the kind itself, and nothing to copy off
+    // `raw`. That is the variant's meaning, not laziness: the page was
+    // read and published no structured recipe, so there is no caption to
+    // quote and no creator to credit — see its doc comment in types.ts on
+    // why attaching a scraped `<title>` here would be inventing a source.
+    case 'no_recipe_on_page':
+      return { kind: 'no_recipe_on_page' };
+    case 'source_fetch_failed':
+      return typeof raw.reason === 'string' && SOURCE_FETCH_FAILURE_REASONS.has(raw.reason)
+        ? { kind: 'source_fetch_failed', reason: raw.reason as SourceFetchFailureReason }
         : null;
     case 'unsupported_url':
       return { kind: 'unsupported_url' };

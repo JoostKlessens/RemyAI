@@ -35,6 +35,32 @@
  * choice — see index.ts's header for Deno's resolution rule. Dropping one
  * does not fail a type-check or a lint; it fails the deploy.
  *
+ * WHICH PLATFORMS MAY HAVE A ROW AT ALL — AND WHY THE GUARD IS HERE
+ * RATHER THAN AT THE CALL SITE. 0006_canonical_recipes.sql declares
+ * `platform text not null check (platform in ('tiktok', 'instagram'))`, so
+ * a `'web'` (SRC-01) or `'youtube'` (SRC-02/SRC-03) row is refused by the
+ * database itself. Both exported functions therefore ask
+ * `canStoreCanonicalRecipe` (canonicalRecipe.ts, pure and unit-tested)
+ * before they touch the network: the read would be a guaranteed miss, and
+ * the write a guaranteed constraint violation — one that would print a
+ * PostgREST error on EVERY web and YouTube import, which is precisely how
+ * you teach whoever reads these logs to stop reading them.
+ *
+ * The guard lives inside this module because the constraint is this
+ * module's business: it is the only reader and writer of those tables, so
+ * a schema rule enforced here cannot be forgotten by a fourth route added
+ * later. index.ts asking politely on its own behalf would work exactly
+ * until someone adds a call site that does not.
+ *
+ * WHAT IT COSTS THOSE TWO PLATFORMS, said plainly: they deduplicate
+ * against nothing, and every one of their imports returns `recipeId:
+ * null`, so the meals they produce are copies of nothing and the social
+ * layer (`shared_cooks`, 0009) can never fire for them. That is a real
+ * product hole and it stays open until a migration widens the CHECK — not
+ * this module's to invent, and `null` is the only honest answer meanwhile
+ * (see `ImportResult.recipeId`, which defines it as permanent and forbids
+ * substituting the URL for it).
+ *
  * WHY THE LOOKUP RUNS WHERE IT DOES. `findStoredRecipe` is called from
  * `resolveImport` (index.ts) immediately after `resolveEffectiveUrl` and
  * strictly BEFORE the oEmbed call. That position is the whole feature, not
@@ -80,6 +106,7 @@ import {
   buildRecipeIngredientRows,
   buildRecipeRowInsert,
   buildRecipeStepRows,
+  canStoreCanonicalRecipe,
   parseStoredRecipe,
 } from '../../../src/domain/import/canonicalRecipe.ts';
 import type {
@@ -176,8 +203,23 @@ function serviceRoleHeaders(extra: Record<string, string> = {}): Record<string, 
  * The cache read. Returns the stored recipe as a fully-formed
  * `ImportResult` (indistinguishable from a fresh extraction — see
  * canonicalRecipe.ts), or null for a miss, an unusable row, or any failure.
+ *
+ * `platform` is read for the CHECK-constraint guard alone and never sent in
+ * the query: `normalized_url` is UNIQUE, so it identifies the row on its
+ * own. Taking the parameter anyway is what lets the guard sit here, where
+ * it cannot be skipped, instead of at a call site that might forget — see
+ * the file header.
  */
-export async function findStoredRecipe(normalizedUrl: string): Promise<ImportResult | null> {
+export async function findStoredRecipe(
+  normalizedUrl: string,
+  platform: ImportPlatform,
+): Promise<ImportResult | null> {
+  if (!canStoreCanonicalRecipe(platform)) {
+    // Nothing of this platform can ever have been written, so this is a
+    // guaranteed miss. Skipping it saves a round trip; returning null says
+    // exactly what a real miss would.
+    return null;
+  }
   // DO NOT re-add double quotes around the filter value. That was tried as
   // defence against reserved characters and it silently broke every cache
   // read: PostgREST does not strip surrounding quotes here, it matches them
@@ -404,6 +446,13 @@ export async function storeCanonicalRecipe(
   platform: ImportPlatform,
   attribution: ImportAttribution,
 ): Promise<string | null> {
+  if (!canStoreCanonicalRecipe(platform)) {
+    // The insert would violate `recipes`' platform CHECK. Skipping it saves
+    // a round trip, but the real reason is the log line it would print on
+    // every single import of this platform — see the file header. `null` is
+    // the honest, permanent "this import has no canonical row".
+    return null;
+  }
   const outcome = await insertCanonicalRecipe(recipe, normalizedUrl, platform, attribution);
   if (outcome.kind === 'failed') {
     return null;

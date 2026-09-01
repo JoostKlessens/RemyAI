@@ -37,7 +37,16 @@
  *    result still flagged `isShortLink` is rejected too — a chain that
  *    "resolved" to another short link has not actually told this app
  *    anything oEmbed can read, so accepting it would just move the same
- *    failure one step later.
+ *    failure one step later. A result of `platform: 'web'` is rejected on
+ *    the same principle, and that rejection became load-bearing the day
+ *    `'web'` joined `ImportPlatform`: `normalizeRecipeUrl` now accepts
+ *    almost any public http(s) host, so without this clause TikTok's own
+ *    redirector would be a way to make this function fetch an arbitrary
+ *    third-party page. The user asked to import a TikTok video; silently
+ *    following an open redirect to somebody else's website and scraping
+ *    that instead is a different act, not a resolution of the one they
+ *    asked for. That a user could paste the same page directly is not a
+ *    defence — then they chose it, which is precisely the difference.
  *
  * The third mitigation — the actual network timeout per hop — cannot live
  * here: it has nothing to decide without making the request, so it stays
@@ -56,7 +65,7 @@
  */
 
 import type { ImportPlatform } from './types';
-import { normalizeRecipeUrl } from './urlParsing';
+import { normalizeRecipeUrl } from './urlParsing.ts';
 
 /**
  * TikTok's own vm./vt. redirector is normally one hop (short host straight
@@ -155,18 +164,48 @@ export function isBlockedRedirectHost(hostname: string): boolean {
 }
 
 /**
+ * The platforms a short-link chain is allowed to land on. A short link is a
+ * PLATFORM'S OWN share-sheet redirector, so its destination is a post on
+ * that kind of platform — never an ordinary web page. Stated as an explicit
+ * allowlist rather than as `!== 'web'` so that the next member of
+ * `ImportPlatform` has to be looked at and decided, instead of being
+ * admitted here by failing to match an exclusion — the same reasoning
+ * `displayOnlyPolicy.ts` gives for writing its own check the way it does.
+ */
+const SHORT_LINK_TARGET_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>([
+  'tiktok',
+  'instagram',
+  'youtube',
+]);
+
+/**
  * The gate a redirect chain's final URL must pass before this app will
  * treat it as resolved and call oEmbed on it — see the file header.
  * Reuses `normalizeRecipeUrl` itself rather than a second, drifting copy of
- * its host logic, and additionally rejects a still-`isShortLink` result: a
- * chain that "resolved" to another short link has not actually produced
- * anything oEmbed can read.
+ * its host logic, and additionally rejects two shapes that pass that
+ * function but mean "not resolved": a result still flagged `isShortLink`
+ * (a chain that "resolved" to another short link has produced nothing
+ * oEmbed can read), and a result whose platform is not one a share-sheet
+ * short link can legitimately point at.
+ *
+ * THE SECOND REJECTION IS THE SSRF-RELEVANT ONE and it is newer than this
+ * function. While `ImportPlatform` was a closed set of social platforms,
+ * `normalizeRecipeUrl` was itself the allowlist, and reusing it was the
+ * whole guarantee. `'web'` widened that function to accept almost any
+ * public host, which quietly turned this gate into a pass-through: a
+ * `vm.tiktok.com` link redirecting to `evil.example/page` would have been
+ * reported as a perfectly good `'web'` target and fetched. The gate now
+ * says what it always meant — a TikTok short link resolves to a TikTok
+ * post, or it does not resolve.
  */
 export function validateShortLinkTarget(
   resolvedUrl: string,
 ): { readonly normalizedUrl: string; readonly platform: ImportPlatform } | null {
   const result = normalizeRecipeUrl(resolvedUrl);
   if (result.kind !== 'ok' || result.isShortLink) {
+    return null;
+  }
+  if (!SHORT_LINK_TARGET_PLATFORMS.has(result.platform)) {
     return null;
   }
   return { normalizedUrl: result.normalizedUrl, platform: result.platform };

@@ -4,6 +4,7 @@ import {
   resolveRedirectTarget,
   validateShortLinkTarget,
 } from '@/domain/import/resolveShortLinkTarget';
+import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
 
 describe('MAX_SHORT_LINK_REDIRECT_HOPS', () => {
   test('is a small, positive, explicit bound — not zero, not unbounded', () => {
@@ -123,6 +124,40 @@ describe('validateShortLinkTarget', () => {
 
   test('rejects a suffix-spoofed host', () => {
     expect(validateShortLinkTarget('https://tiktok.com.evil.example/@x/video/1')).toBeNull();
+  });
+
+  /**
+   * The regression this pins. `normalizeRecipeUrl` gained a `'web'`
+   * catch-all that accepts almost any public http(s) host, which on its own
+   * would have turned this gate into a pass-through and made TikTok's own
+   * redirector a way to point this app's page fetcher at an arbitrary third
+   * party. A short link must resolve to a post on the kind of platform that
+   * issued it, or not resolve at all.
+   */
+  test('rejects an ordinary web page as a short-link destination even though a pasted one would be accepted', () => {
+    // Arrange: the same URL, taken two different ways.
+    const arbitraryPage = 'https://recepten.example/lekker-pastagerecht';
+
+    // Act
+    const asPastedUrl = normalizeRecipeUrl(arbitraryPage);
+    const asShortLinkDestination = validateShortLinkTarget(arbitraryPage);
+
+    // Assert: pasting it is a supported web import; being redirected onto it
+    // from a TikTok short link is not.
+    expect(asPastedUrl).toEqual({
+      kind: 'ok',
+      platform: 'web',
+      normalizedUrl: arbitraryPage,
+      isShortLink: false,
+    });
+    expect(asShortLinkDestination).toBeNull();
+  });
+
+  test('still accepts a chain that lands on a real post on a platform short links point at', () => {
+    expect(validateShortLinkTarget('https://www.tiktok.com/@kok/video/12345')).toEqual({
+      normalizedUrl: 'https://www.tiktok.com/@kok/video/12345',
+      platform: 'tiktok',
+    });
   });
 
   test('rejects a bare host with no path', () => {

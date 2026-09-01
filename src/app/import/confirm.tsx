@@ -52,8 +52,8 @@ import { buildReasonText } from '@/domain/reason';
 import type { AllergenTagStatus, HouseholdId, SaveIntent } from '@/domain/types';
 import { AllergenTaggingSection } from '@/components/AllergenTaggingSection';
 import { Button } from '@/components/Button';
-import { CreatorAttribution } from '@/components/CreatorAttribution';
-import { buildImportCreator } from '@/components/creatorFromAttribution';
+import { ImportCreatorCredit } from '@/components/ImportCreatorCredit';
+import { readCreditableAuthorName } from '@/components/importCreatorCopy';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
 import { SaveIntentSheet } from '@/components/SaveIntentSheet';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
@@ -373,7 +373,7 @@ export default function ImportConfirmScreen(): JSX.Element {
   const reduceMotionEnabled = useReduceMotion();
   const params = useLocalSearchParams<{ data?: string }>();
   const [confirmParams] = useState(() => decodeImportConfirmParams(params.data));
-  const { mode, recipe, platform, authorName, recipeId } = confirmParams;
+  const { mode, recipe, platform, authorName, authorUrl, sourceUrl, recipeId } = confirmParams;
   const friendProofLine = useFriendProofLine(recipeId);
 
   const [title, setTitle] = useState(recipe?.title ?? '');
@@ -393,7 +393,23 @@ export default function ImportConfirmScreen(): JSX.Element {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const creator = authorName !== null && platform !== null ? buildImportCreator(authorName, platform) : null;
+  // PD-007.2: credit the creator, on every platform we import from. This
+  // used to build a social-layer `Creator`, which silently produced
+  // nothing for YouTube and would have done the same for `'web'` — see
+  // importCreatorCopy.ts's header for why the fix is an import-owned
+  // credit path rather than a wider `CreatorPlatform`. Still null when
+  // there is genuinely no author name: omitting attribution beats
+  // rendering a placeholder for data we were never given.
+  const creditableAuthorName = readCreditableAuthorName(authorName);
+  const creatorCredit =
+    creditableAuthorName !== null && platform !== null ? (
+      <ImportCreatorCredit
+        authorName={creditableAuthorName}
+        authorUrl={authorUrl}
+        platform={platform}
+        sourceUrl={sourceUrl}
+      />
+    ) : null;
   const trimmedTitle = title.trim();
   const nonEmptyIngredients = ingredients.filter((item) => item.text.trim().length > 0);
   const nonEmptySteps = steps.filter((item) => item.text.trim().length > 0);
@@ -455,9 +471,9 @@ export default function ImportConfirmScreen(): JSX.Element {
             : 'Automatisch gelezen uit het bijschrift — controleer of alles klopt voordat je opslaat.'}
         </Text>
 
-        {creator !== null || friendProofLine !== null ? (
+        {creatorCredit !== null || friendProofLine !== null ? (
           <View style={styles.creatorBlock}>
-            {creator !== null ? <CreatorAttribution creator={creator} /> : null}
+            {creatorCredit}
             {/* §2.3: one quiet line directly under the credit — `caption`
                 mono, `textMuted`, because a derived fact should read as
                 burned-in metadata rather than as prose the app is telling

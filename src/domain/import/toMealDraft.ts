@@ -50,22 +50,24 @@
  * shortcut worth wanting: the normalized URL is that row's deduplication
  * KEY, not its id, and the two are not interchangeable.
  *
- * NO CALLER SUPPLIES ONE TODAY, and pretending otherwise would be worse
- * than saying so. supabase/functions/parse-recipe/index.ts holds the id —
- * `insertCanonicalRecipe` reads it straight back off the insert — but
- * `ImportResult` (types.ts) has no field to carry it home in, so neither
- * the fresh path nor a cache hit (`parseStoredRecipe`, which never reads
- * the stored row's `id`) hands it to the client. The parameter is threaded
- * through regardless, so the write path is continuous and supplying an id
- * later is a one-line change at the call site rather than another pass
- * over three files. It is emphatically NOT threaded through with a
- * fabricated or URL-derived value, which would point a household's meal at
- * a recipe row that does not exist.
+ * CALLERS DO SUPPLY ONE NOW, which the note that stood here used to deny.
+ * W-01b closed the loop end to end: `ImportResult.recipeId` (types.ts)
+ * carries the id home, the fresh path takes it off the insert's own
+ * RETURNING and a cache hit takes it off the stored row's `id`
+ * (`parseStoredRecipe`), the route params carry it across the paste ->
+ * confirm hop, and confirm.tsx hands it to this function. What has never
+ * changed, and must not, is that it is REPORTED and never DERIVED: a
+ * fabricated or URL-derived id points a household's meal at a recipe row
+ * that does not exist.
  *
- * `null` is therefore not a placeholder for "id pending". It is the
- * permanent, honest state of every seeded, curated and hand-entered meal —
- * a copy of nothing — and the draft always states it explicitly rather
- * than omitting the key.
+ * `null` is therefore not a placeholder for "id pending". It is a
+ * permanent, honest answer, and there are now three distinct ways to
+ * arrive at it: a seeded, curated or hand-entered meal that is a copy of
+ * nothing; an import whose canonical write failed; and — the newest and
+ * least obvious — every `'youtube'` and `'web'` import, because
+ * `recipes.platform`'s CHECK constraint (0006) accepts neither, so no row
+ * is ever attempted. See `canStoreCanonicalRecipe` in canonicalRecipe.ts.
+ * The draft always states the field explicitly rather than omitting it.
  */
 
 import type { HouseholdId } from '../types';
@@ -86,11 +88,13 @@ export interface MealDraftContext {
   readonly thumbnailUrl: string | null;
   /**
    * The canonical `recipes` row (0006) this import came from, when the
-   * caller knows it. Optional because no caller can know it yet — see the
-   * file header — and because a caller with nothing to say here is saying
-   * something true and permanent ("this meal is a copy of nothing"), not
-   * withholding something. A missing key and an explicit `null` therefore
-   * mean exactly the same thing, and both become `null` on the draft.
+   * caller knows it. Still optional, though callers now do supply it (see
+   * the file header): a caller with nothing to say here is saying
+   * something true and permanent — "this meal is a copy of nothing" — not
+   * withholding something, and a manual add or a `'web'` import genuinely
+   * has nothing to say. A missing key and an explicit `null` therefore
+   * mean exactly the same thing, and both become `null` on the draft,
+   * which is why the DRAFT's own field is required while this one is not.
    */
   readonly recipeId?: string | null;
 }
@@ -141,7 +145,8 @@ export interface MealDraftInsert {
    */
   readonly recipeId: string | null;
   readonly sourceUrl: string;
-  readonly sourcePlatform: 'tiktok' | 'reels';
+  /** `null` for a YouTube or web import — see `toMealSourcePlatform` on why that is the honest value and not a missing one. */
+  readonly sourcePlatform: 'tiktok' | 'reels' | null;
   /** See MealDraftContext.thumbnailUrl — carried straight through. */
   readonly thumbnailUrl: string | null;
   readonly ingredients: readonly MealIngredientDraft[];
@@ -150,14 +155,50 @@ export interface MealDraftInsert {
 
 /**
  * `meals.source_platform` (0001_init.sql) predates this feature's
- * `'tiktok' | 'instagram'` vocabulary and uses `'reels'` for Instagram —
- * the exact same bridge `mealStub.ts`'s (unexported) `toMealSourcePlatform`
- * applies for Feed saves. Duplicated here rather than imported: the two
- * features are deliberately decoupled (see types.ts's `ImportPlatform`
- * note), and it's three lines.
+ * vocabulary and uses `'reels'` for Instagram — the exact same bridge
+ * `mealStub.ts`'s (unexported) `toMealSourcePlatform` applies for Feed
+ * saves. Duplicated here rather than imported: the two features are
+ * deliberately decoupled (see types.ts's `ImportPlatform` note).
+ *
+ * THIS USED TO BE `platform === 'tiktok' ? 'tiktok' : 'reels'`, AND THAT
+ * TERNARY WAS A LIE WAITING FOR A THIRD PLATFORM. It was correct while the
+ * union had exactly two members. The moment it had four, it wrote
+ * `'reels'` — Instagram — into a database column for a YouTube video and
+ * for a food blog. Not a display bug: a stored, queryable, wrong fact
+ * about where a household's recipe came from, produced by a line nobody
+ * would think to reread while widening a type in another file. It is the
+ * same failure `creatorFromAttribution.ts` describes replacing in its own
+ * ternary, and the reason this is a `switch`: a fifth platform now fails
+ * to compile here instead of silently becoming a Reel.
+ *
+ * WHAT `null` MEANS, PRECISELY. Not "unknown source" — the source is known
+ * exactly; it is a YouTube video or a web page, and `sourceUrl` right
+ * beside this field says which one. It means THIS COLUMN'S TWO-VALUE
+ * VOCABULARY HAS NO HONEST ANSWER FOR THIS PLATFORM. `source_platform` was
+ * written in 0001 when the only importable things were TikToks and Reels,
+ * and stretching one of its two words to cover a third meaning is worse
+ * than admitting the vocabulary ran out. Nothing downstream is harmed: the
+ * field is presentational (the library's source badge), and both
+ * `src/domain/types.ts` and `src/lib/repository/types.ts` already type it
+ * nullable, because a hand-entered meal has no platform either.
+ *
+ * NO MIGRATION IS NEEDED FOR THIS, stated so nobody goes looking for one:
+ * the column is `text check (source_platform in ('tiktok','reels'))` with
+ * NO `not null`, and a Postgres CHECK evaluates to NULL — and therefore
+ * passes — for a NULL value. `null` is legal in that column today. The
+ * `recipes.platform` ceiling is an entirely different story and DOES need
+ * a migration; see `canStoreCanonicalRecipe` in canonicalRecipe.ts.
  */
-function toMealSourcePlatform(platform: ImportPlatform): 'tiktok' | 'reels' {
-  return platform === 'tiktok' ? 'tiktok' : 'reels';
+function toMealSourcePlatform(platform: ImportPlatform): 'tiktok' | 'reels' | null {
+  switch (platform) {
+    case 'tiktok':
+      return 'tiktok';
+    case 'instagram':
+      return 'reels';
+    case 'youtube':
+    case 'web':
+      return null;
+  }
 }
 
 function toIngredientDrafts(recipe: ParsedRecipe): readonly MealIngredientDraft[] {

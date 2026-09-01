@@ -13,11 +13,15 @@
  * `<script type="application/ld+json">` tag and already run through
  * `JSON.parse` — it does not fetch a URL, does not touch the DOM, and does
  * not know HTML exists beyond the stray tags/entities that leak into text
- * fields (handled below). A caller still has to: fetch the page, find the
- * right `<script>` tag(s) (a page can carry several, only one of which is
- * a Recipe), and `JSON.parse` each candidate — none of that belongs here,
- * for the same reason `validateParsed.ts` doesn't fetch Gemini's response
- * itself.
+ * fields (handled below). Finding the right `<script>` tag among the
+ * several a page carries, and `JSON.parse`ing each candidate, is
+ * `htmlJsonLd.ts`'s job, one file over — pure for the same reasons this
+ * one is, and the module that also reads the creator attribution off the
+ * node this one parses (through `findRecipeNode`, exported below precisely
+ * so the two can never disagree about which node is "the recipe"). That
+ * leaves exactly one impure step, the fetch itself, in the edge function
+ * where it belongs — the same division `validateParsed.ts` keeps by not
+ * fetching Gemini's response itself.
  *
  * THE STANCE, borrowed deliberately from `validateParsed.ts`. That module
  * guards a controlled, schema-forced LLM tool call; this one guards
@@ -183,7 +187,29 @@ function hasRecipeType(node: Record<string, unknown>): boolean {
   return isRecipeTypeValue(type) || (Array.isArray(type) && type.some(isRecipeTypeValue));
 }
 
-function findRecipeNode(value: unknown, depth = 0): Record<string, unknown> | null {
+/**
+ * EXPORTED, unlike everything else above it, because one other module
+ * genuinely needs the NODE and not just the recipe: `htmlJsonLd.ts` reads a
+ * page's creator attribution (`author`, `image`) off the same node this
+ * file reads the ingredients off, and a recipe credited to a different
+ * node's author is a wrong attribution rather than a missing one — see
+ * `ImportAttribution` in types.ts on why that distinction is not cosmetic.
+ *
+ * The alternative was for that module to keep its own copy of the
+ * `@graph`/array/`mainEntity` walk above. That is the one shape of
+ * duplication this pair cannot afford: two walks that agree today would
+ * drift the first time either grows a case, and the symptom would not be a
+ * crash or a failed parse but a correct-looking recipe carrying somebody
+ * else's name. Exporting the single walk makes "the attribution belongs to
+ * the recipe" true by construction — same pure function, same input, same
+ * node — instead of true by two files happening to match.
+ *
+ * It stays an implementation detail in every other sense: no caller should
+ * reach for this to bypass `parseJsonLdRecipe` and read fields off a Recipe
+ * node directly, since every "never invented, never estimated" guarantee in
+ * this file lives in the code BETWEEN this function and that one.
+ */
+export function findRecipeNode(value: unknown, depth = 0): Record<string, unknown> | null {
   if (depth > MAX_SEARCH_DEPTH) {
     return null;
   }

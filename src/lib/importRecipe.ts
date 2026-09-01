@@ -23,28 +23,38 @@
  * reason: an unrecognized shape means we did not get a usable answer, and
  * retrying is the right advice.
  *
- * ATTRIBUTION ACROSS FAILURE PATHS (IMP-02). `authorName` and
- * `thumbnailUrl` are read off `attribution`, which the function now
- * returns on three variants: `parsed`, `display_only` (PD-011, where
- * crediting the creator is the entire point and the attribution is
- * mandatory rather than optional) and, as of IMP-02, `no_recipe_in_caption`
- * — required there too, since the function only ever constructs that
- * variant after oEmbed has already resolved (see its own doc comment in
- * types.ts). A user who falls back to manual entry after
- * `no_recipe_in_caption` now reaches the confirm screen with the same
- * creator the function already had in hand to build its extraction prompt.
+ * ATTRIBUTION ACROSS FAILURE PATHS (IMP-02). `authorName`, `authorUrl` and
+ * `thumbnailUrl` are read off `attribution`, which the function returns on
+ * three variants: `parsed`, `display_only` (PD-011, where crediting the
+ * creator is the entire point) and `no_recipe_in_caption` (IMP-02 —
+ * required there too, since the function only ever constructs that variant
+ * after the source has already resolved; see its doc comment in types.ts).
+ * A user who falls back to manual entry after `no_recipe_in_caption`
+ * reaches the confirm screen with the same creator the function already
+ * had in hand to build its extraction prompt.
  *
- * WHAT IS STILL LEFT, DELIBERATELY OUT OF THIS CHANGE'S SCOPE.
- * `llm_request_failed` and `parse_failed` are both returned AFTER oEmbed
- * has resolved too (`callExtractionModel`/`parseExtractionResponse` run on
- * an already-fetched caption), so the function technically has an
- * attribution in hand there as well — but IMP-02 only asked for
- * `no_recipe_in_caption`, and widening those two was not part of it. This
- * is a real, structurally identical gap on those two variants, not a
- * stale note; `unsupported_url` and `oembed_failed` are different in
- * kind — the first never reaches oEmbed at all, and the second is defined
- * by oEmbed itself having failed, so neither has a payload to build an
- * attribution from even in principle.
+ * `authorUrl` joined the other two when `'web'` joined `ImportPlatform`.
+ * It was previously dropped here and rebuilt downstream from the platform
+ * plus the display name — which works only for TikTok and Instagram, whose
+ * profile URLs are a handle in a fixed path. A YouTube channel URL is keyed
+ * on an id `snippet.channelTitle` does not contain, and a recipe site's
+ * author page follows no pattern at all, so for both of the new platforms
+ * the link is either carried from the source or it does not exist. See
+ * `ImportAttempt.authorUrl`.
+ *
+ * WHICH VARIANTS STILL CARRY NO CREATOR, AND WHY THEY DIFFER.
+ * `llm_request_failed` and `parse_failed` are returned AFTER the source
+ * text was fetched, so the function does have an attribution in hand for
+ * them and does not send it — a real, structurally identical gap to the
+ * one IMP-02 closed, still open because IMP-02 asked only for
+ * `no_recipe_in_caption`. The other four are different in kind and are not
+ * gaps at all: `unsupported_url` never fetches anything;
+ * `oembed_failed` and `source_fetch_failed` are defined by the fetch
+ * itself having failed; and `no_recipe_on_page` fetched a page
+ * successfully but found no structured object, which is precisely the only
+ * thing on a web page we are willing to treat as a source (types.ts). None
+ * of the four has a payload to build an attribution from, even in
+ * principle.
  */
 
 import { parseImportResult } from '@/domain/import/parseImportResult';
@@ -57,38 +67,49 @@ export interface ImportAttempt {
   readonly result: ImportResult;
   /** From the `parsed`, `display_only`, or `no_recipe_in_caption` variant's attribution (IMP-02) — see the file header's "WHAT IS STILL LEFT" note for the variants that still carry none. */
   readonly authorName: string | null;
+  /**
+   * The creator's own profile/channel/author page, straight off the same
+   * attribution, and the reason it is carried rather than reconstructed
+   * downstream: IT CANNOT BE RECONSTRUCTED. `buildAttribution.ts` makes
+   * this argument for TikTok and Instagram (a display name is not reliably
+   * a URL-safe handle, so guessing produces plausible links to the wrong
+   * account) and the two newer platforms make it unanswerable rather than
+   * merely risky — a YouTube channel URL is keyed on a channel id that
+   * `snippet.channelTitle` does not contain, and a web page's author has
+   * no URL pattern at all. Without this field the confirmation screen can
+   * name a creator and cannot link to one, which for PD-007 attribution is
+   * the difference between a credit and a mention.
+   */
+  readonly authorUrl: string | null;
   readonly thumbnailUrl: string | null;
 }
 
 const TRANSPORT_FAILURE: ImportAttempt = {
   result: { kind: 'llm_request_failed' },
   authorName: null,
+  authorUrl: null,
   thumbnailUrl: null,
 };
 
 function toAttempt(result: ImportResult): ImportAttempt {
-  if (result.kind === 'parsed') {
-    return {
-      result,
-      authorName: result.attribution?.authorName ?? null,
-      thumbnailUrl: result.attribution?.thumbnailUrl ?? null,
-    };
-  }
-  if (result.kind === 'display_only' || result.kind === 'no_recipe_in_caption') {
-    // Not optional-chained, unlike `parsed` above: on both of these
-    // variants attribution is required by the type — on `display_only`
-    // because showing a post we may not extract from is only defensible
-    // with its creator attached (PD-011), and on `no_recipe_in_caption`
-    // because the function never constructs it before oEmbed has already
-    // resolved (IMP-02, types.ts). Reading it directly is the point on
-    // both, not an oversight.
+  // One branch for all three attribution-carrying variants, where `parsed`
+  // used to need its own optional-chained copy. That asymmetry is gone
+  // because `ImportResult.parsed.attribution` is now REQUIRED (types.ts):
+  // every producer states it, and `parseImportResult` materialises an
+  // all-null one for a response older than the field, so there is no
+  // longer a version of `parsed` whose creator is `undefined` rather than
+  // null. The remaining variants — `unsupported_url`, `oembed_failed`,
+  // `no_recipe_on_page`, `source_fetch_failed`, and the two LLM failures
+  // named in the header — genuinely have no attribution to read.
+  if (result.kind === 'parsed' || result.kind === 'display_only' || result.kind === 'no_recipe_in_caption') {
     return {
       result,
       authorName: result.attribution.authorName,
+      authorUrl: result.attribution.authorUrl,
       thumbnailUrl: result.attribution.thumbnailUrl,
     };
   }
-  return { result, authorName: null, thumbnailUrl: null };
+  return { result, authorName: null, authorUrl: null, thumbnailUrl: null };
 }
 
 /**

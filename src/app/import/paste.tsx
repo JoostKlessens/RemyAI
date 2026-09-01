@@ -1,11 +1,19 @@
 /**
- * Recipe import, step 1: paste a TikTok/Instagram URL. Client-side
- * validation (`normalizeRecipeUrl`, src/domain/import/urlParsing.ts — the
- * same pure function the real edge function uses) runs first, synchronously,
- * so an obviously unsupported link fails instantly with no spinner at all.
- * Only a URL that passes that check goes on to the real parse
- * step, which genuinely takes several seconds (an oEmbed
- * round trip plus an LLM call).
+ * Recipe import, step 1: paste a link — a TikTok or Instagram post, a
+ * YouTube video, or an ordinary recipe page. Client-side validation
+ * (`normalizeRecipeUrl`, src/domain/import/urlParsing.ts — the same pure
+ * function the real edge function uses) runs first, synchronously, so a
+ * link Remy will not open fails instantly with no spinner at all. Only a
+ * URL that passes that check goes on to the real parse step, which
+ * genuinely takes several seconds (a fetch plus, for the three video
+ * platforms, an LLM call).
+ *
+ * SINCE `'web'` JOINED THE UNION, THE CLIENT-SIDE CHECK REJECTS FAR LESS.
+ * Almost any http(s) address is now a real import attempt, so this screen's
+ * copy stopped listing platforms: a sentence enumerating what Remy accepts
+ * has been wrong twice already (see importFailureCopy.ts's
+ * `unsupported_url` note), and "een video of een receptpagina" survives the
+ * union growing again.
  *
  * **The loading state is the point of this screen** (docs/DESIGN.md §3):
  * three checkpoint rows — "Video gevonden" → "Bijschrift gelezen" →
@@ -92,6 +100,65 @@ const CHECKPOINT_LABELS_EXTRACTION: readonly string[] = [
   'Recept samengesteld…',
 ];
 const CHECKPOINT_LABELS_DISPLAY_ONLY: readonly string[] = ['Post gevonden', 'Maker erbij gezocht…'];
+/**
+ * A web import gets its own list for exactly the reason display-only does.
+ * The extraction list narrates "Video gevonden" and "Bijschrift gelezen",
+ * and for a recipe page both are false twice over: there is no video, and
+ * there is no bijschrift — the recipe comes out of the page's own
+ * structured data, with no model in the loop at all. Reusing that list
+ * because it happens to be the default would narrate three steps we do not
+ * perform, which this screen already refuses to do elsewhere.
+ */
+const CHECKPOINT_LABELS_WEB: readonly string[] = ['Pagina opgehaald', 'Recept van de pagina gelezen…'];
+
+/**
+ * Which narration is honest for a given platform. A function rather than a
+ * `Record<ImportPlatform, …>` because the question is not really
+ * per-platform: display-only is a POLICY (`isDisplayOnlyPlatform`, PD-011)
+ * that any platform could in principle fall under, and it has to be asked
+ * first — a Record keyed on platform would encode today's answer to that
+ * policy as a fact about Instagram.
+ */
+function checkpointLabelsFor(platform: ImportPlatform | null): readonly string[] {
+  if (platform === null) {
+    return CHECKPOINT_LABELS_EXTRACTION;
+  }
+  if (isDisplayOnlyPlatform(platform)) {
+    return CHECKPOINT_LABELS_DISPLAY_ONLY;
+  }
+  return platform === 'web' ? CHECKPOINT_LABELS_WEB : CHECKPOINT_LABELS_EXTRACTION;
+}
+
+/**
+ * The __DEV__ scenario row's demo data. Both are exhaustive Records so a
+ * new scenario or a new platform has to be given a demo rather than
+ * inheriting a wrong one — the previous version was
+ * `scenario === 'display_only' ? 'instagram' : 'tiktok'`, which would have
+ * demoed the two web-only failures under a TikTok URL.
+ *
+ * Each scenario is paired with the platform that can actually produce it:
+ * display-only is Instagram's alone (PD-011), the two page-shaped outcomes
+ * belong to `'web'`, and a TikTok link stands in for everything the
+ * original caption pipeline produces. A demo showing a state that cannot
+ * happen is worse than no demo.
+ */
+const DEMO_URL_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
+  tiktok: 'https://www.tiktok.com/@kokenmetkees/video/000009',
+  instagram: 'https://www.instagram.com/reel/000009',
+  youtube: 'https://www.youtube.com/watch?v=demo000009',
+  web: 'https://www.voorbeeldkeuken.nl/recepten/ovenschotel-zoete-aardappel',
+};
+
+const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, ImportPlatform>> = {
+  parsed: 'tiktok',
+  display_only: 'instagram',
+  no_recipe_in_caption: 'tiktok',
+  no_recipe_on_page: 'web',
+  source_fetch_failed: 'web',
+  oembed_failed: 'tiktok',
+  llm_request_failed: 'tiktok',
+  parse_failed: 'tiktok',
+};
 
 /**
  * Everything the screen still knows after an attempt that produced no
@@ -104,6 +171,8 @@ const CHECKPOINT_LABELS_DISPLAY_ONLY: readonly string[] = ['Post gevonden', 'Mak
 interface FailedAttemptContext {
   readonly result: ImportFailureResult;
   readonly authorName: string | null;
+  /** Travels beside the name because it cannot be rebuilt from it — see `ImportAttempt.authorUrl` (src/lib/importRecipe.ts). */
+  readonly authorUrl: string | null;
   readonly normalizedUrl: string | null;
   readonly platform: ImportPlatform | null;
   /** oEmbed's thumbnail when the attempt resolved one. Only ever carried onward for `display_only` — see `handleManualEntry`. */
@@ -113,6 +182,8 @@ interface FailedAttemptContext {
 interface ConfirmNavigationContext {
   readonly recipe: ParsedRecipe | null;
   readonly authorName: string | null;
+  /** The creator's own page. Carried, never rebuilt from the name and platform: that mapping only exists for TikTok and Instagram — see `ImportConfirmParams.authorUrl`. */
+  readonly authorUrl: string | null;
   readonly normalizedUrl: string | null;
   readonly platform: ImportPlatform | null;
   /** oEmbed's thumbnail, when one was found — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Always null for manual entry. */
@@ -166,6 +237,7 @@ export default function ImportPasteScreen(): JSX.Element {
           sourceUrl: context.normalizedUrl,
           platform: context.platform,
           authorName: context.authorName,
+          authorUrl: context.authorUrl,
           thumbnailUrl: context.thumbnailUrl,
           // `?? null` and never a fallback id: a navigation that does not
           // know its canonical recipe is carrying a meal that is a copy of
@@ -197,6 +269,7 @@ export default function ImportPasteScreen(): JSX.Element {
         navigateToConfirm('parsed', {
           recipe: attempt.result.recipe,
           authorName: attempt.authorName,
+          authorUrl: attempt.authorUrl,
           normalizedUrl: attempt.result.sourceUrl,
           platform: attempt.result.platform,
           thumbnailUrl: attempt.thumbnailUrl,
@@ -210,6 +283,7 @@ export default function ImportPasteScreen(): JSX.Element {
       const context: FailedAttemptContext = {
         result: attempt.result,
         authorName: attempt.authorName,
+        authorUrl: attempt.authorUrl,
         normalizedUrl,
         platform,
         thumbnailUrl: attempt.thumbnailUrl,
@@ -229,6 +303,7 @@ export default function ImportPasteScreen(): JSX.Element {
       setFailedAttempt({
         result: { kind: 'unsupported_url' },
         authorName: null,
+        authorUrl: null,
         normalizedUrl: null,
         platform: null,
         thumbnailUrl: null,
@@ -250,6 +325,10 @@ export default function ImportPasteScreen(): JSX.Element {
     navigateToConfirm('manual', {
       recipe: null,
       authorName: failedAttempt?.authorName ?? null,
+      // Carried on the same terms as the name: whenever an attempt
+      // resolved a creator, the manual-entry route keeps both, so a recipe
+      // the user types still credits — and links to — whoever it came from.
+      authorUrl: failedAttempt?.authorUrl ?? null,
       normalizedUrl: failedAttempt?.normalizedUrl ?? null,
       platform: failedAttempt?.platform ?? null,
       // Manual entry normally carries no thumbnail: when oEmbed resolved one
@@ -294,34 +373,32 @@ export default function ImportPasteScreen(): JSX.Element {
       setFailedAttempt({
         result: { kind: 'unsupported_url' },
         authorName: null,
+        authorUrl: null,
         normalizedUrl: null,
         platform: null,
         thumbnailUrl: null,
       });
       return;
     }
-    // The display-only demo has to be an Instagram link — it is the only
-    // platform that reaches that path, and a TikTok URL sitting under
-    // Instagram copy would demo a state that cannot happen.
-    const demoPlatform: ImportPlatform = scenario === 'display_only' ? 'instagram' : 'tiktok';
-    const demoUrl =
-      demoPlatform === 'instagram'
-        ? 'https://www.instagram.com/reel/000009'
-        : 'https://www.tiktok.com/@kokenmetkees/video/000009';
+    const demoPlatform = DEMO_PLATFORM_BY_SCENARIO[scenario];
+    const demoUrl = DEMO_URL_BY_PLATFORM[demoPlatform];
     const attempt = buildFixtureImportAttempt(scenario, demoPlatform, demoUrl);
     if (attempt.result.kind === 'parsed') {
       navigateToConfirm('parsed', {
         recipe: attempt.result.recipe,
         authorName: attempt.authorName,
+        authorUrl: attempt.authorUrl,
         normalizedUrl: attempt.result.sourceUrl,
         platform: attempt.result.platform,
         thumbnailUrl: attempt.thumbnailUrl,
+        recipeId: attempt.result.recipeId,
       });
       return;
     }
     setFailedAttempt({
       result: attempt.result,
       authorName: attempt.authorName,
+      authorUrl: attempt.authorUrl,
       normalizedUrl: demoUrl,
       platform: demoPlatform,
       thumbnailUrl: attempt.thumbnailUrl,
@@ -329,10 +406,7 @@ export default function ImportPasteScreen(): JSX.Element {
   };
 
   const canRetry = failedAttempt !== null && failedAttempt.normalizedUrl !== null && failedAttempt.platform !== null;
-  const checkpointLabels =
-    loadingPlatform !== null && isDisplayOnlyPlatform(loadingPlatform)
-      ? CHECKPOINT_LABELS_DISPLAY_ONLY
-      : CHECKPOINT_LABELS_EXTRACTION;
+  const checkpointLabels = checkpointLabelsFor(loadingPlatform);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -351,15 +425,23 @@ export default function ImportPasteScreen(): JSX.Element {
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Recept importeren</Text>
+        {/*
+          Names a shape of thing, not a list of platforms. This sentence
+          said "een TikTok- of Instagram-video" while YouTube and ordinary
+          recipe pages were already accepted — the same drift that made the
+          `unsupported_url` copy wrong twice (see importFailureCopy.ts).
+          "Een video of een receptpagina" stays true whatever joins
+          `ImportPlatform` next.
+        */}
         <Text style={[typeScale.bodySmall, styles.subtitle, { color: colors.textMuted }]}>
-          Plak een link naar een TikTok- of Instagram-video. Remy probeert er een recept van te maken.
+          Plak een link naar een video of een receptpagina. Remy probeert er een recept van te maken.
         </Text>
 
         <TextInput
           value={url}
           onChangeText={setUrl}
           onSubmitEditing={handleSubmit}
-          placeholder="https://www.tiktok.com/@…"
+          placeholder="https://…"
           placeholderTextColor={colors.textMuted}
           keyboardType="url"
           autoCapitalize="none"
@@ -371,7 +453,7 @@ export default function ImportPasteScreen(): JSX.Element {
             styles.input,
             { color: colors.textPrimary, backgroundColor: colors.surface, borderColor: colors.border },
           ]}
-          accessibilityLabel="Link naar TikTok- of Instagram-video"
+          accessibilityLabel="Link naar een video of receptpagina"
         />
 
         <Pressable
@@ -463,8 +545,10 @@ const DEV_SCENARIOS: ReadonlyArray<{ value: DevScenarioValue; label: string }> =
   { value: 'normal', label: 'Normaal' },
   { value: 'parsed', label: 'Gelukt' },
   { value: 'no_recipe_in_caption', label: 'Geen recept' },
+  { value: 'no_recipe_on_page', label: 'Pagina zonder recept' },
   { value: 'display_only', label: 'Alleen tonen' },
   { value: 'unsupported_url', label: 'Onbekende link' },
+  { value: 'source_fetch_failed', label: 'Niet opgehaald' },
   { value: 'oembed_failed', label: 'Video-fout' },
   { value: 'llm_request_failed', label: 'Model-fout' },
   { value: 'parse_failed', label: 'Parse-fout' },

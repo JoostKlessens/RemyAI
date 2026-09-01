@@ -12,6 +12,18 @@ describe('detectFixtureScenario', () => {
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/llm-fout')).toBe('llm_request_failed');
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/parse-fout')).toBe('parse_failed');
     expect(detectFixtureScenario('https://www.instagram.com/reel/alleen-tonen')).toBe('display_only');
+    expect(detectFixtureScenario('https://voorbeeldkeuken.nl/pagina-zonder-recept')).toBe('no_recipe_on_page');
+    expect(detectFixtureScenario('https://voorbeeldkeuken.nl/niet-opgehaald')).toBe('source_fetch_failed');
+  });
+
+  /**
+   * 'geen-recept' is a substring of nothing here on purpose: two markers
+   * where one contains the other would resolve by whichever `if` happens
+   * to come first, which is a coin flip dressed up as a rule.
+   */
+  test('keeps the page marker and the caption marker distinguishable', () => {
+    expect(detectFixtureScenario('https://voorbeeldkeuken.nl/pagina-zonder-recept')).toBe('no_recipe_on_page');
+    expect(detectFixtureScenario('https://www.tiktok.com/@x/video/geen-recept')).toBe('no_recipe_in_caption');
   });
 });
 
@@ -32,8 +44,8 @@ describe('buildFixtureImportAttempt', () => {
     const attempt = buildFixtureImportAttempt('parsed', 'tiktok', 'https://www.tiktok.com/@x/video/1');
     expect(attempt.thumbnailUrl).not.toBeNull();
     if (attempt.result.kind === 'parsed') {
-      expect(attempt.result.attribution?.thumbnailUrl).toBe(attempt.thumbnailUrl);
-      expect(attempt.result.attribution?.authorName).toBe(attempt.authorName);
+      expect(attempt.result.attribution.thumbnailUrl).toBe(attempt.thumbnailUrl);
+      expect(attempt.result.attribution.authorName).toBe(attempt.authorName);
     }
   });
 
@@ -41,7 +53,7 @@ describe('buildFixtureImportAttempt', () => {
     const attempt = buildFixtureImportAttempt('parsed', 'instagram', 'https://www.instagram.com/reel/1');
     expect(attempt.thumbnailUrl).toBeNull();
     if (attempt.result.kind === 'parsed') {
-      expect(attempt.result.attribution?.thumbnailUrl).toBeNull();
+      expect(attempt.result.attribution.thumbnailUrl).toBeNull();
     }
   });
 
@@ -109,5 +121,115 @@ describe('buildFixtureImportAttempt', () => {
     if (attempt.result.kind === 'display_only') {
       expect(attempt.result.attribution.thumbnailUrl).toBe(attempt.thumbnailUrl);
     }
+  });
+});
+
+/**
+ * The platforms the union gained after this fixture was written. Both are
+ * reachable now — a YouTube video and an ordinary recipe page are real
+ * imports — so the fixture has to be honest about them rather than
+ * inheriting Instagram's answers, which is exactly what the two-branch
+ * ternaries it used to contain did.
+ */
+describe('buildFixtureImportAttempt — the platforms the union gained', () => {
+  test('a web fixture gets its own recipe, never the Instagram one', () => {
+    const web = buildFixtureImportAttempt('parsed', 'web', 'https://voorbeeldkeuken.nl/recept');
+    const instagram = buildFixtureImportAttempt('parsed', 'instagram', 'https://www.instagram.com/reel/1');
+    if (web.result.kind !== 'parsed' || instagram.result.kind !== 'parsed') {
+      throw new Error('expected parsed');
+    }
+    expect(web.result.recipe.title).not.toBe(instagram.result.recipe.title);
+    expect(web.result.platform).toBe('web');
+  });
+
+  test('a youtube fixture gets its own recipe too', () => {
+    const youtube = buildFixtureImportAttempt('parsed', 'youtube', 'https://www.youtube.com/watch?v=demo');
+    const tiktok = buildFixtureImportAttempt('parsed', 'tiktok', 'https://www.tiktok.com/@x/video/1');
+    if (youtube.result.kind !== 'parsed' || tiktok.result.kind !== 'parsed') {
+      throw new Error('expected parsed');
+    }
+    expect(youtube.result.recipe.title).not.toBe(tiktok.result.recipe.title);
+  });
+
+  /**
+   * `buildAuthorUrl` used to be `platform === 'tiktok' ? tiktok :
+   * instagram`, which would mint `https://www.instagram.com/De Kookkanaal`
+   * for a YouTube fixture — a plausible-looking link to an account that
+   * does not exist, in the one field whose own doc comment forbids exactly
+   * that. Null is the honest answer for both new platforms.
+   */
+  test('never mints an instagram.com profile URL for a youtube or web creator', () => {
+    for (const platform of ['youtube', 'web'] as const) {
+      const attempt = buildFixtureImportAttempt('parsed', platform, 'https://example.test/x');
+      expect(attempt.authorUrl).toBeNull();
+      expect(attempt.result.kind === 'parsed' && attempt.result.attribution.authorUrl).toBeNull();
+      expect(JSON.stringify(attempt)).not.toContain('instagram.com');
+    }
+  });
+
+  test('still builds a real profile URL for the two platforms that have one', () => {
+    const tiktok = buildFixtureImportAttempt('parsed', 'tiktok', 'https://www.tiktok.com/@x/video/1');
+    const instagram = buildFixtureImportAttempt('parsed', 'instagram', 'https://www.instagram.com/reel/1');
+    expect(tiktok.authorUrl).toContain('tiktok.com/@');
+    expect(instagram.authorUrl).toContain('instagram.com/');
+  });
+
+  test('a creator we can name but not link to still travels with a name', () => {
+    const attempt = buildFixtureImportAttempt('parsed', 'web', 'https://voorbeeldkeuken.nl/recept');
+    expect(attempt.authorName).not.toBeNull();
+    expect(attempt.authorUrl).toBeNull();
+  });
+});
+
+describe('buildFixtureImportAttempt — the two outcomes the web route added', () => {
+  /**
+   * `no_recipe_on_page` carries no attribution BY DESIGN (types.ts): the
+   * only thing a web import reads is the page's structured recipe object,
+   * and there wasn't one — so there is no author it found and no image it
+   * was given. A fixture that filled the sidecars in anyway would make the
+   * demo look richer than the real path can ever be.
+   */
+  test('"no_recipe_on_page" carries no creator, no thumbnail and no caption', () => {
+    const attempt = buildFixtureImportAttempt('no_recipe_on_page', 'web', 'https://voorbeeldkeuken.nl/recept');
+    expect(attempt.result).toEqual({ kind: 'no_recipe_on_page' });
+    expect(attempt.authorName).toBeNull();
+    expect(attempt.authorUrl).toBeNull();
+    expect(attempt.thumbnailUrl).toBeNull();
+  });
+
+  test('"source_fetch_failed" carries a reason and never a creator — nothing was ever read', () => {
+    const attempt = buildFixtureImportAttempt('source_fetch_failed', 'web', 'https://voorbeeldkeuken.nl/recept');
+    expect(attempt.result.kind).toBe('source_fetch_failed');
+    if (attempt.result.kind === 'source_fetch_failed') {
+      expect(attempt.result.reason).toBe('refused');
+    }
+    expect(attempt.authorName).toBeNull();
+    expect(attempt.thumbnailUrl).toBeNull();
+  });
+
+  /** The demo-worthy YouTube case is the unconfigured API key: a named, non-retryable deployment fact rather than a site being rude. */
+  test('"source_fetch_failed" on youtube demos the missing Data API key', () => {
+    const attempt = buildFixtureImportAttempt(
+      'source_fetch_failed',
+      'youtube',
+      'https://www.youtube.com/watch?v=demo',
+    );
+    expect(attempt.result.kind === 'source_fetch_failed' && attempt.result.reason).toBe('missing_credentials');
+  });
+});
+
+/**
+ * The fixture has no backend, so it inserted nothing and there is no
+ * canonical `recipes` row to point at. `null` says that; a plausible uuid
+ * would demo a `shared_cooks` link (0009) that does not exist.
+ */
+describe('buildFixtureImportAttempt — canonical recipe id', () => {
+  test('a "parsed" fixture states an explicit null recipeId rather than inventing one', () => {
+    const attempt = buildFixtureImportAttempt('parsed', 'tiktok', 'https://www.tiktok.com/@x/video/1');
+    if (attempt.result.kind !== 'parsed') {
+      throw new Error('expected parsed');
+    }
+    expect(attempt.result.recipeId).toBeNull();
+    expect('recipeId' in attempt.result).toBe(true);
   });
 });

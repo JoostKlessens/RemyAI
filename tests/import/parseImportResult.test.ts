@@ -41,12 +41,23 @@ describe('parseImportResult — parsed', () => {
     expect(result?.kind === 'parsed' && result.recipe.title).toBe('Traybake met kip');
   });
 
-  test('accepts a parsed result with no attribution key at all', () => {
+  /**
+   * A function deployed before `attribution` became required sends no such
+   * key. That still decodes — breaking every client mid-rollout would buy
+   * nothing — but it now decodes to an explicit all-null attribution
+   * rather than an absent field. That is not an invention: types.ts has
+   * always defined an absent attribution here as exactly equivalent to a
+   * populated all-null one, and materialising it means no reader
+   * downstream has to check both `undefined` and three nulls to learn the
+   * same fact.
+   */
+  test('materialises an all-null attribution when the response carries no attribution key', () => {
     const response = parsedResponse() as Record<string, unknown>;
     delete response.attribution;
     const result = parseImportResult(response);
     expect(result?.kind).toBe('parsed');
-    expect(result && 'attribution' in result).toBe(false);
+    expect(result && 'attribution' in result).toBe(true);
+    expect(result).toMatchObject({ attribution: { authorName: null, authorUrl: null, thumbnailUrl: null } });
   });
 
   test('accepts an attribution whose optional fields are all null', () => {
@@ -96,10 +107,24 @@ describe('parseImportResult — parsed', () => {
     expect(parseImportResult(parsedResponse({ platform: 'pinterest' }))).toBeNull();
   });
 
-  /** SRC-02/SRC-03: youtube joined the vocabulary — parseImportResult.ts's PLATFORMS Set must stay in sync with ImportPlatform (types.ts) and urlParsing.ts's host recognition. */
-  test('accepts a parsed result for the youtube platform', () => {
-    const result = parseImportResult(parsedResponse({ platform: 'youtube', sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }));
-    expect(result?.kind === 'parsed' && result.platform).toBe('youtube');
+  /**
+   * The client-side platform vocabulary is now derived from an exhaustive
+   * `Record<ImportPlatform, true>`, so it cannot fall behind the union the
+   * way a hand-written list did twice. This asserts every member of that
+   * union decodes — the previous version of this suite only ever checked
+   * the members someone had remembered to add.
+   */
+  test('accepts a parsed result for every platform in the import vocabulary', () => {
+    const platforms = [
+      { platform: 'tiktok', sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/123' },
+      { platform: 'instagram', sourceUrl: 'https://www.instagram.com/reel/Cx1y2z3' },
+      { platform: 'youtube', sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      { platform: 'web', sourceUrl: 'https://www.leukerecepten.nl/recepten/traybake-kip/' },
+    ];
+    for (const overrides of platforms) {
+      const result = parseImportResult(parsedResponse(overrides));
+      expect(result?.kind === 'parsed' && result.platform).toBe(overrides.platform);
+    }
   });
 
   test('rejects a parsed result with a blank sourceUrl', () => {
@@ -189,6 +214,67 @@ describe('parseImportResult — failure variants', () => {
     expect(parseImportResult({ kind: 'unsupported_url' })).toEqual({ kind: 'unsupported_url' });
     expect(parseImportResult({ kind: 'llm_request_failed' })).toEqual({ kind: 'llm_request_failed' });
     expect(parseImportResult({ kind: 'parse_failed' })).toEqual({ kind: 'parse_failed' });
+  });
+});
+
+describe('parseImportResult — no_recipe_on_page (the web route)', () => {
+  test('accepts the variant on its kind alone', () => {
+    expect(parseImportResult({ kind: 'no_recipe_on_page' })).toEqual({ kind: 'no_recipe_on_page' });
+  });
+
+  /**
+   * The variant deliberately carries no caption and no attribution: the
+   * only thing a web import ever reads is the page's structured recipe
+   * object, and there wasn't one, so anything else attached here would be
+   * scraped text we invented a source for (types.ts). A rogue or future
+   * function attaching either must not have it narrowed through.
+   */
+  test('drops a caption or attribution a rogue response tries to attach', () => {
+    const caption = '350 g pasta, 4 el pesto';
+    const result = parseImportResult({
+      kind: 'no_recipe_on_page',
+      caption,
+      attribution: VALID_ATTRIBUTION,
+    });
+    expect(result).toEqual({ kind: 'no_recipe_on_page' });
+    expect(JSON.stringify(result)).not.toContain(caption);
+  });
+});
+
+describe('parseImportResult — source_fetch_failed', () => {
+  test('accepts every reason in the vocabulary, both producers included', () => {
+    const reasons = [
+      'refused',
+      'not_found',
+      'server_error',
+      'too_large',
+      'not_html',
+      'network_error',
+      'missing_credentials',
+    ];
+    for (const reason of reasons) {
+      expect(parseImportResult({ kind: 'source_fetch_failed', reason })).toEqual({
+        kind: 'source_fetch_failed',
+        reason,
+      });
+    }
+  });
+
+  /**
+   * Same version-skew posture as `oembed_failed`: a reason this client
+   * cannot render honestly fails the whole result rather than being
+   * downgraded to generic copy written for a different failure.
+   */
+  test('rejects a reason outside the vocabulary, and a missing one', () => {
+    expect(parseImportResult({ kind: 'source_fetch_failed', reason: 'teapot' })).toBeNull();
+    expect(parseImportResult({ kind: 'source_fetch_failed' })).toBeNull();
+    expect(parseImportResult({ kind: 'source_fetch_failed', reason: 42 })).toBeNull();
+  });
+
+  /** oEmbed's vocabulary overlaps this one but is not it — the two unions are separate on purpose (types.ts). */
+  test('rejects an oEmbed-only reason smuggled onto this variant', () => {
+    expect(parseImportResult({ kind: 'source_fetch_failed', reason: 'region_locked' })).toBeNull();
+    expect(parseImportResult({ kind: 'source_fetch_failed', reason: 'invalid_url' })).toBeNull();
   });
 });
 

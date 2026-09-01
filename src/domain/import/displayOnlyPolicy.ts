@@ -39,11 +39,32 @@
  * against that conclusion, not against "every platform besides Instagram
  * defaults to yes" — see its own doc comment.
  *
- * NOTHING IN THIS FILE CALLS THE YOUTUBE DATA API. That call, and the
- * client that makes it, do not exist yet — see `ImportPlatform`'s doc
- * comment in types.ts and this repo's SRC-02/SRC-03 scope note. Until it
- * is built, a YouTube URL normalizes and reaches this policy correctly,
- * but the edge function still has no way to actually fetch it.
+ * NOTHING IN THIS FILE CALLS THE YOUTUBE DATA API, and that is now a
+ * statement about layering rather than about something missing. The call
+ * exists: supabase/functions/parse-recipe/index.ts resolves a YouTube
+ * video through `videos.list` beside its oEmbed client, and the typed
+ * failures of that call come back as `source_fetch_failed` (types.ts).
+ * This module still makes no request of any kind, because "may we extract
+ * from this platform" is a licensing question answerable from data already
+ * in hand — which is precisely why it belongs in a pure, tested module and
+ * the fetch does not.
+ *
+ * `'web'` IS THE FOURTH PLATFORM, AND IT IS NOT DISPLAY-ONLY EITHER — the
+ * explicit decision `isDisplayOnlyPlatform`'s own note below demands
+ * instead of an inherited one. An ordinary page's schema.org/Recipe
+ * JSON-LD is published BY THE SITE, expressly so that machines will read
+ * it: that is what the vocabulary is FOR, and Google's rich results are
+ * the reason nearly every recipe site emits it. There is no counterpart to
+ * Meta's embedding-only clause because there is no metadata endpoint and
+ * no terms of use standing between us and the page — the publisher put a
+ * machine-readable recipe in the document they served. So `'web'` gets
+ * full extraction, and unlike the other three it needs no model to do it.
+ *
+ * What that does NOT license is republishing the page's prose or its
+ * photographs, and the pipeline stores neither: a recipe's ingredients and
+ * steps come out of the structured object, and attribution stays an
+ * obligation for a web import exactly as it is for a video (PD-007,
+ * buildAttribution.ts).
  *
  * This module is the single place where the per-platform extraction
  * decision is made, so "which platforms may we extract from" is one
@@ -67,7 +88,7 @@ import type { ImportPlatform, ImportResult } from './types';
 export type DisplayOnlyImportResult = Extract<ImportResult, { readonly kind: 'display_only' }>;
 
 /**
- * A plain comparison, not a configurable set: there are three platforms,
+ * A plain comparison, not a configurable set: there are four platforms,
  * and the answer for each follows from a specific published policy rather
  * than from a preference someone might want to tune. A config flag would
  * invite switching Instagram extraction back on without the approval
@@ -76,16 +97,20 @@ export type DisplayOnlyImportResult = Extract<ImportResult, { readonly kind: 'di
  * Written as `platform === 'instagram'` rather than `platform !==
  * 'tiktok'` on purpose. The latter reads as "display-only is the default,
  * and TikTok is the one carve-out" — which happens to give YouTube the
- * right answer today (`false`, full extraction) but for the wrong reason:
- * it would do so by accident, because YouTube isn't TikTok, not because
- * anyone confirmed the Data API licenses it. The next platform added here
- * should have to be looked at and explicitly decided, not silently
- * inherit "not display-only" by failing to match a growing exclusion list.
- * `platform === 'instagram'` names the one platform this policy actually
- * restricts, so a fourth platform defaults to full extraction only in the
- * sense that someone has to add its own `||` branch to make it
- * display-only — the safer direction to default in, but still a decision
- * this function forces into the open rather than making silently.
+ * right answer (`false`, full extraction) but for the wrong reason: it
+ * would do so by accident, because YouTube isn't TikTok, not because
+ * anyone confirmed the Data API licenses it. A platform added here should
+ * have to be looked at and explicitly decided, not silently inherit "not
+ * display-only" by failing to match a growing exclusion list.
+ *
+ * THAT DECISION HAS NOW BEEN MADE TWICE, and both answers are recorded in
+ * the file header rather than left implied by this expression: YouTube is
+ * not display-only because the Data API licenses reading a video's
+ * snippet, and `'web'` is not display-only because a page's schema.org
+ * JSON-LD is published for machines to read in the first place. Neither
+ * conclusion follows from `platform === 'instagram'` — the expression is
+ * just where the two conclusions end up agreeing, and the header is where
+ * they were argued.
  */
 export function isDisplayOnlyPlatform(platform: ImportPlatform): boolean {
   return platform === 'instagram';

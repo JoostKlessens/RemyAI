@@ -73,6 +73,15 @@
  * rather than served with a null one; see the guard for why the loud
  * failure is the cheap one.
  *
+ * TWO OF THE FOUR PLATFORMS GET NONE OF THIS, AND THE REASON IS A CHECK
+ * CONSTRAINT. `recipes.platform` (0006) accepts only `'tiktok'` and
+ * `'instagram'`, so a YouTube or web import cannot be stored here at all
+ * and permanently reports `recipeId: null` — no deduplication, and no
+ * `shared_cooks` join, which is the social half of everything argued
+ * above. `canStoreCanonicalRecipe` below is where that ceiling is stated
+ * once, with the migration that would lift it and the reason writing that
+ * migration is not this change's decision to make.
+ *
  * THE TRADEOFF WE ARE ACCEPTING. Deduplication makes a bad extraction
  * sticky: once a mediocre parse of a URL is stored, every later importer
  * of that URL gets it, instead of rolling the dice on the model again.
@@ -91,6 +100,7 @@ import { validateParsedRecipe } from './validateParsed.ts';
 export interface RecipeRowInsert {
   /** THE deduplication key: the post-redirect, normalized URL, unique in the table. See the edge function on why it must be resolved before this is read. */
   readonly normalized_url: string;
+  /** Typed as the full `ImportPlatform`, but the COLUMN accepts only two of its members — call `canStoreCanonicalRecipe` before building a row, and read that function for why the gap is a decision someone still has to make rather than a bug to route around. */
   readonly platform: ImportPlatform;
   readonly title: string;
   readonly thumbnail_url: string | null;
@@ -123,6 +133,64 @@ export interface CanonicalRecipeContext {
   readonly platform: ImportPlatform;
   /** From `buildAttribution`, on the oEmbed payload already fetched to read the caption. Never a second round trip. */
   readonly attribution: ImportAttribution;
+}
+
+/**
+ * The platforms the `recipes` table will actually accept a row for. Not a
+ * preference — a mirror of a database constraint:
+ *
+ *   platform text not null check (platform in ('tiktok', 'instagram'))
+ *      — supabase/migrations/0006_canonical_recipes.sql
+ *
+ * The column is NOT NULL, so there is no "leave it blank" escape either: a
+ * `'youtube'` or `'web'` canonical row is not undesirable, it is REJECTED,
+ * and the INSERT fails. Defined here as "the values that CHECK accepts",
+ * deliberately not as "the platforms we want to cache" — if the two ever
+ * diverge, this constant is wrong and the fix is to reread the migration,
+ * not to relitigate the product question.
+ *
+ * WHAT THIS COSTS, STATED PLAINLY BECAUSE IT IS NOT A DETAIL. A YouTube or
+ * web import returns `recipeId: null`, permanently. That means it
+ * deduplicates against nothing — the twentieth household to import the
+ * same food blog pays the same fetch and gets its own unrelated meal — and
+ * it means the social layer can never fire for it: `shared_cooks` (0009)
+ * joins two households on a shared `recipes` row, and
+ * `FRIEND_PROOF_BOOST` (src/domain/scoring.ts) is computed from that join.
+ * A web-imported dinner therefore cannot be proof to a friend, however
+ * many friends cook it. That is a real product hole, not a rough edge.
+ *
+ * WHAT WOULD LIFT IT. One migration, widening 0006's CHECK to the full
+ * import vocabulary:
+ *
+ *   alter table public.recipes drop constraint recipes_platform_check;
+ *   alter table public.recipes add constraint recipes_platform_check
+ *     check (platform in ('tiktok', 'instagram', 'youtube', 'web'));
+ *
+ * WRITING THAT MIGRATION IS DELIBERATELY OUT OF THIS CHANGE'S SCOPE AND IS
+ * THE OWNER'S CALL. It is not a mechanical widening: making a web page's
+ * extraction a shared, cross-household artifact is a decision about what
+ * `recipes` is for, and it drags in questions this change has no standing
+ * to answer — whether a page whose content can change under us should be
+ * cached indefinitely (a video's caption is frozen; a blog post is
+ * edited), and whether a `'web'` row's `author_url` is attribution of the
+ * same kind PD-007 means. Until someone answers those, the honest code is
+ * code that degrades rather than code that pretends.
+ *
+ * WHY NOT JUST ATTEMPT THE INSERT AND LET IT FAIL? Because a
+ * guaranteed-to-fail write is worse than no write in every dimension that
+ * matters here. It spends a round trip to learn something this function
+ * knows for free; it puts a real Postgres constraint violation in the logs
+ * of every single YouTube and web import, which trains whoever reads those
+ * logs to ignore constraint violations; and the `recipeId: null` the user
+ * ends up with is identical either way — so the only thing the failed
+ * INSERT adds is noise that looks like a bug. Not attempting it says the
+ * same thing quietly and truthfully: this platform has no canonical row,
+ * by construction.
+ */
+const STORABLE_CANONICAL_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>(['tiktok', 'instagram']);
+
+export function canStoreCanonicalRecipe(platform: ImportPlatform): boolean {
+  return STORABLE_CANONICAL_PLATFORMS.has(platform);
 }
 
 export function buildRecipeRowInsert(recipe: ParsedRecipe, context: CanonicalRecipeContext): RecipeRowInsert {
@@ -252,8 +320,37 @@ function readAttribution(row: Record<string, unknown>): ImportAttribution | null
   return { authorName: authorName.value, authorUrl: authorUrl.value, thumbnailUrl: thumbnailUrl.value };
 }
 
+/**
+ * The third independent copy of the import platform vocabulary — one per
+ * trust boundary, exactly like the three copies of `readNullableString`
+ * this directory keeps (see that function's own note). This one guards a
+ * DATABASE ROW; parseImportResult.ts's guards an HTTP response, and
+ * routeParams.ts's guards a router param.
+ *
+ * Derived from an exhaustive `Record` rather than written as a chain of
+ * `===` comparisons, and the change is not cosmetic: the chain compiled
+ * happily while missing a member, so widening the union meant finding
+ * every such list by hand — and the widening before this one missed two of
+ * them, leaving a live bug in routeParams.ts. A `Record<ImportPlatform,
+ * true>` cannot be missing a key. The next member added to the union
+ * breaks this file's build instead of quietly rejecting rows.
+ *
+ * Note this is NOT the same question as `canStoreCanonicalRecipe` above,
+ * and the two must not be collapsed. This asks "is this string one of our
+ * platforms" (a vocabulary check, four members); that asks "will the
+ * `recipes` CHECK constraint accept it" (a schema fact, two members). A
+ * stored row naming `'web'` is a row from a future in which that migration
+ * was written — reading it back is correct; writing it today is not.
+ */
+const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
+  tiktok: true,
+  instagram: true,
+  youtube: true,
+  web: true,
+};
+
 function isImportPlatform(value: unknown): value is ImportPlatform {
-  return value === 'tiktok' || value === 'instagram' || value === 'youtube';
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PLATFORM_MEMBERS, value);
 }
 
 /**

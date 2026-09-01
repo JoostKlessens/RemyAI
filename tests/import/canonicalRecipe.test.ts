@@ -3,6 +3,7 @@ import {
   buildRecipeIngredientRows,
   buildRecipeRowInsert,
   buildRecipeStepRows,
+  canStoreCanonicalRecipe,
   parseStoredRecipe,
 } from '@/domain/import/canonicalRecipe';
 import type { ImportAttribution } from '@/domain/import/types';
@@ -349,6 +350,20 @@ describe('parseStoredRecipe — any structural doubt degrades to a cache miss', 
     expect(result?.kind === 'parsed' && result.platform).toBe('youtube');
   });
 
+  /**
+   * READING a `'web'` row is correct even though WRITING one is currently
+   * impossible: `recipes.platform`'s CHECK constraint refuses it today
+   * (see `canStoreCanonicalRecipe`), so such a row can only exist in a
+   * future where that migration was written — and a reader that rejected
+   * it would turn the first day of that future into a silent cache miss on
+   * every web import. The vocabulary guard and the write gate are separate
+   * questions and must not be collapsed into one list.
+   */
+  test('accepts web, so a row written after the constraint is widened still reads back', () => {
+    const result = parseStoredRecipe(makeStoredRow({ platform: 'web' }));
+    expect(result?.kind === 'parsed' && result.platform).toBe('web');
+  });
+
   test('returns null when the title is missing or blank', () => {
     expect(parseStoredRecipe(makeStoredRow({ title: undefined }))).toBeNull();
     expect(parseStoredRecipe(makeStoredRow({ title: '  ' }))).toBeNull();
@@ -434,5 +449,45 @@ describe('canonicalRecipe — the write and read halves agree', () => {
     expect(roundTripped?.kind === 'parsed' && roundTripped.sourceUrl).toBe(CONTEXT.normalizedUrl);
     expect(roundTripped?.kind === 'parsed' && roundTripped.attribution).toEqual(ATTRIBUTION);
     expect(roundTripped?.kind === 'parsed' && roundTripped.recipeId).toBe(RECIPE_ID);
+  });
+});
+
+/**
+ * The `recipes` table's own ceiling, asserted at the boundary where it is
+ * decided rather than left to whoever next writes an INSERT. The
+ * constraint this mirrors is a schema fact, not a preference:
+ *
+ *   platform text not null check (platform in ('tiktok', 'instagram'))
+ *      — supabase/migrations/0006_canonical_recipes.sql
+ */
+describe('canStoreCanonicalRecipe — the 0006 CHECK constraint, mirrored', () => {
+  test('accepts exactly the two platforms the CHECK constraint names', () => {
+    expect(canStoreCanonicalRecipe('tiktok')).toBe(true);
+    expect(canStoreCanonicalRecipe('instagram')).toBe(true);
+  });
+
+  /**
+   * Not "we would rather not cache these" — the column is NOT NULL and the
+   * CHECK rejects both values, so the INSERT fails. The consequence is
+   * real and permanent until someone widens the constraint: a YouTube or
+   * web import reports `recipeId: null`, deduplicates against nothing, and
+   * can never carry `shared_cooks` / FRIEND_PROOF_BOOST.
+   */
+  test('refuses youtube and web, which the column would reject outright', () => {
+    expect(canStoreCanonicalRecipe('youtube')).toBe(false);
+    expect(canStoreCanonicalRecipe('web')).toBe(false);
+  });
+
+  /**
+   * Pinned as a whole rather than platform by platform: this is the one
+   * predicate in the import pipeline that must NOT track `ImportPlatform`
+   * as it grows. A new platform is storable only once a migration says so,
+   * so the safe default for a member nobody has considered is `false`, and
+   * a change that widened this by accident would start writing rows the
+   * database rejects.
+   */
+  test('is a two-member answer across the whole platform vocabulary, not a growing one', () => {
+    const storable = (['tiktok', 'instagram', 'youtube', 'web'] as const).filter(canStoreCanonicalRecipe);
+    expect(storable).toEqual(['tiktok', 'instagram']);
   });
 });

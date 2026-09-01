@@ -76,10 +76,13 @@ describe('toMealDraft — field mapping', () => {
   });
 
   /**
-   * `ParsedRecipe.dishTags` is optional purely for literals that predate it
-   * (src/app/import/_fixtures.ts, confirm.tsx). Those still have to produce
-   * a storable draft, and the stored field is required — so the missing key
-   * must become `[]` here rather than travelling on as `undefined`.
+   * `ParsedRecipe.dishTags` is the last optional field on that type, and
+   * `buildEditedRecipe` in src/app/import/confirm.tsx is the literal
+   * keeping it that way — it rebuilds a recipe from the confirmation
+   * screen's edited fields and carries no dish tags at all. Such a recipe
+   * still has to produce a storable draft, and the stored field is
+   * required, so the missing key must become `[]` here rather than
+   * travelling on as `undefined`.
    */
   test('treats a recipe literal with no dishTags key at all as having no categories', () => {
     const { dishTags: _dishTags, ...withoutDishTags } = makeParsedRecipe();
@@ -159,11 +162,17 @@ describe('toMealDraft — canonical recipe link (meals.recipe_id, 0006)', () => 
   });
 
   /**
-   * An import that knows no canonical recipe (today: every one of them —
-   * the edge function stores the row but never returns its id) must draft
-   * an explicit `null`: the same "this meal is nobody's copy of anything"
-   * a seeded or hand-entered meal stores. An `undefined` travelling on
-   * would be a third state nothing downstream distinguishes.
+   * An import that knows no canonical recipe must draft an explicit
+   * `null`: the same "this meal is nobody's copy of anything" a seeded or
+   * hand-entered meal stores. An `undefined` travelling on would be a
+   * third state nothing downstream distinguishes.
+   *
+   * The note that used to stand here said no import ever knows one,
+   * because the function stored the row without returning its id. W-01b
+   * closed that: `ImportResult.recipeId` carries it home and confirm.tsx
+   * hands it to this function. What DOES still always draft null is a
+   * YouTube or web import — `recipes.platform`'s CHECK constraint refuses
+   * both, so no row is ever attempted (`canStoreCanonicalRecipe`).
    */
   test('drafts an explicit null — never undefined — when no canonical recipe is known', () => {
     const omitted = toMealDraft(makeParsedRecipe(), TIKTOK_CONTEXT);
@@ -189,5 +198,62 @@ describe('toMealDraft — sourcePlatform bridging (0001_init.sql vocabulary)', (
       thumbnailUrl: null,
     });
     expect(draft.sourcePlatform).toBe('reels');
+  });
+});
+
+/**
+ * The two platforms the 0001 vocabulary has no word for. Before this,
+ * `toMealSourcePlatform` was a two-branch ternary that answered `'reels'`
+ * for anything that was not TikTok — so a YouTube video and a food blog
+ * both stored "this came from Instagram", a wrong fact in a database
+ * column rather than a wrong pixel on a screen.
+ */
+describe('toMealDraft — sourcePlatform for platforms the 0001 vocabulary predates', () => {
+  test('drafts null for a youtube import rather than claiming it came from Instagram', () => {
+    const draft = toMealDraft(makeParsedRecipe(), {
+      householdId: 'household-1',
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      platform: 'youtube',
+      thumbnailUrl: null,
+    });
+    expect(draft.sourcePlatform).toBeNull();
+  });
+
+  test('drafts null for a web import rather than claiming it came from Instagram', () => {
+    const draft = toMealDraft(makeParsedRecipe(), {
+      householdId: 'household-1',
+      sourceUrl: 'https://www.leukerecepten.nl/recepten/traybake-kip/',
+      platform: 'web',
+      thumbnailUrl: null,
+    });
+    expect(draft.sourcePlatform).toBeNull();
+  });
+
+  /**
+   * `null` means "this column has no honest word for this platform", never
+   * "we do not know where this came from" — the source is known exactly,
+   * and `sourceUrl` right beside it says which page. A draft that dropped
+   * the URL along with the platform would be the second reading, and it is
+   * the wrong one.
+   */
+  test('keeps the source URL even when the platform has no storable value', () => {
+    const draft = toMealDraft(makeParsedRecipe(), {
+      householdId: 'household-1',
+      sourceUrl: 'https://www.leukerecepten.nl/recepten/traybake-kip/',
+      platform: 'web',
+      thumbnailUrl: null,
+    });
+    expect(draft.sourcePlatform).toBeNull();
+    expect(draft.sourceUrl).toBe('https://www.leukerecepten.nl/recepten/traybake-kip/');
+  });
+
+  test('states sourcePlatform explicitly as null rather than omitting the key', () => {
+    const draft = toMealDraft(makeParsedRecipe(), {
+      householdId: 'household-1',
+      sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      platform: 'youtube',
+      thumbnailUrl: null,
+    });
+    expect('sourcePlatform' in draft).toBe(true);
   });
 });
