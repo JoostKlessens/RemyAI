@@ -77,8 +77,18 @@ describe('buildRecipeRowInsert — PD-006 guarantee', () => {
     expect(row.dish_tags).toEqual(['pasta', 'vegetarisch']);
   });
 
-  test('writes an empty dish_tags array, never undefined, for a recipe that predates the field', () => {
-    const row = buildRecipeRowInsert(makeParsedRecipe({ dishTags: undefined }), CONTEXT);
+  /**
+   * This replaces a test that passed `dishTags: undefined` to stand in for
+   * "a recipe literal written before the field existed". That state is
+   * gone: `ParsedRecipe.dishTags` is required now, so the row builder no
+   * longer coalesces and there is no `undefined` left to defend against.
+   * What still matters is that a recipe with genuinely no categories
+   * writes `[]` and not something invented — the column is
+   * `not null default '{}'` (0004_dish_tags.sql), and an empty array is
+   * the honest value for it.
+   */
+  test('writes an empty dish_tags array for a recipe with no categories, never a guessed one', () => {
+    const row = buildRecipeRowInsert(makeParsedRecipe({ title: 'Restjespasta', dishTags: [] }), CONTEXT);
     expect(row.dish_tags).toEqual([]);
   });
 });
@@ -197,6 +207,7 @@ describe('parseStoredRecipe — a cache hit is indistinguishable from a fresh im
         authorUrl: 'https://www.tiktok.com/@chefremy',
         thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
       },
+      provenance: 'model_from_caption',
     });
   });
 
@@ -271,6 +282,48 @@ describe('parseStoredRecipe — a cache hit is indistinguishable from a fresh im
   test('drops a stored dish tag that has since left the vocabulary, keeping the recipe', () => {
     const result = parseStoredRecipe(makeStoredRow({ dish_tags: ['kip', 'italiaans'] }));
     expect(result?.kind === 'parsed' && result.recipe.dishTags).toEqual(['kip']);
+  });
+});
+
+/**
+ * RCP-06 on the cache path. A stored row records no provenance and this
+ * change adds no column for one, so the answer is DEDUCED from what
+ * `canStoreCanonicalRecipe` permits: only TikTok can actually put a row in
+ * this table (Instagram being display-only, PD-011), and the TikTok route
+ * is the caption route. See `STORED_ROW_PROVENANCE` in canonicalRecipe.ts
+ * for the full chain and for what breaks it.
+ */
+describe('parseStoredRecipe — provenance is deduced from the storability guard, never stored', () => {
+  test('reports a cache hit as a model reading of a caption', () => {
+    const result = parseStoredRecipe(makeStoredRow());
+    expect(result?.kind === 'parsed' && result.provenance).toBe('model_from_caption');
+  });
+
+  /**
+   * The deduction rests on the guard, not on the row, so a row cannot talk
+   * this function out of it — and equally cannot talk it INTO a different
+   * answer. A `provenance` column smuggled onto the row (by a future
+   * schema, or by a hand-written test) is not read: the day such a column
+   * exists is the day this line is meant to change deliberately, in the
+   * same commit as the migration, not the day it starts silently
+   * believing whatever the database says.
+   */
+  test('ignores a provenance-shaped column a row tries to supply', () => {
+    const result = parseStoredRecipe(makeStoredRow({ provenance: 'publisher_structured_data' }));
+    expect(result?.kind === 'parsed' && result.provenance).toBe('model_from_caption');
+  });
+
+  /**
+   * THE TRIPWIRE. This asserts the premise the deduction rests on rather
+   * than the deduction itself: `'model_from_caption'` is honest only while
+   * `canStoreCanonicalRecipe` refuses `'web'`, because a stored web row
+   * would have come from a publisher's JSON-LD. If the pending
+   * `recipes.platform` migration ever widens that CHECK, this test fails
+   * first and points at the line that has to change with it.
+   */
+  test('still refuses to store the one platform whose provenance would differ', () => {
+    expect(canStoreCanonicalRecipe('web')).toBe(false);
+    expect(canStoreCanonicalRecipe('tiktok')).toBe(true);
   });
 });
 

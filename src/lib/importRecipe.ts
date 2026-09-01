@@ -58,7 +58,7 @@
  */
 
 import { parseImportResult } from '@/domain/import/parseImportResult';
-import type { ImportResult } from '@/domain/import/types';
+import type { ImportPlatform, ImportResult, RecipeProvenance } from '@/domain/import/types';
 import { supabase } from './supabase';
 
 const PARSE_RECIPE_FUNCTION = 'parse-recipe';
@@ -82,14 +82,66 @@ export interface ImportAttempt {
    */
   readonly authorUrl: string | null;
   readonly thumbnailUrl: string | null;
+  /**
+   * RCP-06. HOW the recipe on this attempt was arrived at: read out of the
+   * publisher's own machine-readable object, or worked out of a caption by
+   * a model. Lifted to the attempt for the same reason `authorUrl` was —
+   * the confirmation screen is where it matters and the confirmation
+   * screen cannot recover it. `sourceUrl` and `platform` both sit right
+   * there and both look like they would do: a `'web'` import is structured
+   * data TODAY, and a screen that concluded that from the platform would
+   * be asserting a pipeline decision it does not own. Provenance is a fact
+   * about how one particular import actually resolved, so it is reported
+   * by the thing that resolved it or it is not known.
+   *
+   * `null` FOR EVERY NON-`parsed` OUTCOME, and that is a statement rather
+   * than a gap. The other variants carry no recipe at all, so there is
+   * nothing whose origin could be described: a display-only post, a
+   * caption with no recipe in it, a page that never opened. A user who
+   * types the recipe themselves from any of those reaches the confirm
+   * screen with `null`, which is exactly right — it is their recipe, and
+   * claiming a provenance for it would be inventing the one fact this
+   * field exists to carry.
+   */
+  readonly provenance: RecipeProvenance | null;
 }
 
-const TRANSPORT_FAILURE: ImportAttempt = {
-  result: { kind: 'llm_request_failed' },
-  authorName: null,
-  authorUrl: null,
-  thumbnailUrl: null,
-};
+/**
+ * WHY THIS IS A FUNCTION AND NOT THE MODULE-LEVEL CONSTANT IT WAS.
+ * `llm_request_failed` now carries a platform (types.ts requires one on
+ * every outcome but `unsupported_url`), and a constant built at module load
+ * has no URL and therefore nothing to state.
+ *
+ * THE VALUE IS REPORTED, NOT INVENTED, which is the only reason this is
+ * allowed to exist. The caller has already run `normalizeRecipeUrl` over
+ * the pasted text — `requestImport`'s own doc comment has always said so,
+ * and the paste screen would not have reached this call otherwise — so the
+ * platform passed in is the same function's answer about the same URL that
+ * the edge function would have computed for itself. What this attempt
+ * cannot report is anything the SERVER concluded, and it does not try to:
+ * a transport failure means no response arrived, so there is no
+ * attribution, no provenance and no canonical id, and all three stay null.
+ *
+ * ONE HONEST LIMIT, WORTH KNOWING BEFORE TRUSTING THIS NUMBER. If the
+ * pasted link were a short link whose target belonged to a different
+ * platform, the edge function's `resolveEffectiveUrl` would have corrected
+ * the classification and this client never learns that it did. TikTok's
+ * `vm.`/`vt.` codes are the only short links that path expands and they
+ * resolve to TikTok, so today the two answers cannot differ — and if that
+ * ever changes, what this reports is still the truth available on this side
+ * of a request that never completed. Note also that these client-side
+ * attempts reach no log: IMP-07 counts inside the edge function
+ * (importResponse.ts), so nothing here can move that denominator.
+ */
+function transportFailure(platform: ImportPlatform): ImportAttempt {
+  return {
+    result: { kind: 'llm_request_failed', platform },
+    authorName: null,
+    authorUrl: null,
+    thumbnailUrl: null,
+    provenance: null,
+  };
+}
 
 function toAttempt(result: ImportResult): ImportAttempt {
   // One branch for all three attribution-carrying variants, where `parsed`
@@ -107,9 +159,15 @@ function toAttempt(result: ImportResult): ImportAttempt {
       authorName: result.attribution.authorName,
       authorUrl: result.attribution.authorUrl,
       thumbnailUrl: result.attribution.thumbnailUrl,
+      // Narrower than the branch it sits in, on purpose. Attribution is
+      // shared by all three of these variants; provenance describes a
+      // recipe, and only `parsed` has one. Reading it off the union member
+      // rather than off the platform is what keeps this honest — see
+      // `ImportAttempt.provenance`.
+      provenance: result.kind === 'parsed' ? result.provenance : null,
     };
   }
-  return { result, authorName: null, authorUrl: null, thumbnailUrl: null };
+  return { result, authorName: null, authorUrl: null, thumbnailUrl: null, provenance: null };
 }
 
 /**
@@ -117,20 +175,29 @@ function toAttempt(result: ImportResult): ImportAttempt {
  * `normalizeRecipeUrl` check, mirroring the edge function's pipeline
  * order — an obviously unsupported link never costs a round trip.
  *
+ * `platform` IS THE SECOND HALF OF THAT SAME CHECK, and it is a parameter
+ * rather than something recomputed here for a reason: the caller already
+ * holds it (it comes out of the same `normalizeRecipeUrl` call that
+ * produced `normalizedUrl`), and re-deriving it would create a second place
+ * that could answer differently from the first. It is used only to build
+ * the transport-failure attempt — every response that actually arrives
+ * states its own platform, and the function's answer wins over the
+ * client's guess without exception.
+ *
  * Never throws: every failure it can reach is returned as a typed
  * `ImportResult`, so callers have no error path to forget.
  */
-export async function requestImport(normalizedUrl: string): Promise<ImportAttempt> {
+export async function requestImport(normalizedUrl: string, platform: ImportPlatform): Promise<ImportAttempt> {
   try {
     const { data, error } = await supabase.functions.invoke<unknown>(PARSE_RECIPE_FUNCTION, {
       body: { url: normalizedUrl },
     });
     if (error) {
-      return TRANSPORT_FAILURE;
+      return transportFailure(platform);
     }
     const result = parseImportResult(data);
-    return result === null ? TRANSPORT_FAILURE : toAttempt(result);
+    return result === null ? transportFailure(platform) : toAttempt(result);
   } catch {
-    return TRANSPORT_FAILURE;
+    return transportFailure(platform);
   }
 }

@@ -3,7 +3,8 @@
  * answers a missing one is allowed to get.
  *
  * WHY THIS IS A MODULE RATHER THAN A HELPER INSIDE index.ts. The credentials
- * it reads no longer belong to one file: `GEMINI_API_KEY` is index.ts's, and
+ * it reads no longer belong to one file: `GEMINI_API_KEY` is
+ * callExtractionModel.ts's, `YOUTUBE_API_KEY` is fetchSourceText.ts's, and
  * `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` belong to
  * canonicalRecipeStore.ts, which is the only writer of the canonical tables.
  * Exporting the reader from either of those would make one import the other
@@ -104,6 +105,13 @@ export function readRequiredEnvVar(name: string): string {
  * treat one of them as usable. The caller is responsible for turning this
  * null into a typed, user-visible failure — never for carrying on with an
  * empty key.
+ *
+ * It reads one non-credential too: `GEMINI_MODEL` in callExtractionModel.ts,
+ * an optional override with a real default behind it. The unset-or-blank
+ * collapse is the whole reason — a model id set to whitespace would build an
+ * endpoint URL with a hole in it — and a caller that supplies a `??` fallback
+ * is not "carrying on with an empty key", it is choosing the documented
+ * default. Do not read a CREDENTIAL that way.
  */
 export function readOptionalEnvVar(name: string): string | null {
   const value = Deno.env.get(name);

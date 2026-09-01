@@ -7,7 +7,7 @@
  * kind of cross-screen data, applied to this flow's own shape.
  */
 
-import type { ImportPlatform, ParsedRecipe } from '@/domain/import/types';
+import type { ImportPlatform, ParsedRecipe, RecipeProvenance } from '@/domain/import/types';
 
 export interface ImportConfirmParams {
   /** 'manual' when there is no parsed recipe to prefill (no_recipe_in_caption's "type it yourself", or a from-scratch add with no URL at all). */
@@ -53,6 +53,24 @@ export interface ImportConfirmParams {
    * canonical row) and any import whose canonical write failed.
    */
   readonly recipeId: string | null;
+  /**
+   * RCP-06 — how the recipe on this payload was arrived at: read straight
+   * out of a publisher's machine-readable object, or worked out of a
+   * caption by a model. Carried for the same reason `authorUrl` and
+   * `recipeId` are: the confirmation screen cannot recover it. `platform`
+   * travels right beside it and looks like it would answer the question —
+   * it does not. That a `'web'` import means structured data is a fact
+   * about how the pipeline works TODAY, and a screen that re-derived
+   * provenance from the platform would be restating a pipeline decision
+   * rather than reporting what actually happened to this import.
+   *
+   * REQUIRED, and stated even when null — the same call `recipeId` above
+   * makes. `null` is the honest, permanent answer for manual entry and for
+   * every fallback into it: nobody read that recipe out of anything, the
+   * user typed it. See `RecipeProvenanceNote`, which renders nothing at
+   * all for that case rather than claiming an origin.
+   */
+  readonly provenance: RecipeProvenance | null;
 }
 
 export function encodeImportConfirmParams(params: ImportConfirmParams): string {
@@ -110,6 +128,51 @@ function isNullableImportPlatform(value: unknown): value is ImportPlatform | nul
 }
 
 /**
+ * Built exactly like `PLATFORM_MEMBERS` above and for the same reason: a
+ * third `RecipeProvenance` must delete this file from the build until
+ * someone adds it here, rather than quietly becoming "no provenance" on a
+ * screen. Three trust boundaries, three guards — see that constant's note.
+ */
+const PROVENANCE_MEMBERS: Readonly<Record<RecipeProvenance, true>> = {
+  publisher_structured_data: true,
+  model_from_caption: true,
+};
+
+/**
+ * THE ONE FIELD ON THIS PAYLOAD THAT IS READ LENIENTLY, and the asymmetry
+ * is deliberate rather than an oversight.
+ *
+ * Every scalar above is all-or-nothing: a missing or mistyped `recipeId`,
+ * `authorUrl` or `platform` collapses the whole payload to the safe empty
+ * manual shape, because each of them, read wrong, corrupts something that
+ * outlives this screen — a meal pointed at no canonical row, a credit
+ * linking to a stranger, a `sourcePlatform` column that is a lie.
+ * Provenance drives ONE NOTE. Nothing is stored from it, nothing joins on
+ * it, and an absent one renders nothing at all (see
+ * recipeProvenanceCopy.ts) — which is a correct, quieter screen, not a
+ * broken one.
+ *
+ * So the trade runs the other way here. Blanking a recipe the user just
+ * waited several seconds for, and dropping them onto an empty manual
+ * screen, because a NEWER build of this app sent a third provenance value
+ * an older decoder does not know, would recreate the exact bug this file's
+ * `PLATFORM_MEMBERS` note memorialises — in a field whose worst honest
+ * failure is a missing sentence. An unrecognised value is still refused:
+ * we will not render a note built on a word we do not know. It is refused
+ * as ABSENT rather than as evidence the payload is untrustworthy.
+ *
+ * A missing key reads the same way, for a second reason on top of that
+ * one: a payload written before this field existed genuinely had no
+ * provenance to state, and `null` is what that means.
+ */
+function readProvenance(value: unknown): RecipeProvenance | null {
+  if (typeof value !== 'string' || !Object.prototype.hasOwnProperty.call(PROVENANCE_MEMBERS, value)) {
+    return null;
+  }
+  return value as RecipeProvenance;
+}
+
+/**
  * Never throws: this is UI-internal navigation state produced by this same
  * flow one screen earlier, but malformed or missing input still decodes to
  * a safe, empty manual-entry shape rather than crashing the confirmation
@@ -126,6 +189,7 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
     authorUrl: null,
     thumbnailUrl: null,
     recipeId: null,
+    provenance: null,
   };
   if (raw === undefined) {
     return empty;
@@ -166,6 +230,7 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
       authorUrl: parsed.authorUrl,
       thumbnailUrl: parsed.thumbnailUrl,
       recipeId: parsed.recipeId,
+      provenance: readProvenance(parsed.provenance),
     };
   } catch {
     return empty;

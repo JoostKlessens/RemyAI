@@ -26,11 +26,52 @@
  * `display_only` variant an ABSENT attribution is rejected too, not just a
  * malformed one — showing someone's post is only defensible while their
  * name travels with it (PD-011).
+ *
+ * WHERE VERSION SKEW IS TOLERATED AND WHERE IT IS NOT, in one place,
+ * because this module now makes that call three different ways and the
+ * difference is not arbitrary. A field gets a backward-compatible reading
+ * exactly when an old function's silence has a TRUE sentence behind it: an
+ * absent `attribution` on `parsed` means "we cannot name the creator", an
+ * absent `recipeId` means "there is no canonical row", and both are states
+ * a real import genuinely reaches and the UI already draws. A field gets
+ * no such reading when silence means nothing at all — `provenance`
+ * (RCP-06) was the first such case, and `platform` is now the second. The
+ * test is never "how important is this field", it is "is there something
+ * true to say when the response says nothing".
+ *
+ * `platform` LANDS ON THE STRICT SIDE, ON EIGHT OF THE NINE VARIANTS.
+ * types.ts requires it everywhere except `unsupported_url`, on the grounds
+ * that the value is settled by `normalizeRecipeUrl` before any network call
+ * and is therefore in hand at every producer. That argument is exactly what
+ * makes silence here meaningless: a function that answered at all had
+ * already computed the platform, so an omitted one is not an old function
+ * being modest, it is a response this client cannot account for. There is
+ * no true sentence to fall back on and no default that does not fabricate
+ * one — see `readPlatform`. The single exception is narrowed as an
+ * exception rather than by omission: `unsupported_url` reads no platform
+ * because the outcome exists precisely because none was established.
  */
 
 import type { OembedErrorReason } from '../../lib/oembed';
-import type { ImportAttribution, ImportPlatform, ImportResult, SourceFetchFailureReason } from './types';
-import { validateParsedRecipe } from './validateParsed';
+import type {
+  ImportAttribution,
+  ImportPlatform,
+  ImportResult,
+  RecipeProvenance,
+  SourceFetchFailureReason,
+} from './types';
+// The `.ts` IS LOAD-BEARING even though nothing under
+// `supabase/functions/**` imports this file today, and it is spelled out
+// here rather than left for whoever adds that import. Deno resolves
+// relative specifiers literally, so an extensionless VALUE import anywhere
+// in a graph the edge function pulls in fails the DEPLOY and nothing else:
+// not `tsc --noEmit`, not ESLint, not vitest. This directory has already
+// paid for that once (resolveShortLinkTarget.ts), and the cost of being
+// wrong is asymmetric — an extension that turns out to be unnecessary
+// costs three characters, a missing one costs a broken deploy discovered
+// after merge. `allowImportingTsExtensions` (tsconfig.json) is what keeps
+// it legal for the Node/Metro build that DOES check this file.
+import { validateParsedRecipe } from './validateParsed.ts';
 
 /**
  * The CLIENT-side mirror of "which platform values are real": a value this
@@ -65,6 +106,33 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
 };
 const PLATFORMS: ReadonlySet<string> = new Set(Object.keys(PLATFORM_MEMBERS));
 
+/**
+ * The one reader for a field EIGHT of the nine variants now carry, written
+ * once so that all eight are held to the same standard.
+ *
+ * ABSENT AND UNRECOGNISED ARE THE SAME ANSWER HERE, and that is the
+ * module's standing posture rather than a new one. The file header states
+ * the test: a field gets a backward-compatible reading exactly when an old
+ * function's silence has a TRUE sentence behind it. Platform has none. A
+ * response that reached this client at all was produced by a function that
+ * had already run `normalizeRecipeUrl` and therefore already knew the
+ * answer — that is the whole argument types.ts makes for requiring the
+ * field — so silence about it means one thing only: the function on the
+ * other end is not the function this client was built against.
+ *
+ * Defaulting is worse than failing, for the reason `readProvenance` below
+ * gives about its own field and one more that is specific to this one.
+ * Every plausible default is a lie somebody would act on: `'web'` would
+ * file a broken TikTok import under the route that cannot hallucinate, and
+ * a most-common-platform guess would inflate whichever number is already
+ * largest. The user's alternative is a retryable failure they can
+ * understand, and IMP-07's denominator stays a measurement rather than a
+ * mixture of measurement and assumption.
+ */
+function readPlatform(value: unknown): ImportPlatform | null {
+  return typeof value === 'string' && PLATFORMS.has(value) ? (value as ImportPlatform) : null;
+}
+
 const OEMBED_ERROR_REASONS: ReadonlySet<string> = new Set<OembedErrorReason>([
   'invalid_url',
   'missing_credentials',
@@ -87,6 +155,14 @@ const OEMBED_ERROR_REASONS: ReadonlySet<string> = new Set<OembedErrorReason>([
  */
 const SOURCE_FETCH_FAILURE_REASONS: ReadonlySet<string> = new Set<SourceFetchFailureReason>([
   'refused',
+  // Both added by the same change that split "we refused the host" from
+  // "they refused us" (types.ts). They are listed here rather than folded
+  // into `refused` for the reason that split exists at all: this set is
+  // what decides whether the app can render a reason honestly, and a
+  // client that quietly accepted `'forbidden'` as `'refused'` would show
+  // copy blaming Remy's own safety guard for a publisher's bot wall.
+  'forbidden',
+  'rate_limited',
   'not_found',
   'server_error',
   'too_large',
@@ -108,6 +184,46 @@ const SOURCE_FETCH_FAILURE_REASONS: ReadonlySet<string> = new Set<SourceFetchFai
  * header on why a creator we mis-read is worse than one we cannot name.
  */
 const UNNAMED_CREATOR: ImportAttribution = { authorName: null, authorUrl: null, thumbnailUrl: null };
+
+/**
+ * RCP-06's vocabulary, forced exhaustive the same way `PLATFORM_MEMBERS`
+ * is and for the same reason — a hand-written list compiles perfectly
+ * while missing a member, and this directory has already been bitten twice
+ * by exactly that.
+ */
+const PROVENANCE_MEMBERS: Readonly<Record<RecipeProvenance, true>> = {
+  publisher_structured_data: true,
+  model_from_caption: true,
+};
+const PROVENANCES: ReadonlySet<string> = new Set(Object.keys(PROVENANCE_MEMBERS));
+
+/**
+ * THE ONE FIELD ON `parsed` THAT GETS NO BACKWARD-COMPATIBLE READING, and
+ * the asymmetry with its two neighbours is the whole point of writing it
+ * down. `attribution` absent decodes to `UNNAMED_CREATOR` and `recipeId`
+ * absent decodes to `null`, because in both cases there is a true
+ * sentence to fall back on — "we cannot name the creator", "there is no
+ * canonical row" — that some real import genuinely produces, and the UI
+ * already renders it. Provenance has no such sentence. There is no import
+ * that legitimately does not know whether it called a model; the answer is
+ * free at every producer (types.ts's field comment lists them). So an
+ * absent or unrecognised value means exactly one thing — the function on
+ * the other end is not the function this client was built against — and
+ * this module's standing posture for that is to fail the whole result
+ * rather than render half of it.
+ *
+ * INVENTING A DEFAULT HERE WOULD BE THE WORST AVAILABLE OPTION, worse
+ * than the failure and worse than an "unknown" state. Defaulting to
+ * `'model_from_caption'` would tell a user that a recipe their publisher
+ * wrote down was software's interpretation; defaulting to
+ * `'publisher_structured_data'` would put a publisher's name on a model's
+ * reading of a caption. Both are the app stating, in its own voice, a fact
+ * about the origin of a recipe that nobody told it. The user gets a
+ * retryable failure instead, which is honest and recoverable.
+ */
+function readProvenance(value: unknown): RecipeProvenance | null {
+  return typeof value === 'string' && PROVENANCES.has(value) ? (value as RecipeProvenance) : null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -154,12 +270,28 @@ function readAttribution(value: unknown): AttributionResult {
   };
 }
 
+/**
+ * ON `dishTags`, WHICH IS NOW REQUIRED AND STILL HAS NO CODE HERE. That
+ * absence is the design, not an omission: the recipe body is narrowed by
+ * `validateParsedRecipe` — the SAME function the edge function runs over
+ * the model's answer — so this client cannot end up with a different idea
+ * of what a valid recipe is than the server that sent it. That validator
+ * reads a missing `dishTags` key as `[]` and states it, which is why a
+ * response from a function older than the field still decodes and still
+ * satisfies the required type. Adding a second dish-tag reading here
+ * would be a second place for the two to drift.
+ *
+ * It is worth naming why that leniency is right for `dishTags` and wrong
+ * for `provenance` one field below, since they look like the same
+ * question. A dish tag gates nothing, so `[]` is a true and useful thing
+ * to say when nobody said otherwise. A provenance is a claim about where
+ * a recipe came from, and there is no such thing as a true default for
+ * it.
+ */
 function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   const recipe = validateParsedRecipe(raw.recipe);
-  if (recipe === null || !isNonEmptyString(raw.sourceUrl) || typeof raw.platform !== 'string') {
-    return null;
-  }
-  if (!PLATFORMS.has(raw.platform)) {
+  const platform = readPlatform(raw.platform);
+  if (recipe === null || platform === null || !isNonEmptyString(raw.sourceUrl)) {
     return null;
   }
   const attribution = readAttribution(raw.attribution);
@@ -182,11 +314,19 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   if (!recipeId.ok) {
     return null;
   }
+  // RCP-06, and deliberately NOT given the tolerant reading the two fields
+  // above get — see `readProvenance` for why an absent one has no true
+  // sentence to fall back on and a defaulted one would be the app
+  // inventing a claim about where a recipe came from.
+  const provenance = readProvenance(raw.provenance);
+  if (provenance === null) {
+    return null;
+  }
   return {
     kind: 'parsed',
     recipe,
     sourceUrl: raw.sourceUrl.trim(),
-    platform: raw.platform as ImportPlatform,
+    platform,
     // Both of these are now ALWAYS stated, even when the response said
     // nothing about them. That is the whole point of the two fields having
     // become required on the type: one spelling of "we do not know the
@@ -196,6 +336,7 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
     // of the old contract rather than a fabrication.
     attribution: attribution.value ?? UNNAMED_CREATOR,
     recipeId: recipeId.value,
+    provenance,
   };
 }
 
@@ -204,17 +345,19 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
  * no recipe and — deliberately — no caption. Two ways it is stricter than
  * `parseParsedVariant`:
  *
- *  - `attribution` is REQUIRED, not optional. There are no pre-existing
- *    object literals to stay compatible with (unlike `parsed`, whose
- *    optionality exists only for src/app/import/_fixtures.ts), and a
- *    display-only post without a creator is the one shape that should never
- *    render.
+ *  - An ABSENT `attribution` fails the result outright, where on `parsed`
+ *    it decodes to `UNNAMED_CREATOR`. Both variants require the field on
+ *    the type; only this one refuses to materialise a stand-in for it,
+ *    because a display-only post without a creator is the one shape that
+ *    should never render at all — crediting the creator is the entire
+ *    justification for showing the post (PD-011).
  *  - Nothing is copied off `raw` beyond the four fields named below, so a
  *    caption attached by a rogue or future function is dropped here rather
  *    than narrowed through into the app.
  */
 function parseDisplayOnlyVariant(raw: Record<string, unknown>): ImportResult | null {
-  if (!isNonEmptyString(raw.sourceUrl) || typeof raw.platform !== 'string' || !PLATFORMS.has(raw.platform)) {
+  const platform = readPlatform(raw.platform);
+  if (platform === null || !isNonEmptyString(raw.sourceUrl)) {
     return null;
   }
   const attribution = readAttribution(raw.attribution);
@@ -223,7 +366,7 @@ function parseDisplayOnlyVariant(raw: Record<string, unknown>): ImportResult | n
   }
   return {
     kind: 'display_only',
-    platform: raw.platform as ImportPlatform,
+    platform,
     sourceUrl: raw.sourceUrl.trim(),
     attribution: attribution.value,
   };
@@ -241,21 +384,39 @@ function parseDisplayOnlyVariant(raw: Record<string, unknown>): ImportResult | n
  */
 function parseNoRecipeInCaptionVariant(raw: Record<string, unknown>): ImportResult | null {
   const caption = readNullableString(raw.caption);
-  if (!caption.ok) {
+  const platform = readPlatform(raw.platform);
+  if (!caption.ok || platform === null) {
     return null;
   }
   const attribution = readAttribution(raw.attribution);
   if (!attribution.ok || attribution.value === undefined) {
     return null;
   }
-  return { kind: 'no_recipe_in_caption', caption: caption.value, attribution: attribution.value };
+  return { kind: 'no_recipe_in_caption', caption: caption.value, attribution: attribution.value, platform };
 }
 
-/** The single entry point: takes the parsed JSON body of a parse-recipe response and narrows it, or returns null. */
+/**
+ * The single entry point: takes the parsed JSON body of a parse-recipe
+ * response and narrows it, or returns null.
+ *
+ * EIGHT OF THE NINE ARMS NOW READ A PLATFORM, AND `unsupported_url` IS THE
+ * ONE THAT DOES NOT — the same single exception types.ts argues for on the
+ * type, restated in code rather than trusted to it, because a narrower that
+ * merely typed the field would compile perfectly while never checking it.
+ * `readPlatform` above carries the argument for why an absent or
+ * unrecognised value fails the whole result instead of being defaulted.
+ *
+ * The two `reason`-carrying arms deliberately check their platform FIRST,
+ * so an unknown platform and an unknown reason produce the same answer —
+ * null — rather than one silently mattering less than the other. Both are
+ * the same fact about the same response: the function that sent it is not
+ * the function this client was built against.
+ */
 export function parseImportResult(raw: unknown): ImportResult | null {
   if (!isRecord(raw) || typeof raw.kind !== 'string') {
     return null;
   }
+  const platform = readPlatform(raw.platform);
 
   switch (raw.kind) {
     case 'parsed':
@@ -265,26 +426,33 @@ export function parseImportResult(raw: unknown): ImportResult | null {
     case 'no_recipe_in_caption':
       return parseNoRecipeInCaptionVariant(raw);
     case 'oembed_failed':
-      return typeof raw.reason === 'string' && OEMBED_ERROR_REASONS.has(raw.reason)
-        ? { kind: 'oembed_failed', reason: raw.reason as OembedErrorReason }
+      return platform !== null && typeof raw.reason === 'string' && OEMBED_ERROR_REASONS.has(raw.reason)
+        ? { kind: 'oembed_failed', reason: raw.reason as OembedErrorReason, platform }
         : null;
-    // Nothing to check beyond the kind itself, and nothing to copy off
-    // `raw`. That is the variant's meaning, not laziness: the page was
+    // The platform is the ONLY thing copied off `raw` here, and the
+    // contrast is the variant's meaning rather than laziness: the page was
     // read and published no structured recipe, so there is no caption to
     // quote and no creator to credit — see its doc comment in types.ts on
     // why attaching a scraped `<title>` here would be inventing a source.
+    // Which route found nothing is a fact about our own pipeline, not
+    // something read off the page, so it is the one thing there is to say.
     case 'no_recipe_on_page':
-      return { kind: 'no_recipe_on_page' };
+      return platform === null ? null : { kind: 'no_recipe_on_page', platform };
     case 'source_fetch_failed':
-      return typeof raw.reason === 'string' && SOURCE_FETCH_FAILURE_REASONS.has(raw.reason)
-        ? { kind: 'source_fetch_failed', reason: raw.reason as SourceFetchFailureReason }
+      return platform !== null && typeof raw.reason === 'string' && SOURCE_FETCH_FAILURE_REASONS.has(raw.reason)
+        ? { kind: 'source_fetch_failed', reason: raw.reason as SourceFetchFailureReason, platform }
         : null;
+    // The one arm that reads no platform, because there is none to read:
+    // this outcome is produced by the branch that runs before a URL has
+    // been identified at all. types.ts's variant comment argues why a
+    // nullable field or a `'web'` default would both be worse than the
+    // honest absence.
     case 'unsupported_url':
       return { kind: 'unsupported_url' };
     case 'llm_request_failed':
-      return { kind: 'llm_request_failed' };
+      return platform === null ? null : { kind: 'llm_request_failed', platform };
     case 'parse_failed':
-      return { kind: 'parse_failed' };
+      return platform === null ? null : { kind: 'parse_failed', platform };
     default:
       return null;
   }

@@ -76,17 +76,24 @@ describe('toMealDraft — field mapping', () => {
   });
 
   /**
-   * `ParsedRecipe.dishTags` is the last optional field on that type, and
-   * `buildEditedRecipe` in src/app/import/confirm.tsx is the literal
-   * keeping it that way — it rebuilds a recipe from the confirmation
-   * screen's edited fields and carries no dish tags at all. Such a recipe
-   * still has to produce a storable draft, and the stored field is
-   * required, so the missing key must become `[]` here rather than
-   * travelling on as `undefined`.
+   * THIS TEST REPLACES ONE THAT CAN NO LONGER BE WRITTEN, and the reason
+   * it cannot is the fix. It used to strip `dishTags` off a recipe
+   * literal and assert the draft came out with `[]`, because
+   * `ParsedRecipe.dishTags` was optional and `buildEditedRecipe` in
+   * src/app/import/confirm.tsx really did rebuild a recipe without it —
+   * silently deleting a user's categories the moment they edited an
+   * imported recipe. The field is required now, so a recipe with no
+   * `dishTags` key is not a case to be handled, it is a compile error,
+   * and `toMealDraft` no longer coalesces.
+   *
+   * What is left to assert is that the draft never invents categories of
+   * its own for a recipe that honestly has none — the half of the old
+   * test that was about this module rather than about that bug.
    */
-  test('treats a recipe literal with no dishTags key at all as having no categories', () => {
-    const { dishTags: _dishTags, ...withoutDishTags } = makeParsedRecipe();
-    expect(toMealDraft(withoutDishTags, TIKTOK_CONTEXT).dishTags).toEqual([]);
+  test('carries a genuinely empty category list into the draft, never a guessed one', () => {
+    const draft = toMealDraft(makeParsedRecipe({ title: 'Pasta pesto', dishTags: [] }), TIKTOK_CONTEXT);
+    expect(draft.dishTags).toEqual([]);
+    expect(draft.ingredientTags).toEqual([]);
   });
 
   test('passes householdId and sourceUrl through from context, independent of the recipe', () => {

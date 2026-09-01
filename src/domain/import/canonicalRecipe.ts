@@ -73,6 +73,15 @@
  * rather than served with a null one; see the guard for why the loud
  * failure is the cheap one.
  *
+ * "INDISTINGUISHABLE" ALSO NOW INCLUDES PROVENANCE (RCP-06), and that one
+ * is the uncomfortable one, because unlike `id` and `attribution` it is
+ * not stored anywhere. `ImportResult.parsed` requires a `RecipeProvenance`
+ * — the publisher's own structured data, or a model's reading of prose —
+ * and the `recipes` table has no column for it. So the cache path DEDUCES
+ * it from what `canStoreCanonicalRecipe` permits, which is sound today and
+ * stops being sound the moment that guard widens. That whole argument, and
+ * the warning attached to it, lives on `STORED_ROW_PROVENANCE` below.
+ *
  * TWO OF THE FOUR PLATFORMS GET NONE OF THIS, AND THE REASON IS A CHECK
  * CONSTRAINT. `recipes.platform` (0006) accepts only `'tiktok'` and
  * `'instagram'`, so a YouTube or web import cannot be stored here at all
@@ -93,7 +102,7 @@
  * accumulate, not weakening the validation here.
  */
 
-import type { ImportAttribution, ImportPlatform, ImportResult, ParsedRecipe } from './types';
+import type { ImportAttribution, ImportPlatform, ImportResult, ParsedRecipe, RecipeProvenance } from './types';
 import { validateParsedRecipe } from './validateParsed.ts';
 
 /** The `recipes` columns this pipeline writes. `id` and `created_at` are database-generated and deliberately absent — the same reasoning as `MealDraftInsert` in toMealDraft.ts. */
@@ -166,6 +175,15 @@ export interface CanonicalRecipeContext {
  *   alter table public.recipes add constraint recipes_platform_check
  *     check (platform in ('tiktok', 'instagram', 'youtube', 'web'));
  *
+ * ⚠ AND THAT MIGRATION CANNOT SHIP ALONE. `STORED_ROW_PROVENANCE` further
+ * down this file reports every stored row as `'model_from_caption'`, and
+ * it is allowed to do so ONLY because this constant permits nothing but
+ * TikTok in practice (Instagram being display-only). Widen the CHECK
+ * without changing that line and a web import's cache hit will tell the
+ * user a publisher-written recipe was a model's reading of prose. Read
+ * that constant's comment before running the SQL above; the two changes
+ * belong in one commit.
+ *
  * WRITING THAT MIGRATION IS DELIBERATELY OUT OF THIS CHANGE'S SCOPE AND IS
  * THE OWNER'S CALL. It is not a mechanical widening: making a web page's
  * extraction a shared, cross-household artifact is a decision about what
@@ -203,13 +221,15 @@ export function buildRecipeRowInsert(recipe: ParsedRecipe, context: CanonicalRec
     servings: recipe.servings,
     author_name: context.attribution.authorName,
     author_url: context.attribution.authorUrl,
-    // `ParsedRecipe.dishTags` is optional only for the object literals that
-    // predate it (src/app/import/_fixtures.ts, confirm.tsx — see its own
-    // comment in types.ts); `validateParsedRecipe` always populates it.
-    // `[]` is the right reading of a missing one — no categories — exactly
-    // as `toMealDraft` treats it. Never `undefined`: the column is
-    // `not null default '{}'` (0004_dish_tags.sql).
-    dish_tags: recipe.dishTags ?? [],
+    // Straight through, with no `?? []` in front of it any more.
+    // `ParsedRecipe.dishTags` is now a REQUIRED field (types.ts), so
+    // "the recipe forgot to state its categories" is no longer a state
+    // that can reach this function — the coalesce that used to stand here
+    // was defending against object literals the type has since made
+    // impossible. An empty list still arrives, often, and is written as
+    // one: the column is `not null default '{}'` (0004_dish_tags.sql), so
+    // `[]` and "no categories" are the same row either way.
+    dish_tags: recipe.dishTags,
   };
 }
 
@@ -354,6 +374,51 @@ function isImportPlatform(value: unknown): value is ImportPlatform {
 }
 
 /**
+ * RCP-06 on the cache path. `parseStoredRecipe` returns a `parsed`
+ * result, and `provenance` is required on that shape — so a cache hit has
+ * to answer "was this the publisher's own structured data, or a model
+ * reading prose?" for a row that does not record the answer.
+ *
+ * THE CHAIN THAT MAKES `'model_from_caption'` A DEDUCTION AND NOT A
+ * GUESS. It is three links, all of them already in this file:
+ *
+ *  1. `canStoreCanonicalRecipe` above permits exactly `'tiktok'` and
+ *     `'instagram'`, mirroring 0006's CHECK constraint. A `'youtube'` or
+ *     `'web'` row cannot be inserted; the write is never attempted.
+ *  2. Instagram is display-only (PD-011, displayOnlyPolicy.ts). An
+ *     Instagram import returns `display_only` and never reaches a
+ *     `ParsedRecipe`, so it never reaches a canonical write either.
+ *  3. That leaves TikTok as the only platform that can actually put a row
+ *     in this table, and the TikTok route is the caption route: oEmbed
+ *     caption in, model out.
+ *
+ * Every row that can exist in `recipes` today therefore came from the
+ * caption pipeline. This constant reports that, and reports nothing the
+ * row did not earn.
+ *
+ * ⚠ AND IT IS AN INFERENCE FROM A GUARD, NOT A STORED FACT. That is the
+ * fragile part and it should be read as fragile. Nothing in the database
+ * says how a row was extracted; this line says it on the database's
+ * behalf, and it is true only for exactly as long as link 1 holds. WIDEN
+ * `canStoreCanonicalRecipe` — which is precisely what the pending
+ * `recipes.platform` migration written out in that function's own doc
+ * comment would do — AND THIS LINE BECOMES A LIE ON THE SAME DAY: a
+ * stored `'web'` row came from a page's JSON-LD and is
+ * `'publisher_structured_data'`, and reporting it as a model's reading
+ * would tell a user their publisher-written recipe was interpreted by
+ * software. It must change in the same commit as that migration, into a
+ * per-platform mapping, or into a real column.
+ *
+ * `parseStoredRecipe` deliberately still READS rows for all four
+ * platforms (`isImportPlatform` above says why), which sharpens rather
+ * than softens the warning: the day a widened constraint lets such a row
+ * be written, this file will happily read it back and mislabel it.
+ * Nothing here fails loudly. Only this comment stands between that and a
+ * shipped falsehood.
+ */
+const STORED_ROW_PROVENANCE: RecipeProvenance = 'model_from_caption';
+
+/**
  * Turns one stored `recipes` row (with `recipe_ingredients` and
  * `recipe_steps` embedded, as PostgREST returns them) back into the
  * `parsed` result a fresh extraction would have produced — or `null`,
@@ -448,5 +513,11 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
     // `buildAttribution`, so a hit that left this undefined would be a
     // visible difference between the two paths for no reason.
     attribution,
+    // NOT READ OFF THE ROW — there is no such column, and adding one is a
+    // migration this change does not write. Deduced instead, from what
+    // the storability guard already permits. See
+    // `STORED_ROW_PROVENANCE` above for the three-link chain and for the
+    // warning about the one change that breaks it.
+    provenance: STORED_ROW_PROVENANCE,
   };
 }

@@ -1,7 +1,54 @@
 import { describe, expect, test } from 'vitest';
 import type { OembedErrorReason } from '@/lib/oembed';
-import type { SourceFetchFailureReason } from '@/domain/import/types';
+import type { ImportPlatform, SourceFetchFailureReason } from '@/domain/import/types';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
+
+/**
+ * WHY EVERY LITERAL BELOW NOW STATES A PLATFORM, AND WHY THESE BUILDERS
+ * EXIST RATHER THAN A CONSTANT SPRINKLED THROUGH THE FILE.
+ *
+ * `ImportResult` requires a platform on every variant except
+ * `unsupported_url` (types.ts). This copy layer reads it for `display_only`
+ * alone, so it would be tempting to pick one member and paste it
+ * everywhere — and that would quietly fill this suite with imports that
+ * cannot happen: a `no_recipe_on_page` from TikTok, a `missing_credentials`
+ * fetch failure from a web page, an oEmbed failure from a route that never
+ * calls oEmbed. Copy tests are read as documentation of what the pipeline
+ * produces, so a fabricated pairing here is a false statement about the
+ * product, even when no assertion depends on it.
+ *
+ * The two reason-to-platform mappings below are therefore the real ones:
+ * a fetch `missing_credentials` is an unset `YOUTUBE_API_KEY` and can arise
+ * on no other route, and an oEmbed `missing_credentials` is an unset
+ * Instagram token (index.ts, env.ts). Everything else is attributed to the
+ * route that most plainly produces it.
+ */
+const CAPTION_PLATFORM: ImportPlatform = 'tiktok';
+const PAGE_PLATFORM: ImportPlatform = 'web';
+
+function fetchFailurePlatform(reason: SourceFetchFailureReason): ImportPlatform {
+  return reason === 'missing_credentials' ? 'youtube' : PAGE_PLATFORM;
+}
+
+function oembedFailurePlatform(reason: OembedErrorReason): ImportPlatform {
+  return reason === 'missing_credentials' ? 'instagram' : CAPTION_PLATFORM;
+}
+
+function sourceFetchFailed(reason: SourceFetchFailureReason): ImportFailureResult {
+  return { kind: 'source_fetch_failed', reason, platform: fetchFailurePlatform(reason) };
+}
+
+function oembedFailed(reason: OembedErrorReason): ImportFailureResult {
+  return { kind: 'oembed_failed', reason, platform: oembedFailurePlatform(reason) };
+}
+
+function noRecipeInCaption(caption: string | null): ImportFailureResult {
+  return { kind: 'no_recipe_in_caption', caption, attribution: NO_RECIPE_ATTRIBUTION, platform: CAPTION_PLATFORM };
+}
+
+const NO_RECIPE_ON_PAGE: ImportFailureResult = { kind: 'no_recipe_on_page', platform: PAGE_PLATFORM };
+const LLM_REQUEST_FAILED: ImportFailureResult = { kind: 'llm_request_failed', platform: CAPTION_PLATFORM };
+const PARSE_FAILED: ImportFailureResult = { kind: 'parse_failed', platform: CAPTION_PLATFORM };
 
 const DISPLAY_ONLY_RESULT: ImportFailureResult = {
   kind: 'display_only',
@@ -58,11 +105,7 @@ describe('buildImportFailureCopy', () => {
   });
 
   test('no_recipe_in_caption: manual entry elevated, carries the caption through as a quote', () => {
-    const result: ImportFailureResult = {
-      kind: 'no_recipe_in_caption',
-      caption: 'POV: lekker eten vanavond',
-      attribution: NO_RECIPE_ATTRIBUTION,
-    };
+    const result = noRecipeInCaption('POV: lekker eten vanavond');
     const copy = buildImportFailureCopy(result);
     expect(copy.manualEntryIsPrimary).toBe(true);
     expect(copy.canRetry).toBe(false);
@@ -70,25 +113,25 @@ describe('buildImportFailureCopy', () => {
   });
 
   test('no_recipe_in_caption: a null caption (nothing to read) surfaces no quote', () => {
-    const copy = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null, attribution: NO_RECIPE_ATTRIBUTION });
+    const copy = buildImportFailureCopy(noRecipeInCaption(null));
     expect(copy.quote).toBeNull();
   });
 
   test('llm_request_failed: retryable, manual entry not elevated (usually transient)', () => {
-    const copy = buildImportFailureCopy({ kind: 'llm_request_failed' });
+    const copy = buildImportFailureCopy(LLM_REQUEST_FAILED);
     expect(copy.canRetry).toBe(true);
     expect(copy.manualEntryIsPrimary).toBe(false);
   });
 
   test('parse_failed: retryable AND manual entry elevated — distinct from llm_request_failed', () => {
-    const copy = buildImportFailureCopy({ kind: 'parse_failed' });
+    const copy = buildImportFailureCopy(PARSE_FAILED);
     expect(copy.canRetry).toBe(true);
     expect(copy.manualEntryIsPrimary).toBe(true);
   });
 
   test('llm_request_failed and parse_failed never collapse into identical copy', () => {
-    const llmCopy = buildImportFailureCopy({ kind: 'llm_request_failed' });
-    const parseCopy = buildImportFailureCopy({ kind: 'parse_failed' });
+    const llmCopy = buildImportFailureCopy(LLM_REQUEST_FAILED);
+    const parseCopy = buildImportFailureCopy(PARSE_FAILED);
     expect(llmCopy.title).not.toBe(parseCopy.title);
     expect(llmCopy.body).not.toBe(parseCopy.body);
   });
@@ -105,7 +148,7 @@ describe('buildImportFailureCopy', () => {
       'unknown_error',
     ];
 
-    const bodies = reasons.map((reason) => buildImportFailureCopy({ kind: 'oembed_failed', reason }).body);
+    const bodies = reasons.map((reason) => buildImportFailureCopy(oembedFailed(reason)).body);
     expect(new Set(bodies).size).toBe(reasons.length);
     for (const body of bodies) {
       expect(body.length).toBeGreaterThan(0);
@@ -113,19 +156,19 @@ describe('buildImportFailureCopy', () => {
   });
 
   test('oembed_failed is always retryable', () => {
-    const copy = buildImportFailureCopy({ kind: 'oembed_failed', reason: 'rate_limited' });
+    const copy = buildImportFailureCopy(oembedFailed('rate_limited'));
     expect(copy.canRetry).toBe(true);
   });
 
   test('none of the failure copy ever claims safety ("veilig")', () => {
     const results: readonly ImportFailureResult[] = [
       { kind: 'unsupported_url' },
-      { kind: 'oembed_failed', reason: 'not_found' },
-      { kind: 'no_recipe_in_caption', caption: null, attribution: NO_RECIPE_ATTRIBUTION },
-      { kind: 'no_recipe_on_page' },
-      { kind: 'source_fetch_failed', reason: 'refused' },
-      { kind: 'llm_request_failed' },
-      { kind: 'parse_failed' },
+      oembedFailed('not_found'),
+      noRecipeInCaption(null),
+      NO_RECIPE_ON_PAGE,
+      sourceFetchFailed('refused'),
+      LLM_REQUEST_FAILED,
+      PARSE_FAILED,
       DISPLAY_ONLY_RESULT,
     ];
     for (const result of results) {
@@ -171,7 +214,7 @@ describe('buildImportFailureCopy — display_only', () => {
 
   test('does not reuse no_recipe_in_caption copy — a different reason deserves different words', () => {
     const displayOnly = buildImportFailureCopy(DISPLAY_ONLY_RESULT);
-    const noRecipe = buildImportFailureCopy({ kind: 'no_recipe_in_caption', caption: null, attribution: NO_RECIPE_ATTRIBUTION });
+    const noRecipe = buildImportFailureCopy(noRecipeInCaption(null));
     expect(displayOnly.title).not.toBe(noRecipe.title);
     expect(displayOnly.body).not.toBe(noRecipe.body);
   });
@@ -185,7 +228,7 @@ describe('buildImportFailureCopy — display_only', () => {
  * would read the same page and find the same nothing.
  */
 describe('buildImportFailureCopy — no_recipe_on_page', () => {
-  const RESULT: ImportFailureResult = { kind: 'no_recipe_on_page' };
+  const RESULT = NO_RECIPE_ON_PAGE;
 
   test('elevates manual entry and offers no retry — a second read finds the same nothing', () => {
     const copy = buildImportFailureCopy(RESULT);
@@ -210,11 +253,7 @@ describe('buildImportFailureCopy — no_recipe_on_page', () => {
    */
   test('does not reuse no_recipe_in_caption copy — a page is not a video', () => {
     const onPage = buildImportFailureCopy(RESULT);
-    const inCaption = buildImportFailureCopy({
-      kind: 'no_recipe_in_caption',
-      caption: null,
-      attribution: NO_RECIPE_ATTRIBUTION,
-    });
+    const inCaption = buildImportFailureCopy(noRecipeInCaption(null));
     expect(onPage.title).not.toBe(inCaption.title);
     expect(onPage.body).not.toBe(inCaption.body);
   });
@@ -228,6 +267,8 @@ describe('buildImportFailureCopy — no_recipe_on_page', () => {
 describe('buildImportFailureCopy — source_fetch_failed', () => {
   const REASONS: readonly SourceFetchFailureReason[] = [
     'refused',
+    'forbidden',
+    'rate_limited',
     'not_found',
     'server_error',
     'too_large',
@@ -237,7 +278,7 @@ describe('buildImportFailureCopy — source_fetch_failed', () => {
   ];
 
   test('every reason maps to distinct, non-empty body copy', () => {
-    const bodies = REASONS.map((reason) => buildImportFailureCopy({ kind: 'source_fetch_failed', reason }).body);
+    const bodies = REASONS.map((reason) => buildImportFailureCopy(sourceFetchFailed(reason)).body);
     expect(new Set(bodies).size).toBe(REASONS.length);
     for (const body of bodies) {
       expect(body.length).toBeGreaterThan(0);
@@ -245,47 +286,106 @@ describe('buildImportFailureCopy — source_fetch_failed', () => {
   });
 
   test('shares one title across both producers — the user pasted a link either way', () => {
-    const titles = REASONS.map((reason) => buildImportFailureCopy({ kind: 'source_fetch_failed', reason }).title);
+    const titles = REASONS.map((reason) => buildImportFailureCopy(sourceFetchFailed(reason)).title);
     expect(new Set(titles).size).toBe(1);
   });
 
   /**
    * The one property this copy must not get wrong: a retry button on a
-   * failure a retry cannot fix. A missing API key is a deployment fact, and
-   * a too-large or non-HTML response is a property of the address itself —
-   * all three return the same answer however often they are asked.
+   * failure a retry cannot fix. A missing API key is a deployment fact; a
+   * too-large or non-HTML response is a property of the address itself; a
+   * 403 is a publisher's standing policy; and `refused` is Remy's own
+   * guard, which is a pure function of the URL. All five return the same
+   * answer however often they are asked.
    */
-  test('offers no retry for the three failures a retry cannot help', () => {
-    for (const reason of ['missing_credentials', 'too_large', 'not_html'] as const) {
-      const copy = buildImportFailureCopy({ kind: 'source_fetch_failed', reason });
+  test('offers no retry for the five failures a retry cannot help', () => {
+    for (const reason of ['missing_credentials', 'too_large', 'not_html', 'forbidden', 'refused'] as const) {
+      const copy = buildImportFailureCopy(sourceFetchFailed(reason));
       expect(copy.canRetry).toBe(false);
     }
   });
 
   test('offers a retry for the server and network failures, which are usually a bad moment', () => {
-    for (const reason of ['refused', 'not_found', 'server_error', 'network_error'] as const) {
-      const copy = buildImportFailureCopy({ kind: 'source_fetch_failed', reason });
+    for (const reason of ['not_found', 'server_error', 'network_error'] as const) {
+      const copy = buildImportFailureCopy(sourceFetchFailed(reason));
       expect(copy.canRetry).toBe(true);
     }
+  });
+
+  /**
+   * `refused` USED TO OFFER A RETRY, AND THAT WAS WRONG. It reads as a
+   * server failure only if you believe the reason's old doc comment,
+   * which described a 403 — a status that is now `forbidden`. What
+   * actually produces `refused` is Remy's own guard: a blocked host, a
+   * redirect into one, or a chain that never terminates. Every one of
+   * those is decided from the URL alone, so the button could not have
+   * produced a different answer no matter how many times it was tapped.
+   */
+  test('no longer offers a retry for refused — Remy is the one saying no, and it will say it again', () => {
+    const copy = buildImportFailureCopy(sourceFetchFailed('refused'));
+    expect(copy.canRetry).toBe(false);
+    expect(copy.manualEntryIsPrimary).toBe(true);
+  });
+
+  /**
+   * The publisher is refusing this client and will refuse it again in ten
+   * seconds, so the honest primary action is typing it yourself. The copy
+   * must also not read as an accusation: "verboden" would put the user in
+   * the wrong, when the site is turning away Remy and not the person
+   * holding the phone.
+   */
+  test('forbidden offers no false hope and never calls the user verboden', () => {
+    const copy = buildImportFailureCopy(sourceFetchFailed('forbidden'));
+    expect(copy.canRetry).toBe(false);
+    expect(copy.manualEntryIsPrimary).toBe(true);
+    expect(copy.body.toLowerCase()).not.toContain('verboden');
+    expect(copy.body).toContain('Remy');
+  });
+
+  /**
+   * The one reason in this union whose answer really does change by
+   * waiting — so the button stays, and the sentence says when, rather
+   * than inviting an immediate tap into the same wall. Voice borrowed
+   * from `oembedFailureBody`'s own `rate_limited` line.
+   */
+  test('rate_limited keeps the retry but names the wait rather than promising an instant one', () => {
+    const copy = buildImportFailureCopy(sourceFetchFailed('rate_limited'));
+    expect(copy.canRetry).toBe(true);
+    expect(copy.manualEntryIsPrimary).toBe(false);
+    expect(copy.body).toContain('minuutje');
+  });
+
+  /**
+   * `refused` and `forbidden` are one word apart and name opposite
+   * decisions — ours and theirs. Sharing a sentence would tell one of the
+   * two groups of users a flatly untrue thing about who turned them away,
+   * so the two bodies must not converge.
+   */
+  test('tells the user who said no, with a different sentence for each', () => {
+    const refused = buildImportFailureCopy(sourceFetchFailed('refused')).body;
+    const forbidden = buildImportFailureCopy(sourceFetchFailed('forbidden')).body;
+    expect(refused).not.toBe(forbidden);
+    expect(forbidden).toContain('website');
+    expect(refused).toContain('Remy is zelf gestopt');
   });
 
   /** Typing it yourself becomes the elevated action exactly when it is the only way forward. */
   test('elevates manual entry precisely when a retry is not offered', () => {
     for (const reason of REASONS) {
-      const copy = buildImportFailureCopy({ kind: 'source_fetch_failed', reason });
+      const copy = buildImportFailureCopy(sourceFetchFailed(reason));
       expect(copy.manualEntryIsPrimary).toBe(!copy.canRetry);
     }
   });
 
   test('quotes nothing — nothing was ever read', () => {
     for (const reason of REASONS) {
-      expect(buildImportFailureCopy({ kind: 'source_fetch_failed', reason }).quote).toBeNull();
+      expect(buildImportFailureCopy(sourceFetchFailed(reason)).quote).toBeNull();
     }
   });
 
   /** The missing YouTube key is named as such rather than hidden behind generic outage copy. */
   test('missing_credentials names YouTube instead of blaming the link', () => {
-    const copy = buildImportFailureCopy({ kind: 'source_fetch_failed', reason: 'missing_credentials' });
+    const copy = buildImportFailureCopy(sourceFetchFailed('missing_credentials'));
     expect(copy.body).toContain('YouTube');
   });
 });

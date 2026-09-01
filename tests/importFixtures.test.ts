@@ -7,6 +7,7 @@ describe('detectFixtureScenario', () => {
   });
 
   test('recognises each demo marker', () => {
+    expect(detectFixtureScenario('https://voorbeeldkeuken.nl/pagina-met-recept')).toBe('parsed_from_page');
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/geen-recept')).toBe('no_recipe_in_caption');
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/oembed-fout')).toBe('oembed_failed');
     expect(detectFixtureScenario('https://www.tiktok.com/@x/video/llm-fout')).toBe('llm_request_failed');
@@ -188,13 +189,43 @@ describe('buildFixtureImportAttempt — the two outcomes the web route added', (
    * and there wasn't one — so there is no author it found and no image it
    * was given. A fixture that filled the sidecars in anyway would make the
    * demo look richer than the real path can ever be.
+   *
+   * It DOES carry the platform, and the two facts are not in tension. An
+   * author and a thumbnail would be things read off the page, which is
+   * exactly what did not happen; the platform is our own classification of
+   * the URL, settled before the page was ever opened. Nothing is invented
+   * by stating which route found nothing.
    */
-  test('"no_recipe_on_page" carries no creator, no thumbnail and no caption', () => {
+  test('"no_recipe_on_page" carries its platform but no creator, thumbnail or caption', () => {
     const attempt = buildFixtureImportAttempt('no_recipe_on_page', 'web', 'https://voorbeeldkeuken.nl/recept');
-    expect(attempt.result).toEqual({ kind: 'no_recipe_on_page' });
+    expect(attempt.result).toEqual({ kind: 'no_recipe_on_page', platform: 'web' });
     expect(attempt.authorName).toBeNull();
     expect(attempt.authorUrl).toBeNull();
     expect(attempt.thumbnailUrl).toBeNull();
+  });
+
+  /**
+   * The __DEV__ row pairs every scenario with a platform
+   * (`DEMO_PLATFORM_BY_SCENARIO` in paste.tsx) and this builder must report
+   * that pairing rather than a literal of its own: a fixture that hardcoded
+   * `'tiktok'` for a caption failure would demo a YouTube button that
+   * produces a TikTok result, which is the exact drift the platform field
+   * was added to make visible.
+   */
+  test('every scenario that carries a platform reports the one it was given', () => {
+    const scenarios = [
+      'no_recipe_in_caption',
+      'source_fetch_failed',
+      'oembed_failed',
+      'llm_request_failed',
+      'parse_failed',
+    ] as const;
+    for (const scenario of scenarios) {
+      for (const platform of ['tiktok', 'youtube'] as const) {
+        const attempt = buildFixtureImportAttempt(scenario, platform, 'https://example.test/x');
+        expect(attempt.result).toMatchObject({ platform });
+      }
+    }
   });
 
   test('"source_fetch_failed" carries a reason and never a creator — nothing was ever read', () => {
@@ -231,5 +262,60 @@ describe('buildFixtureImportAttempt — canonical recipe id', () => {
     }
     expect(attempt.result.recipeId).toBeNull();
     expect('recipeId' in attempt.result).toBe(true);
+  });
+});
+
+/**
+ * RCP-06. The fixture's provenance follows the PLATFORM, never the demo
+ * scenario, because that is how the real pipeline works: a recipe page
+ * publishes a machine-readable object and a TikTok has only a caption. A
+ * fixture that let a demo button choose the answer would show a route the
+ * pipeline cannot take.
+ */
+describe('buildFixtureImportAttempt — provenance', () => {
+  test('a web import is read from the publisher, on the result and on the sidecar alike', () => {
+    const attempt = buildFixtureImportAttempt('parsed', 'web', 'https://voorbeeldkeuken.nl/recept');
+    expect(attempt.provenance).toBe('publisher_structured_data');
+    expect(attempt.result.kind === 'parsed' && attempt.result.provenance).toBe('publisher_structured_data');
+  });
+
+  test('every video platform is a model reading a caption', () => {
+    for (const platform of ['tiktok', 'instagram', 'youtube'] as const) {
+      const attempt = buildFixtureImportAttempt('parsed', platform, 'https://example.test/x');
+      expect(attempt.provenance).toBe('model_from_caption');
+      expect(attempt.result.kind === 'parsed' && attempt.result.provenance).toBe('model_from_caption');
+    }
+  });
+
+  /**
+   * The demo scenario exists only so the __DEV__ row has a button that
+   * lands on a web import; it builds the same `parsed` result. If it ever
+   * started deciding the provenance itself, a TikTok demo could claim a
+   * publisher wrote its ingredient list.
+   */
+  test('the page demo scenario changes nothing but which platform it is paired with', () => {
+    const viaScenario = buildFixtureImportAttempt('parsed_from_page', 'web', 'https://voorbeeldkeuken.nl/recept');
+    const viaPlatform = buildFixtureImportAttempt('parsed', 'web', 'https://voorbeeldkeuken.nl/recept');
+    expect(viaScenario).toEqual(viaPlatform);
+    expect(viaScenario.result.kind).toBe('parsed');
+
+    const onTiktok = buildFixtureImportAttempt('parsed_from_page', 'tiktok', 'https://www.tiktok.com/@x/video/1');
+    expect(onTiktok.provenance).toBe('model_from_caption');
+  });
+
+  test('no scenario without a recipe ever claims a provenance', () => {
+    const scenarios = [
+      'display_only',
+      'no_recipe_in_caption',
+      'no_recipe_on_page',
+      'source_fetch_failed',
+      'oembed_failed',
+      'llm_request_failed',
+      'parse_failed',
+    ] as const;
+    for (const scenario of scenarios) {
+      const attempt = buildFixtureImportAttempt(scenario, 'tiktok', 'https://www.tiktok.com/@x/video/1');
+      expect(attempt.provenance).toBeNull();
+    }
   });
 });

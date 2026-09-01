@@ -2,7 +2,12 @@
  * Recipe import, step 2 — the most important screen in this flow. AI
  * extraction from a caption is unreliable and the user is the only one who
  * can tell, so every field here is editable, never read-only text: title,
- * ingredients, steps, time, servings. Nothing is ever saved silently — the
+ * ingredients, steps, time, servings. That reason covers the caption route
+ * and not the web one, where a publisher wrote the fields and no model was
+ * involved — those are editable too, for a plainer reason: it is the
+ * household's copy of the dish, and halving it or dropping the anchovies
+ * is not a correction. Both routes therefore get the same editable screen
+ * and DIFFERENT guidance copy, which is recipeProvenanceCopy.ts's job. Nothing is ever saved silently — the
  * only way off this screen that persists anything is the "Doorgaan" button,
  * which routes through `SaveIntentSheet` (PD-004's mandatory "when?"
  * prompt, reused verbatim, unmodified) before anything is written.
@@ -39,6 +44,19 @@
  * have cooked this (W-14, DESIGN-SOCIAL.md §2.3). See
  * `readFriendProofLine` for why one friend is already useful here when a
  * ranked surface would need ten, and why no proof means no line at all.
+ *
+ * ---
+ *
+ * IT IS ALSO THE ONLY SCREEN THAT SAYS WHERE THE RECIPE CAME FROM (RCP-06).
+ * Two import routes land here and are indistinguishable once they have:
+ * a recipe page's own machine-readable object, where the publisher typed
+ * every field and no model was involved, and a caption a model read prose
+ * out of. The person on this screen is deciding whether to cook from it,
+ * so this is the last honest moment to tell them which one they are
+ * looking at — see `RecipeProvenanceNote` for where it sits, and
+ * recipeProvenanceCopy.ts for why it is a fact and never a score. Nothing
+ * about it is persisted: provenance is a fact about the IMPORT, not a
+ * column on the meal, and this screen is where it is spent.
  */
 
 import { useEffect, useState } from 'react';
@@ -54,6 +72,8 @@ import { AllergenTaggingSection } from '@/components/AllergenTaggingSection';
 import { Button } from '@/components/Button';
 import { ImportCreatorCredit } from '@/components/ImportCreatorCredit';
 import { readCreditableAuthorName } from '@/components/importCreatorCopy';
+import { RecipeProvenanceNote } from '@/components/RecipeProvenanceNote';
+import { buildImportConfirmGuidance } from '@/components/recipeProvenanceCopy';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
 import { SaveIntentSheet } from '@/components/SaveIntentSheet';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
@@ -94,10 +114,45 @@ function parseOptionalPositiveInt(text: string): number | null {
 }
 
 /**
- * Rebuilds a ParsedRecipe from the screen's current (possibly user-edited)
- * field state — never from the original, pre-edit `recipe` route param.
- * "Nothing is ever saved silently" (file header) means an edit the user
- * made here must be what actually gets persisted.
+ * Rebuilds a ParsedRecipe from this screen's current field state. Every
+ * field on `ParsedRecipe` falls into exactly one of two categories here,
+ * and there is no third:
+ *
+ *  - EDITED — title, ingredients, steps, minutes, servings. Read from this
+ *    screen's state and NEVER from the pre-edit `recipe` route param.
+ *    "Nothing is ever saved silently" (file header) means the correction
+ *    the user made here is what gets persisted, so reading the arrival for
+ *    any of these would quietly throw their edit away.
+ *  - CARRIED — `dishTags`. Not editable on this screen, so there is no
+ *    state to read it from; it travels through from the recipe that
+ *    arrived, unchanged.
+ *
+ * THE MISSING THIRD CATEGORY WAS A LIVE BUG. This function used to name
+ * only the edited fields, and a field that is neither edited nor carried is
+ * simply gone — so a user who fixed a typo in the title silently lost the
+ * recipe's categories, and Bibliotheek's dishTag filter then under-reported
+ * what that household owns. Nothing threw and nothing logged, because a
+ * rebuild-from-scratch cannot notice what it failed to mention.
+ * `ParsedRecipe.dishTags` is required (types.ts) exactly so the next
+ * carried field cannot go the same way: it has to be passed in here, or
+ * this file does not compile.
+ *
+ * AND ONE FIELD THIS STILL FLATTENS — a different problem, not the same
+ * one, and worth naming rather than leaving to be rediscovered.
+ * `ParsedIngredient` keeps `quantity` and `unit` apart from `name`, and
+ * this screen edits an ingredient as ONE free-text line ("400 g kipfilet",
+ * see `formatIngredientLine`), so the rebuild writes `quantity: null, unit:
+ * null` and folds the amount into the name. That is the cost of editing
+ * ingredients as text rather than as three tiny fields — a deliberate
+ * choice this file's header makes — but the cost is paid on EVERY save,
+ * including one where the user changed nothing, and it is not free
+ * downstream: `scaleRecipe.ts` cannot scale an amount that is part of a
+ * name, and the shopping list's quantity column comes up empty. Recovering
+ * it means either splitting the line back into three (a parser inventing
+ * structure the user did not type) or carrying the arrival's quantity
+ * through for lines nobody touched. Both are real changes with a product
+ * question inside them, so this states the cost instead of quietly picking
+ * one.
  */
 function buildEditedRecipe(
   title: string,
@@ -105,6 +160,8 @@ function buildEditedRecipe(
   steps: readonly EditableTextListItem[],
   estimatedMinutesText: string,
   servingsText: string,
+  /** Carried, not edited — see this function's header. `[]` is a real value here, never a stand-in for "unknown": a recipe the user typed has no model-assigned categories. */
+  dishTags: readonly string[],
 ): ParsedRecipe {
   return {
     title,
@@ -115,6 +172,7 @@ function buildEditedRecipe(
     steps: steps.map((item) => item.text.trim()).filter((text) => text.length > 0),
     estimatedMinutes: parseOptionalPositiveInt(estimatedMinutesText),
     servings: parseOptionalPositiveInt(servingsText),
+    dishTags,
   };
 }
 
@@ -373,7 +431,7 @@ export default function ImportConfirmScreen(): JSX.Element {
   const reduceMotionEnabled = useReduceMotion();
   const params = useLocalSearchParams<{ data?: string }>();
   const [confirmParams] = useState(() => decodeImportConfirmParams(params.data));
-  const { mode, recipe, platform, authorName, authorUrl, sourceUrl, recipeId } = confirmParams;
+  const { mode, recipe, platform, authorName, authorUrl, sourceUrl, recipeId, provenance } = confirmParams;
   const friendProofLine = useFriendProofLine(recipeId);
 
   const [title, setTitle] = useState(recipe?.title ?? '');
@@ -387,6 +445,21 @@ export default function ImportConfirmScreen(): JSX.Element {
   const [servingsText, setServingsText] = useState(
     recipe?.servings !== null && recipe?.servings !== undefined ? String(recipe.servings) : '',
   );
+  /**
+   * Not state, because nothing on this screen can change it — see
+   * `buildEditedRecipe`'s CARRIED category. Read straight off the arrival
+   * on every render rather than snapshotted, since `confirmParams` is
+   * itself a `useState` initialiser and cannot change either.
+   *
+   * `recipe === null` IS manual entry, and `[]` there is the true answer
+   * rather than a fallback: a recipe somebody typed has no model-assigned
+   * categories, and `ParsedRecipe.dishTags` documents empty as normal and
+   * expected. Deliberately not `recipe?.dishTags ?? []`, which would give
+   * the same answer to a second, entirely different question — a parsed
+   * recipe that arrived WITHOUT the field — and so would paper over
+   * exactly the loss the required field exists to prevent.
+   */
+  const carriedDishTags: readonly string[] = recipe === null ? [] : recipe.dishTags;
   const [allergenTags, setAllergenTags] = useState<readonly string[]>([]);
   const [allergenStatus, setAllergenStatus] = useState<'unknown' | 'verified'>('unknown');
   const [showSaveSheet, setShowSaveSheet] = useState(false);
@@ -432,7 +505,14 @@ export default function ImportConfirmScreen(): JSX.Element {
     setSaveError(null);
     setIsSaving(true);
 
-    const editedRecipe = buildEditedRecipe(trimmedTitle, ingredients, steps, estimatedMinutesText, servingsText);
+    const editedRecipe = buildEditedRecipe(
+      trimmedTitle,
+      ingredients,
+      steps,
+      estimatedMinutesText,
+      servingsText,
+      carriedDishTags,
+    );
     persistImportedMeal(getAppRepository(), intent, editedRecipe, confirmParams, allergenTags, allergenStatus)
       .then(() => {
         router.replace('/recipes');
@@ -443,12 +523,17 @@ export default function ImportConfirmScreen(): JSX.Element {
       });
   };
 
-  const ingredientsHelperText =
-    mode === 'manual'
-      ? 'Typ de ingrediënten die je nodig hebt.'
-      : 'Overgenomen uit het bijschrift van de video — mogelijk niet compleet. Controleer en vul aan waar nodig.';
-  const stepsHelperText =
-    mode === 'manual' ? 'Typ de bereidingsstappen.' : 'Overgenomen uit het bijschrift — controleer de volgorde.';
+  /**
+   * The subtitle and the two helper texts, from the module that also owns
+   * the provenance note — see recipeProvenanceCopy.ts's header. These used
+   * to be three ternaries on `mode` written right here, and every one of
+   * them told a recipe-page import it had been read out of a video's
+   * bijschrift: true when the only import route was a caption, false from
+   * the moment the web route landed, and openly contradicted by the note
+   * sitting a few pixels below them. A branching Dutch sentence in a `.tsx`
+   * is also a sentence no test can reach, which is why nothing caught it.
+   */
+  const guidance = buildImportConfirmGuidance(mode, provenance);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -466,9 +551,7 @@ export default function ImportConfirmScreen(): JSX.Element {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Recept controleren</Text>
         <Text style={[typeScale.bodySmall, styles.subtitle, { color: colors.textMuted }]}>
-          {mode === 'manual'
-            ? 'Vul dit recept zelf aan — Remy kon dit niet automatisch lezen.'
-            : 'Automatisch gelezen uit het bijschrift — controleer of alles klopt voordat je opslaat.'}
+          {guidance.subtitle}
         </Text>
 
         {creatorCredit !== null || friendProofLine !== null ? (
@@ -486,6 +569,15 @@ export default function ImportConfirmScreen(): JSX.Element {
             ) : null}
           </View>
         ) : null}
+
+        {/* RCP-06. Under the credit and above the fields it describes: the
+            last thing read before the ingredient list, and the thing that
+            says what that list actually is. It renders nothing at all when
+            there is no provenance — a recipe the user typed has none, and
+            must not be given one. Every string is
+            recipeProvenanceCopy.ts's; this screen only decides where it
+            sits. */}
+        <RecipeProvenanceNote provenance={provenance} />
 
         <View style={styles.field}>
           <Text style={[typeScale.title3, { color: colors.textPrimary }]}>Titel</Text>
@@ -540,7 +632,7 @@ export default function ImportConfirmScreen(): JSX.Element {
 
         <EditableTextListField
           label="Ingrediënten"
-          helperText={ingredientsHelperText}
+          helperText={guidance.ingredientsHelperText}
           items={ingredients}
           onChangeItemText={(id, text) =>
             setIngredients((current) => current.map((item) => (item.id === id ? { ...item, text } : item)))
@@ -553,7 +645,7 @@ export default function ImportConfirmScreen(): JSX.Element {
 
         <EditableTextListField
           label="Bereiding"
-          helperText={stepsHelperText}
+          helperText={guidance.stepsHelperText}
           items={steps}
           onChangeItemText={(id, text) =>
             setSteps((current) => current.map((item) => (item.id === id ? { ...item, text } : item)))

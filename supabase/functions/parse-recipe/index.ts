@@ -16,10 +16,13 @@
  * SECURITY: the LLM API key must never reach the client. A key shipped
  * inside a mobile app bundle is trivially extractable (it's just a string
  * in a downloadable binary/JS bundle), so extraction has to happen
- * server-side, here, where the key lives only in this function's
- * environment and is attached to the outbound Gemini request as a
- * header — never included in this function's own JSON response body, and
- * never logged. This is a security requirement, not a style preference.
+ * server-side, in this function, where the key lives only in the
+ * deployment's environment and is attached to the outbound Gemini request as
+ * a header — never included in this function's own JSON response body, and
+ * never logged. This is a security requirement, not a style preference. The
+ * key is read in exactly one file, callExtractionModel.ts, which is also the
+ * only file that sends it anywhere; see its header for why a credential's
+ * blast radius being one module is the point rather than tidiness.
  *
  * This function also must NOT be deployed with `--no-verify-jwt`: Supabase
  * verifies the caller's JWT by default before the handler below ever
@@ -158,6 +161,61 @@
  *
  * ---
  *
+ * PROVENANCE (RCP-06): WHERE A RECIPE'S WORDS ACTUALLY CAME FROM.
+ *
+ * Every `parsed` result states one of two things about itself, and the
+ * distinction is the difference between a fact and a reading of one:
+ *
+ *   publisher_structured_data — the publisher wrote these fields, in named
+ *     keys, in a documented vocabulary, and nothing interpreted them. That is
+ *     the web/JSON-LD route, and it is why that route is the only one here
+ *     which cannot hallucinate (see THE WEB ROUTE above).
+ *   model_from_caption — a model's reading of prose that was written for
+ *     humans. Honest, useful, and categorically less certain. TikTok's oEmbed
+ *     title and YouTube's Data API description both land here, because they
+ *     run the same shared tail.
+ *
+ * IT IS SET WHERE EACH RESULT IS BUILT AND NEVER INFERRED FROM `platform`
+ * AFTERWARDS. Platform is a fact about WHO served the URL; provenance is a
+ * fact about HOW the words were obtained. The two line up today only because
+ * each of today's routes happens to use exactly one method — and the moment a
+ * platform serves both (a recipe site that publishes JSON-LD on some pages
+ * and prose on the rest; a video platform that starts emitting structured
+ * metadata) a lookup table keyed on platform would begin stating the wrong
+ * thing with total confidence. Neither may become the other's proxy. Stated
+ * at the one line that knows is the only version that can be right.
+ *
+ * The cache-hit path states its own rather than borrowing this one:
+ * `parseStoredRecipe` (src/domain/import/canonicalRecipe.ts) reads it off the
+ * stored row, so a served row is never silently re-labelled by whichever
+ * route happened to serve it.
+ *
+ * ---
+ *
+ * COUNTING IMPORTS (IMP-07). Every reachable outcome of this function —
+ * successes included, because a failure rate needs both halves of its
+ * fraction — is counted by exactly one structured `console.log` line, at the
+ * single point an `ImportResult` becomes a response.
+ *
+ * EVERY ONE OF THOSE LINES NOW NAMES ITS PLATFORM, except the one that
+ * cannot — a property of THIS file, not of the telemetry module, which can
+ * only report what the result carries. Every `return` below states the
+ * platform its branch was handed; only `unsupported_url` states none,
+ * because it returns before a platform exists. `no_recipe_in_caption` is
+ * the point of the exercise: "a caption yielded no recipe" is not one
+ * number until TikTok's and YouTube's are separable, and that split is the
+ * evidence SRC-09 turns on. That point is
+ * `respondWithImportResult` in importResponse.ts, and that is the whole
+ * reason the module exists: the CORS preflight and the malformed-request
+ * 400/405 replies build their responses with `corsPreflightResponse` and
+ * `jsonResponse` instead, so they are structurally incapable of emitting a
+ * line rather than merely not doing so today. WHAT the line may contain —
+ * counts, and nothing that could identify a person, a household, a URL or a
+ * dish — is argued in that file's header, including why PD-005 makes that a
+ * hard boundary and not a default.
+ *
+ * ---
+ *
  * SCOPE: every source of text this function has is metadata a publisher
  * already offers for reading — an oEmbed caption/title and author name, a
  * Data API `snippet`, or a page's own JSON-LD. NO VIDEO, AUDIO OR IMAGE
@@ -195,12 +253,13 @@
  * without index.ts needing to know or care that the hop exists.
  * `allowImportingTsExtensions` (tsconfig.json) is what keeps that legal
  * under `tsc --noEmit` too, since those two files ARE included in the
- * Node/Metro build. It does NOT extend to this function's own three
- * sibling modules
- * (canonicalRecipeStore.ts, env.ts, fetchSourceText.ts): those are real
- * runtime imports Deno resolves for itself, so they spell out `.ts` too. Dropping an extension
- * there fails nothing locally — neither `tsc --noEmit` nor `npm run lint`
- * looks at this directory — it fails the deploy.
+ * Node/Metro build. It does NOT extend to this function's own five sibling
+ * modules (callExtractionModel.ts, canonicalRecipeStore.ts, env.ts,
+ * fetchSourceText.ts, importResponse.ts): those are real runtime imports
+ * Deno resolves for itself, so they spell out `.ts` too — and so does every
+ * import THEY make, one hop further out. Dropping an extension anywhere in
+ * that chain fails nothing locally — neither `tsc --noEmit` nor `npm run
+ * lint` looks at this directory — it fails the deploy.
  */
 
 // Minimal ambient declaration for the two Deno globals this file uses —
@@ -216,7 +275,6 @@ declare const Deno: {
 import { normalizeRecipeUrl, readYouTubeVideoId } from '../../../src/domain/import/urlParsing.ts';
 import { validateShortLinkTarget } from '../../../src/domain/import/resolveShortLinkTarget.ts';
 import { validateParsedRecipe } from '../../../src/domain/import/validateParsed.ts';
-import { buildExtractionEndpoint, buildExtractionRequest } from '../../../src/domain/import/buildExtractionRequest.ts';
 import { parseExtractionResponse } from '../../../src/domain/import/parseExtractionResponse.ts';
 import { buildAttribution } from '../../../src/domain/import/buildAttribution.ts';
 import { buildDisplayOnlyResult, isDisplayOnlyPlatform } from '../../../src/domain/import/displayOnlyPolicy.ts';
@@ -230,38 +288,26 @@ import type {
   ImportPlatform,
   ImportResult,
   ParsedRecipe,
+  RecipeProvenance,
 } from '../../../src/domain/import/types.ts';
-// The three sibling modules of this function. `canonicalRecipeStore.ts`
-// owns every read and write of the canonical tables — and the service role
-// key that performs them — behind exactly the two calls imported here;
-// `fetchSourceText.ts` owns every outbound request to a host a user chose —
+// The five sibling modules of this function, each owning one thing this file
+// therefore no longer does. `canonicalRecipeStore.ts` owns every read and
+// write of the canonical tables, and the service role key that performs them;
+// `fetchSourceText.ts` owns every outbound request to a host A USER CHOSE —
 // the page GET, the YouTube Data API call and the TikTok short-link chain —
-// plus the YouTube credential one of them needs; `env.ts` owns the credential
-// readers all three share. Their `.ts` extensions are required for the same
-// Deno reason as the imports above.
+// plus the YouTube credential one of them needs; `callExtractionModel.ts`
+// owns the one outbound request to a host THIS REPO chose, and the Gemini key
+// that pays for it; `importResponse.ts` owns everything this function says to
+// a client or to a log, which is what makes counting an import outcome
+// inseparable from answering one (IMP-07); `env.ts` owns the credential
+// readers the others share. Three of the five exist so that a secret's blast
+// radius is one importable file rather than this one. Their `.ts` extensions
+// are required for the same Deno reason as the imports above.
 import { findStoredRecipe, storeCanonicalRecipe } from './canonicalRecipeStore.ts';
+import { callExtractionModel } from './callExtractionModel.ts';
 import { expandShortLink, fetchRecipePageHtml, fetchYouTubeVideoSnippet } from './fetchSourceText.ts';
-import { readRequiredEnvVar } from './env.ts';
+import { corsPreflightResponse, jsonResponse, respondWithImportResult } from './importResponse.ts';
 
-// Fails loudly at module load — mirrors src/lib/supabase.ts's
-// readRequiredEnvVar pattern. A function that silently no-ops (or, worse,
-// silently skips extraction) without a configured key is a much harder
-// failure to notice than one that refuses to boot at all.
-const GEMINI_API_KEY = readRequiredEnvVar('GEMINI_API_KEY');
-// Structured extraction behind a forced function call — no deep reasoning
-// needed, so Flash-Lite is the deliberate choice, not a placeholder. It is
-// roughly a third the cost of the Flash tier for this workload.
-//
-// THE RISK THIS TRADES FOR COST: the anti-hallucination design in
-// buildExtractionRequest.ts depends on the model honestly calling
-// report_no_recipe for a caption with no real recipe, and honest refusal is
-// the first thing a smaller model gets worse at. If invented recipes start
-// appearing, raise this to a Flash tier before touching the prompt.
-//
-// This is a floating alias; pin an exact dated snapshot via the GEMINI_MODEL
-// secret before relying on this in production, so a silent model upgrade
-// cannot silently change extraction behavior.
-const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.6-flash';
 // Optional: see src/lib/oembed.ts's `instagramAccessToken` — undefined
 // here means every Instagram resolution fails with the typed
 // `missing_credentials` reason, never a silent empty result.
@@ -273,19 +319,6 @@ const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.6-flash';
 // degrades to the honest `oembed_failed` / `missing_credentials` copy
 // exactly as it did before.
 const INSTAGRAM_OEMBED_ACCESS_TOKEN = Deno.env.get('INSTAGRAM_OEMBED_ACCESS_TOKEN');
-
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  });
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -392,49 +425,12 @@ async function resolveDisplayOnlyImport(normalizedUrl: string, platform: OembedP
   if (oembedResult.kind === 'error') {
     // The same honest, typed failure as every other path: a deleted post or
     // a missing Instagram token still has to say so, rather than pretend to
-    // have resolved something it did not.
-    return { kind: 'oembed_failed', reason: oembedResult.reason };
+    // have resolved something it did not. The platform is this function's
+    // own argument, so the result says WHOSE endpoint refused us —
+    // `missing_credentials` is an unset Instagram token and nothing else.
+    return { kind: 'oembed_failed', reason: oembedResult.reason, platform };
   }
   return buildDisplayOnlyResult({ sourceUrl: normalizedUrl, platform, payload: oembedResult.payload });
-}
-
-type LlmCallResult = { readonly kind: 'ok'; readonly json: unknown } | { readonly kind: 'error' };
-
-async function callExtractionModel(caption: string, authorName: string | null): Promise<LlmCallResult> {
-  const requestBody = buildExtractionRequest({ caption, authorName });
-  try {
-    const response = await fetch(buildExtractionEndpoint(GEMINI_MODEL), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        // Header rather than a "?key=" query parameter, and never
-        // included in this function's own response — see the file
-        // header's SECURITY note and buildExtractionEndpoint().
-        'x-goog-api-key': GEMINI_API_KEY,
-      },
-      body: JSON.stringify(requestBody),
-    });
-    if (!response.ok) {
-      // Gemini distinguishes a bad model id, a rejected schema and a bad
-      // key by status + message, and swallowing them here makes an
-      // extraction outage undebuggable from the outside: every one of
-      // them surfaces to the user as the same "Even niet gelukt". The
-      // request body carries no user secrets and the API key travels in a
-      // header, so neither can appear in what is logged.
-      const detail = await response.text().catch(() => '<unreadable body>');
-      console.error(
-        `parse-recipe: Gemini rejected the request. status=${response.status} model=${GEMINI_MODEL} body=${detail.slice(0, 600)}`,
-      );
-      return { kind: 'error' };
-    }
-    const json: unknown = await response.json();
-    return { kind: 'ok', json };
-  } catch (error) {
-    // Transport-level failure (DNS, TLS, timeout) — distinct from a
-    // non-2xx above, and worth telling apart in the logs.
-    console.error(`parse-recipe: Gemini call threw before a response. ${String(error)}`);
-    return { kind: 'error' };
-  }
 }
 
 interface ParsedRecipeCompletion {
@@ -442,6 +438,14 @@ interface ParsedRecipeCompletion {
   readonly normalizedUrl: string;
   readonly platform: ImportPlatform;
   readonly attribution: ImportAttribution;
+  /**
+   * RCP-06, and REQUIRED here rather than defaulted, which is the point: the
+   * caller has to say how it got these words, because it is the only code
+   * that knows. A default would let a route added later inherit somebody
+   * else's answer silently. It sits beside `platform` and must never be
+   * derived from it — see the PROVENANCE section in the file header.
+   */
+  readonly provenance: RecipeProvenance;
 }
 
 /**
@@ -475,6 +479,12 @@ async function finishParsedRecipe(input: ParsedRecipeCompletion): Promise<Import
     sourceUrl: input.normalizedUrl,
     platform: input.platform,
     attribution: input.attribution,
+    // Passed straight through from the route that produced the recipe. This
+    // function deliberately has no opinion about it: it does not know whether
+    // it was handed JSON-LD a publisher wrote or a model's reading of a
+    // caption, and inventing an answer from `input.platform` here is exactly
+    // the shortcut the header rules out.
+    provenance: input.provenance,
     // Straight through, null included. No canonical row — because the write
     // failed, or because the schema refuses this platform — means this
     // import really is a copy of nothing, and saying so is the only honest
@@ -515,31 +525,40 @@ async function extractRecipeFromCaption(input: CaptionExtraction): Promise<Impor
   if (caption === null || caption.trim().length === 0) {
     // Nothing to send the model: no LLM call, no cost, and just as honest
     // an outcome as the model reading a caption and finding no recipe.
-    return { kind: 'no_recipe_in_caption', caption: null, attribution };
+    //
+    // IMP-07. The platform travels with it here and on the branch below,
+    // because these two returns are most of the SRC-09 number and neither
+    // is worth counting until it can be read per platform: a YouTube
+    // description is rarely blank where a TikTok caption often is.
+    return { kind: 'no_recipe_in_caption', caption: null, attribution, platform };
   }
 
   const llmResult = await callExtractionModel(caption, attribution.authorName);
   if (llmResult.kind === 'error') {
-    return { kind: 'llm_request_failed' };
+    return { kind: 'llm_request_failed', platform };
   }
 
   const extraction = parseExtractionResponse(llmResult.json);
   if (extraction.kind === 'malformed') {
-    return { kind: 'parse_failed' };
+    return { kind: 'parse_failed', platform };
   }
   if (extraction.kind === 'no_recipe') {
-    return { kind: 'no_recipe_in_caption', caption, attribution };
+    return { kind: 'no_recipe_in_caption', caption, attribution, platform };
   }
 
   const recipe = validateParsedRecipe(extraction.rawRecipe);
   if (recipe === null) {
-    return { kind: 'parse_failed' };
+    return { kind: 'parse_failed', platform };
   }
 
   // Only a fully validated recipe is ever stored — every failure branch
   // above returned already, so nothing half-parsed can become the canonical
   // answer a later importer receives.
-  return finishParsedRecipe({ recipe, normalizedUrl, platform, attribution });
+  //
+  // `model_from_caption` for BOTH platforms that reach here, and it is a
+  // statement about this function rather than about TikTok or YouTube: what
+  // was read is prose written for humans, and a model did the reading.
+  return finishParsedRecipe({ recipe, normalizedUrl, platform, attribution, provenance: 'model_from_caption' });
 }
 
 /**
@@ -564,7 +583,9 @@ async function resolveWebImport(normalizedUrl: string): Promise<ImportResult> {
 
   const page = await fetchRecipePageHtml(normalizedUrl);
   if (page.kind === 'failed') {
-    return { kind: 'source_fetch_failed', reason: page.reason };
+    // A literal, not a parameter: `resolveImport` only enters this route
+    // for a `'web'` URL, so it is a fact about which function you are in.
+    return { kind: 'source_fetch_failed', reason: page.reason, platform: 'web' };
   }
 
   const extraction = extractRecipeFromHtml(page.value);
@@ -573,7 +594,7 @@ async function resolveWebImport(normalizedUrl: string): Promise<ImportResult> {
     // A real, permanent answer about a real page — distinct from every
     // `source_fetch_failed` reason, which are all answers about the fetch —
     // and emphatically not a cue to go and guess at the visible markup.
-    return { kind: 'no_recipe_on_page' };
+    return { kind: 'no_recipe_on_page', platform: 'web' };
   }
 
   return finishParsedRecipe({
@@ -581,6 +602,11 @@ async function resolveWebImport(normalizedUrl: string): Promise<ImportResult> {
     normalizedUrl,
     platform: 'web',
     attribution: extraction.attribution,
+    // The publisher stated these fields themselves, in named JSON-LD keys, and
+    // no model touched them. This is the only route that can say that, and
+    // saying it here — not deriving it from `platform: 'web'` later — is what
+    // keeps the claim true if a `'web'` page ever needs a different reader.
+    provenance: 'publisher_structured_data',
   });
 }
 
@@ -604,15 +630,18 @@ async function resolveYouTubeImport(normalizedUrl: string): Promise<ImportResult
     // problem with the user's link — and it would otherwise look to a user
     // exactly like a dead video.
     console.error(`parse-recipe: normalized YouTube URL carried no readable video id. url=${normalizedUrl}`);
-    return { kind: 'source_fetch_failed', reason: 'refused' };
+    return { kind: 'source_fetch_failed', reason: 'refused', platform: 'youtube' };
   }
 
   const snippet = await fetchYouTubeVideoSnippet(videoId);
   if (snippet.kind === 'failed') {
     // Includes `missing_credentials` when YOUTUBE_API_KEY is unset — the
     // same honest, actionable failure Instagram gives without its oEmbed
-    // token, and never a silent skip.
-    return { kind: 'source_fetch_failed', reason: snippet.reason };
+    // token, and never a silent skip. Naming `'youtube'` keeps that reason
+    // readable: this variant is shared with the web route, where an unset
+    // key cannot happen, so the one failure with a named fix would
+    // otherwise be counted as ambiguous.
+    return { kind: 'source_fetch_failed', reason: snippet.reason, platform: 'youtube' };
   }
 
   return extractRecipeFromCaption({
@@ -651,6 +680,11 @@ async function resolveYouTubeImport(normalizedUrl: string): Promise<ImportResult
 async function resolveImport(rawUrl: string): Promise<ImportResult> {
   const normalized = normalizeRecipeUrl(rawUrl);
   if (normalized.kind === 'unsupported_url') {
+    // THE ONE RETURN IN THIS FILE THAT NAMES NO PLATFORM, and the line
+    // above is why: establishing the platform is exactly what failed.
+    // Everything past here has `normalized.platform` in hand, which is what
+    // lets types.ts require the field everywhere else. No default here —
+    // see that file's `unsupported_url` comment.
     return { kind: 'unsupported_url' };
   }
 
@@ -690,7 +724,9 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
 
   const oembedResult = await resolveOembedFor(effective.normalizedUrl, effective.platform);
   if (oembedResult.kind === 'error') {
-    return { kind: 'oembed_failed', reason: oembedResult.reason };
+    // `effective.platform`, never the pre-expansion one: a short link has
+    // already resolved, so this names the endpoint that actually refused us.
+    return { kind: 'oembed_failed', reason: oembedResult.reason, platform: effective.platform };
   }
 
   // Built once, right after oEmbed resolves, and carried into every outcome
@@ -727,8 +763,12 @@ async function readUrlFromRequest(request: Request): Promise<string | null> {
 }
 
 Deno.serve(async (request) => {
+  // Neither of the next two replies is an import outcome, and neither is
+  // counted (IMP-07): a preflight asks whether it may POST, and a wrong
+  // method never reached the pipeline. Both use the response builders that
+  // have no telemetry in them — see importResponse.ts.
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: CORS_HEADERS });
+    return corsPreflightResponse();
   }
   if (request.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405);
@@ -736,12 +776,18 @@ Deno.serve(async (request) => {
 
   const url = await readUrlFromRequest(request);
   if (url === null) {
+    // Also not counted: a body with no usable `url` never became an import,
+    // so it has no outcome. Counting it would inflate the denominator the
+    // whole telemetry line exists to make trustworthy.
     return jsonResponse({ error: 'Request body must be { "url": string }' }, 400);
   }
 
   try {
     const result = await resolveImport(url);
-    return jsonResponse(result, 200);
+    // The one place an `ImportResult` becomes a response, which is therefore
+    // the one place an import is counted — successes and modeled failures
+    // alike, exactly once each.
+    return respondWithImportResult(result);
   } catch (error) {
     // A genuinely unexpected exception (not one of the modeled failure
     // paths above, all of which return normally) — logged server-side

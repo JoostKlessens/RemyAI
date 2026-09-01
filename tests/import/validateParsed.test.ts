@@ -127,6 +127,33 @@ describe('validateParsedRecipe — dishTags (closed vocabulary)', () => {
   test('rejects a dishTags array holding a non-string entry', () => {
     expect(validateParsedRecipe({ ...VALID_RAW, dishTags: ['pasta', 42] })).toBeNull();
   });
+
+  /**
+   * `ParsedRecipe.dishTags` is a REQUIRED field now, and this function is
+   * the only door a real model response comes through — so "the key is
+   * always present on what comes out" has to hold whatever went in. The
+   * type enforces it at the single `return`; this asserts it across every
+   * shape of input that produces a recipe at all, so a future early
+   * success path cannot quietly ship a recipe whose categories are a
+   * missing key rather than an empty list.
+   */
+  test('always states dishTags on the way out, for every input that yields a recipe', () => {
+    const { dishTags: _dishTags, ...withoutDishTags } = VALID_RAW;
+    const inputs: readonly unknown[] = [
+      VALID_RAW,
+      { ...VALID_RAW, dishTags: [] },
+      { ...VALID_RAW, dishTags: null },
+      { ...VALID_RAW, dishTags: ['italiaans'] },
+      withoutDishTags,
+    ];
+
+    for (const input of inputs) {
+      const result = validateParsedRecipe(input);
+      expect(result).not.toBeNull();
+      expect(result !== null && 'dishTags' in result).toBe(true);
+      expect(Array.isArray(result?.dishTags)).toBe(true);
+    }
+  });
 });
 
 describe('validateParsedRecipe — rejects malformed shapes (never a half-populated recipe)', () => {

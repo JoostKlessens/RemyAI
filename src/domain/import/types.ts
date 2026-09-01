@@ -42,6 +42,14 @@
  * `no_recipe_on_page`, "the page said nothing structured", rather than
  * `no_recipe_in_caption`, "the text we were given did not contain a
  * recipe".
+ *
+ * THAT DIFFERENCE IS NOW SOMETHING THE USER CAN SEE, not just something
+ * this header explains to whoever reads it. `RecipeProvenance` below is
+ * the same distinction made into a field on the result: a recipe the
+ * publisher wrote down for machines, or a recipe a model read out of prose
+ * written for people. It is deliberately one bit and not a confidence
+ * number — see its own doc comment for why turning it into a score would
+ * undo the honesty it exists to provide.
  */
 
 import type { OembedErrorReason } from '../../lib/oembed';
@@ -116,39 +124,36 @@ export interface ParsedRecipe {
    * `Meal.ingredientTags` — see toMealDraft.ts's header for how that
    * separation is made a compile error rather than a convention.
    *
-   * STILL OPTIONAL, AND THE ONE FIELD ON THIS PAGE THAT IS. Its two
-   * siblings on `ImportResult.parsed` (`attribution`, `recipeId`) were
-   * made required when src/app/import/_fixtures.ts was given real values
-   * for them. This one could not follow, because `_fixtures.ts` is not its
-   * only pre-dating literal: `buildEditedRecipe` in
-   * src/app/import/confirm.tsx rebuilds a `ParsedRecipe` from the
-   * confirmation screen's own edited fields and does not carry dish tags
-   * through at all — so requiring this field is a change to that screen
-   * (and a real question about whether editing a recipe should silently
-   * drop its categories), not a change to this type.
+   * REQUIRED, AND THE BUG THAT MADE IT REQUIRED IS WORTH KNOWING,
+   * because it is the cleanest example in this codebase of what an
+   * optional field costs.
    *
-   * `validateParsedRecipe` — the only way a real model response becomes a
-   * `ParsedRecipe` — always populates it, so `undefined` never reaches the
-   * import pipeline from the server. Treat it as `[]` wherever it can
-   * appear (`toMealDraft` does), never as "categories unknown": there is
+   * It was optional. `validateParsedRecipe` — the only way a real model
+   * response becomes a `ParsedRecipe` — always populated it, so the field
+   * was in practice never absent on any value the server produced. It was
+   * absent on exactly one path: `buildEditedRecipe` in
+   * src/app/import/confirm.tsx, which does not narrow anything but
+   * REBUILDS a `ParsedRecipe` from scratch out of the confirmation
+   * screen's edited fields. Because the field was optional, that literal
+   * compiled while simply not mentioning it. So a user who imported a
+   * recipe and then corrected one ingredient before saving got a meal with
+   * NO dish tags, while a user who saved the identical import untouched
+   * got the model's categories — and the library's dishTag filter
+   * (recipeSearch.ts) then under-reported what the household owned, with
+   * nothing anywhere reporting a problem. Editing a recipe silently
+   * deleted its categories, and the type said that was fine.
+   *
+   * That is the whole argument for requiring it: the danger was never a
+   * validator letting a bad value in, it was a hand-written literal
+   * omitting a good one, and only the type can catch that. `[]` still says
+   * what it always said — no obvious category — but it and "the writer
+   * forgot" are now different things to say, and only one of them
+   * compiles. Never read an empty list as "categories unknown": there is
    * no fail-safe reading to preserve, because a dish tag gates nothing.
    */
-  readonly dishTags?: readonly string[];
+  readonly dishTags: readonly string[];
 }
 
-/**
- * Every outcome a paste of a URL can produce. Modeled as a closed
- * discriminated union — not a nullable `ParsedRecipe` plus an error
- * string — because the UI needs to show different copy and a different
- * recovery action for each (per the brief): "that's not a TikTok/Instagram
- * link" reads and resolves completely differently from "we found the
- * video but there's no recipe in the caption," which again differs from
- * "something went wrong talking to the video platform, try again."
- * Collapsing any of these into a shared "failed" bucket would be exactly
- * the kind of silent-failure UX this feature exists to avoid — the
- * caption-only limitation in the file header must surface as a clear,
- * distinguishable outcome, not a vague error toast.
- */
 /**
  * A recipe's creator attribution — see buildAttribution.ts's file header
  * for the full rationale. Every field is explicitly `string | null`, never
@@ -172,12 +177,74 @@ export interface ImportAttribution {
 }
 
 /**
+ * RCP-06. HOW THIS IMPORT GOT ITS RECIPE — the one fact a user needs to
+ * judge what they are looking at, and the one this pipeline has spent its
+ * whole existence keeping true.
+ *
+ *  - `publisher_structured_data` — the publisher wrote it down, in
+ *    machine-readable form, on purpose. A schema.org/Recipe object in a
+ *    page's JSON-LD (jsonLdRecipe.ts): every ingredient came out of a
+ *    named key the site itself filled in, so nothing was interpreted and
+ *    nothing COULD be hallucinated, because no model was involved at all.
+ *  - `model_from_caption` — a language model read prose that was written
+ *    for humans and produced a structured recipe from it. The caption
+ *    pipeline: a TikTok caption, a YouTube description. The model is
+ *    instructed and schema-constrained never to invent a quantity
+ *    (buildExtractionRequest.ts) and `validateParsedRecipe` throws away
+ *    anything malformed — but it is still a READING, and a reading can be
+ *    wrong in ways no validator can see, because the text it misread was
+ *    perfectly well-formed.
+ *
+ * THIS IS A PROVENANCE FACT, NOT A SCORE, AND IT MUST NEVER BECOME ONE.
+ * Do not add a confidence number, a percentage, a star rating, or an enum
+ * with degrees between these two. They are not two points on a scale —
+ * they are two different KINDS of thing. One is a publisher's own
+ * statement about their own recipe; the other is our software's
+ * interpretation of somebody's prose. A user is entitled to know which of
+ * those they are holding, and that question has an exact answer, whereas
+ * "how sure are we" does not: nothing in this pipeline measures its own
+ * accuracy, so any number attached here would be a decoration invented at
+ * the point of display. PD-019 states the rule this follows — precision
+ * follows the instrument, not the screen — and the instrument here yields
+ * one bit, honestly. A "87% zeker" badge would be exactly the false
+ * precision the rest of this codebase refuses: it would read as measured
+ * and be guessed, and it would let a genuinely wrong extraction wear a
+ * high number.
+ *
+ * WHY THERE IS NO THIRD MEMBER FOR THE FUTURE. `'web'` is the only route
+ * that reads structured data and the caption routes are the only ones that
+ * call a model, so these two exhaust what the pipeline can currently do.
+ * A new extraction route earns a new member, argued the way these two
+ * were — not a fallback to whichever of these is closest.
+ */
+export type RecipeProvenance = 'publisher_structured_data' | 'model_from_caption';
+
+/**
  * Why the text we wanted to read never arrived. Every member names a
  * DIFFERENT decision someone has to make about it, which is the whole
  * reason this isn't one opaque "fetch error":
  *
- *  - `refused` — the server answered, and said no (401/403, a bot wall).
- *    Nothing is broken on our side and nothing is missing on theirs.
+ *  - `refused` — WE said no, before any bytes were exchanged. Our own SSRF
+ *    guard rejected the host or a hop in its redirect chain: a link back
+ *    at our own machine, a private-network address, a scheme we do not
+ *    open (`isBlockedRedirectHost`, resolveShortLinkTarget.ts). The
+ *    publisher never heard from us and has no opinion about us.
+ *  - `forbidden` — THEY said no, to US. The server answered, with 403 (and
+ *    401/451 alongside it): a bot wall, a login gate, a legal block. The
+ *    request was made, reached them, and was turned away.
+ *
+ *    THESE TWO ARE ONE WORD APART AND MEAN OPPOSITE THINGS, which is
+ *    exactly why they are two members instead of one. `refused` is our
+ *    decision; `forbidden` is theirs. Map a 403 onto `refused` and the
+ *    copy tells a user their perfectly ordinary recipe blog is somehow
+ *    dangerous; map our SSRF block onto `forbidden` and it tells them a
+ *    site they can open in a browser is blocking them, sending them to
+ *    complain to a publisher who did nothing. The word for a 403 is
+ *    `forbidden`. Nothing else in this union is `forbidden`.
+ *  - `rate_limited` — HTTP 429. They will talk to us, just not this
+ *    often. The only member here whose answer changes purely by waiting,
+ *    which is why the copy says "over een minuutje" rather than offering
+ *    an instant retry (importFailureCopy.ts).
  *  - `not_found` — 404/410. The page or video is gone, or was never there.
  *  - `server_error` — a 5xx. Their outage, not ours, and usually brief.
  *  - `too_large` — the response exceeded the byte ceiling we read up to
@@ -201,6 +268,8 @@ export interface ImportAttribution {
  */
 export type SourceFetchFailureReason =
   | 'refused'
+  | 'forbidden'
+  | 'rate_limited'
   | 'not_found'
   | 'server_error'
   | 'too_large'
@@ -208,6 +277,67 @@ export type SourceFetchFailureReason =
   | 'network_error'
   | 'missing_credentials';
 
+/**
+ * Every outcome a paste of a URL can produce. Modeled as a closed
+ * discriminated union — not a nullable `ParsedRecipe` plus an error
+ * string — because the UI needs to show different copy and a different
+ * recovery action for each (per the brief): "that's not a TikTok/Instagram
+ * link" reads and resolves completely differently from "we found the
+ * video but there's no recipe in the caption," which again differs from
+ * "something went wrong talking to the video platform, try again."
+ * Collapsing any of these into a shared "failed" bucket would be exactly
+ * the kind of silent-failure UX this feature exists to avoid — the
+ * caption-only limitation in the file header must surface as a clear,
+ * distinguishable outcome, not a vague error toast.
+ *
+ * ---
+ *
+ * EVERY VARIANT BELOW CARRIES A `platform` EXCEPT `unsupported_url`. One
+ * sentence, one exception, and the exception is the reason the rule is
+ * stated as a rule rather than granted variant by variant.
+ *
+ * THE FACT THAT MAKES IT AFFORDABLE: the platform is known the instant
+ * `normalizeRecipeUrl` succeeds (urlParsing.ts), which is the FIRST thing
+ * the pipeline does and strictly before any network call. Every outcome
+ * except one is therefore constructed downstream of a value already sitting
+ * in scope — nothing has to be looked up, re-derived, or guessed to state
+ * it. Read the edge function's `resolveImport` top to bottom and the shape
+ * is plain: `unsupported_url` returns on the line above, and every other
+ * `return` in the file is inside a branch that has just been handed a
+ * platform.
+ *
+ * THE FACT THAT MAKES IT NECESSARY: an outcome that cannot say which
+ * platform it came from is an outcome nobody can act on. `no_recipe_in_caption`
+ * is the case that decides a real question rather than a hypothetical one.
+ * SRC-09 — reading a video's audio or on-screen text — is out of scope on
+ * copyright grounds (see the file header), and the only evidence that could
+ * ever justify reopening it is the rate at which caption-only extraction
+ * fails. But "a caption yielded no recipe" is not one number: a TikTok
+ * caption and a YouTube description are different lengths, written by
+ * different people, under different conventions, and there is no reason
+ * whatsoever for them to fail alike. Counting them together produces an
+ * average of two populations and answers for neither. IMP-07's telemetry
+ * (importTelemetry.ts) can only report what the variant carries, so the
+ * variant has to carry it.
+ *
+ * `unsupported_url` IS THE ONE HONEST ABSENCE, and its absence is a fact
+ * rather than a gap. That variant is returned when `normalizeRecipeUrl`
+ * itself refuses the text — it is not a link, not a scheme we open, or a
+ * host pointing back at our own network — which is to say it is returned
+ * precisely because we never established what the URL points at. There is
+ * no platform to omit. Giving it a nullable field, or a `'web'` default,
+ * would be the app inventing a fact about a string it declined to open, and
+ * a fabricated platform is strictly worse than a missing one: it does not
+ * merely fail to answer the SRC-09 question, it corrupts the denominator
+ * that question is asked against.
+ *
+ * SO THE RULE IS A RULE AND NOT A COLLECTION OF CASES. "Everything but
+ * `unsupported_url`" is one sentence a reader can hold and a reviewer can
+ * check; "whichever variants somebody got round to widening" is a state
+ * nobody can verify without reading all nine. The next variant added
+ * inherits the rule by default and has to argue its way out of it, which is
+ * the direction the burden of proof belongs in.
+ */
 export type ImportResult =
   | {
       readonly kind: 'parsed';
@@ -282,6 +412,38 @@ export type ImportResult =
        * third state for a reader to wonder about.
        */
       readonly recipeId: string | null;
+      /**
+       * RCP-06. Whether this recipe is what the publisher themselves
+       * stated in machine-readable form, or a model's reading of prose —
+       * see `RecipeProvenance` above for the two members and for why this
+       * is a fact rather than a score.
+       *
+       * WHY IT LIVES HERE AND NOT ON `ParsedRecipe`. `ParsedRecipe` is
+       * CONTENT: it is the dish — a title, ingredients, steps, the things
+       * that would be equally true if the same recipe had arrived some
+       * other way. Provenance is a fact about one ACT OF IMPORTING, not
+       * about the dish. Put it on the content and it travels: `toMealDraft`
+       * would carry it into a household's meal and `buildRecipeRowInsert`
+       * into the canonical row, where it would stop meaning "this is how
+       * Remy obtained this, once" and start meaning "this recipe IS
+       * model-derived" — a claim about the dish itself that outlives the
+       * import, gets copied between households, and is wrong the moment
+       * the same recipe is later imported from a page that publishes it
+       * properly. The narrow field is the honest one.
+       *
+       * REQUIRED, for exactly the reason `attribution` and `recipeId`
+       * above became required in the wave before this one: an optional
+       * field is a field a producer can forget, and a provenance that is
+       * sometimes absent forces the UI to render a third, "onbekend"
+       * state that no producer ever actually means. Every producer knows
+       * the answer for free — the web route knows it read JSON-LD, the
+       * caption route knows it called a model, and `parseStoredRecipe`
+       * derives it from what the storability guard permits (see
+       * canonicalRecipe.ts, and the warning there about what happens if
+       * that guard widens). None of them has to look anything up, so none
+       * of them has an excuse to omit it.
+       */
+      readonly provenance: RecipeProvenance;
     }
   /**
    * The post resolved, and we deliberately never asked the model to read
@@ -311,7 +473,8 @@ export type ImportResult =
    * only constructor of this shape and never touches `OembedPayload.title`,
    * so there is no code path that could regress this by forgetting.
    *
-   * `attribution` is REQUIRED here, unlike on `parsed`: crediting the
+   * `attribution` is REQUIRED here — as it now is on `parsed` too, though
+   * this variant got there first and for a stronger reason: crediting the
    * creator is the entire justification for showing this post at all, so a
    * version of this result without one is not worth rendering.
    */
@@ -331,10 +494,11 @@ export type ImportResult =
    * was never even called — see the edge function) so the UI can, if it
    * chooses, show the user what we actually read.
    *
-   * IMP-02. `attribution` is REQUIRED here, unlike `parsed`'s optional
-   * field. `parsed`'s optionality exists purely as fixture backward-
-   * compatibility (see its own doc comment) — the real edge function
-   * always populates it. This variant has no equivalent excuse: index.ts
+   * IMP-02. `attribution` is REQUIRED here. It was required here first,
+   * while `parsed`'s was still optional for fixture backward-
+   * compatibility; that gap has since closed and both are required now,
+   * but the arguments are not the same one twice. This variant never had
+   * even the fixture excuse: index.ts
    * only ever constructs it AFTER `resolveOembedFor` has already resolved
    * successfully (both the "caption was empty, the model was never
    * called" short-circuit and the model's own explicit "no recipe here"
@@ -351,7 +515,24 @@ export type ImportResult =
    * though the function had already resolved one via oEmbed to build its
    * extraction prompt.
    */
-  | { readonly kind: 'no_recipe_in_caption'; readonly caption: string | null; readonly attribution: ImportAttribution }
+  | {
+      readonly kind: 'no_recipe_in_caption';
+      readonly caption: string | null;
+      readonly attribution: ImportAttribution;
+      /**
+       * THE ONE THIS UNION WAS WIDENED FOR. `'tiktok'` or `'youtube'` —
+       * the two platforms that reach the shared caption tail — and telling
+       * them apart is most of the SRC-09 question, not a nicety. See the
+       * union's own doc comment above.
+       *
+       * Free at both construction sites, which is why it is required
+       * rather than optional: the blank-caption short-circuit and the
+       * model's explicit "no recipe here" both live inside
+       * `extractRecipeFromCaption`, whose input already names the platform
+       * its caller fetched from.
+       */
+      readonly platform: ImportPlatform;
+    }
   /**
    * THE WEB ROUTE'S HONEST SIBLING OF `no_recipe_in_caption`. The page was
    * fetched without incident and simply publishes no machine-readable
@@ -374,7 +555,19 @@ export type ImportResult =
    * which is a true and useful thing to tell someone about a video and a
    * meaningless thing to tell someone about a food blog.
    */
-  | { readonly kind: 'no_recipe_on_page' }
+  | {
+      readonly kind: 'no_recipe_on_page';
+      /**
+       * `'web'` today, and stated rather than assumed. The JSON-LD reader
+       * is the only thing that produces this outcome and only the web route
+       * runs it, so a reader could work the value out — and that is exactly
+       * the inference this field exists to make unnecessary. A count keyed
+       * on "which route found nothing" must not depend on a coincidence
+       * that holds until the day some other route learns to read structured
+       * data.
+       */
+      readonly platform: ImportPlatform;
+    }
   /**
    * We never got the source text at all — see `SourceFetchFailureReason`
    * above for what each reason means and which of them a retry can help.
@@ -394,7 +587,22 @@ export type ImportResult =
    * because there is nothing there to find. A result that sends a reader
    * to the wrong file is worse than one more union member.
    */
-  | { readonly kind: 'source_fetch_failed'; readonly reason: SourceFetchFailureReason }
+  | {
+      readonly kind: 'source_fetch_failed';
+      readonly reason: SourceFetchFailureReason;
+      /**
+       * THE FIELD THAT MAKES "TWO PRODUCERS, ONE VARIANT" READABLE AGAIN.
+       * The paragraph above argues that a web GET and a Data API call fail
+       * in the same shape and mean the same thing TO THE USER — which is
+       * true, and is why the copy is shared. It was never true of the
+       * operator: `missing_credentials` means an unset `YOUTUBE_API_KEY` on
+       * the YouTube route and cannot arise on the web one, and a wall of
+       * `forbidden` is a bot wall on somebody's blog rather than anything
+       * Google did. One outcome for the reader, two for whoever has to fix
+       * it, and this field is what keeps the second reading available.
+       */
+      readonly platform: ImportPlatform;
+    }
   /**
    * The pasted text is not a link this app will open at all — see
    * urlParsing.ts. Rejected before any network call.
@@ -407,11 +615,72 @@ export type ImportResult =
    * private network (`isBlockedRedirectHost`). The copy in
    * src/components/importFailureCopy.ts is written against exactly that
    * list and must be reread whenever this one changes.
+   *
+   * THE ONE VARIANT WITH NO `platform`, AND THE ONLY ONE THAT COULD NOT
+   * HONESTLY HAVE ONE. Every sibling states its platform (see the union's
+   * doc comment for the rule and why it exists); this one is returned by
+   * the branch that runs BEFORE a platform is established, because
+   * establishing it is exactly what failed. Every list above describes text
+   * we declined to identify: `javascript:hello` belongs to no platform, a
+   * bare host names no page on one, and a link at our own private network
+   * is refused before anyone asks what serves it.
+   *
+   * DO NOT GIVE IT A NULLABLE FIELD TO "COMPLETE THE SET". A
+   * `platform: ImportPlatform | null` here would put a null back into the
+   * eight variants that no longer need one, so every reader would be back
+   * to handling an absence that only one outcome can produce — and IMP-07's
+   * telemetry already renders a missing platform as `-` at the log line,
+   * which is the one place the absence needs a spelling. And do not default
+   * it to `'web'` on the grounds that most rejected text looks like a URL:
+   * that would file every unopened string under the route whose failure
+   * rate matters, inventing exactly the data importTelemetry.ts exists to
+   * measure honestly.
    */
   | { readonly kind: 'unsupported_url' }
   /** oEmbed itself failed (404, rate limited, missing Instagram credentials, ...) — reason carried through verbatim from src/lib/oembed.ts's own typed failure vocabulary, so the UI can reuse its copy/recovery mapping. */
-  | { readonly kind: 'oembed_failed'; readonly reason: OembedErrorReason }
+  | {
+      readonly kind: 'oembed_failed';
+      readonly reason: OembedErrorReason;
+      /**
+       * `'tiktok'` or `'instagram'` in practice — oEmbed is reachable from
+       * those two alone, structurally, because the web and YouTube routes
+       * return before it (see the edge function's `resolveImport`). Typed
+       * as the full `ImportPlatform` anyway rather than as `OembedPlatform`:
+       * this is the shape a CLIENT narrows off the wire, and a client that
+       * hard-refused an `oembed_failed` naming a third platform would be
+       * asserting a fact about a server it cannot see the version of.
+       * `missing_credentials` reads completely differently on the two —
+       * an unset Instagram token versus a TikTok endpoint that should need
+       * none — so merging their counts hides the only actionable half.
+       */
+      readonly platform: ImportPlatform;
+    }
   /** The extraction model itself could not be reached, or returned a transport-level failure (network error, non-2xx, rate limit) — distinct from `parse_failed` below because this one is usually worth a simple "try again," not a "this video probably has no written recipe." */
-  | { readonly kind: 'llm_request_failed' }
+  | {
+      readonly kind: 'llm_request_failed';
+      /**
+       * In hand at both producers, and they are not the same producer.
+       * Inside the edge function this is the caption route's platform, held
+       * since before the model was called. On the client,
+       * src/lib/importRecipe.ts synthesises this variant when the round
+       * trip itself failed — no response to read, so nothing of the
+       * server's to report — and states the platform `normalizeRecipeUrl`
+       * gave the paste screen before the request was sent. That is the same
+       * function, on the same URL, that the function would have used; it is
+       * a reading rather than a guess, and without it the transport-failure
+       * path would be the one import outcome with no platform at all.
+       */
+      readonly platform: ImportPlatform;
+    }
   /** The model responded, but not in the required shape (bad tool call, fields that don't validate against `ParsedRecipe`) — see validateParsed.ts and parseExtractionResponse.ts. Never surfaced as a half-populated recipe. */
-  | { readonly kind: 'parse_failed' };
+  | {
+      readonly kind: 'parse_failed';
+      /**
+       * `'tiktok'` or `'youtube'`: only the caption routes call a model, so
+       * only they can be answered badly by one. Worth counting apart for
+       * the same reason `no_recipe_in_caption` is — a model that mangles
+       * one platform's prose and not the other's is a prompt problem, and
+       * a single merged number cannot show that.
+       */
+      readonly platform: ImportPlatform;
+    };

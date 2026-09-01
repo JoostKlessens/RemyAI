@@ -66,7 +66,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { buildFixtureImportAttempt, type FixtureImportScenario } from './_fixtures';
 import { encodeImportConfirmParams } from './routeParams';
-import type { ImportPlatform, ParsedRecipe } from '@/domain/import/types';
+import type { ImportPlatform, ParsedRecipe, RecipeProvenance } from '@/domain/import/types';
 import { isDisplayOnlyPlatform } from '@/domain/import/displayOnlyPolicy';
 import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
 import { requestImport } from '@/lib/importRecipe';
@@ -151,6 +151,12 @@ const DEMO_URL_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
 
 const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, ImportPlatform>> = {
   parsed: 'tiktok',
+  // RCP-06's other route. `'parsed'` above demos a caption a model read;
+  // this one demos a page whose publisher wrote the recipe out in machine-
+  // readable form, so the two provenance notes on the confirmation screen
+  // can both be seen on device. Pairing it with anything but `'web'` would
+  // demo a structured-data import from a platform that has none.
+  parsed_from_page: 'web',
   display_only: 'instagram',
   no_recipe_in_caption: 'tiktok',
   no_recipe_on_page: 'web',
@@ -203,6 +209,18 @@ interface ConfirmNavigationContext {
    * explicit `null` mean the same thing and both travel as `null`.
    */
   readonly recipeId?: string | null;
+  /**
+   * RCP-06 — how the recipe travelling with this navigation was arrived
+   * at. REQUIRED and stated at every call site rather than optional like
+   * `recipeId` above, because the two fields fail differently when
+   * forgotten: an omitted `recipeId` is read as `null` and writes a meal
+   * that is a copy of nothing, which is at least a legible outcome, while
+   * an omitted provenance would silently strip the one sentence telling a
+   * user whether they are looking at a publisher's list or a model's
+   * reading of a caption — on the screen where they decide to cook from
+   * it. Every route that has no recipe says `null` out loud instead.
+   */
+  readonly provenance: RecipeProvenance | null;
 }
 
 export default function ImportPasteScreen(): JSX.Element {
@@ -243,6 +261,7 @@ export default function ImportPasteScreen(): JSX.Element {
           // know its canonical recipe is carrying a meal that is a copy of
           // nothing, which is a real answer.
           recipeId: context.recipeId ?? null,
+          provenance: context.provenance,
         }),
       },
     });
@@ -261,7 +280,12 @@ export default function ImportPasteScreen(): JSX.Element {
       setTimeout(() => setLoadingCheckpoint(1), CHECKPOINT_ONE_DELAY_MS),
       setTimeout(() => setLoadingCheckpoint(2), CHECKPOINT_TWO_DELAY_MS),
     ];
-    requestImport(normalizedUrl).then((attempt) => {
+    // `platform` travels with the URL because a failed round trip has no
+    // response to read a platform off, and `llm_request_failed` now states
+    // one (types.ts). This is the same value `normalizeRecipeUrl` handed
+    // `handleSubmit`, passed on rather than recomputed — see
+    // `requestImport`.
+    requestImport(normalizedUrl, platform).then((attempt) => {
       clearCheckpointTimers();
       setPhase('idle');
       if (attempt.result.kind === 'parsed') {
@@ -273,6 +297,9 @@ export default function ImportPasteScreen(): JSX.Element {
           normalizedUrl: attempt.result.sourceUrl,
           platform: attempt.result.platform,
           thumbnailUrl: attempt.thumbnailUrl,
+          // Reported by the attempt, never inferred here from
+          // `attempt.result.platform` — see `ImportAttempt.provenance`.
+          provenance: attempt.provenance,
           // The one place a real canonical id enters the app. Straight off
           // the function's answer — the row it inserted, or the stored row
           // a cache hit served — never rebuilt from `sourceUrl`.
@@ -342,6 +369,11 @@ export default function ImportPasteScreen(): JSX.Element {
       // Dropping it here would throw away the only part of the import that
       // worked.
       thumbnailUrl: failedAttempt?.result.kind === 'display_only' ? failedAttempt.thumbnailUrl : null,
+      // Always null, on every route into manual entry, including the ones
+      // that resolved a post and a creator first. Nothing was read out of
+      // anything: the user is about to type this recipe, so it has no
+      // origin to report and the confirmation screen shows no note at all.
+      provenance: null,
     });
   };
 
@@ -392,6 +424,7 @@ export default function ImportPasteScreen(): JSX.Element {
         platform: attempt.result.platform,
         thumbnailUrl: attempt.thumbnailUrl,
         recipeId: attempt.result.recipeId,
+        provenance: attempt.provenance,
       });
       return;
     }
@@ -543,7 +576,11 @@ interface DevScenarioRowProps {
 
 const DEV_SCENARIOS: ReadonlyArray<{ value: DevScenarioValue; label: string }> = [
   { value: 'normal', label: 'Normaal' },
-  { value: 'parsed', label: 'Gelukt' },
+  // Two "gelukt" buttons, because there are two ways to succeed and they
+  // say different things on the confirmation screen (RCP-06). Labelled by
+  // the route rather than by the outcome, since the outcome is identical.
+  { value: 'parsed', label: 'Gelukt (bijschrift)' },
+  { value: 'parsed_from_page', label: 'Gelukt (pagina)' },
   { value: 'no_recipe_in_caption', label: 'Geen recept' },
   { value: 'no_recipe_on_page', label: 'Pagina zonder recept' },
   { value: 'display_only', label: 'Alleen tonen' },

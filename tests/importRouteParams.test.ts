@@ -13,6 +13,9 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
         steps: ['Verwarm de oven voor op 200°C.'],
         estimatedMinutes: 35,
         servings: 4,
+        // Required since the confirmation screen stopped dropping it — see
+        // `buildEditedRecipe` in src/app/import/confirm.tsx.
+        dishTags: ['kip', 'ovenschotel'],
       },
       sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
       platform: 'tiktok',
@@ -20,6 +23,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: 'https://www.tiktok.com/@kokenmetkees',
       thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
       recipeId: RECIPE_ID,
+      provenance: 'model_from_caption',
     };
 
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
@@ -35,6 +39,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
+      provenance: null,
     };
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
   });
@@ -49,6 +54,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
+      provenance: null,
     });
   });
 
@@ -87,6 +93,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: 'https://www.tiktok.com/@kokenmetkees',
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
+      provenance: 'model_from_caption',
     });
     expect(decodeImportConfirmParams(raw).recipeId).toBe(RECIPE_ID);
   });
@@ -101,6 +108,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
+      provenance: null,
     });
     expect(decodeImportConfirmParams(raw).recipeId).toBeNull();
   });
@@ -152,6 +160,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
         authorUrl: null,
         thumbnailUrl: null,
         recipeId: RECIPE_ID,
+        provenance: 'publisher_structured_data',
       });
       const decoded = decodeImportConfirmParams(raw);
       expect(decoded.platform).toBe(platform);
@@ -180,6 +189,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
+      provenance: null,
     });
   });
 
@@ -200,6 +210,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: 'https://www.leukerecepten.nl/over-sanne',
       thumbnailUrl: null,
       recipeId: null,
+      provenance: 'publisher_structured_data',
     });
     expect(decodeImportConfirmParams(raw).authorUrl).toBe('https://www.leukerecepten.nl/over-sanne');
   });
@@ -214,10 +225,106 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: null,
       thumbnailUrl: null,
       recipeId: null,
+      provenance: 'model_from_caption',
     });
     const decoded = decodeImportConfirmParams(raw);
     expect(decoded.authorName).toBe('De Kookkanaal');
     expect(decoded.authorUrl).toBeNull();
+  });
+
+  /**
+   * RCP-06. Provenance travels for the same reason `authorUrl` and
+   * `recipeId` do: the confirmation screen cannot recover it. `platform`
+   * arrives right beside it and looks like it would answer the question,
+   * and a screen that concluded "web means the publisher wrote it" would
+   * be restating a pipeline rule rather than reporting what happened to
+   * this import.
+   */
+  test('carries each provenance across the paste -> confirm hop', () => {
+    for (const provenance of ['publisher_structured_data', 'model_from_caption'] as const) {
+      const raw = encodeImportConfirmParams({
+        mode: 'parsed',
+        recipe: null,
+        sourceUrl: 'https://example.test/recept',
+        platform: 'web',
+        authorName: 'Sanne Bakker',
+        authorUrl: null,
+        thumbnailUrl: null,
+        recipeId: null,
+        provenance,
+      });
+      expect(decodeImportConfirmParams(raw).provenance).toBe(provenance);
+    }
+  });
+
+  test('keeps an explicitly null provenance null — a recipe the user types has no origin to report', () => {
+    const raw = encodeImportConfirmParams({
+      mode: 'manual',
+      recipe: null,
+      sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
+      platform: 'tiktok',
+      authorName: 'kokenmetkees',
+      authorUrl: null,
+      thumbnailUrl: null,
+      recipeId: null,
+      provenance: null,
+    });
+    expect(decodeImportConfirmParams(raw).provenance).toBeNull();
+  });
+
+  /**
+   * The version-skew case, and the one field on this payload that is read
+   * leniently rather than all-or-nothing. A value from a NEWER build is
+   * refused — we will not render a note built on a word we do not know —
+   * but it is refused as ABSENT, because blanking a recipe the user waited
+   * for, over a missing sentence, is the worse trade. See `readProvenance`.
+   */
+  test('reads an unrecognised provenance as absent, and keeps the rest of the payload', () => {
+    const raw = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: 'https://example.test/recept',
+      platform: 'web',
+      authorName: 'Sanne Bakker',
+      authorUrl: null,
+      thumbnailUrl: null,
+      recipeId: RECIPE_ID,
+      provenance: 'vibes',
+    });
+    const decoded = decodeImportConfirmParams(raw);
+    expect(decoded.provenance).toBeNull();
+    expect(decoded.mode).toBe('parsed');
+    expect(decoded.recipeId).toBe(RECIPE_ID);
+    expect(decoded.sourceUrl).toBe('https://example.test/recept');
+  });
+
+  test('reads a missing or wrongly-typed provenance as absent rather than discarding the import', () => {
+    const withoutKey = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: 'https://example.test/recept',
+      platform: 'web',
+      authorName: null,
+      authorUrl: null,
+      thumbnailUrl: null,
+      recipeId: RECIPE_ID,
+    });
+    expect(decodeImportConfirmParams(withoutKey).provenance).toBeNull();
+    expect(decodeImportConfirmParams(withoutKey).mode).toBe('parsed');
+
+    const wrongType = JSON.stringify({
+      mode: 'parsed',
+      recipe: null,
+      sourceUrl: 'https://example.test/recept',
+      platform: 'web',
+      authorName: null,
+      authorUrl: null,
+      thumbnailUrl: null,
+      recipeId: RECIPE_ID,
+      provenance: 7,
+    });
+    expect(decodeImportConfirmParams(wrongType).provenance).toBeNull();
+    expect(decodeImportConfirmParams(wrongType).mode).toBe('parsed');
   });
 
   test('decodes to the safe empty shape when authorUrl is missing or is not a string', () => {

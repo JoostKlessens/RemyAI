@@ -20,6 +20,22 @@
  * recipe" rule, and only in one direction — see `readDishTags` below for
  * why a wrong WORD is dropped while a wrong SHAPE still fails the recipe.
  *
+ * WHAT BENDING THAT RULE DOES NOT MEAN, now that `ParsedRecipe.dishTags`
+ * is a REQUIRED field (types.ts). "Absent in the answer we were handed"
+ * and "absent on the value this function returns" are two different
+ * questions, and only the first has ever had a lenient answer here.
+ * `readDishTags` accepts a missing key and reports `[]`; `ParsedRecipe`
+ * then requires that `[]` to be STATED. This function has always
+ * populated the field on every path — there is exactly one `return` that
+ * produces a recipe, and it names `dishTags` — but until now that was a
+ * property of the code, true only as long as nobody added a second
+ * `return`. It is now a property of the type: drop the field from the
+ * object literal below, or add an early success path that omits it, and
+ * this file stops compiling. The optionality that guarantee used to lean
+ * on is gone, along with the bug it enabled elsewhere — a hand-written
+ * recipe literal that silently dropped the field, see
+ * `ParsedRecipe.dishTags`'s own comment.
+ *
  * Like buildExtractionRequest.ts, this module now carries runtime imports
  * (`sanitizeDishTags`, `normalizeTag`) where it previously had only
  * `import type`. See that file's "NOTE ON THE `dishTags` IMPORT" header
@@ -118,10 +134,10 @@ type DishTagsResult = { readonly ok: true; readonly value: readonly string[] } |
  *
  * A value the closed vocabulary does not know is DROPPED and the recipe
  * survives. That is what a closed vocabulary is for: a model answering
- * "italiaans" has picked a wrong word for an optional, descriptive field,
- * and failing an otherwise perfect recipe over it would turn a cosmetic
- * miss into a user-facing `parse_failed` — a strictly worse outcome for
- * the person who pasted the link. A dish tag gates nothing, so losing one
+ * "italiaans" has picked a wrong word for a purely descriptive field, and
+ * failing an otherwise perfect recipe over it would turn a cosmetic miss
+ * into a user-facing `parse_failed` — a strictly worse outcome for the
+ * person who pasted the link. A dish tag gates nothing, so losing one
  * costs a narrower search result and nothing else.
  *
  * A malformed CONTAINER — `dishTags` as a bare string, or an array holding
@@ -132,7 +148,11 @@ type DishTagsResult = { readonly ok: true; readonly value: readonly string[] } |
  *
  * Missing or null is a plain empty list, not an error: most captions make
  * no category obvious, and `report_recipe` deliberately does not mark
- * `dishTags` as required (see buildExtractionRequest.ts).
+ * `dishTags` as required (see buildExtractionRequest.ts). That leniency is
+ * about the model's ANSWER, and does not survive into the result — the
+ * `[]` produced here is then stated explicitly on a required field, so
+ * "no category" is something this pipeline says out loud rather than
+ * something a reader infers from a missing key.
  *
  * Normalization is `sanitizeDishTags` + the shared `normalizeTag` and
  * nothing else — the SAME function restriction entry and meal tagging use.

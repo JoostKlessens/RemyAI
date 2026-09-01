@@ -45,13 +45,29 @@
  * asking whoever came to own this file to give them real values so the
  * fields could become required. Done: `attribution` is built from the
  * per-platform locals, and `recipeId` is stated as an explicit `null`,
- * which is the truthful value for a fixture that inserted nothing. One
- * sibling could NOT follow: `ParsedRecipe.dishTags` is still optional,
- * because `buildEditedRecipe` in confirm.tsx is a second pre-dating
- * literal and requiring the field is a change to that screen.
+ * which is the truthful value for a fixture that inserted nothing. The one
+ * sibling that could not follow at the time — `ParsedRecipe.dishTags`, held
+ * optional because `buildEditedRecipe` in confirm.tsx was a second
+ * pre-dating literal — has followed since: that screen now carries dish
+ * tags through its own rebuild, so the field is required and these literals
+ * already stated it.
+ *
+ * AND ONE FIELD THAT IS NOT A SIDECAR AT ALL. `provenance` (RCP-06) is a
+ * property of the `parsed` result itself, and this fixture has to be
+ * honest about it in the one way that matters: it follows the PLATFORM,
+ * never the scenario. A web page publishes a machine-readable recipe
+ * object and a TikTok does not, so no amount of demo wiring may produce a
+ * TikTok fixture claiming a publisher wrote its ingredient list — that
+ * would demo a route the pipeline cannot take.
  */
 
-import type { ImportAttribution, ImportPlatform, ImportResult, ParsedRecipe } from '@/domain/import/types';
+import type {
+  ImportAttribution,
+  ImportPlatform,
+  ImportResult,
+  ParsedRecipe,
+  RecipeProvenance,
+} from '@/domain/import/types';
 
 export interface FixtureImportAttempt {
   readonly result: ImportResult;
@@ -60,6 +76,13 @@ export interface FixtureImportAttempt {
   readonly authorUrl: string | null;
   /** oEmbed's thumbnail, when (simulated) oEmbed succeeded. Null for `oembed_failed`, and for TikTok/Instagram fixtures deliberately built to demo the no-thumbnail library fallback (docs/DESIGN.md §2). */
   readonly thumbnailUrl: string | null;
+  /**
+   * RCP-06, mirroring `ImportAttempt.provenance` (src/lib/importRecipe.ts):
+   * how the recipe this attempt carries was arrived at. Null for every
+   * scenario that carries no recipe — there is no origin to describe for a
+   * page that never opened or a caption with nothing in it.
+   */
+  readonly provenance: RecipeProvenance | null;
 }
 
 const SAMPLE_RECIPE_TIKTOK: ParsedRecipe = {
@@ -157,6 +180,28 @@ const SAMPLE_RECIPE_BY_PLATFORM: Readonly<Record<ImportPlatform, ParsedRecipe>> 
   web: SAMPLE_RECIPE_WEB,
 };
 
+/**
+ * RCP-06. WHICH ROUTE EACH PLATFORM'S RECIPE ACTUALLY CAME BY, not a knob
+ * a demo may turn. `'web'` is structured data because an ordinary recipe
+ * page publishes a schema.org/Recipe object and no model is asked to read
+ * anything (types.ts); the three video platforms are a model's reading of
+ * a caption, because a caption is the only text those routes ever have.
+ *
+ * Instagram is in this Record and is normally unreachable through it —
+ * PD-011 stops that platform at `display_only`, before any extraction. It
+ * is answered anyway because `buildFixtureImportAttempt` will build a
+ * `parsed` result for any platform it is handed, and a caption is what an
+ * Instagram post would have if the policy ever permitted reading one. The
+ * exhaustive Record is the point: a fifth platform must be told which of
+ * the two routes it takes rather than inheriting an answer.
+ */
+const SAMPLE_PROVENANCE_BY_PLATFORM: Readonly<Record<ImportPlatform, RecipeProvenance>> = {
+  tiktok: 'model_from_caption',
+  instagram: 'model_from_caption',
+  youtube: 'model_from_caption',
+  web: 'publisher_structured_data',
+};
+
 const SAMPLE_CAPTION_WITHOUT_RECIPE = 'POV: zondagavond eten bij oma 🍝✨ dit smaakt altijd naar thuis #foodtok';
 
 const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
@@ -244,6 +289,19 @@ function buildAuthorUrl(platform: ImportPlatform, authorName: string): string | 
 
 export type FixtureImportScenario =
   | 'parsed'
+  /**
+   * RCP-06's second half, and the only reason this is a scenario of its
+   * own rather than a fourth platform passed to `'parsed'`: the __DEV__
+   * row picks a scenario, not a platform (`DEMO_PLATFORM_BY_SCENARIO` in
+   * paste.tsx does that), so without an entry here there is no button that
+   * lands a demo on a web import — and therefore no way to see the
+   * structured-data note on device beside the caption one.
+   *
+   * It builds the SAME `parsed` result `'parsed'` does. The provenance
+   * difference is not encoded here at all; it comes from the platform this
+   * scenario is paired with, per `SAMPLE_PROVENANCE_BY_PLATFORM`.
+   */
+  | 'parsed_from_page'
   | 'display_only'
   | 'no_recipe_in_caption'
   | 'no_recipe_on_page'
@@ -264,6 +322,13 @@ export function detectFixtureScenario(normalizedUrl: string): FixtureImportScena
   // as a rule.
   if (normalizedUrl.includes('pagina-zonder-recept')) {
     return 'no_recipe_on_page';
+  }
+  // Neither marker contains the other, so their order here is not load-
+  // bearing — unlike the pair the comment above is about. Kept adjacent
+  // because the next person adding a 'pagina-' marker has to check exactly
+  // that, and both are in front of them.
+  if (normalizedUrl.includes('pagina-met-recept')) {
+    return 'parsed_from_page';
   }
   if (normalizedUrl.includes('niet-opgehaald')) {
     return 'source_fetch_failed';
@@ -295,8 +360,14 @@ export function buildFixtureImportAttempt(
   const authorName = AUTHOR_NAME_BY_PLATFORM[platform];
   const authorUrl = buildAuthorUrl(platform, authorName);
   const thumbnailUrl = SAMPLE_THUMBNAIL_BY_PLATFORM[platform];
+  const provenance = SAMPLE_PROVENANCE_BY_PLATFORM[platform];
   switch (scenario) {
-    case 'parsed': {
+    // One body for both, because they ARE one outcome: a recipe came back.
+    // What differs is the platform the __DEV__ row pairs each with, and the
+    // provenance follows from that rather than from the scenario name — see
+    // `SAMPLE_PROVENANCE_BY_PLATFORM`.
+    case 'parsed':
+    case 'parsed_from_page': {
       const attribution: ImportAttribution = { authorName, authorUrl, thumbnailUrl };
       return {
         result: {
@@ -312,10 +383,12 @@ export function buildFixtureImportAttempt(
           // refuses. A fake id here would demo a working `shared_cooks`
           // link that does not exist.
           recipeId: null,
+          provenance,
         },
         authorName,
         authorUrl,
         thumbnailUrl,
+        provenance,
       };
     }
     /**
@@ -334,6 +407,11 @@ export function buildFixtureImportAttempt(
         authorName,
         authorUrl,
         thumbnailUrl: SAMPLE_DISPLAY_ONLY_THUMBNAIL,
+        // Null on every remaining scenario, and never `provenance` — none
+        // of them carries a recipe, so there is nothing whose origin could
+        // be described. A display-only post is the sharpest case: the user
+        // will type this recipe themselves, and it will be theirs.
+        provenance: null,
       };
     }
     /**
@@ -347,10 +425,15 @@ export function buildFixtureImportAttempt(
     case 'no_recipe_in_caption': {
       const attribution: ImportAttribution = { authorName, authorUrl, thumbnailUrl };
       return {
-        result: { kind: 'no_recipe_in_caption', caption: SAMPLE_CAPTION_WITHOUT_RECIPE, attribution },
+        // `platform` is the one the caller paired this scenario with, never
+        // a literal: the real function reaches this variant from TikTok and
+        // from YouTube, and a fixture that hardcoded one would demo a
+        // caption failure that could only ever have come from the other.
+        result: { kind: 'no_recipe_in_caption', caption: SAMPLE_CAPTION_WITHOUT_RECIPE, attribution, platform },
         authorName,
         authorUrl,
         thumbnailUrl,
+        provenance: null,
       };
     }
     /**
@@ -365,7 +448,13 @@ export function buildFixtureImportAttempt(
      * this file's header was rewritten to stop.
      */
     case 'no_recipe_on_page':
-      return { result: { kind: 'no_recipe_on_page' }, authorName: null, authorUrl: null, thumbnailUrl: null };
+      return {
+        result: { kind: 'no_recipe_on_page', platform },
+        authorName: null,
+        authorUrl: null,
+        thumbnailUrl: null,
+        provenance: null,
+      };
     /**
      * Per-platform reason, exactly as `oembed_failed` below picks one: for
      * YouTube the demo-worthy case is the missing Data API key (a named,
@@ -379,22 +468,39 @@ export function buildFixtureImportAttempt(
         result: {
           kind: 'source_fetch_failed',
           reason: platform === 'youtube' ? 'missing_credentials' : 'refused',
+          // Stated beside the reason it already varies by, which is the
+          // pairing this fixture exists to demo: `missing_credentials` is a
+          // YouTube fact and `refused` a web one, and a screen showing the
+          // reason without the platform shows half of each.
+          platform,
         },
         authorName: null,
         authorUrl: null,
         thumbnailUrl: null,
+        provenance: null,
       };
     case 'oembed_failed':
       return {
-        result: { kind: 'oembed_failed', reason: platform === 'instagram' ? 'missing_credentials' : 'not_found' },
+        result: {
+          kind: 'oembed_failed',
+          reason: platform === 'instagram' ? 'missing_credentials' : 'not_found',
+          platform,
+        },
         authorName: null,
         authorUrl: null,
         thumbnailUrl: null,
+        provenance: null,
       };
     case 'llm_request_failed':
-      return { result: { kind: 'llm_request_failed' }, authorName, authorUrl, thumbnailUrl };
+      return {
+        result: { kind: 'llm_request_failed', platform },
+        authorName,
+        authorUrl,
+        thumbnailUrl,
+        provenance: null,
+      };
     case 'parse_failed':
-      return { result: { kind: 'parse_failed' }, authorName, authorUrl, thumbnailUrl };
+      return { result: { kind: 'parse_failed', platform }, authorName, authorUrl, thumbnailUrl, provenance: null };
     default: {
       const exhaustiveCheck: never = scenario;
       throw new Error(`Unhandled FixtureImportScenario: ${String(exhaustiveCheck)}`);

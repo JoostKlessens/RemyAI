@@ -227,10 +227,14 @@ export function toMealDraft(recipe: ParsedRecipe, context: MealDraftContext): Me
     servings: recipe.servings,
     ingredientTags: [],
     allergenTagStatus: 'unknown',
-    // `ParsedRecipe.dishTags` is optional only for literals that predate
-    // it (see its own comment); `[]` is the right reading of a missing
-    // one — no categories — never a reason to go guessing at some.
-    dishTags: recipe.dishTags ?? [],
+    // Straight through. `ParsedRecipe.dishTags` is a REQUIRED field now
+    // (see its own comment in types.ts), so there is no missing one left
+    // to read: the `?? []` that used to stand here was covering for the
+    // literals that omitted it, and one of those was the confirm screen
+    // quietly dropping a user's categories on edit. An empty list still
+    // arrives and still travels as an empty list — never a reason to go
+    // guessing at a category.
+    dishTags: recipe.dishTags,
     // `?? null` and never a fallback id: an import that does not know its
     // canonical recipe is a meal that is a copy of nothing, which is a
     // real answer. See the file header for why no caller knows one yet.

@@ -15,11 +15,17 @@
  *
  * The two readers return the same typed `SourceFetchOutcome` — never a
  * throw, never an empty-but-successful answer — so index.ts can map either
- * failure straight onto `{ kind: 'source_fetch_failed', reason }` and stay a
- * pipeline instead of becoming a fetch client. (The oEmbed and Gemini calls
+ * failure straight onto `{ kind: 'source_fetch_failed', reason, platform }`
+ * and stay a pipeline instead of becoming a fetch client. NEITHER READER
+ * NAMES THE PLATFORM ITSELF, and that stays true deliberately: a reader
+ * knows which endpoint it called, but the platform is the pipeline's own
+ * classification of the pasted URL (`normalizeRecipeUrl`), and having two
+ * modules able to state it is how the two answers start disagreeing. Each
+ * caller in index.ts adds it at the one line that already branched on it. (The oEmbed and Gemini calls
  * are the deliberate exceptions: both go to a fixed endpoint this repo
  * chose, carry a credential, and already have owners — src/lib/oembed.ts and
- * index.ts's `callExtractionModel`.)
+ * callExtractionModel.ts, which makes the same blast-radius argument for the
+ * Gemini key that this file makes for the YouTube one.)
  *
  * WHY THIS IS ITS OWN FILE. Two reasons, and the second is the real one.
  * index.ts was already ~700 lines against this repo's 800-line ceiling, so
@@ -118,9 +124,30 @@
  *
  * ---
  *
+ * WHAT AN HTTP STATUS IS ALLOWED TO MEAN.
+ *
+ * `mapHttpStatusToReason` below is the only status judgement in this file and
+ * it feeds BOTH readers, so what it decides is what a user is eventually told
+ * about a page fetch AND about a YouTube lookup. It used to collapse every
+ * 4xx into `not_found` — "we couldn't find that page" — about two situations
+ * that are not that: a publisher refusing an automated reader, and a quota or
+ * rate limit. Those are different facts with different fixes, one permanent
+ * and about us, the other temporary and about volume, and `not_found` was
+ * wrong about both. `SourceFetchFailureReason` carries `forbidden` and
+ * `rate_limited` now (types.ts), so this file can stop rounding.
+ *
+ * THE STATUS IS ALL WE GET AND WE DO NOT GUESS PAST IT. A 403 is genuinely
+ * ambiguous on the YouTube route in particular; `mapHttpStatusToReason`
+ * records how that was resolved and why the detail that disambiguates it
+ * belongs in the log line `logYouTubeApiRejection` already writes rather than
+ * in a reason code a user is shown.
+ *
+ * ---
+ *
  * THE YOUTUBE KEY travels in an `x-goog-api-key` header and never in the
  * query string, for the same reason `GEMINI_API_KEY` does (index.ts's
- * SECURITY note): query strings end up in proxy logs, referrer headers and
+ * SECURITY note, and callExtractionModel.ts's header): query strings end up
+ * in proxy logs, referrer headers and
  * error reports, and a header does not. It is never logged and never
  * returned. Its ABSENCE is a first-class typed outcome —
  * `missing_credentials`, the same answer Instagram gives without its oEmbed
@@ -192,25 +219,87 @@ const RECIPE_PAGE_REQUEST_HEADERS: Record<string, string> = {
   'user-agent': 'RemyRecipeImport/1.0',
 };
 
+/** Their side broke: the floor of the 5xx range. */
+const HTTP_SERVER_ERROR_STATUS = 500;
+/** The floor of the 4xx range — at or above it, the request is the problem. */
+const HTTP_CLIENT_ERROR_STATUS = 400;
+/** Too many requests: the one status that is explicitly about volume and time. */
+const HTTP_TOO_MANY_REQUESTS_STATUS = 429;
+
+/** No credential was accepted. */
+const HTTP_UNAUTHORIZED_STATUS = 401;
+/** A credential was accepted and the answer is still no — or none was wanted. */
+const HTTP_FORBIDDEN_STATUS = 403;
+/** Unavailable for legal reasons: a block, stated as one. */
+const HTTP_LEGAL_REASONS_STATUS = 451;
+
+/**
+ * The three statuses that all say the same thing — THEY will not serve US —
+ * whether the stated cause is a missing credential, a refused one, or a legal
+ * block. A `readonly` list because it is a fixed fact about HTTP, not state.
+ */
+const FORBIDDEN_STATUSES: readonly number[] = [
+  HTTP_UNAUTHORIZED_STATUS,
+  HTTP_FORBIDDEN_STATUS,
+  HTTP_LEGAL_REASONS_STATUS,
+];
+
 /**
  * The only HTTP-status judgement in this file, in one place so its two
  * callers cannot drift apart.
  *
- * KNOWN IMPRECISION, recorded rather than hidden: a 403 (the publisher
- * refuses automated readers) and a 429 (we are being rate limited) both land
- * in `not_found`, which reads to a user as "we couldn't find that page".
- * Neither really is that, and a 429 is retryable while `not_found` reads as
- * permanent. The fix is a wider `SourceFetchFailureReason` in types.ts, and
- * that vocabulary is not this file's to invent — quietly routing 429 to
- * `server_error` here would be exactly that: a shell making a domain
- * decision in the one place nothing can test it. Flagged in the handover
- * instead.
+ * THE IMPRECISION FLAGGED HERE LAST WAVE IS DISCHARGED. This used to answer
+ * every 4xx with `not_found` and say so in a comment, because widening the
+ * vocabulary was a domain decision and `SourceFetchFailureReason` did not
+ * have the words. It has them now. Note what did NOT change: `refused` still
+ * means WE refused, in our own SSRF guard above, and no status maps to it.
+ * `refused` and `forbidden` are one word apart in English and opposite in
+ * blame; they are never interchangeable.
+ *
+ *  - 401/403/451 -> `forbidden`. One fact from the user's side (this source
+ *    will not be served to us) with one absence of a user-side fix. Splitting
+ *    them would produce reason codes no piece of copy could say anything
+ *    different about.
+ *  - 429 -> `rate_limited`, alone, because it is the one status that is
+ *    genuinely TEMPORARY. That is the entire reason the word exists: a
+ *    failure a later retry fixes must not wear the same label as one no
+ *    retry will ever fix.
+ *  - every other 4xx -> `not_found`, which is now true of what is left.
+ *  - 5xx -> `server_error`, unchanged.
+ *
+ * THE YOUTUBE 403 IS A REAL AMBIGUITY AND WAS NOT MISSED. The Data API
+ * answers 403 both when a video is genuinely closed to us and when this
+ * project's daily quota is spent, and Google returns the same status for
+ * both. Resolved to `forbidden` for both, deliberately rather than by
+ * defaulting:
+ *
+ *  - `rate_limited` promises a retry that soon works. YouTube quota resets on
+ *    a daily boundary, so that promise would be false for the MORE likely of
+ *    the two meanings — and this pipeline's whole posture is that it never
+ *    states something the source did not give it.
+ *  - `forbidden` is true of both meanings: "they would not serve us" holds
+ *    whether the refusal was about that video or about our billing.
+ *  - The detail that actually separates them is Google's own `error.reason`
+ *    in the response body, which `logYouTubeApiRejection` already logs in
+ *    full. That distinction is operational — somebody has to raise a quota or
+ *    fix a key — so it belongs in the log an operator reads, not in a reason
+ *    code shown to a user who can act on neither.
+ *
+ * Branching on that body here was the rejected alternative: it would put a
+ * Google-shaped JSON judgement in the one file nothing type-checks, tests or
+ * lints, to produce a distinction no user-facing copy would use.
  */
 function mapHttpStatusToReason(status: number): SourceFetchFailureReason {
-  if (status >= 500) {
+  if (status >= HTTP_SERVER_ERROR_STATUS) {
     return 'server_error';
   }
-  if (status >= 400) {
+  if (FORBIDDEN_STATUSES.includes(status)) {
+    return 'forbidden';
+  }
+  if (status === HTTP_TOO_MANY_REQUESTS_STATUS) {
+    return 'rate_limited';
+  }
+  if (status >= HTTP_CLIENT_ERROR_STATUS) {
     return 'not_found';
   }
   // A 1xx/2xx that still failed `response.ok`. Not a modeled outcome;
@@ -437,19 +526,27 @@ export async function fetchRecipePageHtml(pageUrl: string): Promise<SourceFetchO
  * unset or blank, which every caller must treat as `missing_credentials` —
  * see env.ts's header for why this one does not throw the way
  * `GEMINI_API_KEY` does. It lives in this module rather than index.ts for
- * the same reason canonicalRecipeStore.ts keeps the service role key: a
- * credential whose blast radius is one importable file is one a reviewer can
- * actually bound.
+ * the same reason canonicalRecipeStore.ts keeps the service role key and
+ * callExtractionModel.ts keeps the Gemini one: a credential whose blast
+ * radius is one importable file is one a reviewer can actually bound.
  */
 const YOUTUBE_API_KEY = readOptionalEnvVar('YOUTUBE_API_KEY');
 
 /**
  * Logs a non-2xx from the Data API, for the same reason
- * `callExtractionModel` logs Gemini's (index.ts): a bad key, a disabled API
+ * `callExtractionModel` logs Gemini's (callExtractionModel.ts): a bad key, a
+ * disabled API
  * and an exhausted quota are told apart by status and message, and
  * swallowing them makes an outage undebuggable from outside — all three
  * reach the user as the same failure copy. The request carries no user
  * secrets and the key travels in a header, so neither can appear here.
+ *
+ * THIS IS ALSO THE 403 DISAMBIGUATOR, which is now load-bearing rather than
+ * incidental: `mapHttpStatusToReason` deliberately answers "quota spent" and
+ * "video closed to us" with the same `forbidden`, because the status cannot
+ * tell them apart and guessing would be inventing a fact. Google's own
+ * `error.reason` in the body below is what does tell them apart, and an
+ * operator reading this line is the only person who can act on either.
  */
 async function logYouTubeApiRejection(response: Response, videoId: string): Promise<void> {
   const detail = await response.text().catch(() => '<unreadable body>');

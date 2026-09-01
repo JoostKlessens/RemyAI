@@ -103,14 +103,48 @@ function oembedFailureBody(reason: OembedErrorReason): string {
  *
  * Written for a reader who is not thinking about HTTP. "De website liet
  * Remy niet binnen" is what a 403 means to them; "403" is what it means to
- * us. None of these sentences tells the user to try again — whether a
- * retry is offered at all is `canRetry`'s job below, and a body that
- * promised one where the button is absent would be the worst of both.
+ * us.
+ *
+ * NO SENTENCE HERE MAY PROMISE A RETRY THE BUTTON DOES NOT OFFER. That is
+ * the rule, and it is slightly narrower than the one that used to stand
+ * here ("none of these sentences tells the user to try again"), which
+ * `rate_limited` could not honour without lying by omission. A 429 is the
+ * one failure in this union whose answer genuinely changes by waiting, and
+ * "probeer het opnieuw" with no sense of when invites the user to tap
+ * immediately and hit the same wall — so its sentence names the wait, and
+ * `canRetry` gives it the button to match. Where the button is ABSENT the
+ * old rule stands unchanged and matters more: `forbidden` and `refused`
+ * say plainly that a second attempt changes nothing, and none of the
+ * others mentions trying again at all. `canRetry` and this copy have to
+ * agree; a sentence that outran the button would be the worst of both.
  */
 function sourceFetchFailureBody(reason: SourceFetchFailureReason): string {
   switch (reason) {
+    // THIS SENTENCE USED TO BELONG TO `refused`, AND MOVING IT IS THE
+    // POINT OF THE PAIR. "De website liet Remy niet binnen" describes a
+    // 403 — the publisher turning us away — and that is now `forbidden`.
+    // `refused` below is Remy's own guard, and telling a user their link
+    // was blocked by the site when it was blocked by us would send them
+    // to complain to a publisher who never heard from them.
+    case 'forbidden':
+      return 'De website liet Remy niet binnen. Sommige sites laten geen apps meelezen. Bij een tweede poging gebeurt hetzelfde.';
+    // Our own decision, said as ours. Covers all three ways
+    // `fetchRecipePageHtml` (supabase/functions/parse-recipe/
+    // fetchSourceText.ts) produces it — a blocked host, a redirect into a
+    // blocked one, and a chain that never stops redirecting — without
+    // making the user learn which. Deliberately not "onveilig" or
+    // "geblokkeerd": nothing accuses the link's owner and nothing accuses
+    // the person who pasted it.
     case 'refused':
-      return 'De website liet Remy niet binnen. Sommige sites laten geen apps meelezen.';
+      return 'Remy is zelf gestopt bij deze link. Die wijst naar een adres dat Remy niet opent, of blijft doorverwijzen zonder ergens uit te komen.';
+    // The one reason here whose answer really does change by waiting, so
+    // this is the one sentence allowed to mention a second attempt — see
+    // this function's own header on why that is not a contradiction of
+    // the rule it states. Same voice as
+    // `oembedFailureBody`'s `rate_limited`, which says the same fact about
+    // a different endpoint.
+    case 'rate_limited':
+      return 'De website kreeg te veel verzoeken tegelijk. Probeer het over een minuutje opnieuw.';
     case 'not_found':
       return 'Op dit adres staat niets meer. De pagina is verplaatst of verwijderd.';
     case 'server_error':
@@ -135,24 +169,56 @@ function sourceFetchFailureBody(reason: SourceFetchFailureReason): string {
 }
 
 /**
- * The three reasons where "Opnieuw proberen" is a promise we cannot keep.
- * `missing_credentials` is a deployment fact — the YouTube key is not
- * configured, and no number of taps will configure it. `too_large` and
- * `not_html` are properties of the thing at that address: the same URL
- * yields the same too-big or non-HTML response every time. Every other
- * reason is a server or a network having a bad moment, where a retry is
- * exactly the right advice.
+ * The reasons where "Opnieuw proberen" is a promise we cannot keep. All
+ * nine members were re-read against reality when `forbidden` and
+ * `rate_limited` joined the union, and one of them was already on the
+ * wrong side.
  *
- * An opt-out list rather than an exhaustive map on purpose: retryable is
- * the safe default for a fetch failure (offering a button that does not
- * help is a smaller harm than hiding one that would), and
- * `sourceFetchFailureBody`'s `never` guard already forces whoever adds a
- * reason to open this file and see this list.
+ * NOT RETRYABLE, and why each:
+ *  - `missing_credentials` — a deployment fact. The YouTube key is not
+ *    configured, and no number of taps will configure it.
+ *  - `too_large` / `not_html` — properties of the thing at that address.
+ *    The same URL yields the same too-big or non-HTML response every time.
+ *  - `forbidden` — the publisher is refusing this client. They will refuse
+ *    it again in ten seconds, because the refusal is a policy and not a
+ *    bad moment. A retry button here is false hope with a wait attached.
+ *  - `refused` — MOVED HERE, AND IT WAS WRONG BEFORE. This reason is our
+ *    OWN guard saying no: a blocked host, a redirect into one, or a chain
+ *    that never terminates (`fetchRecipePageHtml`). All three are pure
+ *    functions of the URL. The same paste is refused identically forever,
+ *    so the old retryable answer offered a button that could not, even in
+ *    principle, produce a different result. It read as retryable only
+ *    because the reason's doc comment used to describe a 403 — which is
+ *    now `forbidden`, on this same list for its own separate reason.
+ *
+ * RETRYABLE, and equally deliberately:
+ *  - `server_error` (5xx) and `network_error` — someone else's bad
+ *    moment, usually brief, where a retry is exactly the right advice.
+ *  - `rate_limited` (429) — the only member whose answer changes by
+ *    WAITING rather than by anything changing. Its body says "over een
+ *    minuutje" so the button is not tapped straight into the same wall.
+ *  - `not_found` (404/410) — examined and deliberately left retryable,
+ *    though its copy asserts the page is gone. A 404 is the one status
+ *    here that is genuinely produced by transient causes too: a
+ *    half-propagated deploy, a CDN edge that has not caught up, a
+ *    platform under load. Hiding the button would be right for a 410 and
+ *    wrong for those, and the default below decides ties in the user's
+ *    favour.
+ *
+ * STILL AN OPT-OUT LIST RATHER THAN AN EXHAUSTIVE MAP, even though the
+ * list is now the larger half. The default it encodes is not "most
+ * failures are retryable" but "when in doubt, offer the button": a button
+ * that does not help costs a tap and a wait, where a hidden one costs a
+ * user the only recovery that would have worked. That asymmetry does not
+ * change with the tally. `sourceFetchFailureBody`'s `never` guard is what
+ * forces whoever adds a reason to open this file and land on this list.
  */
 const SOURCE_FETCH_FAILURES_A_RETRY_CANNOT_HELP: ReadonlySet<SourceFetchFailureReason> = new Set([
   'missing_credentials',
   'too_large',
   'not_html',
+  'forbidden',
+  'refused',
 ]);
 
 /** The single entry point: every reachable `ImportResult` failure kind maps to exactly one deliberate copy + recovery shape. */
