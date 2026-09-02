@@ -143,6 +143,10 @@ describe('parseImportResult — parsed', () => {
       { platform: 'instagram', sourceUrl: 'https://www.instagram.com/reel/Cx1y2z3' },
       { platform: 'youtube', sourceUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
       { platform: 'web', sourceUrl: 'https://www.leukerecepten.nl/recepten/traybake-kip/' },
+      // SRC-08. The one member whose sourceUrl is null rather than a
+      // string: a pasted-text import has no URL. The pairing between the
+      // two fields gets its own suite further down, in both directions.
+      { platform: 'text', sourceUrl: null, provenance: 'model_from_pasted_text' },
     ];
     for (const overrides of platforms) {
       const result = parseImportResult(parsedResponse(overrides));
@@ -565,5 +569,157 @@ describe('parseImportResult — trust nothing from the network', () => {
 
   test('rejects a kind this client does not know, rather than guessing', () => {
     expect(parseImportResult({ kind: 'some_future_variant' })).toBeNull();
+  });
+});
+
+/**
+ * SRC-08. `sourceUrl` became `string | null` on the `parsed` variant so a
+ * pasted-text import could say the true thing about itself. This suite
+ * exists because a nullable TYPE is not the same as a nullable CONTRACT:
+ * the field is read together with the platform, so exactly one route may
+ * omit it and exactly one route may not state it.
+ */
+describe('parseImportResult — a nullable sourceUrl is one route s fact, not a general loosening', () => {
+  test('accepts a text import with no sourceUrl key at all', () => {
+    // Arrange
+    const response = parsedResponse({ platform: 'text', provenance: 'model_from_pasted_text' }) as Record<
+      string,
+      unknown
+    >;
+    delete response.sourceUrl;
+
+    // Act
+    const result = parseImportResult(response);
+
+    // Assert
+    expect(result?.kind).toBe('parsed');
+    expect(result?.kind === 'parsed' && result.sourceUrl).toBeNull();
+  });
+
+  test('accepts a text import whose sourceUrl is an explicit null', () => {
+    const result = parseImportResult(
+      parsedResponse({ platform: 'text', sourceUrl: null, provenance: 'model_from_pasted_text' }),
+    );
+    expect(result?.kind === 'parsed' && result.sourceUrl).toBeNull();
+  });
+
+  /**
+   * A blank string is the shape a hand-built payload most plausibly sends
+   * for "there is no URL", and it means the same true thing as an absent
+   * key. It decodes to `null` rather than to `''`, so no reader downstream
+   * has to know two spellings of nothing.
+   */
+  test('reads a blank sourceUrl on a text import as null, never as an empty string', () => {
+    const result = parseImportResult(
+      parsedResponse({ platform: 'text', sourceUrl: '   ', provenance: 'model_from_pasted_text' }),
+    );
+    expect(result?.kind === 'parsed' && result.sourceUrl).toBeNull();
+  });
+
+  /**
+   * THE OTHER HALF OF THE PAIRING, and the reason it is checked in both
+   * directions. This client models a pasted-text import as having no
+   * origin at all. A response that attaches one is a function saying
+   * something this client cannot render honestly — is it where the text
+   * came from, where the user found it, or a leftover from another branch?
+   * — and quietly stripping it would be this module deciding what a server
+   * meant.
+   */
+  test('rejects a text import that names a sourceUrl, rather than silently dropping it', () => {
+    expect(
+      parseImportResult(
+        parsedResponse({
+          platform: 'text',
+          sourceUrl: 'https://www.leukerecepten.nl/recepten/traybake-kip/',
+          provenance: 'model_from_pasted_text',
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  /**
+   * THE HOLE THIS SUITE EXISTS TO KEEP SHUT. Nullability on the type must
+   * not become permission on the wire: a `'web'` recipe that lost its URL
+   * is a publisher's recipe with the link back to them deleted, which is
+   * the same harm the module refuses for a dropped attribution.
+   */
+  test('still requires a non-empty sourceUrl for every platform that is not text', () => {
+    for (const platform of ['tiktok', 'instagram', 'youtube', 'web'] as const) {
+      const response = parsedResponse({ platform }) as Record<string, unknown>;
+      delete response.sourceUrl;
+      expect(parseImportResult(response)).toBeNull();
+      expect(parseImportResult(parsedResponse({ platform, sourceUrl: null }))).toBeNull();
+      expect(parseImportResult(parsedResponse({ platform, sourceUrl: '  ' }))).toBeNull();
+    }
+  });
+
+  test('rejects a sourceUrl that is present but not a string, on a text import as on any other', () => {
+    expect(parseImportResult(parsedResponse({ platform: 'text', sourceUrl: 42 }))).toBeNull();
+    expect(parseImportResult(parsedResponse({ sourceUrl: { href: 'https://example.test' } }))).toBeNull();
+  });
+});
+
+/**
+ * RCP-06's third member (SRC-08). Held to exactly the same strictness as
+ * the first two: recognised or the whole result fails, never defaulted.
+ */
+describe('parseImportResult — model_from_pasted_text', () => {
+  test('carries the pasted-text provenance through the boundary', () => {
+    const result = parseImportResult(
+      parsedResponse({ platform: 'text', sourceUrl: null, provenance: 'model_from_pasted_text' }),
+    );
+    expect(result?.kind === 'parsed' && result.provenance).toBe('model_from_pasted_text');
+  });
+
+  test('accepts every member of the provenance vocabulary and nothing beside it', () => {
+    for (const provenance of ['publisher_structured_data', 'model_from_caption', 'model_from_pasted_text'] as const) {
+      const result = parseImportResult(parsedResponse({ provenance }));
+      expect(result?.kind === 'parsed' && result.provenance).toBe(provenance);
+    }
+    expect(parseImportResult(parsedResponse({ provenance: 'model_from_pasted_image' }))).toBeNull();
+  });
+
+  /**
+   * A text import is never mislabelled as a caption reading by this
+   * boundary, because nothing here derives a provenance from a platform.
+   * The response says which one, or the result fails.
+   */
+  test('fails a text import whose provenance is missing rather than assuming the pasted-text one', () => {
+    const response = parsedResponse({ platform: 'text', sourceUrl: null }) as Record<string, unknown>;
+    delete response.provenance;
+    expect(parseImportResult(response)).toBeNull();
+  });
+});
+
+/**
+ * SRC-08 on the failing side. A pasted text that holds no recipe reaches
+ * `no_recipe_in_caption` (types.ts argues why it was not given a variant of
+ * its own), so this boundary has to narrow that combination.
+ */
+describe('parseImportResult — no_recipe_in_caption for a pasted-text import', () => {
+  test('accepts the caption-failure shape with platform text and carries the pasted text as the caption', () => {
+    const result = parseImportResult({
+      kind: 'no_recipe_in_caption',
+      caption: 'Boodschappenlijstje: melk, brood, eieren',
+      attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+      platform: 'text',
+    });
+    expect(result).toEqual({
+      kind: 'no_recipe_in_caption',
+      caption: 'Boodschappenlijstje: melk, brood, eieren',
+      attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+      platform: 'text',
+    });
+  });
+
+  /**
+   * The all-null attribution a text import carries is `NO_CREATOR_TO_CREDIT`
+   * (buildAttribution.ts) and is accepted as a populated attribution, not
+   * as a missing one — this variant still rejects an ABSENT attribution,
+   * and that asymmetry is deliberate: "there is no creator" is a stated
+   * answer, "the key is gone" is version skew.
+   */
+  test('still rejects an absent attribution on a text import, though an all-null one is fine', () => {
+    expect(parseImportResult({ kind: 'no_recipe_in_caption', caption: 'wat tekst', platform: 'text' })).toBeNull();
   });
 });

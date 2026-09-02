@@ -88,7 +88,7 @@ import type { ImportPlatform, ImportResult } from './types';
 export type DisplayOnlyImportResult = Extract<ImportResult, { readonly kind: 'display_only' }>;
 
 /**
- * A plain comparison, not a configurable set: there are four platforms,
+ * A plain comparison, not a configurable set: there are five platforms,
  * and the answer for each follows from a specific published policy rather
  * than from a preference someone might want to tune. A config flag would
  * invite switching Instagram extraction back on without the approval
@@ -103,14 +103,21 @@ export type DisplayOnlyImportResult = Extract<ImportResult, { readonly kind: 'di
  * have to be looked at and explicitly decided, not silently inherit "not
  * display-only" by failing to match a growing exclusion list.
  *
- * THAT DECISION HAS NOW BEEN MADE TWICE, and both answers are recorded in
- * the file header rather than left implied by this expression: YouTube is
- * not display-only because the Data API licenses reading a video's
- * snippet, and `'web'` is not display-only because a page's schema.org
- * JSON-LD is published for machines to read in the first place. Neither
- * conclusion follows from `platform === 'instagram'` — the expression is
- * just where the two conclusions end up agreeing, and the header is where
- * they were argued.
+ * THAT DECISION HAS NOW BEEN MADE THREE TIMES, and every answer is
+ * recorded rather than left implied by this expression: YouTube is not
+ * display-only because the Data API licenses reading a video's snippet,
+ * `'web'` is not display-only because a page's schema.org JSON-LD is
+ * published for machines to read in the first place, and `'text'`
+ * (SRC-08) is not display-only because there is no third party's post
+ * involved at all — the user pasted the recipe themselves, so there is no
+ * licence to respect, no post to render and no creator to credit
+ * (`NO_CREATOR_TO_CREDIT`, buildAttribution.ts). That last one is the
+ * clearest case yet of why this must not become "everything except
+ * TikTok": a route with nothing to license would have inherited a
+ * licensing restriction by failing to match a name. None of the three
+ * conclusions follows from `platform === 'instagram'` — the expression is
+ * just where they end up agreeing, and the header is where they were
+ * argued.
  */
 export function isDisplayOnlyPlatform(platform: ImportPlatform): boolean {
   return platform === 'instagram';

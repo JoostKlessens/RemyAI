@@ -118,6 +118,12 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
   instagram: true,
   youtube: true,
   web: true,
+  // SRC-08, and it earned its place here exactly as the note above predicts:
+  // adding it to `ImportPlatform` deleted this file from the build until it
+  // was listed. It is the first member that is not a HOST — nothing served a
+  // pasted recipe — which is why `sourceUrl` travels beside it as null on
+  // this route and the pair must be read together rather than either alone.
+  text: true,
 };
 
 function isNullableImportPlatform(value: unknown): value is ImportPlatform | null {
@@ -128,14 +134,16 @@ function isNullableImportPlatform(value: unknown): value is ImportPlatform | nul
 }
 
 /**
- * Built exactly like `PLATFORM_MEMBERS` above and for the same reason: a
- * third `RecipeProvenance` must delete this file from the build until
- * someone adds it here, rather than quietly becoming "no provenance" on a
- * screen. Three trust boundaries, three guards — see that constant's note.
+ * Built exactly like `PLATFORM_MEMBERS` above and for the same reason: a new
+ * `RecipeProvenance` must delete this file from the build until someone adds
+ * it here, rather than quietly becoming "no provenance" on a screen. Three
+ * trust boundaries, three guards — see that constant's note. The third member
+ * below is that mechanism having worked once already.
  */
 const PROVENANCE_MEMBERS: Readonly<Record<RecipeProvenance, true>> = {
   publisher_structured_data: true,
   model_from_caption: true,
+  model_from_pasted_text: true,
 };
 
 /**

@@ -658,3 +658,107 @@ describe('formatImportTelemetryLine', () => {
     expect(unique.size).toBe(OUTCOME_COUNT);
   });
 });
+
+/**
+ * SRC-08. The pasted-text route flows through the existing `platform`
+ * field and adds no field of its own — which is the privacy guarantee
+ * working rather than the privacy guarantee being lucky. Pasted text is
+ * the most sensitive input this pipeline has ever taken (unlike a caption
+ * it was never published anywhere), and there is nowhere on this event to
+ * put a fragment of it.
+ */
+describe('buildImportTelemetryEvent — the pasted-text route', () => {
+  test('counts a parsed pasted-text import by route and by provenance and nothing else', () => {
+    // Arrange
+    const result: ImportResult = {
+      kind: 'parsed',
+      recipe: RECIPE,
+      sourceUrl: null,
+      platform: 'text',
+      attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+      recipeId: null,
+      provenance: 'model_from_pasted_text',
+    };
+
+    // Act
+    const event = buildImportTelemetryEvent(result);
+
+    // Assert
+    expect(event).toEqual({
+      outcome: 'parsed',
+      platform: 'text',
+      provenance: 'model_from_pasted_text',
+      failureDetail: null,
+    });
+  });
+
+  /**
+   * THE SPLIT SRC-09 DEPENDS ON. A pasted text with no recipe reports the
+   * same OUTCOME as a caption with no recipe, because it reaches the same
+   * variant. The platform is therefore the only thing separating "captions
+   * fail this often" — the evidence that could reopen a question closed on
+   * copyright grounds — from "people paste things that are not recipes",
+   * which is not evidence about video at all.
+   */
+  test('tells a pasted-text failure apart from a caption failure on the same outcome', () => {
+    const fromText = buildImportTelemetryEvent(captionFailureFor('text'));
+    const fromTikTok = buildImportTelemetryEvent(captionFailureFor('tiktok'));
+
+    expect(fromText.outcome).toBe(fromTikTok.outcome);
+    expect(fromText.platform).toBe('text');
+    expect(fromTikTok.platform).toBe('tiktok');
+  });
+
+  /**
+   * The event still has exactly four fields for the newest route, which is
+   * the property the module's header claims and the one a fifth field
+   * would quietly break.
+   */
+  test('adds no field for the newest route, whatever the outcome', () => {
+    const events = [
+      buildImportTelemetryEvent(captionFailureFor('text')),
+      buildImportTelemetryEvent({ kind: 'llm_request_failed', platform: 'text' }),
+      buildImportTelemetryEvent({ kind: 'parse_failed', platform: 'text' }),
+    ];
+    for (const event of events) {
+      expect(Object.keys(event).sort()).toEqual([...EVENT_KEYS].sort());
+    }
+  });
+
+  /**
+   * The pasted text itself must not be reachable from the emitted line —
+   * not because anyone promised, but because the variant's caption never
+   * reaches a field. This asserts the rendered line rather than the event,
+   * since the line is what actually leaves the process.
+   */
+  test('renders a line that carries the route and no fragment of the text that was read', () => {
+    const result: ImportResult = {
+      kind: 'no_recipe_in_caption',
+      caption: 'Boodschappenlijstje: melk, brood, eieren',
+      attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+      platform: 'text',
+    };
+
+    const line = formatImportTelemetryLine(buildImportTelemetryEvent(result));
+
+    expect(line).toBe('import_event outcome=no_recipe_in_caption platform=text provenance=- failure=-');
+    expect(line).not.toContain('melk');
+    expect(line).not.toContain('Boodschappenlijstje');
+  });
+
+  test('renders the pasted-text provenance verbatim on the parsed line', () => {
+    const result: ImportResult = {
+      kind: 'parsed',
+      recipe: RECIPE,
+      sourceUrl: null,
+      platform: 'text',
+      attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+      recipeId: null,
+      provenance: 'model_from_pasted_text',
+    };
+
+    expect(formatImportTelemetryLine(buildImportTelemetryEvent(result))).toBe(
+      'import_event outcome=parsed platform=text provenance=model_from_pasted_text failure=-',
+    );
+  });
+});

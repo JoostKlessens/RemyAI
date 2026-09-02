@@ -264,3 +264,85 @@ describe('toMealDraft — sourcePlatform for platforms the 0001 vocabulary preda
     expect('sourcePlatform' in draft).toBe(true);
   });
 });
+
+/**
+ * SRC-08. A pasted-text import drafts a meal with no URL and no platform,
+ * which makes it indistinguishable in `meals` from a hand-entered recipe —
+ * correctly, because that is what it is. These tests pin the two nulls
+ * separately, because the ways they could go wrong are different: the
+ * platform could be stretched to `'reels'` by a ternary, and the URL could
+ * be filled in with a plausible placeholder to make the row "look like an
+ * import".
+ */
+describe('toMealDraft — a pasted-text import has no source to record', () => {
+  const TEXT_CONTEXT = {
+    householdId: 'household-1',
+    sourceUrl: null,
+    platform: 'text' as const,
+    thumbnailUrl: null,
+  };
+
+  test('drafts a null sourcePlatform for a text import rather than claiming it came from Instagram', () => {
+    // Arrange / Act
+    const draft = toMealDraft(makeParsedRecipe(), TEXT_CONTEXT);
+
+    // Assert
+    expect(draft.sourcePlatform).toBeNull();
+  });
+
+  /**
+   * The one null in this pipeline that could most plausibly be "helpfully"
+   * filled in. `meals.source_url` is read as the link back to where a
+   * recipe came from, and there is nowhere to go back to — so a sentinel
+   * here would be a stored, queryable falsehood, not a harmless
+   * placeholder.
+   */
+  test('carries the absent source URL through as null, never as an empty string or a placeholder', () => {
+    const draft = toMealDraft(makeParsedRecipe(), TEXT_CONTEXT);
+    expect(draft.sourceUrl).toBeNull();
+  });
+
+  test('states both keys explicitly rather than omitting them', () => {
+    const draft = toMealDraft(makeParsedRecipe(), TEXT_CONTEXT);
+    expect('sourceUrl' in draft).toBe(true);
+    expect('sourcePlatform' in draft).toBe(true);
+  });
+
+  /**
+   * A text import can never have a canonical recipe row: that table is
+   * keyed on a normalized URL and this import has none. `null` here is
+   * permanent, and it is the caller stating a fact rather than the draft
+   * inventing one.
+   */
+  test('drafts a null recipeId, which for this route is permanent rather than pending', () => {
+    const draft = toMealDraft(makeParsedRecipe(), TEXT_CONTEXT);
+    expect(draft.recipeId).toBeNull();
+  });
+
+  /**
+   * PD-006 does not weaken for a route with no creator and no source: the
+   * recipe still came out of a model, so allergen state stays untouched.
+   */
+  test('keeps the PD-006 guarantees exactly as for every other route', () => {
+    const draft = toMealDraft(makeParsedRecipe({ dishTags: ['pasta'] }), TEXT_CONTEXT);
+    expect(draft.ingredientTags).toEqual([]);
+    expect(draft.allergenTagStatus).toBe('unknown');
+    expect(draft.dishTags).toEqual(['pasta']);
+  });
+
+  /**
+   * The recipe body is carried through identically whichever route brought
+   * it: a pasted-text import is not a lesser import, it just has less
+   * context around it.
+   */
+  test('carries the recipe body through unchanged', () => {
+    const draft = toMealDraft(
+      makeParsedRecipe({ title: 'Bloemkoolcurry', estimatedMinutes: 30, servings: 3 }),
+      TEXT_CONTEXT,
+    );
+    expect(draft.title).toBe('Bloemkoolcurry');
+    expect(draft.estimatedMinutes).toBe(30);
+    expect(draft.servings).toBe(3);
+    expect(draft.source).toBe('saved');
+  });
+});

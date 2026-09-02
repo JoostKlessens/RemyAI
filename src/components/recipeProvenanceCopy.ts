@@ -7,16 +7,29 @@
  * inside a `.tsx` is a sentence nothing can assert, and this one is a
  * claim about where a recipe came from.
  *
- * WHY THE CONFIRMATION SCREEN NEEDS THIS AT ALL. Two import routes arrive
- * at that screen by fundamentally different means and produce a
+ * WHY THE CONFIRMATION SCREEN NEEDS THIS AT ALL. Three import routes now
+ * arrive at that screen by fundamentally different means and produce a
  * `ParsedRecipe` that looks identical once it is there. An ordinary recipe
  * page publishes a schema.org/Recipe object: the publisher typed the
  * ingredient list and the method into named keys, and Remy read those keys.
  * A TikTok or YouTube import has no such object — there is a caption
  * somebody wrote for a different purpose, and a model worked a recipe out
- * of the prose. Those are not the same kind of fact, and the person on that
- * screen is about to decide whether to cook from it. Telling them which one
- * they are looking at, before they commit, is the whole of RCP-06.
+ * of the prose. And since SRC-08 there is a third: the user handed Remy
+ * the text themselves, out of a message or an email or a photo they
+ * retyped, and a model worked the recipe out of THAT. Those are not the
+ * same kind of fact, and the person on that screen is about to decide
+ * whether to cook from it. Telling them which one they are looking at,
+ * before they commit, is the whole of RCP-06.
+ *
+ * THE THIRD NOTE IS NOT THE CAPTION NOTE WITH A WORD SWAPPED, which is
+ * why the union grew a member instead of the caption branch being
+ * stretched to cover both. The caption note explains that makers write
+ * their recipe in a bijschrift and points at "het origineel" for a
+ * quantity that looks off. Neither half survives the move: nobody wrote
+ * pasted text as a caption for anything, and there is no original to go
+ * look at — the user is holding it. What replaces them is the one thing
+ * that IS true and worth saying, that Remy read what they gave it and
+ * worked a recipe out of it, and may have read a number wrong.
  *
  * THIS IS A FACT, NOT A SCORE, AND THE SHAPE OF THE COPY IS WHAT ENFORCES
  * THAT. No percentage, no stars, no "betrouwbaarheid: hoog", nothing a
@@ -25,7 +38,7 @@
  * is false, and which would teach people to distrust the route that
  * produces most of their recipes.
  *
- * WHICH IS ALSO WHY BOTH VALUES RENDER, in the same place, at the same
+ * WHICH IS ALSO WHY EVERY VALUE RENDERS, in the same place, at the same
  * weight, differing only in their words. Rendering the caption note alone
  * and staying silent on the structured one was the obvious cheaper option
  * and was rejected: present-versus-absent IS a two-point scale, and a
@@ -107,6 +120,15 @@
  * naming the platforms or the medium it happens to cover today is a
  * sentence that spends every future union widening being wrong. The branch
  * is defined by the caption, not by what the caption is attached to.
+ *
+ * THE PASTED-TEXT BRANCH SAYING "je tekst" DOES NOT BREAK THAT RULE, and
+ * the distinction is worth being exact about because it looks like an
+ * exception. The rule forbids naming the CONTAINER a text arrived in — a
+ * video, a Reel, a blog — because the container is what changes under a
+ * widening while the text stays the text. Here the text IS the source.
+ * There is no container to be wrong about: no post it was attached to, no
+ * page it was published on, nothing that a future route could make stale.
+ * "Je tekst" names what the model read, exactly as "het bijschrift" does.
  */
 
 import type { RecipeProvenance } from '@/domain/import/types';
@@ -160,6 +182,36 @@ const NOTES: Readonly<Record<RecipeProvenance, Omit<RecipeProvenanceNoteCopy, 'a
     body:
       'Makers schrijven hun recept in het bijschrift, zelden als nette lijst. Remy heeft daar de ingrediënten en de stappen uit gehaald. ' +
       'Dat gaat meestal goed, maar een hoeveelheid of een stap kan ontbreken of anders gelezen zijn — loop het hieronder na, en kijk bij twijfel nog even bij het origineel.',
+  },
+  /**
+   * The pasted-text route. Opens by naming who supplied the text, because
+   * that is the fact this note exists to state and the one thing that
+   * separates it from the caption note a few lines up: Remy did not go and
+   * fetch anything, it read what it was handed.
+   *
+   * "Zoals je hem gaf" is doing real work. It says the input was not
+   * cleaned up, translated or filled in — what Remy read is exactly what
+   * the user pasted — which is the same "no model invented anything"
+   * promise the rest of this pipeline makes, in the one form that is
+   * checkable by the reader: they know what they pasted.
+   *
+   * NO REFERENCE TO AN ORIGINAL, unlike the caption note. There is no
+   * original anywhere Remy can point at, and the user needs no directions
+   * to the message they copied it from. The ask is the same size as the
+   * caption note's and lands in the same place — the fields directly
+   * below — because the possible error is the same one: prose is not a
+   * list, and a number read out of prose can be read wrong.
+   *
+   * NOT AN APOLOGY, for the same reason the caption note is not one.
+   * Pasting text is a normal, first-class way to get a recipe into Remy,
+   * not what you fall back to when a link fails, and nothing here should
+   * suggest the recipe is worth less for having arrived that way.
+   */
+  model_from_pasted_text: {
+    title: 'Uit je tekst gehaald',
+    body:
+      'Remy heeft je tekst gelezen zoals je hem gaf, en er de ingrediënten en de stappen uit gehaald. ' +
+      'Dat gaat meestal goed, maar een hoeveelheid of een stap kan ontbreken of anders gelezen zijn — loop het hieronder even na.',
   },
 };
 
@@ -227,6 +279,19 @@ const HELPER_TEXTS: Readonly<
   model_from_caption: {
     ingredientsHelperText: 'Overgenomen uit het bijschrift — mogelijk niet compleet. Controleer en vul aan waar nodig.',
     stepsHelperText: 'Overgenomen uit het bijschrift — controleer de volgorde.',
+  },
+  /**
+   * The caption branch's asks with the source corrected, because the asks
+   * themselves are genuinely the same: a model pulled a list out of prose,
+   * so prose that omitted an amount produces a list that omits it, and the
+   * order of the steps was decided rather than given. What changes is only
+   * where the prose came from, and saying "het bijschrift" to someone who
+   * pasted an email would be the same false claim the web route used to
+   * get.
+   */
+  model_from_pasted_text: {
+    ingredientsHelperText: 'Overgenomen uit je tekst — mogelijk niet compleet. Controleer en vul aan waar nodig.',
+    stepsHelperText: 'Overgenomen uit je tekst — controleer de volgorde.',
   },
 };
 

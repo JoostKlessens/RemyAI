@@ -3,7 +3,8 @@
  *
  * The Feed (PD-007) is being removed; this is its replacement: a user
  * pastes a URL — a TikTok or Instagram Reel, a YouTube video, or an
- * ordinary recipe page — and we try to turn it into a structured recipe.
+ * ordinary recipe page — or pastes the recipe text itself, and we try to
+ * turn it into a structured recipe.
  * See docs/PRODUCT-DECISIONS.md, especially PD-004 (a
  * saved/imported meal is measured on cook conversion, never dwell time —
  * still true here, we're just skipping the browsing step entirely) and
@@ -31,6 +32,18 @@
  * always an honest, typed outcome rather than an empty or invented
  * recipe. See `ImportResult`'s `no_recipe_in_caption` variant below and
  * the extraction prompt in `buildExtractionRequest.ts`.
+ *
+ * THE PASTED-TEXT ROUTE (`'text'`) SIDESTEPS THAT CONSTRAINT FROM THE
+ * OTHER END, and it is the newest thing in this file. It does not read
+ * more of somebody's video; it reads exactly what the user handed over —
+ * a recipe out of a WhatsApp message, an email, a cookbook copied out by
+ * hand, a screenshot retyped. No oEmbed hop, no page GET, no URL at all.
+ * That makes it the only route where the legal question above does not
+ * arise: nothing of a third party's is fetched, and nothing is shown back
+ * to anyone but the person who supplied it. It is also the only route
+ * with NO CREATOR TO CREDIT — deliberately, and named as such rather than
+ * left to fall out of whichever branch happened to skip attribution. See
+ * `NO_CREATOR_TO_CREDIT` in buildAttribution.ts.
  *
  * THE `'web'` ROUTE IS THE ONE THAT ESCAPES THAT CONSTRAINT, and it is
  * worth being precise about why rather than treating it as "one more
@@ -61,7 +74,7 @@ import type { OembedErrorReason } from '../../lib/oembed';
  * duplication is cheaper than a cross-feature coupling to code that may
  * not exist much longer.
  *
- * FOUR MEMBERS, THREE DIFFERENT REASONS FOR EXISTING.
+ * FIVE MEMBERS, FOUR DIFFERENT REASONS FOR EXISTING.
  *
  *  - `'tiktok'` and `'instagram'` are the original pair: a social post,
  *    read through that platform's oEmbed endpoint, whose caption is the
@@ -82,6 +95,37 @@ import type { OembedErrorReason } from '../../lib/oembed';
  *    named key the publisher wrote, and a page that publishes no such
  *    object fails as `no_recipe_on_page` rather than being guessed at.
  *    Pinterest arrives through this member too — see urlParsing.ts.
+ *  - `'text'` is not a place at all. No host, no endpoint, no fetch, and
+ *    no URL: the user pasted the recipe itself and Remy reads exactly the
+ *    characters they handed it. It is the caption route with its whole
+ *    front end removed — no oEmbed hop, no page GET, straight into the
+ *    model — and it is the one member that reaches this pipeline without
+ *    anything being retrieved from anybody. Which is also why it is the
+ *    one member with no creator: not a creator we failed to resolve, a
+ *    creator that does not exist, exactly as for the manual-entry path
+ *    that has always credited nobody. `NO_CREATOR_TO_CREDIT`
+ *    (buildAttribution.ts) is where that is written down as a fact rather
+ *    than left to be inferred from a missing field.
+ *
+ * THIS UNION IS NOW MISNAMED, AND THE NAME IS DELIBERATELY LEFT ALONE.
+ * "Platform" stopped being accurate when `'web'` joined — an ordinary
+ * recipe blog is not a platform — and `'text'` finishes the job, because
+ * a clipboard is not a platform in any sense at all. What the union
+ * actually enumerates is WHICH ROUTE THE PIPELINE TOOK TO OBTAIN THE TEXT
+ * IT READ, and therefore what may be done with what came back: oEmbed on
+ * two platforms under two different licences, a documented Data API, an
+ * ordinary GET for JSON-LD, and no fetch whatsoever. Read every
+ * `platform` field in this file as "route" and the code is exact; read it
+ * as "social network" and three of the five members are false.
+ *
+ * `ImportRoute` would be the honest name, and renaming it is NOT this
+ * change's business. Five modules keep their own deliberate copy of this
+ * vocabulary (parseImportResult.ts, canonicalRecipe.ts, routeParams.ts,
+ * importCreatorCopy.ts, importFailureCopy.ts), and `recipes.platform`
+ * (0006) and `meals.source_platform` (0001) are COLUMNS whose names would
+ * then disagree with the code that writes them. So this is recorded as a
+ * judgement rather than performed as a drive-by: whoever renames the type
+ * should rename the columns in the same commit, or leave both alone.
  *
  * The note that used to stand here ("this union is widened ONLY; nobody
  * fetches YouTube yet") is discharged: the edge function now has a
@@ -89,7 +133,7 @@ import type { OembedErrorReason } from '../../lib/oembed';
  * client, and `source_fetch_failed` below is the typed outcome both of
  * them produce when the fetch itself does not happen.
  */
-export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube' | 'web';
+export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube' | 'web' | 'text';
 
 export interface ParsedIngredient {
   readonly name: string;
@@ -194,6 +238,23 @@ export interface ImportAttribution {
  *    anything malformed — but it is still a READING, and a reading can be
  *    wrong in ways no validator can see, because the text it misread was
  *    perfectly well-formed.
+ *  - `model_from_pasted_text` — a language model read text THE USER
+ *    SUPPLIED and produced a structured recipe from it. Same model, same
+ *    schema, same refusal to invent a quantity; a different source, and
+ *    the difference is not cosmetic. A caption is a creator's own prose
+ *    about their own video: it was published, it has an author, and the
+ *    original is one tap away if a quantity looks wrong. Pasted text is
+ *    whatever the user had — a message from a friend, an email, a
+ *    cookbook page they typed out, a screenshot they retyped and possibly
+ *    mistyped. Nobody wrote it for this purpose and there is no original
+ *    to go back to; the user IS holding the original. So the confirm
+ *    screen has to say something different about it (see
+ *    src/components/recipeProvenanceCopy.ts, whose caption note points at
+ *    "het origineel" — advice that means nothing here), and the SRC-09
+ *    denominator has to count it apart: "captions often fail" is evidence
+ *    about video, and a pasted screenshot's OCR mistakes folded into that
+ *    number would corrupt exactly the measurement importTelemetry.ts
+ *    exists to keep honest.
  *
  * THIS IS A PROVENANCE FACT, NOT A SCORE, AND IT MUST NEVER BECOME ONE.
  * Do not add a confidence number, a percentage, a star rating, or an enum
@@ -211,13 +272,19 @@ export interface ImportAttribution {
  * and be guessed, and it would let a genuinely wrong extraction wear a
  * high number.
  *
- * WHY THERE IS NO THIRD MEMBER FOR THE FUTURE. `'web'` is the only route
- * that reads structured data and the caption routes are the only ones that
- * call a model, so these two exhaust what the pipeline can currently do.
- * A new extraction route earns a new member, argued the way these two
- * were — not a fallback to whichever of these is closest.
+ * THE THIRD MEMBER IS WHAT THE RULE LOOKS LIKE WHEN IT IS OBEYED. The
+ * note that stood here said there was no third member and that a new
+ * extraction route would have to EARN one, argued the way the first two
+ * were — never a fallback to whichever existing member is closest. SRC-08
+ * added such a route and paid that price rather than reusing
+ * `model_from_caption`, which would have compiled perfectly and told
+ * every pasted-text importer that Remy had read a caption they never
+ * pasted. Two things are still true and still bind the next member: a
+ * route earns one only when the screen genuinely has something different
+ * to say to the user, and these remain KINDS and never DEGREES. There is
+ * no ordering among the three, and none may be introduced.
  */
-export type RecipeProvenance = 'publisher_structured_data' | 'model_from_caption';
+export type RecipeProvenance = 'publisher_structured_data' | 'model_from_caption' | 'model_from_pasted_text';
 
 /**
  * Why the text we wanted to read never arrived. Every member names a
@@ -306,6 +373,13 @@ export type SourceFetchFailureReason =
  * `return` in the file is inside a branch that has just been handed a
  * platform.
  *
+ * `'text'` MAKES THAT ARGUMENT STRONGER RATHER THAN WEAKER, which is worth
+ * saying because it is the first member that reaches this pipeline without
+ * a URL at all. It is known EARLIER than the other four, not later: the
+ * user picked the paste-text route before typing a character, so there is
+ * no parse to succeed and nothing to establish. A text import therefore
+ * carries its platform for free at every producer, exactly like the rest.
+ *
  * THE FACT THAT MAKES IT NECESSARY: an outcome that cannot say which
  * platform it came from is an outcome nobody can act on. `no_recipe_in_caption`
  * is the case that decides a real question rather than a hypothetical one.
@@ -342,8 +416,30 @@ export type ImportResult =
   | {
       readonly kind: 'parsed';
       readonly recipe: ParsedRecipe;
-      /** The oEmbed-resolved, normalized URL actually used — carried forward so a caller can pass it straight into `toMealDraft`. */
-      readonly sourceUrl: string;
+      /**
+       * The resolved, normalized URL actually used — carried forward so a
+       * caller can pass it straight into `toMealDraft`.
+       *
+       * NULLABLE AS OF SRC-08, FOR EXACTLY ONE ROUTE. A `'text'` import
+       * has no URL: the user pasted the recipe, not a link to it, so
+       * there is no address to carry and never was one. Every other
+       * platform still always states one — `parseImportResult` enforces
+       * that pairing rather than merely typing it, so this nullability
+       * cannot become a hole the other four slip through.
+       *
+       * WHY NULL AND NOT A SENTINEL. An empty string, a `'pasted:'`
+       * scheme or an `about:blank` would keep the field a `string` and
+       * spare every reader a null check, which is precisely the problem:
+       * a sentinel is a value every downstream reader must know to
+       * UN-read, and the ones that forget do not fail, they write it
+       * down. It would land in `meals.source_url` as a stored, queryable
+       * falsehood about where a household's recipe came from, and it
+       * would collide in any lookup keyed on a normalized URL, making two
+       * unrelated pasted recipes look like the same dish. `null` cannot
+       * be mistaken for an address by anything, and the compiler makes
+       * every reader say what it does about the absence.
+       */
+      readonly sourceUrl: string | null;
       readonly platform: ImportPlatform;
       /**
        * Who made this recipe: from the same oEmbed call already made to
@@ -481,7 +577,16 @@ export type ImportResult =
   | {
       readonly kind: 'display_only';
       readonly platform: ImportPlatform;
-      /** The oEmbed-resolved, normalized URL — carried through so manual entry keeps the link back to the original post. */
+      /**
+       * The oEmbed-resolved, normalized URL — carried through so manual
+       * entry keeps the link back to the original post. Deliberately NOT
+       * widened to `string | null` when `parsed`'s was (SRC-08): this
+       * variant is reached through oEmbed alone, so it always has a URL,
+       * and the post it links back to is the entire justification for
+       * showing it at all (PD-011). A nullable field here would let a
+       * display-only result exist with nothing to link to, which is the
+       * one shape this variant must never take.
+       */
       readonly sourceUrl: string;
       readonly attribution: ImportAttribution;
     }
@@ -493,6 +598,30 @@ export type ImportResult =
    * when there was no caption/title text at all, in which case the LLM
    * was never even called — see the edge function) so the UI can, if it
    * chooses, show the user what we actually read.
+   *
+   * THIS VARIANT IS NOW THE PASTED-TEXT ROUTE'S HONEST FAILURE TOO, and
+   * its name has stopped keeping up. A `'text'` import whose text holds
+   * no recipe is the same event in every way that decides the shape of
+   * the result: a model was given prose, said plainly that there was no
+   * recipe in it, nothing broke, nothing is retryable, and the way
+   * forward is to type it. `caption` then holds the user's OWN pasted
+   * text, which is theirs to be shown back to them — none of PD-011's
+   * reasoning is engaged, because nothing of a third party's is being
+   * handed anywhere.
+   *
+   * A SIXTH VARIANT WAS THE ALTERNATIVE AND IS THE WRONG TRADE. It would
+   * buy an accurate name and cost a tenth outcome for every exhaustive
+   * switch in the codebase to grow an arm for, plus a second telemetry
+   * outcome that splits one measurement in two — while the `platform`
+   * field already tells the two apart exactly where that matters
+   * (importTelemetry.ts). The COPY does differ and is branched on
+   * platform where it is written, in src/components/importFailureCopy.ts:
+   * the sentence about makers who speak their recipe aloud is true of a
+   * video and false of a message somebody pasted. So the variant is
+   * misnamed in the same way `ImportPlatform` is, and is left alone for
+   * the same reason: a rename is a wide mechanical change across the edge
+   * function, the copy layer and the telemetry vocabulary, not a
+   * side-effect of adding a route.
    *
    * IMP-02. `attribution` is REQUIRED here. It was required here first,
    * while `parsed`'s was still optional for fixture backward-
@@ -520,16 +649,19 @@ export type ImportResult =
       readonly caption: string | null;
       readonly attribution: ImportAttribution;
       /**
-       * THE ONE THIS UNION WAS WIDENED FOR. `'tiktok'` or `'youtube'` —
-       * the two platforms that reach the shared caption tail — and telling
-       * them apart is most of the SRC-09 question, not a nicety. See the
-       * union's own doc comment above.
+       * THE ONE THIS UNION WAS WIDENED FOR. `'tiktok'`, `'youtube'` or —
+       * since SRC-08 — `'text'`: the three routes that reach the shared
+       * model tail. Telling the first two apart is most of the SRC-09
+       * question, not a nicety, and telling `'text'` from either is what
+       * keeps that question answerable at all: a pasted screenshot's
+       * mistyped amounts are not evidence about captions, and counted as
+       * if they were they would inflate the only number SRC-09 turns on.
+       * See the union's own doc comment above.
        *
-       * Free at both construction sites, which is why it is required
-       * rather than optional: the blank-caption short-circuit and the
-       * model's explicit "no recipe here" both live inside
-       * `extractRecipeFromCaption`, whose input already names the platform
-       * its caller fetched from.
+       * Free at every construction site, which is why it is required
+       * rather than optional: the blank-text short-circuit and the model's
+       * explicit "no recipe here" both live inside the shared extraction
+       * tail, whose input already names the route its caller took.
        */
       readonly platform: ImportPlatform;
     }
@@ -606,6 +738,18 @@ export type ImportResult =
   /**
    * The pasted text is not a link this app will open at all — see
    * urlParsing.ts. Rejected before any network call.
+   *
+   * READ THAT SENTENCE AGAIN NOW THAT PASTING TEXT IS A ROUTE. "Not a
+   * link" is no longer the same statement as "no use to Remy": a
+   * WhatsApp message full of ingredients is not a link either, and it is
+   * a perfectly good import. This variant is what `normalizeRecipeUrl`
+   * returns for text submitted AS A URL, and nothing else. Text
+   * submitted as text never reaches it — it goes straight to the model
+   * and fails, if it fails, as `no_recipe_in_caption` with
+   * `platform: 'text'`. The two must not be conflated, in code or in
+   * copy: telling someone who pasted a recipe that their link is wrong
+   * names a mistake they did not make and hides the one they did. See
+   * the note on this variant's copy in src/components/importFailureCopy.ts.
    *
    * Since `'web'` joined `ImportPlatform` this is a much narrower set than
    * it used to be: an ordinary recipe page is now accepted, so what

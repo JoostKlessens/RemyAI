@@ -50,9 +50,21 @@
  * field of any type they could be assigned to. Every one of the four is a
  * closed union of literals this codebase already enumerates elsewhere, so
  * the set of strings this module can ever emit is finite, and you can read
- * all of it in one sitting: nine outcomes, four platforms, two
+ * all of it in one sitting: nine outcomes, five platforms, three
  * provenances, and the two typed failure vocabularies. A caption cannot be
  * a member of a union it was not written into.
+ *
+ * SRC-08 ADDED A ROUTE AND ADDED NO FIELD, WHICH IS THE GUARANTEE WORKING
+ * RATHER THAN THE GUARANTEE BEING LUCKY. Pasted text is the one import
+ * source that arrives as free text the user typed or copied — the single
+ * most sensitive thing this pipeline has ever handled, because unlike a
+ * caption it was never published anywhere and may contain anything that
+ * happened to be in the message it came out of. It flows through the
+ * existing `platform` field as `'text'` and nothing else changes here. It
+ * COULD not: there is no field on this event a fragment of that text
+ * could be assigned to, so "we log a route, never its contents" needed no
+ * new discipline and no new review. That is the shape doing the work the
+ * header claims for it.
  *
  * THAT IS THE SAME MOVE THIS CODEBASE HAS NOW MADE FOUR TIMES, and it is
  * made deliberately here rather than by resemblance:
@@ -111,7 +123,14 @@
  *    web route fail?", which is a different route with a different fix —
  *    nor, now that the failing outcomes carry one too, TikTok's captions
  *    from YouTube's descriptions, which is the split that decision actually
- *    rests on.
+ *    rests on. `'text'` makes that field carry one more weight: a
+ *    pasted-text import that yields no recipe reports the same OUTCOME as
+ *    a caption that yields none (`no_recipe_in_caption` — see its note in
+ *    types.ts on why it was not given a variant of its own), so the
+ *    platform is the only thing separating "captions fail this often",
+ *    which is the SRC-09 evidence, from "people paste things that are not
+ *    recipes", which is not evidence about video at all. Merged, they
+ *    would inflate the exact number the copyright question turns on.
  *
  * What we are NOT claiming is that this is anonymous by magic. It is
  * unidentified because of what it omits, and it stays unidentified only

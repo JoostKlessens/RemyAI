@@ -125,9 +125,18 @@ const YOUTUBE_WATCH_PATH = '/watch';
  * in this shape would be a value that cannot occur, and its only effect
  * would be to stop the compiler from proving that `canonicalHost` below is
  * only ever asked about a platform it has a canonical host for.
+ *
+ * `'text'` IS EXCLUDED FOR A STRONGER VERSION OF THE SAME REASON (SRC-08),
+ * and the exclusion had to be written by hand rather than inherited: a
+ * pasted-text import never reaches this file at all, because there is no
+ * URL to normalize. Leaving it in the type would have let a hostname
+ * resolve to a route that by definition has no host — and the compiler
+ * caught exactly that, refusing to hand `canonicalHost` a widened
+ * parameter. That is the narrowing doing the job the paragraph above
+ * claims for it, on the first union widening after it was written.
  */
 interface HostResolution {
-  readonly platform: Exclude<ImportPlatform, 'web'>;
+  readonly platform: Exclude<ImportPlatform, 'web' | 'text'>;
   readonly isShortLink: boolean;
 }
 
@@ -162,7 +171,7 @@ function resolvePlatform(hostname: string): HostResolution | null {
  * host+path+query together (the id is not always in the path alone) and
  * `normalizeWebUrl` keeps a generic host as it found it, so neither ever
  * reaches here — but a `ImportPlatform`-shaped parameter would let the
- * final `else` silently hand a fifth platform an `instagram.com` host,
+ * final `else` silently hand a later platform an `instagram.com` host,
  * which is precisely the failure a two-branch ternary produced elsewhere
  * in this codebase when this union last grew. Typed this way, the caller
  * stops compiling instead.

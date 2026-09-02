@@ -26,6 +26,10 @@
  * the same component, not a second screen, since "AI got it wrong" and "AI
  * found nothing" both resolve to "the user types it" here.
  *
+ * A PASTED-TEXT IMPORT (SRC-08) IS NEITHER, however much it resembles one
+ * here: no URL and no creator, so the same quiet credit-less surface, but
+ * a real parsed recipe, written like every other import.
+ *
  * ---
  *
  * THIS SCREEN IS ALSO THE END OF THE CANONICAL RECIPE'S JOURNEY (W-01b).
@@ -64,6 +68,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { decodeImportConfirmParams, type ImportConfirmParams } from './routeParams';
+import { formatIngredientLine, resolveEditedIngredients } from '@/domain/import/editedIngredients';
 import { toMealDraft, type MealDraftInsert } from '@/domain/import/toMealDraft';
 import type { ParsedIngredient, ParsedRecipe } from '@/domain/import/types';
 import { buildReasonText } from '@/domain/reason';
@@ -89,12 +94,7 @@ function generateLocalId(prefix: string): string {
   return `${prefix}-${localIdCounter}`;
 }
 
-/** Combines quantity+unit+name into one editable line (e.g. "400 g kipfilet") — see the file header on why ingredients are edited as free-text lines, not three separate tiny fields per ingredient. */
-function formatIngredientLine(ingredient: ParsedIngredient): string {
-  const quantityUnit = [ingredient.quantity, ingredient.unit].filter((part): part is string => part !== null).join(' ');
-  return quantityUnit.length > 0 ? `${quantityUnit} ${ingredient.name}` : ingredient.name;
-}
-
+/** `formatIngredientLine` moved to src/domain/import/editedIngredients.ts, and the move IS the fix: rendering a line and recognising an unchanged one are a single logic read in two directions, and two copies drift a trim apart until every ingredient silently reports "edited". */
 function buildInitialIngredientItems(ingredients: readonly ParsedIngredient[]): EditableTextListItem[] {
   return ingredients.map((ingredient) => ({ id: generateLocalId('ingredient'), text: formatIngredientLine(ingredient) }));
 }
@@ -115,47 +115,44 @@ function parseOptionalPositiveInt(text: string): number | null {
 
 /**
  * Rebuilds a ParsedRecipe from this screen's current field state. Every
- * field on `ParsedRecipe` falls into exactly one of two categories here,
- * and there is no third:
+ * field lands in one of three categories, and the third is scar tissue
+ * from two separate bugs of the same shape:
  *
- *  - EDITED — title, ingredients, steps, minutes, servings. Read from this
- *    screen's state and NEVER from the pre-edit `recipe` route param.
- *    "Nothing is ever saved silently" (file header) means the correction
- *    the user made here is what gets persisted, so reading the arrival for
- *    any of these would quietly throw their edit away.
- *  - CARRIED — `dishTags`. Not editable on this screen, so there is no
- *    state to read it from; it travels through from the recipe that
- *    arrived, unchanged.
+ *  - EDITED — title, steps, minutes, servings. Read from this screen's
+ *    state and NEVER from the pre-edit `recipe` route param. "Nothing is
+ *    ever saved silently" (file header) means the correction the user made
+ *    here is what gets persisted, so reading the arrival for any of these
+ *    would quietly throw their edit away.
+ *  - CARRIED — `dishTags`. Not editable here, so there is no state to read
+ *    it from; it travels through from the arrival, unchanged.
+ *  - BOTH, PER LINE — `ingredients`, which is the second bug below.
  *
- * THE MISSING THIRD CATEGORY WAS A LIVE BUG. This function used to name
- * only the edited fields, and a field that is neither edited nor carried is
- * simply gone — so a user who fixed a typo in the title silently lost the
- * recipe's categories, and Bibliotheek's dishTag filter then under-reported
- * what that household owns. Nothing threw and nothing logged, because a
- * rebuild-from-scratch cannot notice what it failed to mention.
- * `ParsedRecipe.dishTags` is required (types.ts) exactly so the next
- * carried field cannot go the same way: it has to be passed in here, or
- * this file does not compile.
+ * A FIELD IN NEITHER OF THE FIRST TWO IS SIMPLY GONE, AND THAT WAS LIVE.
+ * This function used to name only the edited fields, so a user who fixed a
+ * typo in the title silently lost the recipe's categories and
+ * Bibliotheek's dishTag filter then under-reported what that household
+ * owns. Nothing threw and nothing logged, because a rebuild-from-scratch
+ * cannot notice what it failed to mention. `ParsedRecipe.dishTags` is
+ * required (types.ts) exactly so the next carried field cannot go the same
+ * way: it is passed in here, or this file does not compile.
  *
- * AND ONE FIELD THIS STILL FLATTENS — a different problem, not the same
- * one, and worth naming rather than leaving to be rediscovered.
- * `ParsedIngredient` keeps `quantity` and `unit` apart from `name`, and
- * this screen edits an ingredient as ONE free-text line ("400 g kipfilet",
- * see `formatIngredientLine`), so the rebuild writes `quantity: null, unit:
- * null` and folds the amount into the name. That is the cost of editing
- * ingredients as text rather than as three tiny fields — a deliberate
- * choice this file's header makes — but the cost is paid on EVERY save,
- * including one where the user changed nothing, and it is not free
- * downstream: `scaleRecipe.ts` cannot scale an amount that is part of a
- * name, and the shopping list's quantity column comes up empty. Recovering
- * it means either splitting the line back into three (a parser inventing
- * structure the user did not type) or carrying the arrival's quantity
- * through for lines nobody touched. Both are real changes with a product
- * question inside them, so this states the cost instead of quietly picking
- * one.
+ * AND THE INGREDIENT FLATTENING THIS HEADER USED TO STATE AS AN OPEN COST
+ * IS NOW SETTLED, in two halves, because it was two questions under one
+ * name. The rebuild wrote every line back as `{ name: line, quantity:
+ * null, unit: null }` on EVERY save, the great majority nobody had touched
+ * included, so merely opening this screen destroyed amounts the source
+ * gave us: `scaleRecipe.ts` cannot halve an amount folded into a name, and
+ * the shopping list's quantity column came up empty. A line NOBODY TOUCHED
+ * now carries its arriving `ParsedIngredient` through unchanged; a line
+ * the user DID edit stays null, deliberately and permanently, since
+ * splitting it back into three fields would be a parser inventing
+ * structure nobody typed. That decision, whitespace ruling included, is
+ * editedIngredients.ts's — pure and unit-tested, which here it is not.
  */
 function buildEditedRecipe(
   title: string,
+  /** The ingredients as they ARRIVED: "unchanged" is a comparison, and there is nothing to compare a line against without them. `[]` is manual entry's real answer, not a fallback. */
+  arrivedIngredients: readonly ParsedIngredient[],
   ingredients: readonly EditableTextListItem[],
   steps: readonly EditableTextListItem[],
   estimatedMinutesText: string,
@@ -165,10 +162,7 @@ function buildEditedRecipe(
 ): ParsedRecipe {
   return {
     title,
-    ingredients: ingredients
-      .map((item) => item.text.trim())
-      .filter((text) => text.length > 0)
-      .map((text) => ({ name: text, quantity: null, unit: null })),
+    ingredients: resolveEditedIngredients(arrivedIngredients, ingredients.map((item) => item.text)),
     steps: steps.map((item) => item.text.trim()).filter((text) => text.length > 0),
     estimatedMinutes: parseOptionalPositiveInt(estimatedMinutesText),
     servings: parseOptionalPositiveInt(servingsText),
@@ -203,6 +197,15 @@ function buildMealInputFromDraft(
     servings: draft.servings,
     ingredientTags: allergenTags,
     allergenTagStatus: allergenStatus,
+    // The model's dish categories, and the SECOND time this screen has
+    // lost them. `ParsedRecipe.dishTags` was made required so
+    // `buildEditedRecipe` could not omit it and `toMealDraft` duly puts it
+    // on the draft — then this literal, the last rebuild before the write,
+    // did not mention it, because `CreateMealInput.dishTags` is OPTIONAL.
+    // Word for word `recipeId`'s sentence below: every layer had the
+    // value, and every layer left it out. Only REQUIRING the field stops
+    // the third occurrence — a wave-6 decision, recorded not taken.
+    dishTags: draft.dishTags,
     sourceUrl: draft.sourceUrl,
     sourcePlatform: draft.sourcePlatform,
     thumbnailUrl: draft.thumbnailUrl,
@@ -218,7 +221,16 @@ function buildMealInputFromDraft(
   };
 }
 
-/** A fully from-scratch manual add (no URL at all) has no sourceUrl/platform for toMealDraft's context to require — built directly instead, same overlay rule as the drafted path above. */
+/**
+ * FROM-SCRATCH MANUAL ENTRY — after SRC-08 a narrower set than "an import
+ * without a URL", reached only when there is NO ROUTE AT ALL: no platform,
+ * so no oEmbed hop, no page GET, no pasted text, nothing ever read. Which
+ * keeps the three `null` literals below honest rather than assumed: here
+ * `sourceUrl`, `thumbnailUrl` and `recipeId` are not merely absent, they
+ * are permanently unavailable. Stating them rather than omitting them is
+ * what stops a reader wondering whether they were forgotten — exactly how
+ * `recipeId` went unwritten everywhere, and `dishTags` here.
+ */
 function buildManualMealInput(
   recipe: ParsedRecipe,
   householdId: HouseholdId,
@@ -234,19 +246,18 @@ function buildManualMealInput(
     servings: recipe.servings,
     ingredientTags: allergenTags,
     allergenTagStatus: allergenStatus,
+    // Same drop, same fix as the drafted path. `[]` is what a hand-typed
+    // recipe has, but "no categories" and "the writer forgot" were
+    // indistinguishable here until this line said which one it is.
+    dishTags: recipe.dishTags,
     sourceUrl: null,
     sourcePlatform: null,
     // A from-scratch add has no post to take a thumbnail from, so the
     // library falls back to a monogram tile. Not a rule about manual entry
     // in general: a display-only import (PD-011) is typed by hand too but
-    // keeps its post's image, and reaches this screen with a sourceUrl and
-    // platform, so it takes the drafted path above rather than this one.
+    // keeps its image, arrives with a platform, and so drafts instead.
     thumbnailUrl: null,
-    // Stated rather than omitted, though `createMeal` reads the two the
-    // same way: a from-scratch add is a copy of nothing, permanently.
-    // Saying so out loud is what stops a later reader wondering whether
-    // the field was simply forgotten here — which is precisely how this
-    // link went unwritten everywhere else.
+    // Stated, not omitted: a from-scratch add is a copy of nothing.
     recipeId: null,
     ingredients: recipe.ingredients.map((ingredient, index) => ({
       name: ingredient.name,
@@ -258,6 +269,24 @@ function buildManualMealInput(
   };
 }
 
+/**
+ * WHICH WRITE PATH — AND THE TEST IS THE PLATFORM, NOT THE URL AND NOT
+ * `mode`. This read `sourceUrl !== null && platform !== null`; the extra
+ * clause was invisible while every route that had one had the other.
+ * SRC-08 separates them: a pasted-text import is a genuine parsed recipe
+ * that never had an address, so the old condition dropped it into the
+ * manual builder — which hardcodes `recipeId`/`thumbnailUrl` and, until
+ * this change, omitted `dishTags`, being written for a caller that
+ * provably has none. It would have reached the database stripped of its
+ * categories, silently.
+ *
+ * So the branch now tests what `toMealDraft` cannot do without: a nullable
+ * `sourceUrl` (widened for this route) and a REQUIRED `platform` it
+ * derives `source_platform` from. `platform === null` therefore means
+ * something precise — no route taken, nothing fetched or pasted — and that
+ * alone is manual entry. `mode` is not consulted: it says which SCREEN the
+ * user came through, which is a fact about the journey, not the row.
+ */
 function buildMealInput(
   recipe: ParsedRecipe,
   confirmParams: ImportConfirmParams,
@@ -266,11 +295,11 @@ function buildMealInput(
   allergenStatus: AllergenTagStatus,
 ): CreateMealInput {
   const { sourceUrl, platform, thumbnailUrl, recipeId } = confirmParams;
-  if (sourceUrl !== null && platform !== null) {
-    const draft = toMealDraft(recipe, { householdId, sourceUrl, platform, thumbnailUrl, recipeId });
-    return buildMealInputFromDraft(draft, allergenTags, allergenStatus);
+  if (platform === null) {
+    return buildManualMealInput(recipe, householdId, allergenTags, allergenStatus);
   }
-  return buildManualMealInput(recipe, householdId, allergenTags, allergenStatus);
+  const draft = toMealDraft(recipe, { householdId, sourceUrl, platform, thumbnailUrl, recipeId });
+  return buildMealInputFromDraft(draft, allergenTags, allergenStatus);
 }
 
 /**
@@ -460,6 +489,8 @@ export default function ImportConfirmScreen(): JSX.Element {
    * exactly the loss the required field exists to prevent.
    */
   const carriedDishTags: readonly string[] = recipe === null ? [] : recipe.dishTags;
+  /** The ingredients AS THEY ARRIVED, kept beside the editable lines rather than replaced by them: `buildEditedRecipe` needs both to tell an untouched line from an edited one, and an untouched line keeps the quantity and unit it came with. Read on every render, and `[]` for manual entry, for exactly `carriedDishTags`' reasons above. */
+  const arrivedIngredients: readonly ParsedIngredient[] = recipe === null ? [] : recipe.ingredients;
   const [allergenTags, setAllergenTags] = useState<readonly string[]>([]);
   const [allergenStatus, setAllergenStatus] = useState<'unknown' | 'verified'>('unknown');
   const [showSaveSheet, setShowSaveSheet] = useState(false);
@@ -473,6 +504,12 @@ export default function ImportConfirmScreen(): JSX.Element {
   // credit path rather than a wider `CreatorPlatform`. Still null when
   // there is genuinely no author name: omitting attribution beats
   // rendering a placeholder for data we were never given.
+  // A PASTED-TEXT IMPORT (SRC-08) CREDITS NOBODY, AND THAT IS THE ANSWER
+  // RATHER THAN A GAP: `authorName: null` falls out on the first clause
+  // exactly as manual entry does, and that identical treatment is the
+  // point, not a coincidence to repair — no creator was failed to resolve,
+  // the user supplied the text. No credit line, no "onbekende maker", no
+  // empty avatar chip, and no `'text'` case here to say it louder.
   const creditableAuthorName = readCreditableAuthorName(authorName);
   const creatorCredit =
     creditableAuthorName !== null && platform !== null ? (
@@ -507,6 +544,7 @@ export default function ImportConfirmScreen(): JSX.Element {
 
     const editedRecipe = buildEditedRecipe(
       trimmedTitle,
+      arrivedIngredients,
       ingredients,
       steps,
       estimatedMinutesText,

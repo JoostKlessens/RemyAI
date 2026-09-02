@@ -14,7 +14,7 @@
  * layer's machinery — building a `Creator` (src/domain/feed/types.ts) and
  * handing it to `CreatorAttribution`. That worked only while the importer
  * and the social layer happened to share a vocabulary. They no longer do:
- * `ImportPlatform` has four members and `CreatorPlatform` has two, so the
+ * `ImportPlatform` has five members and `CreatorPlatform` has two, so the
  * borrowed path silently rendered NOTHING for a YouTube import and would
  * have done the same for a `'web'` one. Silently dropping attribution is
  * the one failure mode parseImportResult.ts's header rules out by name.
@@ -95,6 +95,19 @@ const PLATFORM_LABELS: Readonly<Record<ImportPlatform, string>> = {
   instagram: 'Instagram',
   youtube: 'YouTube',
   web: 'de website',
+  // `'text'` IS UNREACHABLE HERE BY CONSTRUCTION, NOT BY COINCIDENCE, and
+  // it is the only entry in this Record for which that is a guarantee
+  // rather than a current fact. A pasted-text import's attribution is
+  // `NO_CREATOR_TO_CREDIT` (src/domain/import/buildAttribution.ts): all
+  // three fields null, deliberately, because the user supplied the recipe
+  // and there is no creator — the same posture manual entry has always
+  // had. `buildImportCreatorCredit` returns null before it reads any
+  // label whenever there is no author name, so this string cannot render
+  // while that holds. It exists to keep the Record exhaustive, which is
+  // what makes the next route a compile error here instead of silent
+  // missing attribution — the exact bug this file's header describes
+  // YouTube causing.
+  text: 'de geplakte tekst',
 };
 
 /**
@@ -109,6 +122,10 @@ const PROFILE_NOUNS: Readonly<Record<ImportPlatform, string>> = {
   instagram: 'profiel',
   youtube: 'kanaal',
   web: 'pagina',
+  // Unreachable for the same reason as the label above: there is no
+  // creator, so there is no profile link and nothing to name. 'pagina' is
+  // the least wrong of the available nouns if it ever did render.
+  text: 'pagina',
 };
 
 /**

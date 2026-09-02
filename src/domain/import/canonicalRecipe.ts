@@ -82,14 +82,27 @@
  * stops being sound the moment that guard widens. That whole argument, and
  * the warning attached to it, lives on `STORED_ROW_PROVENANCE` below.
  *
- * TWO OF THE FOUR PLATFORMS GET NONE OF THIS, AND THE REASON IS A CHECK
- * CONSTRAINT. `recipes.platform` (0006) accepts only `'tiktok'` and
- * `'instagram'`, so a YouTube or web import cannot be stored here at all
- * and permanently reports `recipeId: null` — no deduplication, and no
- * `shared_cooks` join, which is the social half of everything argued
- * above. `canStoreCanonicalRecipe` below is where that ceiling is stated
- * once, with the migration that would lift it and the reason writing that
- * migration is not this change's decision to make.
+ * THREE OF THE FIVE PLATFORMS GET NONE OF THIS, FOR TWO DIFFERENT
+ * REASONS, AND THE DIFFERENCE MATTERS MORE THAN THE COUNT.
+ * `recipes.platform` (0006) accepts only `'tiktok'` and `'instagram'`, so
+ * a YouTube or web import cannot be stored here at all and permanently
+ * reports `recipeId: null` — no deduplication, and no `shared_cooks`
+ * join, which is the social half of everything argued above. That is a
+ * CEILING: one migration lifts it, and `canStoreCanonicalRecipe` below
+ * states it once, with the SQL and with the reason writing that SQL is
+ * not this change's decision to make.
+ *
+ * `'text'` is excluded by something no migration can lift. Every argument
+ * on this page rests on `normalized_url`: it is the deduplication key, it
+ * is what makes the twentieth household's paste find the first
+ * household's row, and it is `unique` in the table. A pasted-text import
+ * has no URL — the user pasted a recipe, not a link — so there is no key
+ * to store it under and nothing for a later import to match against. Two
+ * people who paste the same recipe out of the same WhatsApp group are not
+ * even in principle recognisable as having done so, because the only
+ * thing this table can compare is an address neither of them has. So
+ * `'text'` is not waiting on a decision the way YouTube and web are; it
+ * is outside what this table can express.
  *
  * THE TRADEOFF WE ARE ACCEPTING. Deduplication makes a bad extraction
  * sticky: once a mediocre parse of a URL is stored, every later importer
@@ -168,12 +181,22 @@ export interface CanonicalRecipeContext {
  * A web-imported dinner therefore cannot be proof to a friend, however
  * many friends cook it. That is a real product hole, not a rough edge.
  *
- * WHAT WOULD LIFT IT. One migration, widening 0006's CHECK to the full
- * import vocabulary:
+ * WHAT WOULD LIFT IT. One migration, widening 0006's CHECK to the two
+ * further routes that HAVE a URL:
  *
  *   alter table public.recipes drop constraint recipes_platform_check;
  *   alter table public.recipes add constraint recipes_platform_check
  *     check (platform in ('tiktok', 'instagram', 'youtube', 'web'));
+ *
+ * ⚠ `'text'` IS ABSENT FROM THAT LIST ON PURPOSE AND MUST STAY ABSENT.
+ * Whoever eventually writes this migration will be reading a five-member
+ * `ImportPlatform` and the obvious move is to paste all five in. It would
+ * not be a widening, it would be a broken table: `normalized_url` is
+ * `not null unique` and a pasted-text import has no URL to put there, so
+ * every such row would either fail the insert or — far worse — be given a
+ * synthesised key, at which point the second person to paste any recipe
+ * would silently receive the first person's. The exclusion of `'text'`
+ * from this table is structural, not a policy waiting to be revisited.
  *
  * ⚠ AND THAT MIGRATION CANNOT SHIP ALONE. `STORED_ROW_PROVENANCE` further
  * down this file reports every stored row as `'model_from_caption'`, and
@@ -206,6 +229,17 @@ export interface CanonicalRecipeContext {
  * by construction.
  */
 const STORABLE_CANONICAL_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>(['tiktok', 'instagram']);
+
+/**
+ * DELIBERATELY UNCHANGED BY SRC-08, WHICH IS WORTH ONE LINE BECAUSE THE
+ * SILENCE COULD BE READ AS AN OVERSIGHT. `'text'` is refused by this set
+ * for free — a `Set` excludes by default, so a new union member needs no
+ * edit here to be rejected — and that default happens to be the right
+ * answer for exactly the reason given above: there is no normalized URL to
+ * key a canonical row on. The set is opt-in and stays opt-in; the day
+ * somebody widens it, `'text'` must not be the member they wave through
+ * because it was easier than reading why the other four are listed.
+ */
 
 export function canStoreCanonicalRecipe(platform: ImportPlatform): boolean {
   return STORABLE_CANONICAL_PLATFORMS.has(platform);
@@ -357,7 +391,7 @@ function readAttribution(row: Record<string, unknown>): ImportAttribution | null
  *
  * Note this is NOT the same question as `canStoreCanonicalRecipe` above,
  * and the two must not be collapsed. This asks "is this string one of our
- * platforms" (a vocabulary check, four members); that asks "will the
+ * platforms" (a vocabulary check, five members); that asks "will the
  * `recipes` CHECK constraint accept it" (a schema fact, two members). A
  * stored row naming `'web'` is a row from a future in which that migration
  * was written — reading it back is correct; writing it today is not.
@@ -367,6 +401,16 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
   instagram: true,
   youtube: true,
   web: true,
+  // Present because this is a VOCABULARY check and `'text'` is in the
+  // vocabulary — not because such a row can exist. It cannot: the CHECK
+  // constraint refuses it, and more permanently, a row here needs a
+  // `normalized_url` that a pasted-text import does not have, so nothing
+  // could ever look one up even if it were somehow written. Keeping the
+  // key is still right. This function answers "is this string one of our
+  // routes", and quietly answering "no" for a real member would be a
+  // second, hidden storability rule pretending to be a spelling check —
+  // exactly the collapse the note above warns against.
+  text: true,
 };
 
 function isImportPlatform(value: unknown): value is ImportPlatform {
@@ -384,7 +428,11 @@ function isImportPlatform(value: unknown): value is ImportPlatform {
  *
  *  1. `canStoreCanonicalRecipe` above permits exactly `'tiktok'` and
  *     `'instagram'`, mirroring 0006's CHECK constraint. A `'youtube'` or
- *     `'web'` row cannot be inserted; the write is never attempted.
+ *     `'web'` row cannot be inserted; the write is never attempted. Nor
+ *     can a `'text'` one, and that member strengthens rather than
+ *     threatens this chain: it is refused by the table's shape (no URL,
+ *     no key) rather than by a constraint someone might widen, so it
+ *     cannot arrive here even in the future this warning is about.
  *  2. Instagram is display-only (PD-011, displayOnlyPolicy.ts). An
  *     Instagram import returns `display_only` and never reaches a
  *     `ParsedRecipe`, so it never reaches a canonical write either.
@@ -409,8 +457,8 @@ function isImportPlatform(value: unknown): value is ImportPlatform {
  * software. It must change in the same commit as that migration, into a
  * per-platform mapping, or into a real column.
  *
- * `parseStoredRecipe` deliberately still READS rows for all four
- * platforms (`isImportPlatform` above says why), which sharpens rather
+ * `parseStoredRecipe` deliberately still READS rows for any platform in
+ * the vocabulary (`isImportPlatform` above says why), which sharpens rather
  * than softens the warning: the day a widened constraint lets such a row
  * be written, this file will happily read it back and mislabel it.
  * Nothing here fails loudly. Only this comment stands between that and a
@@ -461,6 +509,26 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
   }
 
   if (!isNonEmptyString(raw.normalized_url) || !isImportPlatform(raw.platform)) {
+    return null;
+  }
+
+  // A row naming the pasted-text route is refused, and this is the one
+  // platform refused HERE rather than only at the write gate. The contrast
+  // with `'web'` two paragraphs up is the whole reason: a stored `'web'`
+  // row is merely impossible TODAY, so reading one back is how the first
+  // day after that migration works instead of silently missing the cache.
+  // A stored `'text'` row is INCOHERENT in any future. Every row in this
+  // table has a `normalized_url` — it is `not null unique` and it is the
+  // only thing a lookup can be keyed on — and a pasted-text import has no
+  // URL at all. Such a row could only have been written by giving one a
+  // URL it does not have, and serving it would hand the reader a
+  // `parsed` result whose platform says "no source" while its `sourceUrl`
+  // names one; `parseImportResult` rejects exactly that pairing on the
+  // wire (see `readSourceUrl`), so accepting it here would put the two
+  // boundaries into disagreement about what a valid result is. Treated as
+  // a corrupt row, which this module already has one answer for: a cache
+  // MISS, re-extract, no user harmed.
+  if (raw.platform === 'text') {
     return null;
   }
 

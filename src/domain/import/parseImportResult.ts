@@ -50,6 +50,18 @@
  * one — see `readPlatform`. The single exception is narrowed as an
  * exception rather than by omission: `unsupported_url` reads no platform
  * because the outcome exists precisely because none was established.
+ *
+ * `sourceUrl` BECAME NULLABLE ON `parsed` (SRC-08) AND THIS FILE IS WHERE
+ * THAT DOES NOT BECOME A HOLE. A `'text'` import has no URL by
+ * construction, so the type had to admit `null`; the other four routes
+ * settle their URL before any network call and have always had one. Typed
+ * nullability alone would hand all five the same latitude, and the one
+ * that would suffer is `'web'`: a malformed response whose `sourceUrl`
+ * went missing would decode into a recipe with no link back to the
+ * publisher who wrote it — the same silent loss of a source this header
+ * refuses one paragraph up for `attribution`. So the field is read
+ * TOGETHER WITH the platform (`readSourceUrl`), and the pairing is
+ * checked rather than assumed in both directions.
  */
 
 import type { OembedErrorReason } from '../../lib/oembed';
@@ -103,6 +115,12 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
   instagram: true,
   youtube: true,
   web: true,
+  // SRC-08. Added by the compiler's insistence rather than by anyone
+  // remembering — which is the entire argument the paragraph above makes,
+  // now paid off once: widening `ImportPlatform` broke this file's build
+  // instead of quietly rejecting every pasted-text import as an unknown
+  // platform.
+  text: true,
 };
 const PLATFORMS: ReadonlySet<string> = new Set(Object.keys(PLATFORM_MEMBERS));
 
@@ -194,6 +212,7 @@ const UNNAMED_CREATOR: ImportAttribution = { authorName: null, authorUrl: null, 
 const PROVENANCE_MEMBERS: Readonly<Record<RecipeProvenance, true>> = {
   publisher_structured_data: true,
   model_from_caption: true,
+  model_from_pasted_text: true,
 };
 const PROVENANCES: ReadonlySet<string> = new Set(Object.keys(PROVENANCE_MEMBERS));
 
@@ -247,6 +266,45 @@ function readNullableString(value: unknown): NullableStringResult {
   return { ok: true, value: trimmed.length > 0 ? trimmed : null };
 }
 
+type SourceUrlResult = { readonly ok: true; readonly value: string | null } | { readonly ok: false };
+
+/**
+ * Reads `parsed`'s `sourceUrl` AGAINST the platform that came with it,
+ * because after SRC-08 the field's legal values depend on which route
+ * produced the result and no single rule covers both.
+ *
+ * FOUR ROUTES STILL REQUIRE A NON-EMPTY STRING, exactly as before this
+ * function existed. TikTok, Instagram, YouTube and web all resolve and
+ * normalize their URL before any network call — it is the first thing the
+ * pipeline does — so a response from any of them without one is not an
+ * older function being terse, it is a response this client cannot account
+ * for. And the failure it would cause is the expensive kind: a `'web'`
+ * recipe that lost its URL is a publisher's recipe with the link back to
+ * them deleted, which is the same harm the file header refuses for a
+ * dropped attribution. Nullability on the TYPE must not become permission
+ * on the WIRE.
+ *
+ * `'text'` REQUIRES THE OPPOSITE, AND THAT SYMMETRY IS THE POINT. A
+ * pasted-text import has no URL, so absent, `null` and blank all decode to
+ * `null` — three spellings of the same true sentence, and a blank string
+ * is what a hand-built payload most plausibly sends. But a text result
+ * that NAMES a URL is rejected rather than quietly stripped. This client
+ * models pasted text as having no origin at all; a function that attaches
+ * one is telling us something we have no way to render honestly — we
+ * could not say whether it is where the text came from, where the user
+ * found it, or a leftover from another branch — and dropping it silently
+ * would be this module deciding what a server meant. Same posture the
+ * rest of the file takes towards a value it does not recognise: fail the
+ * whole result and let the user retry.
+ */
+function readSourceUrl(value: unknown, platform: ImportPlatform): SourceUrlResult {
+  if (platform === 'text') {
+    const pasted = readNullableString(value);
+    return pasted.ok && pasted.value === null ? { ok: true, value: null } : { ok: false };
+  }
+  return isNonEmptyString(value) ? { ok: true, value: value.trim() } : { ok: false };
+}
+
 type AttributionResult =
   | { readonly ok: true; readonly value: ImportAttribution | undefined }
   | { readonly ok: false };
@@ -291,7 +349,14 @@ function readAttribution(value: unknown): AttributionResult {
 function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   const recipe = validateParsedRecipe(raw.recipe);
   const platform = readPlatform(raw.platform);
-  if (recipe === null || platform === null || !isNonEmptyString(raw.sourceUrl)) {
+  if (recipe === null || platform === null) {
+    return null;
+  }
+  // Read together, never separately — see `readSourceUrl` for why the
+  // field's legal values depend on the platform beside it, and why the
+  // check runs in both directions.
+  const sourceUrl = readSourceUrl(raw.sourceUrl, platform);
+  if (!sourceUrl.ok) {
     return null;
   }
   const attribution = readAttribution(raw.attribution);
@@ -325,7 +390,7 @@ function parseParsedVariant(raw: Record<string, unknown>): ImportResult | null {
   return {
     kind: 'parsed',
     recipe,
-    sourceUrl: raw.sourceUrl.trim(),
+    sourceUrl: sourceUrl.value,
     platform,
     // Both of these are now ALWAYS stated, even when the response said
     // nothing about them. That is the whole point of the two fields having

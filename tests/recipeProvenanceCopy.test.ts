@@ -9,7 +9,11 @@ import { buildImportConfirmGuidance, buildRecipeProvenanceNote } from '@/compone
  * catches a third member that was given copy without anyone deciding what
  * it should say.
  */
-const EVERY_PROVENANCE: readonly RecipeProvenance[] = ['publisher_structured_data', 'model_from_caption'];
+const EVERY_PROVENANCE: readonly RecipeProvenance[] = [
+  'publisher_structured_data',
+  'model_from_caption',
+  'model_from_pasted_text',
+];
 
 /**
  * The words that would turn a provenance FACT into a provenance SCORE.
@@ -221,5 +225,114 @@ describe('buildImportConfirmGuidance', () => {
   test('manual entry ignores a provenance it should never have carried', () => {
     const withProvenance = buildImportConfirmGuidance('manual', 'publisher_structured_data');
     expect(withProvenance).toEqual(buildImportConfirmGuidance('manual', null));
+  });
+});
+
+/**
+ * SRC-08. The pasted-text note. Everything the two older notes are held to
+ * applies here unchanged (the ranking-word and screen-reader suites above
+ * loop the whole union), so this suite only asserts what is specific to
+ * this route: that it names who supplied the text, that it does not
+ * inherit the caption note's two claims that are false here, and that it
+ * is not written as an apology for a second-class route.
+ */
+describe('buildRecipeProvenanceNote — the pasted-text route', () => {
+  test('names the reader as the source of the text, which is the fact this note exists to state', () => {
+    // Arrange / Act
+    const note = buildRecipeProvenanceNote('model_from_pasted_text');
+
+    // Assert
+    expect(note?.title).toBe('Uit je tekst gehaald');
+    expect(note?.body).toContain('je');
+    expect(note?.body).toContain('tekst');
+  });
+
+  /**
+   * The two sentences that make the caption note true are both false here:
+   * nobody wrote pasted text as a bijschrift for anything, and there is no
+   * original to go and look at, because the reader is holding it. Reusing
+   * `model_from_caption` would have shipped both.
+   */
+  test('claims no bijschrift and points at no original, because neither exists for this route', () => {
+    const note = buildRecipeProvenanceNote('model_from_pasted_text');
+    const text = `${note?.title ?? ''} ${note?.body ?? ''}`.toLowerCase();
+    expect(text).not.toContain('bijschrift');
+    expect(text).not.toContain('origineel');
+    expect(text).not.toContain('maker');
+    expect(text).not.toContain('video');
+  });
+
+  /**
+   * Pasting text is a first-class way into Remy, not what you fall back to
+   * when a link fails. Same tone rule the caption note is held to.
+   */
+  test('reads as a working route rather than an apology', () => {
+    const note = buildRecipeProvenanceNote('model_from_pasted_text');
+    const body = note?.body.toLowerCase() ?? '';
+    expect(body).not.toContain('sorry');
+    expect(body).not.toContain('helaas');
+    expect(body).not.toContain('mislukt');
+    expect(body).not.toContain('fout');
+    expect(body).toContain('gaat meestal goed');
+  });
+
+  test('asks the reader to check the amounts and steps, on this screen', () => {
+    const note = buildRecipeProvenanceNote('model_from_pasted_text');
+    expect(note?.body).toContain('hoeveelheid');
+    expect(note?.body).toContain('stap');
+    expect(note?.body).toContain('hieronder');
+  });
+
+  /**
+   * Three routes, three notes, no two alike. A note that duplicated
+   * another would mean the union gained a member without gaining anything
+   * to say, which is exactly what reusing `model_from_caption` would have
+   * been.
+   */
+  test('every provenance says something different from every other', () => {
+    const titles = EVERY_PROVENANCE.map((provenance) => buildRecipeProvenanceNote(provenance)?.title);
+    const bodies = EVERY_PROVENANCE.map((provenance) => buildRecipeProvenanceNote(provenance)?.body);
+    expect(new Set(titles).size).toBe(EVERY_PROVENANCE.length);
+    expect(new Set(bodies).size).toBe(EVERY_PROVENANCE.length);
+  });
+});
+
+/**
+ * The confirmation screen's helper texts for a pasted-text import. The asks
+ * are the caption route's asks with the source corrected — a model pulled a
+ * list out of prose either way — and saying "het bijschrift" to somebody
+ * who pasted an email is the same false claim the web route used to get.
+ */
+describe('buildImportConfirmGuidance — the pasted-text route', () => {
+  test('names the reader-supplied text as the source, and never a bijschrift', () => {
+    const guidance = buildImportConfirmGuidance('parsed', 'model_from_pasted_text');
+    expect(guidance.ingredientsHelperText).toContain('je tekst');
+    expect(guidance.stepsHelperText).toContain('je tekst');
+    expect(guidance.ingredientsHelperText).not.toContain('bijschrift');
+    expect(guidance.stepsHelperText).not.toContain('bijschrift');
+  });
+
+  test('keeps both asks, because prose omits amounts and step order was decided either way', () => {
+    const guidance = buildImportConfirmGuidance('parsed', 'model_from_pasted_text');
+    expect(guidance.ingredientsHelperText).toContain('mogelijk niet compleet');
+    expect(guidance.stepsHelperText).toContain('controleer de volgorde');
+  });
+
+  test('shares the origin-free subtitle with every other route', () => {
+    const pasted = buildImportConfirmGuidance('parsed', 'model_from_pasted_text');
+    const caption = buildImportConfirmGuidance('parsed', 'model_from_caption');
+    expect(pasted.subtitle).toBe(caption.subtitle);
+  });
+
+  /**
+   * The unknown-origin branch is what a payload from a newer build
+   * produces, and it must stay distinguishable from a route that DOES know
+   * its source: it says "automatisch overgenomen" and names nothing.
+   */
+  test('is not the same as the unknown-origin branch, which names no source at all', () => {
+    const pasted = buildImportConfirmGuidance('parsed', 'model_from_pasted_text');
+    const unknown = buildImportConfirmGuidance('parsed', null);
+    expect(pasted.ingredientsHelperText).not.toBe(unknown.ingredientsHelperText);
+    expect(unknown.ingredientsHelperText).not.toContain('tekst');
   });
 });

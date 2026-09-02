@@ -21,6 +21,36 @@
  * container is genuinely the right one — a calm, bordered panel with a
  * title, a sentence and the next action, which is exactly what this
  * outcome needs too.
+ *
+ * ---
+ *
+ * EVERY SENTENCE BELOW WAS RE-READ AGAINST A SOURCE THAT IS NEITHER A
+ * VIDEO NOR A PAGE (SRC-08), and two of them were false. That is the
+ * recurring cost of copy that names the medium it happens to cover today,
+ * which `unsupported_url`'s note has already paid twice, and it is worth
+ * recording which sentences moved and which were left alone:
+ *
+ *  - `no_recipe_in_caption` now BRANCHES on the platform. Its sentence
+ *    explains that some makers speak their recipe aloud instead of typing
+ *    it — true and useful about a video, and meaningless about a message
+ *    somebody pasted, where there is no maker and nothing was spoken. A
+ *    pasted-text import that yields no recipe reaches this same variant
+ *    (see its note in src/domain/import/types.ts on why it was not given
+ *    a variant of its own), so the branch lives here, in the copy, which
+ *    is the only place the two genuinely differ.
+ *  - `llm_request_failed` STOPPED NAMING A VIDEO. It said "het verwerken
+ *    van deze video", and that was already wrong before this change: the
+ *    client synthesises this variant for any transport failure, web
+ *    imports included. Pasted text made it wrong a second way. The
+ *    sentence now names no medium at all, which is the form that cannot
+ *    go stale again.
+ *  - `parse_failed` was checked and left exactly as it was. It already
+ *    says "de tekst", which is true of a caption, a page and a paste
+ *    alike.
+ *  - `no_recipe_on_page`, `source_fetch_failed`, `oembed_failed` and
+ *    `display_only` all name a page, a website or a post, and all four
+ *    are structurally unreachable for a `'text'` import — there is no
+ *    fetch, no oEmbed call and no post. They keep their words.
  */
 
 import type { ImportPlatform, ImportResult, SourceFetchFailureReason } from '@/domain/import/types';
@@ -31,7 +61,12 @@ export type ImportFailureResult = Exclude<ImportResult, { readonly kind: 'parsed
 export interface ImportFailureCopy {
   readonly title: string;
   readonly body: string;
-  /** The caption Remy actually read, when one exists — lets the user judge for themselves instead of taking "no recipe" on faith. */
+  /**
+   * The text Remy actually read, when there is one — lets the user judge
+   * for themselves instead of taking "no recipe" on faith. A caption on
+   * the video routes; the user's own pasted text on the `'text'` route,
+   * which is theirs to see and carries none of PD-011's constraints.
+   */
   readonly quote: string | null;
   /**
    * Whether "Opnieuw proberen" (retry the same URL) makes sense here.
@@ -65,6 +100,18 @@ const PLATFORM_LABELS: Readonly<Record<ImportPlatform, string>> = {
   instagram: 'Instagram',
   youtube: 'YouTube',
   web: 'de website',
+  // `'text'` is unreachable here for a stronger reason than `'web'` is.
+  // Display-only is a licensing outcome about somebody else's post
+  // (PD-011), and a pasted-text import has no post, no platform and no
+  // creator — `NO_CREATOR_TO_CREDIT` in src/domain/import/buildAttribution.ts
+  // says why that absence is by construction. It is here because this
+  // `Record` must stay exhaustive: that is what makes the next route a
+  // compile error in this file rather than a missing word on a screen.
+  // If some future route ever does reach display-only copy with this
+  // platform, the thing to rewrite is the whole sentence — "Van de
+  // geplakte tekst mag Remy de post en de maker laten zien" is nonsense —
+  // not this label.
+  text: 'de geplakte tekst',
 };
 
 function oembedFailureBody(reason: OembedErrorReason): string {
@@ -221,6 +268,48 @@ const SOURCE_FETCH_FAILURES_A_RETRY_CANNOT_HELP: ReadonlySet<SourceFetchFailureR
   'refused',
 ]);
 
+/**
+ * The one `kind` whose copy depends on WHICH ROUTE reached it, because the
+ * two routes that reach it are answering different questions.
+ *
+ * For a video, "no recipe in the caption" has a specific and genuinely
+ * useful explanation: plenty of makers say the recipe out loud and never
+ * type it, so the text we are allowed to read simply does not contain it
+ * (types.ts's header, and the SRC-09 question that hangs off it). Telling
+ * someone that about a WhatsApp message they pasted would be nonsense —
+ * nobody spoke it, there is no video, and the text is right there in front
+ * of them.
+ *
+ * What the pasted-text sentence must do instead is avoid the accusation
+ * the URL routes get to make. `unsupported_url` can fairly say "check the
+ * link"; there is no equivalent here, because the user did not mistype an
+ * address — they gave Remy a piece of text and Remy could not find a
+ * recipe in it. So the sentence says exactly that, allows that the text
+ * may be fine and Remy simply did not recognise it, and points at the one
+ * thing that always works. It never suggests a second attempt with the
+ * same text: the answer is deterministic and `canRetry` says so.
+ *
+ * Both branches keep `quote`. Showing a user the text Remy read is what
+ * lets them judge "no recipe" instead of taking it on faith, and for a
+ * `'text'` import the quoted text is THEIR OWN — none of PD-011's
+ * reasoning applies, because nothing of a third party's is being handed
+ * back to anybody.
+ */
+function noRecipeInSourceCopy(platform: ImportPlatform): { readonly title: string; readonly body: string } {
+  if (platform === 'text') {
+    return {
+      title: 'Geen recept in deze tekst',
+      body:
+        'Remy heeft de tekst gelezen die je gaf, maar er geen ingrediënten en stappen in gevonden. Misschien staat het recept er anders in dan Remy herkent, of mist er een stuk. ' +
+        'Typ het recept zelf over. Dan staat het net zo goed in je lijst.',
+    };
+  }
+  return {
+    title: 'Geen recept gevonden in het bijschrift',
+    body: 'Sommige makers vertellen het recept alleen hardop in de video en typen het niet uit. Remy leest alleen tekst, dus die vindt het recept dan niet. Typ het recept zelf over. Dan staat het net zo goed in je lijst.',
+  };
+}
+
 /** The single entry point: every reachable `ImportResult` failure kind maps to exactly one deliberate copy + recovery shape. */
 export function buildImportFailureCopy(result: ImportFailureResult): ImportFailureCopy {
   switch (result.kind) {
@@ -243,6 +332,18 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
         // address pointing back at Remy's own network. "Een adres dat Remy
         // niet opent" covers the last three without making the user learn
         // any of them.
+        //
+        // AND IT MUST NOT DRIFT INTO ITS NEW NEIGHBOUR'S TERRITORY. Since
+        // SRC-08 a user can paste the recipe TEXT instead of a link, and
+        // text that holds no recipe is a real, ordinary outcome — but it
+        // is `no_recipe_in_caption` with `platform: 'text'`, not this. The
+        // difference is an accusation: this sentence tells someone their
+        // link is wrong, which is exactly the wrong thing to say to
+        // someone who pasted a perfectly good recipe Remy could not read.
+        // This variant is reached only by text submitted AS A URL that
+        // `normalizeRecipeUrl` refused, and its copy should stay narrow
+        // enough that routing the other case here would read as obviously
+        // false.
         body: 'Dit lijkt geen webadres dat Remy kan openen. Controleer de link hierboven, of voer het recept zelf in.',
         quote: null,
         canRetry: false,
@@ -304,15 +405,20 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
         canRetry: true,
         manualEntryIsPrimary: false,
       };
-    case 'no_recipe_in_caption':
+    // Two routes, two sentences, one variant — see `noRecipeInSourceCopy`.
+    // The recovery shape is identical for both and deliberately so: the
+    // same text read twice yields the same answer, so there is nothing to
+    // retry, and typing it is not a fallback but the way forward.
+    case 'no_recipe_in_caption': {
+      const { title, body } = noRecipeInSourceCopy(result.platform);
       return {
-        title: 'Geen recept gevonden in het bijschrift',
-        body:
-          'Sommige makers vertellen het recept alleen hardop in de video en typen het niet uit. Remy leest alleen tekst, dus die vindt het recept dan niet. Typ het recept zelf over. Dan staat het net zo goed in je lijst.',
+        title,
+        body,
         quote: result.caption,
         canRetry: false,
         manualEntryIsPrimary: true,
       };
+    }
     /**
      * PD-011. Deliberately positive and deliberately specific: it names
      * what Remy IS allowed to do with this post, says plainly why the
@@ -340,14 +446,23 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
         manualEntryIsPrimary: true,
       };
     }
+    // NAMES NO MEDIUM, AND THAT IS THE FIX RATHER THAN THE STYLE. This
+    // said "deze video" and was already false for a web import — the
+    // client synthesises this variant on any transport failure
+    // (src/lib/importRecipe.ts), whatever the route — and pasted text made
+    // it false a second time. "Dit" is true of a video, a page and a
+    // paste, and stays true of whatever route comes next.
     case 'llm_request_failed':
       return {
         title: 'Even niet gelukt',
-        body: 'Het verwerken van deze video lukte nu niet. Dit is meestal tijdelijk. Probeer het opnieuw.',
+        body: 'Remy kon dit nu niet verwerken. Dit is meestal tijdelijk. Probeer het opnieuw.',
         quote: null,
         canRetry: true,
         manualEntryIsPrimary: false,
       };
+    // Re-read against pasted text and deliberately unchanged: "de tekst"
+    // is already what every route hands the model, so this sentence is
+    // true of a caption, a page and a paste without naming any of them.
     case 'parse_failed':
       return {
         title: 'Waarschijnlijk geen uitgeschreven recept',

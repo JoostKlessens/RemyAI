@@ -142,14 +142,16 @@ function checkpointLabelsFor(platform: ImportPlatform | null): readonly string[]
  * original caption pipeline produces. A demo showing a state that cannot
  * happen is worse than no demo.
  */
-const DEMO_URL_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
+// Keyed by the link-paste platforms only — see `FixtureLinkPlatform` in
+// _fixtures.ts for why `'text'` has no entry here rather than a fake one.
+const DEMO_URL_BY_PLATFORM: Readonly<Record<Exclude<ImportPlatform, 'text'>, string>> = {
   tiktok: 'https://www.tiktok.com/@kokenmetkees/video/000009',
   instagram: 'https://www.instagram.com/reel/000009',
   youtube: 'https://www.youtube.com/watch?v=demo000009',
   web: 'https://www.voorbeeldkeuken.nl/recepten/ovenschotel-zoete-aardappel',
 };
 
-const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, ImportPlatform>> = {
+const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, Exclude<ImportPlatform, 'text'>>> = {
   parsed: 'tiktok',
   // RCP-06's other route. `'parsed'` above demos a caption a model read;
   // this one demos a page whose publisher wrote the recipe out in machine-

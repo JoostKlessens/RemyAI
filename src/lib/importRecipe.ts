@@ -3,10 +3,25 @@
  * Function, narrowed into the same `ImportResult` the screens already
  * switch on.
  *
+ * TWO CALLS, ONE ENDPOINT, AND ONE OF EACH IS THE WHOLE DESIGN.
+ * `requestImport` sends `{ url }` — a link the user pasted — and
+ * `requestTextImport` sends `{ text }` — a recipe the user pasted with no
+ * link behind it (SRC-08). The edge function refuses a body carrying BOTH,
+ * on the grounds that it cannot know which the caller meant
+ * (supabase/functions/parse-recipe/importRequest.ts), so this module makes
+ * that unrepresentable rather than merely avoided: there is no single
+ * function with two optional arguments that a caller could fill in twice.
+ * They differ in exactly two lines each — the body they post and the
+ * platform their transport failure reports — and share everything after,
+ * which is what keeps the response handling from forking.
+ *
  * This module is the impure shell and nothing else. Every judgement it
  * makes about the response body lives in the pure, tested
  * `parseImportResult` (src/domain/import/parseImportResult.ts) — this file
- * only performs the call and maps the ways a call can fail outright.
+ * only performs the call and maps the ways a call can fail outright. That
+ * is why the text route needed no new narrowing here: the function answers
+ * with the same `ImportResult` union whichever body it was handed, so
+ * `toAttempt` below already covers it.
  *
  * WHY TRANSPORT FAILURES BECOME `llm_request_failed`. The edge function
  * answers 200 for every outcome it actually anticipates, including all of
@@ -18,6 +33,16 @@
  * het opnieuw" — is the honest thing to show. It is deliberately NOT
  * mapped to `parse_failed`, which tells the user their video probably has
  * no written recipe: that would blame the video for our outage.
+ *
+ * THE ONE 400 THAT WOULD GIVE BAD ADVICE, NAMED RATHER THAN LEFT TO BE
+ * FOUND. An over-long `{ text }` body is refused with a 400, and it lands
+ * here as `llm_request_failed` — "probeer het opnieuw" — which is wrong,
+ * because retrying an over-long paste fails identically forever. It is
+ * tolerable only because the paste screen enforces the same cap before it
+ * ever calls `requestTextImport`, so this mapping is reachable only by a
+ * caller that is not that screen. If a typed "your text is too long"
+ * outcome is ever added to `ImportResult`, this is the paragraph that
+ * should stop being true.
  *
  * A response body we cannot narrow lands in the same place, for the same
  * reason: an unrecognized shape means we did not get a usable answer, and
@@ -199,5 +224,43 @@ export async function requestImport(normalizedUrl: string, platform: ImportPlatf
     return result === null ? transportFailure(platform) : toAttempt(result);
   } catch {
     return transportFailure(platform);
+  }
+}
+
+/**
+ * SRC-08. The same endpoint, the same narrowing, a different body: recipe
+ * text the user pasted, with no URL anywhere in the transaction.
+ *
+ * IT TAKES NO `platform` ARGUMENT, AND THAT ABSENCE IS THE INTERESTING PART.
+ * `requestImport` needs one because a URL's platform is a CONCLUSION —
+ * `normalizeRecipeUrl`'s reading of a string the user pasted — and its own
+ * doc comment above spends a paragraph on the one way that conclusion could
+ * disagree with the server's. Here there is nothing to conclude: `'text'` is
+ * a fact about which body was posted, decided by the line below and by
+ * nothing else, so client and server cannot differ about it even in
+ * principle. Passing it in would invite a caller to pass something else.
+ *
+ * Only ever called with text the caller has already trimmed, found non-blank
+ * and found within the length cap — the same order `requestImport` mirrors
+ * for URLs, and for the same reason: a body the function will refuse should
+ * not cost a round trip. See the header on what happens when it does anyway.
+ *
+ * Never throws, exactly as its sibling does not.
+ */
+export async function requestTextImport(text: string): Promise<ImportAttempt> {
+  try {
+    const { data, error } = await supabase.functions.invoke<unknown>(PARSE_RECIPE_FUNCTION, {
+      // `text` alone. Sending a `url: null` alongside it would be refused as
+      // ambiguous by the function's own boundary, which is the behaviour that
+      // makes this one-key body a requirement rather than a style choice.
+      body: { text },
+    });
+    if (error) {
+      return transportFailure('text');
+    }
+    const result = parseImportResult(data);
+    return result === null ? transportFailure('text') : toAttempt(result);
+  } catch {
+    return transportFailure('text');
   }
 }

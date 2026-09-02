@@ -1,15 +1,18 @@
 /**
- * Supabase Edge Function: recipe import from a pasted URL — a TikTok or
- * Instagram post, a YouTube video, or an ordinary recipe page.
+ * Supabase Edge Function: recipe import. From a pasted URL — a TikTok or
+ * Instagram post, a YouTube video, or an ordinary recipe page — or from
+ * recipe text the user pasted with no URL behind it at all.
  *
- * POST { url: string } -> 200 application/json, body is an `ImportResult`
- * (src/domain/import/types.ts) for every REACHABLE outcome, including
- * failures — see that file's header for why every failure is a distinct,
- * typed `kind` rather than a shared error bucket. Non-2xx status codes are
- * reserved for the request itself being malformed (missing/blank `url`,
+ * POST { url: string } OR { text: string }, exactly one of the two -> 200
+ * application/json, body is an `ImportResult` (src/domain/import/types.ts)
+ * for every REACHABLE outcome, including failures — see that file's header
+ * for why every failure is a distinct, typed `kind` rather than a shared
+ * error bucket. Non-2xx status codes are reserved for the request itself
+ * being malformed (neither field, both fields, a blank or over-long `text`,
  * wrong HTTP method) or a genuinely unexpected server error; the client
  * should switch on `body.kind`, not on HTTP status, for every case this
- * feature actually anticipates.
+ * feature actually anticipates. WHICH bodies are refused, and why an
+ * over-long paste is one of them, is argued in importRequest.ts.
  *
  * ---
  *
@@ -45,10 +48,16 @@
  * pure mapping and the PD-006 reason a shared recipe can never carry
  * allergen state.
  *
- * TWO OF THE FOUR PLATFORMS CANNOT USE IT AT ALL, AND THAT IS A SCHEMA
- * FACT RATHER THAN A PREFERENCE. 0006_canonical_recipes.sql declares
+ * THREE OF THE FIVE SOURCES CANNOT USE IT AT ALL, FOR TWO DIFFERENT
+ * REASONS, AND THE DIFFERENCE IS THE INTERESTING PART. For `'web'` and
+ * `'youtube'` it is a SCHEMA fact: 0006_canonical_recipes.sql declares
  * `platform text not null check (platform in ('tiktok', 'instagram'))`, so
- * a `'web'` or `'youtube'` parent row is rejected by the database itself.
+ * either parent row is rejected by the database itself — a CHECK a migration
+ * could widen. For `'text'` (SRC-08) it is not a constraint at all but the
+ * absence of a KEY: that table is keyed on `normalized_url` and a pasted text
+ * has no URL to be keyed under, so neither half of the cache has anything to
+ * ask about, however that CHECK is widened later. See
+ * `resolveCanonicalRecipeId` in finishImport.ts.
  * Both halves of the cache are therefore gated on `canStoreCanonicalRecipe`
  * (src/domain/import/canonicalRecipe.ts, pure and unit-tested) — INSIDE
  * canonicalRecipeStore.ts rather than at the call sites here, so a route
@@ -58,9 +67,10 @@
  * error on every single web and YouTube import, which is how you train
  * whoever reads those logs to stop reading them.
  *
- * WHAT THAT COSTS, SAID OUT LOUD RATHER THAN DISCOVERED LATER. A web or
- * YouTube import deduplicates against nothing — the twentieth household to
- * paste the same recipe page pays the whole fetch again — and, far more
+ * WHAT THAT COSTS, SAID OUT LOUD RATHER THAN DISCOVERED LATER. A web,
+ * YouTube or pasted-text import deduplicates against nothing — the twentieth
+ * household to paste the same page pays the whole fetch again, and the
+ * twentieth to paste the same TEXT the whole extraction — and, far more
  * important, every one of those imports returns `recipeId: null`, so the
  * meal it produces is a copy of nothing and the social half of the product
  * (`shared_cooks` in 0009, `FRIEND_PROOF_BOOST` in src/domain/scoring.ts)
@@ -143,12 +153,59 @@
  *
  * ---
  *
+ * THE PASTED-TEXT ROUTE (SRC-08): A SOURCE WITH NO URL AT ALL.
+ *
+ * A `{ text }` body is a recipe the user already had — forwarded in a
+ * message, sitting in an email, read off a photo of a cookbook page and
+ * typed out. There is nothing to fetch, nobody to ask and no address to
+ * normalise, which removes every step the other four routes are made of: NO
+ * `normalizeRecipeUrl`, NO short-link expansion, NO oEmbed, NO page GET, and
+ * neither half of the Fase 1b cache. What is left is the model call, which is
+ * why `resolveTextImport` below is six lines long: it hands the user's own
+ * words to the SAME `extractRecipeFromCaption` TikTok and YouTube run.
+ *
+ * THE CACHE IS SKIPPED FOR WANT OF A KEY, NOT BECAUSE A GUARD REFUSED.
+ * `canStoreCanonicalRecipe('text')` is false and would refuse the write on
+ * its own, but that is the second reason and the weaker one. `recipes` is
+ * keyed on `normalized_url` (0006) and this route has no URL, so there is
+ * nothing to look a stored row up BY and nothing to write a new one UNDER —
+ * and that stays true however the CHECK is widened later. Two households
+ * pasting identical text are two unrelated imports, each paying for its own
+ * extraction; the only thing that could change that is a hash of the text as
+ * a second deduplication key, which is a different question with a schema
+ * decision attached and is the owner's to take.
+ *
+ * NOBODY IS CREDITED, AND THAT IS CORRECT RATHER THAN DEGRADED. Every other
+ * route treats an unnamed creator as a failure — `display_only` refuses
+ * outright without one (PD-011), a malformed attribution fails the whole
+ * import — so an all-null attribution turning up anywhere else is a symptom.
+ * Here there is no creator being lost: nothing of a third party's was
+ * fetched, nothing is shown back to anybody but the person who supplied it,
+ * and their own private library is not a surface on which somebody's work is
+ * being republished. It is the posture manual entry has always had, and
+ * pasting rather than typing does not change who is looking at what. So this
+ * route says it with the NAMED constant `NO_CREATOR_TO_CREDIT`
+ * (buildAttribution.ts) instead of three nulls written inline, precisely so
+ * that the deliberate case and the symptom cannot be confused by grep.
+ *
+ * WHAT THE ROUTE CANNOT KNOW, AND DOES NOT PRETEND TO. The text may well
+ * have been copied out of a blog whose author would want crediting; this
+ * function has no way to tell, and inventing a source would be the exact
+ * fabrication the rest of this file exists to prevent. So `sourceUrl` is
+ * null, and the provenance is `model_from_pasted_text` rather than a reuse
+ * of `model_from_caption` — a caption was published beside a video by the
+ * person who made it, and a paste has no publisher this function can see.
+ * The confirmation screen tells the user which of the three they hold.
+ *
+ * ---
+ *
  * WHICH ROUTE TALKS TO WHICH ENDPOINT, in one place so it stays true:
  *
  *   tiktok     -> oEmbed            -> Gemini    -> canonical row
  *   instagram  -> oEmbed            -> (stops, PD-011)
  *   youtube    -> Data API snippet  -> Gemini    -> no row (CHECK, above)
  *   web        -> page GET + JSON-LD -> (no model) -> no row (CHECK, above)
+ *   text       -> (nothing fetched) -> Gemini    -> no row (NO KEY, above)
  *
  * `resolveOembedFor` is consequently reachable by TikTok and Instagram
  * ONLY, and `resolveImport` is arranged so that this is structural rather
@@ -163,8 +220,9 @@
  *
  * PROVENANCE (RCP-06): WHERE A RECIPE'S WORDS ACTUALLY CAME FROM.
  *
- * Every `parsed` result states one of two things about itself, and the
- * distinction is the difference between a fact and a reading of one:
+ * Every `parsed` result states one of three things about itself, and the
+ * distinctions are the difference between a fact, a reading of somebody's
+ * published prose, and a reading of prose with no publisher behind it:
  *
  *   publisher_structured_data — the publisher wrote these fields, in named
  *     keys, in a documented vocabulary, and nothing interpreted them. That is
@@ -174,6 +232,13 @@
  *     humans. Honest, useful, and categorically less certain. TikTok's oEmbed
  *     title and YouTube's Data API description both land here, because they
  *     run the same shared tail.
+ *   model_from_pasted_text — the same model, reading prose the USER supplied
+ *     (SRC-08). No publisher stands behind it and there is no source we could
+ *     go back and check. A third member rather than a reuse of the one above,
+ *     because "a creator wrote this caption under their own video" and
+ *     "somebody pasted this from somewhere" are different claims about where
+ *     the words came from — which is why the shared tail takes provenance as
+ *     an argument rather than hardcoding it.
  *
  * IT IS SET WHERE EACH RESULT IS BUILT AND NEVER INFERRED FROM `platform`
  * AFTERWARDS. Platform is a fact about WHO served the URL; provenance is a
@@ -195,7 +260,10 @@
  * COUNTING IMPORTS (IMP-07). Every reachable outcome of this function —
  * successes included, because a failure rate needs both halves of its
  * fraction — is counted by exactly one structured `console.log` line, at the
- * single point an `ImportResult` becomes a response.
+ * single point an `ImportResult` becomes a response. The pasted-text route
+ * needed NO NEW FIELD to be counted, which is the test a shared telemetry
+ * line should pass: it returns the same variants carrying `platform: 'text'`,
+ * so it lands in the same four-key line and the same denominator.
  *
  * EVERY ONE OF THOSE LINES NOW NAMES ITS PLATFORM, except the one that
  * cannot — a property of THIS file, not of the telemetry module, which can
@@ -216,10 +284,13 @@
  *
  * ---
  *
- * SCOPE: every source of text this function has is metadata a publisher
- * already offers for reading — an oEmbed caption/title and author name, a
- * Data API `snippet`, or a page's own JSON-LD. NO VIDEO, AUDIO OR IMAGE
- * BINARY IS EVER DOWNLOADED, ANYWHERE IN THIS FUNCTION. Transcribing a
+ * SCOPE: every source of text this function has is either metadata a
+ * publisher already offers for reading — an oEmbed caption/title and author
+ * name, a Data API `snippet`, or a page's own JSON-LD — or text the user
+ * handed us themselves (SRC-08), fetched from nobody. NO VIDEO, AUDIO OR
+ * IMAGE BINARY IS EVER DOWNLOADED, ANYWHERE IN THIS FUNCTION. The text route
+ * does not widen that an inch: a paste is characters a person typed or
+ * copied. Transcribing a
  * video's audio or OCR'ing its on-screen text would surface real
  * ingredients and steps far more often, and is deliberately a different and
  * much larger legal exposure (redistributing and processing a third party's
@@ -253,10 +324,11 @@
  * without index.ts needing to know or care that the hop exists.
  * `allowImportingTsExtensions` (tsconfig.json) is what keeps that legal
  * under `tsc --noEmit` too, since those two files ARE included in the
- * Node/Metro build. It does NOT extend to this function's own five sibling
+ * Node/Metro build. It does NOT extend to this function's own seven sibling
  * modules (callExtractionModel.ts, canonicalRecipeStore.ts, env.ts,
- * fetchSourceText.ts, importResponse.ts): those are real runtime imports
- * Deno resolves for itself, so they spell out `.ts` too — and so does every
+ * fetchSourceText.ts, finishImport.ts, importRequest.ts, importResponse.ts):
+ * those are real runtime imports Deno resolves for itself, so they spell out
+ * `.ts` too — and so does every
  * import THEY make, one hop further out. Dropping an extension anywhere in
  * that chain fails nothing locally — neither `tsc --noEmit` nor `npm run
  * lint` looks at this directory — it fails the deploy.
@@ -274,38 +346,46 @@ declare const Deno: {
 
 import { normalizeRecipeUrl, readYouTubeVideoId } from '../../../src/domain/import/urlParsing.ts';
 import { validateShortLinkTarget } from '../../../src/domain/import/resolveShortLinkTarget.ts';
-import { validateParsedRecipe } from '../../../src/domain/import/validateParsed.ts';
-import { parseExtractionResponse } from '../../../src/domain/import/parseExtractionResponse.ts';
-import { buildAttribution } from '../../../src/domain/import/buildAttribution.ts';
+// `NO_CREATOR_TO_CREDIT` out of the same module as `buildAttribution`, and
+// that adjacency is the argument: one builds an attribution from a source
+// that named a creator, the other IS the answer for the one route that
+// consulted no source at all.
+import { buildAttribution, NO_CREATOR_TO_CREDIT } from '../../../src/domain/import/buildAttribution.ts';
 import { buildDisplayOnlyResult, isDisplayOnlyPlatform } from '../../../src/domain/import/displayOnlyPolicy.ts';
 // The JSON-LD reader is the whole web route: it is what makes that path
 // modelless, and therefore the one path that cannot invent an ingredient.
 import { extractRecipeFromHtml } from '../../../src/domain/import/htmlJsonLd.ts';
 import { resolveOembed } from '../../../src/lib/oembed.ts';
 import type { OembedPlatform } from '../../../src/lib/oembed.ts';
-import type {
-  ImportAttribution,
-  ImportPlatform,
-  ImportResult,
-  ParsedRecipe,
-  RecipeProvenance,
-} from '../../../src/domain/import/types.ts';
-// The five sibling modules of this function, each owning one thing this file
-// therefore no longer does. `canonicalRecipeStore.ts` owns every read and
-// write of the canonical tables, and the service role key that performs them;
+// Down to two, because the recipe-shaped types moved with the tail that
+// handles them (finishImport.ts). This file routes and answers; it no longer
+// touches a `ParsedRecipe` on the way past.
+import type { ImportPlatform, ImportResult } from '../../../src/domain/import/types.ts';
+// The seven sibling modules of this function, each owning one thing this file
+// therefore no longer does. `importRequest.ts` owns what a client is allowed
+// to send, so the boundary is a place with a header rather than the opening
+// lines of a handler; `canonicalRecipeStore.ts` owns every read and write of
+// the canonical tables, and the service role key that performs them;
 // `fetchSourceText.ts` owns every outbound request to a host A USER CHOSE —
 // the page GET, the YouTube Data API call and the TikTok short-link chain —
 // plus the YouTube credential one of them needs; `callExtractionModel.ts`
 // owns the one outbound request to a host THIS REPO chose, and the Gemini key
-// that pays for it; `importResponse.ts` owns everything this function says to
-// a client or to a log, which is what makes counting an import outcome
-// inseparable from answering one (IMP-07); `env.ts` owns the credential
-// readers the others share. Three of the five exist so that a secret's blast
-// radius is one importable file rather than this one. Their `.ts` extensions
-// are required for the same Deno reason as the imports above.
-import { findStoredRecipe, storeCanonicalRecipe } from './canonicalRecipeStore.ts';
-import { callExtractionModel } from './callExtractionModel.ts';
+// that pays for it; `finishImport.ts` owns the tail every recipe-producing
+// route ends in, which is what makes "TikTok, YouTube and a paste run the
+// same model path" a fact about the call graph rather than a claim in a
+// comment; `importResponse.ts` owns everything this function says to a client
+// or to a log, which is what makes counting an import outcome inseparable
+// from answering one (IMP-07); `env.ts` owns the credential readers the
+// others share. Three of the seven exist so that a secret's blast radius is
+// one importable file rather than this one, and two are now further away
+// still: the Gemini key is not imported here at all and the canonical WRITE
+// no longer is either — both are reached through `finishImport.ts`, leaving
+// this file only the cache lookup. Their `.ts` extensions are required for
+// the same Deno reason as the imports above.
+import { findStoredRecipe } from './canonicalRecipeStore.ts';
 import { expandShortLink, fetchRecipePageHtml, fetchYouTubeVideoSnippet } from './fetchSourceText.ts';
+import { extractRecipeFromCaption, finishParsedRecipe } from './finishImport.ts';
+import { readImportRequest } from './importRequest.ts';
 import { corsPreflightResponse, jsonResponse, respondWithImportResult } from './importResponse.ts';
 
 // Optional: see src/lib/oembed.ts's `instagramAccessToken` — undefined
@@ -319,10 +399,6 @@ import { corsPreflightResponse, jsonResponse, respondWithImportResult } from './
 // degrades to the honest `oembed_failed` / `missing_credentials` copy
 // exactly as it did before.
 const INSTAGRAM_OEMBED_ACCESS_TOKEN = Deno.env.get('INSTAGRAM_OEMBED_ACCESS_TOKEN');
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 /**
  * Expands a short link, or hands its input straight back.
@@ -372,15 +448,17 @@ async function resolveEffectiveUrl(
  * One place that knows how this function calls oEmbed, so its two call
  * sites cannot drift apart.
  *
- * TYPED `OembedPlatform`, NOT `ImportPlatform`, AND THAT IS THE POINT. Two
- * of the four platforms this function now handles have no business here at
- * all: a `'web'` page has no oEmbed endpoint, and YouTube's exists but is
+ * TYPED `OembedPlatform`, NOT `ImportPlatform`, AND THAT IS THE POINT.
+ * Three of the five sources this function now handles have no business here
+ * at all: a `'web'` page has no oEmbed endpoint; YouTube's exists but is
  * licensed for embedding only — reading a description from it would be the
- * exact use PD-011 forbids for Instagram (displayOnlyPolicy.ts). Naming
- * oEmbed's own two-member union here says that in the signature instead of
- * in a comment somebody has to find, and `resolveImport` returns the web
- * and YouTube routes before this line is reachable, so the narrowing is
- * real rather than aspirational.
+ * exact use PD-011 forbids for Instagram (displayOnlyPolicy.ts); and a
+ * `'text'` import has no URL to hand an oEmbed endpoint even in principle.
+ * Naming oEmbed's own two-member union here says that in the signature
+ * instead of in a comment somebody has to find, and the narrowing is real
+ * rather than aspirational: `resolveImport` returns the web and YouTube
+ * routes before this line is reachable, and the text route never enters
+ * `resolveImport` at all.
  */
 function resolveOembedFor(normalizedUrl: string, platform: OembedPlatform) {
   return resolveOembed(normalizedUrl, platform, {
@@ -433,134 +511,6 @@ async function resolveDisplayOnlyImport(normalizedUrl: string, platform: OembedP
   return buildDisplayOnlyResult({ sourceUrl: normalizedUrl, platform, payload: oembedResult.payload });
 }
 
-interface ParsedRecipeCompletion {
-  readonly recipe: ParsedRecipe;
-  readonly normalizedUrl: string;
-  readonly platform: ImportPlatform;
-  readonly attribution: ImportAttribution;
-  /**
-   * RCP-06, and REQUIRED here rather than defaulted, which is the point: the
-   * caller has to say how it got these words, because it is the only code
-   * that knows. A default would let a route added later inherit somebody
-   * else's answer silently. It sits beside `platform` and must never be
-   * derived from it — see the PROVENANCE section in the file header.
-   */
-  readonly provenance: RecipeProvenance;
-}
-
-/**
- * The single place a fully validated recipe becomes a `parsed` result —
- * shared by the caption routes and the JSON-LD one, so all three store and
- * report the canonical id identically.
- *
- * The write is AWAITED, not fire-and-forget. Letting it run detached would
- * shave a few hundred milliseconds off the response, but an edge runtime is
- * free to tear down the isolate once the response is returned, which would
- * silently drop the write — turning deduplication into an expensive no-op
- * that still looks like it is working. Correct-and-slightly-slower wins
- * here, and only on the miss path, which was already paying for a fetch.
- * There is a second reason since W-01b: the id this returns is the only way
- * the response can tell the client which canonical row its meal is a copy
- * of, and there is nowhere else to get it from afterwards.
- */
-async function finishParsedRecipe(input: ParsedRecipeCompletion): Promise<ImportResult> {
-  // Returns null without a round trip for a platform `recipes`' CHECK
-  // refuses — the guard lives in the store, where it cannot be skipped by a
-  // route that forgets to ask. See canonicalRecipeStore.ts's header.
-  const recipeId = await storeCanonicalRecipe(
-    input.recipe,
-    input.normalizedUrl,
-    input.platform,
-    input.attribution,
-  );
-  return {
-    kind: 'parsed',
-    recipe: input.recipe,
-    sourceUrl: input.normalizedUrl,
-    platform: input.platform,
-    attribution: input.attribution,
-    // Passed straight through from the route that produced the recipe. This
-    // function deliberately has no opinion about it: it does not know whether
-    // it was handed JSON-LD a publisher wrote or a model's reading of a
-    // caption, and inventing an answer from `input.platform` here is exactly
-    // the shortcut the header rules out.
-    provenance: input.provenance,
-    // Straight through, null included. No canonical row — because the write
-    // failed, or because the schema refuses this platform — means this
-    // import really is a copy of nothing, and saying so is the only honest
-    // answer. `sourceUrl` above is a deduplication key, never a stand-in for
-    // this id. The cache-hit path returns the same field from the stored
-    // row's `id` (`parseStoredRecipe`), so the two paths agree.
-    recipeId,
-  };
-}
-
-interface CaptionExtraction {
-  readonly normalizedUrl: string;
-  readonly platform: ImportPlatform;
-  /** Null or blank means the model is never called at all — see below. */
-  readonly caption: string | null;
-  readonly attribution: ImportAttribution;
-}
-
-/**
- * Caption text in, `ImportResult` out: ask the model, validate its answer,
- * store the recipe. TikTok reaches this with an oEmbed title; YouTube
- * reaches it with a Data API description. THEY RUN THE SAME CODE, and that
- * is a correctness property rather than tidiness — the anti-hallucination
- * behaviour this function encodes (the model's explicit `report_no_recipe`
- * becoming an honest `no_recipe_in_caption`, a malformed answer becoming
- * `parse_failed` instead of a half-populated recipe) must not be able to
- * hold for one platform and quietly rot for the other. A forked copy is how
- * that happens.
- *
- * The blank-caption short-circuit is part of the shared contract, not an
- * optimization bolted onto one caller: a video with no description costs no
- * tokens and still returns the creator's attribution, exactly as IMP-02
- * requires.
- */
-async function extractRecipeFromCaption(input: CaptionExtraction): Promise<ImportResult> {
-  const { attribution, caption, normalizedUrl, platform } = input;
-
-  if (caption === null || caption.trim().length === 0) {
-    // Nothing to send the model: no LLM call, no cost, and just as honest
-    // an outcome as the model reading a caption and finding no recipe.
-    //
-    // IMP-07. The platform travels with it here and on the branch below,
-    // because these two returns are most of the SRC-09 number and neither
-    // is worth counting until it can be read per platform: a YouTube
-    // description is rarely blank where a TikTok caption often is.
-    return { kind: 'no_recipe_in_caption', caption: null, attribution, platform };
-  }
-
-  const llmResult = await callExtractionModel(caption, attribution.authorName);
-  if (llmResult.kind === 'error') {
-    return { kind: 'llm_request_failed', platform };
-  }
-
-  const extraction = parseExtractionResponse(llmResult.json);
-  if (extraction.kind === 'malformed') {
-    return { kind: 'parse_failed', platform };
-  }
-  if (extraction.kind === 'no_recipe') {
-    return { kind: 'no_recipe_in_caption', caption, attribution, platform };
-  }
-
-  const recipe = validateParsedRecipe(extraction.rawRecipe);
-  if (recipe === null) {
-    return { kind: 'parse_failed', platform };
-  }
-
-  // Only a fully validated recipe is ever stored — every failure branch
-  // above returned already, so nothing half-parsed can become the canonical
-  // answer a later importer receives.
-  //
-  // `model_from_caption` for BOTH platforms that reach here, and it is a
-  // statement about this function rather than about TikTok or YouTube: what
-  // was read is prose written for humans, and a model did the reading.
-  return finishParsedRecipe({ recipe, normalizedUrl, platform, attribution, provenance: 'model_from_caption' });
-}
-
 /**
  * THE WEB ROUTE (SRC-01). Fetch the page, read its JSON-LD, done — no
  * oEmbed (there is no endpoint to ask) and NO MODEL CALL (the JSON-LD is
@@ -599,7 +549,7 @@ async function resolveWebImport(normalizedUrl: string): Promise<ImportResult> {
 
   return finishParsedRecipe({
     recipe: extraction.recipe,
-    normalizedUrl,
+    sourceUrl: normalizedUrl,
     platform: 'web',
     attribution: extraction.attribution,
     // The publisher stated these fields themselves, in named JSON-LD keys, and
@@ -645,10 +595,46 @@ async function resolveYouTubeImport(normalizedUrl: string): Promise<ImportResult
   }
 
   return extractRecipeFromCaption({
-    normalizedUrl,
+    sourceUrl: normalizedUrl,
     platform: 'youtube',
     caption: snippet.value.caption,
     attribution: snippet.value.attribution,
+    // A model's reading of prose a creator published beside their own video.
+    // Stated here rather than defaulted inside the shared tail, because this
+    // route is the only code that knows how these particular words were
+    // obtained — see the PROVENANCE section in the header.
+    provenance: 'model_from_caption',
+  });
+}
+
+/**
+ * THE PASTED-TEXT ROUTE (SRC-08). Six lines, and the interesting thing about
+ * every one of them is what this route does NOT do — see the header section
+ * of the same name. There is no URL to normalise, no host to fetch, no oEmbed
+ * endpoint to ask, and no canonical row to look up or write, so what remains
+ * is the shared model tail with four values stated out loud.
+ *
+ * It returns the tail's promise rather than awaiting it: the whole route IS
+ * the shared tail, and a wrapper `await` would only obscure that.
+ */
+function resolveTextImport(text: string): Promise<ImportResult> {
+  return extractRecipeFromCaption({
+    // No URL EXISTS, as distinct from one we failed to resolve — the
+    // difference `ImportResult.parsed.sourceUrl` was widened to hold.
+    sourceUrl: null,
+    platform: 'text',
+    // Already trimmed, non-blank and inside the length cap
+    // (importRequest.ts), so the tail's blank short-circuit is unreachable
+    // from here; it stays there for the two routes that can still hit it.
+    caption: text,
+    // The named constant, never three nulls written inline: this is the one
+    // route where crediting nobody is correct rather than a creator we failed
+    // to resolve, and the name is what keeps that case greppable apart from
+    // the symptom. See buildAttribution.ts and the header section above.
+    attribution: NO_CREATOR_TO_CREDIT,
+    // A third provenance, not a reuse of `model_from_caption`: a caption was
+    // published beside a video by whoever made it; a paste has no publisher.
+    provenance: 'model_from_pasted_text',
   });
 }
 
@@ -657,6 +643,10 @@ async function resolveYouTubeImport(normalizedUrl: string): Promise<ImportResult
  * -> FAN OUT BY PLATFORM -> a typed `ImportResult`. Every `return` below is
  * a deliberate, named outcome; there is no unhandled path that falls
  * through to an implicit success.
+ *
+ * A `{ text }` body never reaches this function at all: it has no URL to
+ * validate and no short link to resolve, so `resolveTextImport` above is its
+ * entire route and the `'text'` branch below is only a type-level guard.
  *
  * The fan-out is the shape of this function now, and its ORDER carries
  * meaning. It sits after short-link resolution, so the platform is final
@@ -701,9 +691,20 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
     return resolveYouTubeImport(effective.normalizedUrl);
   }
 
+  // Unreachable in fact and loud on purpose, like the YouTube video-id
+  // branch: `'text'` describes a body with NO URL in it (SRC-08) and this
+  // function is only ever entered with one. It exists so the narrowing below
+  // is the type-checker's conclusion rather than a comment's claim; narrowing
+  // `NormalizedUrlResult.platform` to `Exclude<ImportPlatform, 'text'>` in
+  // urlParsing.ts would delete it, and is the better fix.
+  if (effective.platform === 'text') {
+    console.error(`parse-recipe: a URL classified as the URL-less 'text' platform. url=${effective.normalizedUrl}`);
+    return { kind: 'unsupported_url' };
+  }
+
   // Past this line only `'tiktok'` and `'instagram'` remain — the platforms
   // oEmbed serves and the ones `recipes`' CHECK accepts — as a consequence
-  // of the two returns above rather than as an assumption.
+  // of the three returns above rather than as an assumption.
 
   // PD-011. Everything below — the cache, the model, the write — is skipped
   // for a display-only platform, and this sits BEFORE the cache lookup so
@@ -742,24 +743,14 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
   // from the other's anti-hallucination behaviour. `payload.title` is the
   // caption; `extractRecipeFromCaption` owns every decision after it.
   return extractRecipeFromCaption({
-    normalizedUrl: effective.normalizedUrl,
+    sourceUrl: effective.normalizedUrl,
     platform: effective.platform,
     caption: oembedResult.payload.title,
     attribution,
+    // The same statement YouTube's route makes one function up, for the same
+    // reason: prose written for humans, read by a model.
+    provenance: 'model_from_caption',
   });
-}
-
-async function readUrlFromRequest(request: Request): Promise<string | null> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return null;
-  }
-  if (!isRecord(body) || typeof body.url !== 'string' || body.url.trim().length === 0) {
-    return null;
-  }
-  return body.url;
 }
 
 Deno.serve(async (request) => {
@@ -774,19 +765,29 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
-  const url = await readUrlFromRequest(request);
-  if (url === null) {
-    // Also not counted: a body with no usable `url` never became an import,
-    // so it has no outcome. Counting it would inflate the denominator the
-    // whole telemetry line exists to make trustworthy.
-    return jsonResponse({ error: 'Request body must be { "url": string }' }, 400);
+  const importRequest = await readImportRequest(request);
+  if (importRequest.kind === 'malformed') {
+    // Also not counted, for the reason the two replies above are not: a body
+    // with no usable source — neither field, both fields, a blank or
+    // over-long `text` — never became an import, so it has no outcome, and
+    // counting it would inflate the denominator the telemetry line exists to
+    // make trustworthy. The sentence is importRequest.ts's, phrased where the
+    // refusal was decided; this line only picks the status code. See that
+    // module for why an over-long paste is refused here rather than answered
+    // as a typed 200.
+    return jsonResponse({ error: importRequest.message }, 400);
   }
 
   try {
-    const result = await resolveImport(url);
+    // The two routes, and the only place either is entered. They converge
+    // again one line down, which is what keeps both countable by one call.
+    const result =
+      importRequest.kind === 'url'
+        ? await resolveImport(importRequest.url)
+        : await resolveTextImport(importRequest.text);
     // The one place an `ImportResult` becomes a response, which is therefore
     // the one place an import is counted — successes and modeled failures
-    // alike, exactly once each.
+    // alike, exactly once each, on both routes.
     return respondWithImportResult(result);
   } catch (error) {
     // A genuinely unexpected exception (not one of the modeled failure

@@ -389,3 +389,126 @@ describe('buildImportFailureCopy — source_fetch_failed', () => {
     expect(copy.body).toContain('YouTube');
   });
 });
+
+/**
+ * SRC-08. A pasted text that holds no recipe is a real, ordinary outcome,
+ * and it arrives on the SAME variant a video caption failure does — see
+ * `no_recipe_in_caption` in src/domain/import/types.ts for why it was not
+ * given a variant of its own. The copy is where the two genuinely differ,
+ * so the copy is where the branch lives, and this suite is what keeps the
+ * video sentence from being shown to somebody who pasted a message.
+ */
+describe('buildImportFailureCopy — no recipe in a pasted text', () => {
+  const pastedTextFailure: ImportFailureResult = {
+    kind: 'no_recipe_in_caption',
+    caption: 'Boodschappenlijstje: melk, brood, eieren',
+    attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+    platform: 'text',
+  };
+
+  test('never tells someone who pasted text that a maker spoke the recipe aloud in a video', () => {
+    // Arrange / Act
+    const copy = buildImportFailureCopy(pastedTextFailure);
+
+    // Assert
+    const text = `${copy.title} ${copy.body}`.toLowerCase();
+    expect(text).not.toContain('video');
+    expect(text).not.toContain('maker');
+    expect(text).not.toContain('bijschrift');
+  });
+
+  /**
+   * The accusation this copy must avoid. `unsupported_url` can fairly say
+   * "check the link"; there is no link here, and the user did not mistype
+   * anything — they gave Remy a piece of text it could not read a recipe
+   * out of.
+   */
+  test('blames no link, because the user pasted no link', () => {
+    const copy = buildImportFailureCopy(pastedTextFailure);
+    const text = `${copy.title} ${copy.body}`.toLowerCase();
+    expect(text).not.toContain('link');
+    expect(text).not.toContain('adres');
+    expect(text).toContain('tekst');
+  });
+
+  test('offers manual entry as the way forward and no retry, since the same text reads the same way twice', () => {
+    const copy = buildImportFailureCopy(pastedTextFailure);
+    expect(copy.canRetry).toBe(false);
+    expect(copy.manualEntryIsPrimary).toBe(true);
+  });
+
+  /**
+   * The quoted text is the user's OWN, which is what makes showing it back
+   * unremarkable: none of PD-011's reasoning about a third party's caption
+   * is engaged when nothing of a third party's was ever fetched.
+   */
+  test('shows the reader the text Remy read, so no recipe is not taken on faith', () => {
+    const copy = buildImportFailureCopy(pastedTextFailure);
+    expect(copy.quote).toBe('Boodschappenlijstje: melk, brood, eieren');
+  });
+
+  test('still says the video sentence for a caption failure, which is where it is true', () => {
+    const copy = buildImportFailureCopy({
+      kind: 'no_recipe_in_caption',
+      caption: 'Lekker weekendontbijt!',
+      attribution: { authorName: 'kokenmetkees', authorUrl: null, thumbnailUrl: null },
+      platform: CAPTION_PLATFORM,
+    });
+    expect(copy.body).toContain('video');
+    expect(copy.title).toContain('bijschrift');
+  });
+
+  test('gives the two routes different words for the same variant', () => {
+    const pasted = buildImportFailureCopy(pastedTextFailure);
+    const caption = buildImportFailureCopy({
+      kind: 'no_recipe_in_caption',
+      caption: 'Lekker weekendontbijt!',
+      attribution: { authorName: 'kokenmetkees', authorUrl: null, thumbnailUrl: null },
+      platform: CAPTION_PLATFORM,
+    });
+    expect(pasted.title).not.toBe(caption.title);
+    expect(pasted.body).not.toBe(caption.body);
+    // The recovery shape is deliberately identical: neither is retryable,
+    // and typing it is the way forward for both.
+    expect(pasted.canRetry).toBe(caption.canRetry);
+    expect(pasted.manualEntryIsPrimary).toBe(caption.manualEntryIsPrimary);
+  });
+});
+
+/**
+ * The transport-failure sentence used to say "het verwerken van deze
+ * video". That was already false for a web import — the client synthesises
+ * this variant on any transport failure, whatever the route — and pasted
+ * text made it false a second way. It now names no medium at all.
+ */
+describe('buildImportFailureCopy — llm_request_failed names no medium', () => {
+  test('says nothing about a video, a page or a link, whichever route produced it', () => {
+    for (const platform of ['tiktok', 'instagram', 'youtube', 'web', 'text'] as const) {
+      const copy = buildImportFailureCopy({ kind: 'llm_request_failed', platform });
+      const text = `${copy.title} ${copy.body}`.toLowerCase();
+      expect(text).not.toContain('video');
+      expect(text).not.toContain('pagina');
+      expect(text).not.toContain('link');
+    }
+  });
+
+  test('still tells the reader it is temporary and offers the retry to match', () => {
+    const copy = buildImportFailureCopy({ kind: 'llm_request_failed', platform: 'text' });
+    expect(copy.body.toLowerCase()).toContain('tijdelijk');
+    expect(copy.canRetry).toBe(true);
+  });
+});
+
+/**
+ * `parse_failed` was re-read against pasted text and deliberately left
+ * alone: it already says "de tekst", which is what every route hands the
+ * model.
+ */
+describe('buildImportFailureCopy — parse_failed was already medium-neutral', () => {
+  test('is the same sentence for a pasted text as for a caption', () => {
+    const pasted = buildImportFailureCopy({ kind: 'parse_failed', platform: 'text' });
+    const caption = buildImportFailureCopy({ kind: 'parse_failed', platform: CAPTION_PLATFORM });
+    expect(pasted).toEqual(caption);
+    expect(pasted.body.toLowerCase()).not.toContain('video');
+  });
+});

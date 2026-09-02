@@ -61,13 +61,36 @@
  * that does not exist.
  *
  * `null` is therefore not a placeholder for "id pending". It is a
- * permanent, honest answer, and there are now three distinct ways to
+ * permanent, honest answer, and there are now four distinct ways to
  * arrive at it: a seeded, curated or hand-entered meal that is a copy of
- * nothing; an import whose canonical write failed; and — the newest and
- * least obvious — every `'youtube'` and `'web'` import, because
- * `recipes.platform`'s CHECK constraint (0006) accepts neither, so no row
- * is ever attempted. See `canStoreCanonicalRecipe` in canonicalRecipe.ts.
- * The draft always states the field explicitly rather than omitting it.
+ * nothing; an import whose canonical write failed; every `'youtube'` and
+ * `'web'` import, because `recipes.platform`'s CHECK constraint (0006)
+ * accepts neither, so no row is ever attempted; and every `'text'` import,
+ * which is a stronger no than the other three — a canonical recipe is
+ * keyed on a normalized URL and pasted text has none, so there is nothing
+ * to deduplicate against even in principle. See `canStoreCanonicalRecipe`
+ * in canonicalRecipe.ts. The draft always states the field explicitly
+ * rather than omitting it.
+ *
+ * ---
+ *
+ * A PASTED-TEXT IMPORT DRAFTS A MEAL WITH NEITHER A URL NOR A PLATFORM
+ * (SRC-08), which makes it indistinguishable in the `meals` table from a
+ * recipe somebody typed in by hand. THAT IS THE CORRECT OUTCOME AND NOT A
+ * LOSS OF INFORMATION: it IS a recipe somebody supplied by hand. The only
+ * difference is who did the typing of the ingredient rows, and no column
+ * here has ever recorded that. What must never happen is the repair that
+ * suggests itself — writing a placeholder into `source_url` so the row
+ * "looks like an import" — because that column is read as the link back to
+ * where a recipe came from, and there is nowhere to go back to.
+ *
+ * NO MIGRATION IS NEEDED FOR ANY OF THIS, and that was checked rather than
+ * assumed: `meals.source_url` is declared `source_url text,` and
+ * `meals.source_platform` `text check (source_platform in ('tiktok',
+ * 'reels'))` — 0001_init.sql, lines 296-297. Neither carries `not null`,
+ * and a Postgres CHECK evaluates to NULL (and therefore passes) for a NULL
+ * value, so a row with both columns empty is legal in the schema as it
+ * stands today.
  */
 
 import type { HouseholdId } from '../types';
@@ -75,8 +98,18 @@ import type { ImportPlatform, ParsedRecipe } from './types';
 
 export interface MealDraftContext {
   readonly householdId: HouseholdId;
-  /** The oEmbed-resolved URL actually used (`ImportResult.parsed.sourceUrl`) — carried straight through, never re-derived. */
-  readonly sourceUrl: string;
+  /**
+   * The resolved URL actually used (`ImportResult.parsed.sourceUrl`) —
+   * carried straight through, never re-derived.
+   *
+   * `null` for a `'text'` import and for nothing else: the user pasted a
+   * recipe rather than a link, so there is no address to carry. It is not
+   * "the caller has not looked it up yet" — this layer is pure and could
+   * not look anything up — and it must not be filled in with a plausible
+   * stand-in downstream. See the file header on why a placeholder in
+   * `meals.source_url` is worse than an empty column.
+   */
+  readonly sourceUrl: string | null;
   readonly platform: ImportPlatform;
   /**
    * `ImportAttribution.thumbnailUrl` (buildAttribution.ts), carried
@@ -144,8 +177,9 @@ export interface MealDraftInsert {
    * feature that silently never fires.
    */
   readonly recipeId: string | null;
-  readonly sourceUrl: string;
-  /** `null` for a YouTube or web import — see `toMealSourcePlatform` on why that is the honest value and not a missing one. */
+  /** `null` only for a pasted-text import, which genuinely has no URL — see `MealDraftContext.sourceUrl`. Every other route always states one. */
+  readonly sourceUrl: string | null;
+  /** `null` for a YouTube, web or pasted-text import — see `toMealSourcePlatform` on why that is the honest value and not a missing one. */
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
   /** See MealDraftContext.thumbnailUrl — carried straight through. */
   readonly thumbnailUrl: string | null;
@@ -168,8 +202,10 @@ export interface MealDraftInsert {
  * about where a household's recipe came from, produced by a line nobody
  * would think to reread while widening a type in another file. It is the
  * same failure `creatorFromAttribution.ts` describes replacing in its own
- * ternary, and the reason this is a `switch`: a fifth platform now fails
- * to compile here instead of silently becoming a Reel.
+ * ternary, and the reason this is a `switch`: a sixth platform now fails
+ * to compile here instead of silently becoming a Reel. `'text'` was the
+ * fifth, and it arrived exactly that way — as a compile error in this
+ * function rather than as a pasted recipe stored as an Instagram Reel.
  *
  * WHAT `null` MEANS, PRECISELY. Not "unknown source" — the source is known
  * exactly; it is a YouTube video or a web page, and `sourceUrl` right
@@ -181,6 +217,17 @@ export interface MealDraftInsert {
  * field is presentational (the library's source badge), and both
  * `src/domain/types.ts` and `src/lib/repository/types.ts` already type it
  * nullable, because a hand-entered meal has no platform either.
+ *
+ * `'text'` GETS THE SAME `null` FOR A DIFFERENT REASON, AND THE SENTENCE
+ * ABOVE NEEDS ONE AMENDMENT FOR IT. For YouTube and web, "the source is
+ * known exactly and `sourceUrl` says which one" holds. For pasted text it
+ * does not: that column is null too. The pair therefore says something
+ * true and slightly different — nobody handed this recipe over, the user
+ * supplied it — which is precisely the hand-entered meal the paragraph
+ * above already names as the reason this column is nullable at all. So
+ * `'text'` is not a platform the vocabulary ran out of words for; it is
+ * the absence of a platform, arriving at the same column value by the
+ * shortest possible road.
  *
  * NO MIGRATION IS NEEDED FOR THIS, stated so nobody goes looking for one:
  * the column is `text check (source_platform in ('tiktok','reels'))` with
@@ -197,6 +244,12 @@ function toMealSourcePlatform(platform: ImportPlatform): 'tiktok' | 'reels' | nu
       return 'reels';
     case 'youtube':
     case 'web':
+      return null;
+    // SRC-08. Not "we ran out of words for this platform" like the two
+    // above it, but "there is no platform": the recipe came out of the
+    // user's own clipboard. Listed as its own arm rather than folded in
+    // with them so the switch keeps saying which fact each null reports.
+    case 'text':
       return null;
   }
 }

@@ -173,7 +173,27 @@ const SAMPLE_RECIPE_WEB: ParsedRecipe = {
  * quiet wrongness this wave went looking for. Exhaustive means the next
  * platform has to be given a recipe rather than inheriting one.
  */
-const SAMPLE_RECIPE_BY_PLATFORM: Readonly<Record<ImportPlatform, ParsedRecipe>> = {
+/**
+ * The platforms the LINK-PASTE demo flow can actually produce.
+ *
+ * `'text'` is excluded on purpose, and excluding it is the honest answer
+ * rather than a gap. Every Record below is keyed by this type, and the
+ * alternative was inventing a `text` entry for each: an author name for a
+ * route that has no author, a thumbnail for something with no image, a
+ * demo URL for an import that never had a URL. Those values could never be
+ * read — `DEMO_PLATFORM_BY_SCENARIO` in paste.tsx maps no scenario to
+ * `'text'` — so they would exist solely to satisfy exhaustiveness while
+ * asserting four things that are false.
+ *
+ * This keeps the exhaustiveness these Records were made for. A SIXTH
+ * link-based platform still fails to compile until someone gives it a
+ * recipe, a name and a thumbnail. It only stops demanding those from the
+ * one member that, by construction, cannot have them: pasting text is not
+ * pasting a link, and the paste-a-link demo has nothing to say about it.
+ */
+type FixtureLinkPlatform = Exclude<ImportPlatform, 'text'>;
+
+const SAMPLE_RECIPE_BY_PLATFORM: Readonly<Record<FixtureLinkPlatform, ParsedRecipe>> = {
   tiktok: SAMPLE_RECIPE_TIKTOK,
   instagram: SAMPLE_RECIPE_INSTAGRAM,
   youtube: SAMPLE_RECIPE_YOUTUBE,
@@ -195,7 +215,7 @@ const SAMPLE_RECIPE_BY_PLATFORM: Readonly<Record<ImportPlatform, ParsedRecipe>> 
  * exhaustive Record is the point: a fifth platform must be told which of
  * the two routes it takes rather than inheriting an answer.
  */
-const SAMPLE_PROVENANCE_BY_PLATFORM: Readonly<Record<ImportPlatform, RecipeProvenance>> = {
+const SAMPLE_PROVENANCE_BY_PLATFORM: Readonly<Record<FixtureLinkPlatform, RecipeProvenance>> = {
   tiktok: 'model_from_caption',
   instagram: 'model_from_caption',
   youtube: 'model_from_caption',
@@ -204,7 +224,7 @@ const SAMPLE_PROVENANCE_BY_PLATFORM: Readonly<Record<ImportPlatform, RecipeProve
 
 const SAMPLE_CAPTION_WITHOUT_RECIPE = 'POV: zondagavond eten bij oma 🍝✨ dit smaakt altijd naar thuis #foodtok';
 
-const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
+const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<FixtureLinkPlatform, string>> = {
   tiktok: 'kokenmetkees',
   instagram: 'plantaardigpauline',
   // A channel name rather than an @handle, because that is what the Data
@@ -227,7 +247,7 @@ const AUTHOR_NAME_BY_PLATFORM: Readonly<Record<ImportPlatform, string>> = {
  * monogram fallback (docs/DESIGN.md §2) on a `parsed` result without
  * inventing a fake failure mode to demo it.
  */
-const SAMPLE_THUMBNAIL_BY_PLATFORM: Readonly<Record<ImportPlatform, string | null>> = {
+const SAMPLE_THUMBNAIL_BY_PLATFORM: Readonly<Record<FixtureLinkPlatform, string | null>> = {
   tiktok: 'https://p16-sign.tiktokcdn.com/traybake-kip-citroen~tplv-thumb.jpg',
   instagram: null,
   // A thumbnail rather than null because YouTube's API always returns one:
@@ -275,7 +295,7 @@ const SAMPLE_DISPLAY_ONLY_THUMBNAIL = 'https://scontent.cdninstagram.com/pastape
  * A `switch`, so a fifth platform fails to compile rather than silently
  * acquiring an instagram.com URL.
  */
-function buildAuthorUrl(platform: ImportPlatform, authorName: string): string | null {
+function buildAuthorUrl(platform: FixtureLinkPlatform, authorName: string): string | null {
   switch (platform) {
     case 'tiktok':
       return `https://www.tiktok.com/@${authorName}`;
@@ -354,7 +374,7 @@ export function detectFixtureScenario(normalizedUrl: string): FixtureImportScena
 /** Pure scenario -> `FixtureImportAttempt` builder — separated from `resolveFixtureImportResult`'s artificial delay so this half stays synchronously testable. */
 export function buildFixtureImportAttempt(
   scenario: FixtureImportScenario,
-  platform: ImportPlatform,
+  platform: FixtureLinkPlatform,
   normalizedUrl: string,
 ): FixtureImportAttempt {
   const authorName = AUTHOR_NAME_BY_PLATFORM[platform];
@@ -519,7 +539,7 @@ const SIMULATED_NETWORK_DELAY_MS = 2200;
  */
 export function resolveFixtureImportResult(
   normalizedUrl: string,
-  platform: ImportPlatform,
+  platform: FixtureLinkPlatform,
 ): Promise<FixtureImportAttempt> {
   return new Promise((resolve) => {
     setTimeout(() => {

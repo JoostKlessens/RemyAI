@@ -544,3 +544,50 @@ describe('canStoreCanonicalRecipe — the 0006 CHECK constraint, mirrored', () =
     expect(storable).toEqual(['tiktok', 'instagram']);
   });
 });
+
+/**
+ * SRC-08. `'text'` is refused by this table for a reason no migration can
+ * lift: a canonical recipe is keyed on a normalized URL and a pasted-text
+ * import has none, so there is nothing to store it under and nothing for a
+ * later import to match against. That makes it categorically different
+ * from `'youtube'` and `'web'`, which are refused by a CHECK constraint
+ * somebody could widen tomorrow.
+ */
+describe('canonicalRecipe — the pasted-text route has nothing to deduplicate against', () => {
+  test('refuses to store a text import, permanently and not pending a migration', () => {
+    expect(canStoreCanonicalRecipe('text')).toBe(false);
+  });
+
+  /**
+   * The pinned list grows with the union deliberately: this predicate must
+   * NOT track `ImportPlatform` as it gains members, so every new member
+   * added to this array should still leave the answer at exactly two.
+   */
+  test('is still a two-member answer across the whole widened platform vocabulary', () => {
+    const storable = (['tiktok', 'instagram', 'youtube', 'web', 'text'] as const).filter(canStoreCanonicalRecipe);
+    expect(storable).toEqual(['tiktok', 'instagram']);
+  });
+
+  /**
+   * The write gate and the read guard answer different questions for every
+   * other platform — a `'web'` row is unwritable today but readable back
+   * tomorrow. `'text'` is the one member where both answers are no, because
+   * a row claiming it would have a `normalized_url` that the route it
+   * names cannot have. A corrupt row is a cache MISS here, which is this
+   * module's standing answer for one.
+   */
+  test('reads a stored row naming the text route as a cache miss rather than serving an incoherent result', () => {
+    expect(parseStoredRecipe(makeStoredRow({ platform: 'text' }))).toBeNull();
+  });
+
+  /**
+   * The deduction that every stored row came from the caption pipeline is
+   * unaffected by the widening: the routes that could break it are still
+   * the two the CHECK constraint refuses, and `'text'` cannot reach the
+   * table at all.
+   */
+  test('leaves the stored-row provenance deduction intact for the rows that can exist', () => {
+    const stored = parseStoredRecipe(makeStoredRow({ platform: 'tiktok' }));
+    expect(stored?.kind === 'parsed' && stored.provenance).toBe('model_from_caption');
+  });
+});
