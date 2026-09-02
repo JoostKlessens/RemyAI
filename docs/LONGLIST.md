@@ -10,7 +10,7 @@ boodschappenmand bij Albert Heijn of Jumbo. De overlap met Remy is uitsluitend
 de import; hun tweede helft (boodschappen, prijzen, supermarktkoppeling) is
 grotendeels bewust niet overgenomen.
 
-**Stand:** 2 september 2026, `feat/live-import-and-plan-phases`, t/m `a4a220f`.
+**Stand:** 2 september 2026, `feat/live-import-and-plan-phases`, t/m `a285b5d`.
 
 | Status | Betekenis |
 |---|---|
@@ -18,6 +18,7 @@ grotendeels bewust niet overgenomen.
 | 🟡 | Deels — domeinlaag af, geen scherm of geen aanroeper |
 | ⬜ | Open, geen blokkade |
 | 🔒 | Geblokkeerd — wacht op een beslissing, zie `OPEN-BESLISSINGEN.md` |
+| ⛔ | Onderzocht en afgewezen — de blokkade is een feit, geen openstaande vraag |
 
 ---
 
@@ -30,11 +31,11 @@ grotendeels bewust niet overgenomen.
 | IMP-03 | ✅ | `unsupported_url` noemt nu welke platforms wél werken |
 | IMP-04 | ✅ | Instagram `missing_credentials` — opgelost via de tokenloze oEmbed-route |
 | IMP-05 | 🔒 | Gemini-model staat op een zwevende alias. Wacht op één snapshot-ID van de eigenaar |
-| IMP-06 | 🟡 | Rate limiting. Beleid gebouwd en getest, bewust niet aangesloten — er is geen duurzame teller. Migratie `0012` ligt klaar |
+| IMP-06 | ✅ | Rate limiting. Migratie `0012` is de duurzame teller, `supabaseImportBudgetStore.ts` leest hem, en de poort in `index.ts` handhaaft. Een beller zonder `sub` — de anon key — wordt geweigerd in plaats van gemeterd. **Draai `supabase db push` vóór deploy** |
 | IMP-07 | ✅ | Import-telemetrie. Eén structurele regel per uitkomst, geen SDK, geen tabel, geen PII |
 | IMP-08 | — | Geschrapt: "opnieuw proberen" bestond al |
 | IMP-09 | ⬜ | Handmatig aanvullen na mislukte extractie is nog steeds de zwakste plek |
-| IMP-10 | 🟡 | Kostenplafond per huishouden. Zelfde situatie als IMP-06 |
+| IMP-10 | ✅ | Kostenplafond per huishouden. Zelfde poort als IMP-06; het dagvenster telt alleen modelaanroepen |
 
 ## SRC — importbronnen
 
@@ -43,12 +44,12 @@ grotendeels bewust niet overgenomen.
 | SRC-01 | ✅ | Webimport via schema.org/Recipe JSON-LD. Geen model nodig, geen hallucinatierisico, geen kosten |
 | SRC-02 | ✅ | YouTube via Data API v3 (`videos.list?part=snippet`) |
 | SRC-03 | ✅ | YouTube Shorts genormaliseerd naar dezelfde canonieke vorm |
-| SRC-04 | 🔒 | Instagram volledige extractie. Technisch één functie; wacht op DEC-01 (Meta's oEmbed-voorwaarden) |
+| SRC-04 | ⛔ | Instagram volledige extractie. **DEC-01 is beantwoord en het antwoord is nee** — Meta's gebruiksbeperking staat er onveranderd, alleen de tokeneis verviel op 15 juni 2026. Herzien vergt een licentie of een andere bron, niet een nieuwe lezing. Zie `OPEN-BESLISSINGEN.md` |
 | SRC-05 | ✅ | Pinterest — rich pins dragen de structured data van de bronpagina, dus dit liftte mee met SRC-01 |
 | SRC-06 | 🔒 | Facebook. Zelfde Meta-voorwaarden als Instagram, en weinig NL-kookcontent |
 | SRC-07 | ⬜ | Foto van een kookboek of screenshot. Juridisch het schoonste: het is je eigen boek |
 | SRC-08 | ✅ | Platte tekst plakken. Expliciete moduskeuze, nooit raden of iets "op een URL lijkt" |
-| SRC-09 | 🔒 | Audio-transcriptie of OCR van de video. Wacht op DEC-02 én op een maand telemetrie |
+| SRC-09 | 🔒 | Audio-transcriptie of OCR van de video. DEC-02 is nu een besluit: telemetrie loopt, **eerstvolgende meetmoment begin oktober 2026** |
 
 ## ENT — hoe recepten binnenkomen
 
@@ -90,7 +91,7 @@ grotendeels bewust niet overgenomen.
 | # | Status | Wat |
 |---|---|---|
 | PRF-01 | ⬜ | Dieetprofielen in één tik. Machinerie bestaat al; let op de grens tussen voorkeur en Artikel 9-data |
-| PRF-02 | 🔒 | Filters bij het importeren. Ziet eruit als bedrading, is het niet — zie `OPEN-BESLISSINGEN.md` §7 |
+| PRF-02 | ✅ | Filters bij het importeren. De backlog beschreef dit verkeerd: taggen bestond al. Het echte gat — overslaan liet je onwetend buiten de allergiepoort vallen — is copy, en die staat er. Geen AI-suggesties: dat ontwerp is en blijft geschrapt |
 | PRF-03 | ⬜ | Instellingen zijn alleen bereikbaar via een tekstlink |
 | PRF-04 | ⬜ | Tweede volwassene in hetzelfde huishouden (uitnodigingsstroom ontbreekt) |
 
@@ -109,7 +110,7 @@ grotendeels bewust niet overgenomen.
 
 | # | Status | Wat |
 |---|---|---|
-| OPS-01 | 🔒 | Expo SDK 51 / RN 0.74 zijn van medio 2024. Blokkeert ENT-01 |
+| OPS-01 | ⬜ | Expo SDK 51 / RN 0.74 zijn van medio 2024; de laatste is SDK 57 / RN 0.86. Blokkeert ENT-01. **Het plan staat uitgeschreven in `OPEN-BESLISSINGEN.md`** — zes stappen, één SDK per keer, want dat is Expo's eigen advies |
 | OPS-02 | 🔒 | Geen development build-pijplijn. Share extension kan niet in Expo Go |
 | OPS-03 | 🔒 | Engelse vertaling. Geen i18n-laag; copy zit hardcoded in tientallen modules |
 | OPS-04 | ⬜ | Fixtures naast de echte paden |
