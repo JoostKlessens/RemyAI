@@ -81,6 +81,7 @@ import { RecipeProvenanceNote } from '@/components/RecipeProvenanceNote';
 import { buildImportConfirmGuidance } from '@/components/recipeProvenanceCopy';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
 import { SaveIntentSheet } from '@/components/SaveIntentSheet';
+import { useHouseholdAllergenRestriction } from '@/hooks/useHouseholdAllergenRestriction';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { loadFriendProofForRecipes } from '@/lib/friendProof';
 import { getAppRepository, todayIso, type CreateMealInput, type RemyRepository } from '@/lib/repository';
@@ -458,6 +459,13 @@ export default function ImportConfirmScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const reduceMotionEnabled = useReduceMotion();
+  /**
+   * PRF-02. Decides whether the tagging step names what skipping COSTS or
+   * merely what state it leaves behind — PD-006 point 2 keeps the stronger
+   * sentence off households with no allergy at all. See the hook.
+   */
+  const householdHasAllergenRestriction = useHouseholdAllergenRestriction();
+
   const params = useLocalSearchParams<{ data?: string }>();
   const [confirmParams] = useState(() => decodeImportConfirmParams(params.data));
   const { mode, recipe, platform, authorName, authorUrl, sourceUrl, recipeId, provenance } = confirmParams;
@@ -697,6 +705,7 @@ export default function ImportConfirmScreen(): JSX.Element {
         />
 
         <AllergenTaggingSection
+          householdHasAllergenRestriction={householdHasAllergenRestriction}
           confirmedTags={allergenTags}
           status={allergenStatus}
           onAddTag={addAllergenTag}

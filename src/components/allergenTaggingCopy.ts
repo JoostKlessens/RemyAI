@@ -33,6 +33,62 @@ import { normalizeTag } from '@/domain/normalizeTag';
 export const ALLERGEN_TAGGING_HEADING = 'Bevat dit gerecht een van deze?';
 
 /**
+ * What skipping this step actually costs, said out loud — PRF-02's whole
+ * remaining substance.
+ *
+ * WHAT WAS WRONG WITH THE OLD SENTENCE. It said the meal "blijft als
+ * niet-gecontroleerd gemarkeerd", which names a STATE and leaves its
+ * CONSEQUENCE for the reader to infer. Nobody infers it: `exclusions.ts`
+ * only ever excludes a `verified` meal, so a household with a peanut
+ * allergy that skips this step has quietly opted a satay recipe out of the
+ * one gate that would have caught it — and the screen that let them do it
+ * said nothing about that. Naming a database state is not informed consent.
+ *
+ * TWO SENTENCES, AND THE SPLIT IS PD-006 POINT 2 RATHER THAN A FLOURISH.
+ * "A household with NO allergen restriction is unaffected. No extra
+ * friction, no prompts." For them `unknown` excludes nothing and never
+ * will, so a warning about filtering would be a caution about a
+ * consequence that cannot occur — friction bought with nothing, on the
+ * majority of households. They keep the sentence they already had.
+ *
+ * IT STILL SUGGESTS NOTHING, which is the line this module opens by
+ * drawing. This is copy about what the USER's own choice costs; no
+ * ingredient is read, no tag is derived, nothing is pre-filled, and the
+ * only path to `verified` is still a human tapping "Bevestigen". The
+ * scrapped AI-prefill design stays scrapped.
+ *
+ * IT NAMES NO ALLERGEN AND NO MEMBER. Which allergy, and whose, is
+ * special-category health data (PD-005) — and this screen is shown to
+ * whoever is holding the phone, who is not necessarily the person the
+ * restriction belongs to. "de allergie die in dit huishouden staat" says
+ * enough to act on and discloses nothing.
+ */
+export function buildAllergenSkipConsequence(householdHasAllergenRestriction: boolean): string {
+  if (!householdHasAllergenRestriction) {
+    return (
+      'Bekijk de ingrediënten hierboven en tag wat van toepassing is. Optioneel — sla over als je het niet zeker ' +
+      'weet, dan blijft dit gerecht als niet-gecontroleerd gemarkeerd.'
+    );
+  }
+  return (
+    'Bekijk de ingrediënten hierboven en tag wat van toepassing is. Sla je dit over, dan blijft het gerecht ' +
+    'niet-gecontroleerd — en dan houdt Remy het niet tegen bij de allergie die in dit huishouden staat.'
+  );
+}
+
+/**
+ * The skip control's own label, for the same reason and with the same
+ * split. A screen-reader user who hears only the button never reads the
+ * helper above it, so the consequence has to travel on the control too.
+ */
+export function buildAllergenSkipAccessibilityLabel(householdHasAllergenRestriction: boolean): string {
+  if (!householdHasAllergenRestriction) {
+    return 'Allergenen overslaan, dit gerecht blijft niet-gecontroleerd';
+  }
+  return 'Allergenen overslaan, dit gerecht blijft niet-gecontroleerd en wordt niet tegengehouden bij de allergie in dit huishouden';
+}
+
+/**
  * A stored tag rendered as the lowercase Dutch word a sentence can be
  * built around ("pinda" -> "pinda's", so "sluit uit: pinda's" and "bevat
  * pinda's" both read as Dutch rather than as a database value).

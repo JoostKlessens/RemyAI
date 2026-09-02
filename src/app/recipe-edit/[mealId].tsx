@@ -145,6 +145,7 @@ import {
   buildRecipeEditSaveErrorMessage,
   describeRecipeEditAllergens,
 } from '@/components/recipeEditCopy';
+import { useHouseholdAllergenRestriction } from '@/hooks/useHouseholdAllergenRestriction';
 import { getAppRepository, type UpdateMealRecipeInput } from '@/lib/repository';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
@@ -266,6 +267,12 @@ export default function RecipeEditScreen(): JSX.Element {
   const { mealId } = useLocalSearchParams<{ mealId: string }>();
   const scheme = useColorScheme();
   const colors = getColors(scheme);
+  /**
+   * PRF-02. Decides whether the tagging step names what skipping COSTS or
+   * merely what state it leaves behind — PD-006 point 2 keeps the stronger
+   * sentence off households with no allergy at all. See the hook.
+   */
+  const householdHasAllergenRestriction = useHouseholdAllergenRestriction();
 
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [loaded, setLoaded] = useState<LoadedRecipe | null>(null);
@@ -564,6 +571,7 @@ export default function RecipeEditScreen(): JSX.Element {
         </Text>
 
         <AllergenTaggingSection
+          householdHasAllergenRestriction={householdHasAllergenRestriction}
           confirmedTags={allergenTags}
           status={allergenStatus}
           onAddTag={addAllergenTag}

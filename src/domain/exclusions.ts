@@ -128,8 +128,18 @@ function hasExcludedTag(meal: Meal, excludedTags: ReadonlySet<string>): boolean 
  * an *allergen* (as opposed to a dislike). Only households with at least
  * one allergen restriction are subject to the tri-state gate below — this
  * is a minority of households, and the rest must see zero extra friction.
+ *
+ * EXPORTED FOR THE IMPORT CONFIRMATION SCREEN, which asks the identical
+ * question for the identical reason. `AllergenTaggingSection` needs to know
+ * whether skipping the tagging step costs this household anything, and the
+ * answer is exactly this predicate: for a household with no allergen
+ * restriction, `unknown` never excludes a thing, so a sentence warning them
+ * about it would be the extra friction PD-006's point 2 forbids in as many
+ * words. A screen-local re-implementation would be a second definition of
+ * "does this household have an allergy", and the two would drift the day
+ * `RestrictionType` gains a member.
  */
-function hasAllergenRestriction(members: readonly Member[], restrictions: readonly Restriction[]): boolean {
+export function hasAllergenRestriction(members: readonly Member[], restrictions: readonly Restriction[]): boolean {
   const memberIds = new Set(members.map((member) => member.id));
   return restrictions.some(
     (restriction) => memberIds.has(restriction.memberId) && restriction.type === 'allergen',

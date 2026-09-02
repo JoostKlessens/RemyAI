@@ -21,7 +21,12 @@
 import { AccessibilityInfo, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { EU_ALLERGENS } from '@/domain/allergens';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
-import { ALLERGEN_TAGGING_HEADING, buildAllergenConfirmedSummary } from './allergenTaggingCopy';
+import {
+  ALLERGEN_TAGGING_HEADING,
+  buildAllergenConfirmedSummary,
+  buildAllergenSkipAccessibilityLabel,
+  buildAllergenSkipConsequence,
+} from './allergenTaggingCopy';
 import { Button } from './Button';
 import { RestrictionTagInput } from './RestrictionTagInput';
 
@@ -32,10 +37,22 @@ export interface AllergenTaggingSectionProps {
   readonly onRemoveTag: (tag: string) => void;
   readonly onConfirm: () => void;
   readonly onReopen: () => void;
+  /**
+   * PRF-02. Whether skipping this step costs this household anything —
+   * `hasAllergenRestriction` (src/domain/exclusions.ts), read by the screen
+   * and passed down rather than asked for here.
+   *
+   * REQUIRED, NOT OPTIONAL. An optional flag defaulting to `false` is a flag
+   * a caller can forget while still compiling, and forgetting THIS one shows
+   * a household with an allergy the sentence written for a household without
+   * one. The direction the mistake would run in is the reason it may not be
+   * defaultable.
+   */
+  readonly householdHasAllergenRestriction: boolean;
 }
 
 export function AllergenTaggingSection(props: AllergenTaggingSectionProps): JSX.Element {
-  const { confirmedTags, status, onAddTag, onRemoveTag, onConfirm, onReopen } = props;
+  const { confirmedTags, status, onAddTag, onRemoveTag, onConfirm, onReopen, householdHasAllergenRestriction } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -66,9 +83,17 @@ export function AllergenTaggingSection(props: AllergenTaggingSectionProps): JSX.
       <Text style={[typeScale.title3, styles.heading, { color: colors.textPrimary }]}>
         {ALLERGEN_TAGGING_HEADING}
       </Text>
+      {/*
+        PRF-02: names what SKIPPING costs, not merely what state it leaves
+        behind. `exclusions.ts` excludes only `verified` meals, so a
+        household with an allergy that skips here has opted this dish out of
+        the one gate that would have caught it — and until now the screen
+        that let them do it said nothing about that. The sentence is only
+        the stronger one when there is an allergy to be caught, per PD-006's
+        "no extra friction, no prompts" for everybody else.
+      */}
       <Text style={[typeScale.bodySmall, styles.helper, { color: colors.textMuted }]}>
-        Bekijk de ingrediënten hierboven en tag wat van toepassing is. Optioneel — sla over als je het niet zeker
-        weet, dan blijft dit gerecht als niet-gecontroleerd gemarkeerd.
+        {buildAllergenSkipConsequence(householdHasAllergenRestriction)}
       </Text>
       <RestrictionTagInput
         label="Allergenen"
@@ -91,7 +116,7 @@ export function AllergenTaggingSection(props: AllergenTaggingSectionProps): JSX.
             label="Sla over"
             variant="tertiary"
             onPress={onReopen}
-            accessibilityLabel="Allergenen overslaan, dit gerecht blijft niet-gecontroleerd"
+            accessibilityLabel={buildAllergenSkipAccessibilityLabel(householdHasAllergenRestriction)}
           />
         </View>
       </View>
