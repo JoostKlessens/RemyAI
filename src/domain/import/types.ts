@@ -102,8 +102,15 @@
  * siblings in this very folder, a screenful of screens, components and
  * tests, and a growing handful of Deno edge-function modules under
  * supabase/functions/parse-recipe/. That last group is what decided it. Deno
- * code is excluded from `tsc --noEmit`, from ESLint and from vitest, so a
- * specifier broken there is caught by nothing at all until a deploy fails.
+ * code is excluded from `tsc --noEmit`, from ESLint and from vitest. When
+ * this was written a specifier broken there was caught by nothing at all
+ * until a deploy failed; since `npm run check:functions` (a separate strict
+ * `tsc` pass over that directory) a renamed export IS caught, which is most
+ * of what this paragraph feared. What survives is narrower and is still the
+ * reason this file stays the entry point: Deno's own resolution rule, which
+ * no TypeScript configuration can see because
+ * `allowImportingTsExtensions` makes the extension optional rather than
+ * mandatory.
  * So `types.ts` re-exports every name it exported before, spelled
  * identically, and not one importer had to change. That is the property that
  * made this refactor reviewable, and it is the property to preserve if the

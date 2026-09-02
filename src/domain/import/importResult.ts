@@ -14,7 +14,8 @@
  *
  * THE RULES THIS UNION ENFORCES ARE STATED ONCE AND INHERITED BY WHATEVER
  * COMES NEXT, which is the only reason ten variants stay reviewable. Every
- * variant carries a `platform` except `unsupported_url`, whose absence is a
+ * variant carries a `platform` except the two that are refused BEFORE one is
+ * established — `unsupported_url` and `import_throttled` — whose absence is a
  * fact rather than a gap. Every field a producer knows for free is REQUIRED
  * rather than optional, because an optional field is a field a hand-written
  * literal can forget while still compiling — and this codebase has already
@@ -26,9 +27,9 @@
  *
  * WHY IT IS NOT SPLIT FURTHER — per variant, or into success and failure
  * families. The union is only exhaustive if a reader can see all of it at
- * once. "Everything but `unsupported_url` carries a platform" is one
- * sentence a reviewer can check against nine adjacent members, and becomes a
- * claim nobody can verify the moment those members live in five files; the
+ * once. "Everything refused after a route is known carries a platform" is
+ * one sentence a reviewer can check against ten adjacent members, and becomes
+ * a claim nobody can verify the moment those members live in five files; the
  * same goes for "no member may be a degree of another". The size of this
  * file is the price of keeping those checks cheap, and it is worth paying up
  * to the point where the file stops fitting under the ceiling — which is
@@ -41,8 +42,10 @@
 
 // The `.ts` on every relative specifier here is LOAD-BEARING, and is spelled
 // even on type-only imports, which are erased and would never be resolved at
-// all. Five modules under supabase/functions/parse-recipe/ import this
-// file's public entry point (types.ts), Deno resolves relative specifiers
+// all. Eight modules under supabase/functions/parse-recipe/ import this
+// file's public entry point (types.ts) — it said five until 2 September
+// 2026, and a number nothing verifies is a number that rots — Deno resolves
+// relative specifiers
 // literally, and the day one of these imports stops being type-only is the
 // day an extensionless specifier breaks the DEPLOY and nothing else — not
 // `tsc --noEmit`, not ESLint, not vitest, all of which exclude that
@@ -70,9 +73,19 @@ import type { ParsedRecipe } from './parsedRecipe.ts';
  *
  * ---
  *
- * EVERY VARIANT BELOW CARRIES A `platform` EXCEPT `unsupported_url`. One
- * sentence, one exception, and the exception is the reason the rule is
- * stated as a rule rather than granted variant by variant.
+ * EVERY VARIANT BELOW CARRIES A `platform` EXCEPT THE TWO REFUSED BEFORE A
+ * ROUTE EXISTS — `unsupported_url` and `import_throttled`. One sentence, two
+ * exceptions of a single kind, and that kind is the reason the rule is stated
+ * as a rule rather than granted variant by variant.
+ *
+ * IT SAID "ONE EXCEPTION" UNTIL 2 SEPTEMBER 2026, AND THAT IS THE FAILURE
+ * THIS PARAGRAPH NOW GUARDS AGAINST. `import_throttled` (IMP-06/IMP-10)
+ * arrived without a `platform` and without arguing for the omission, and six
+ * comments across this file and parseImportResult.ts went on asserting a
+ * single exception while three others were quietly updated to admit two. A
+ * rule half-updated is worse than a rule never written: it reads as verified
+ * and is not. The rule below demands that a new variant argue its way out;
+ * enforcing that demand is what this correction is.
  *
  * THE FACT THAT MAKES IT AFFORDABLE: the platform is known the instant
  * `normalizeRecipeUrl` succeeds (urlParsing.ts), which is the FIRST thing
@@ -105,23 +118,33 @@ import type { ParsedRecipe } from './parsedRecipe.ts';
  * (importTelemetry.ts) can only report what the variant carries, so the
  * variant has to carry it.
  *
- * `unsupported_url` IS THE ONE HONEST ABSENCE, and its absence is a fact
- * rather than a gap. That variant is returned when `normalizeRecipeUrl`
- * itself refuses the text — it is not a link, not a scheme we open, or a
- * host pointing back at our own network — which is to say it is returned
- * precisely because we never established what the URL points at. There is
+ * THE TWO HONEST ABSENCES ARE THE SAME ABSENCE TWICE, AND THAT IS WHY THEY
+ * ARE EXCEPTIONS RATHER THAN HOLES. `unsupported_url` is returned when
+ * `normalizeRecipeUrl` itself refuses the text — it is not a link, not a
+ * scheme we open, or a host pointing back at our own network — which is to
+ * say it is returned precisely because we never established what the URL
+ * points at. There is
  * no platform to omit. Giving it a nullable field, or a `'web'` default,
  * would be the app inventing a fact about a string it declined to open, and
  * a fabricated platform is strictly worse than a missing one: it does not
  * merely fail to answer the SRC-09 question, it corrupts the denominator
  * that question is asked against.
  *
- * SO THE RULE IS A RULE AND NOT A COLLECTION OF CASES. "Everything but
- * `unsupported_url`" is one sentence a reader can hold and a reviewer can
- * check; "whichever variants somebody got round to widening" is a state
- * nobody can verify without reading all ten. The next variant added
- * inherits the rule by default and has to argue its way out of it, which is
- * the direction the burden of proof belongs in.
+ * `import_throttled` IS THE SECOND, AND IT IS NOT A NEW KIND OF HOLE. The
+ * budget gate runs at index.ts's `decideImportBudget` call, before the
+ * `{ url }` / `{ text }` fork and therefore before `normalizeRecipeUrl` has
+ * seen anything. A refused caller has established no route, exactly as a
+ * refused string has not. The two differ in why we declined to look, not in
+ * what we know afterwards, and giving either a nullable field would put a
+ * null back into the eight that no longer carry one.
+ *
+ * SO THE RULE IS A RULE AND NOT A COLLECTION OF CASES. "Everything refused
+ * after a route is known" is one sentence a reader can hold and a reviewer
+ * can check; "whichever variants somebody got round to widening" is a state
+ * nobody can verify without reading all ten. The next variant added inherits
+ * the rule by default and has to argue its way out of it, which is the
+ * direction the burden of proof belongs in — and `import_throttled` is the
+ * proof that the demand has teeth only when somebody enforces it.
  */
 export type ImportResult =
   | {
@@ -473,9 +496,10 @@ export type ImportResult =
    * src/components/importFailureCopy.ts is written against exactly that
    * list and must be reread whenever this one changes.
    *
-   * THE ONE VARIANT WITH NO `platform`, AND THE ONLY ONE THAT COULD NOT
-   * HONESTLY HAVE ONE. Every sibling states its platform (see the union's
-   * doc comment for the rule and why it exists); this one is returned by
+   * ONE OF THE TWO VARIANTS WITH NO `platform` — `import_throttled` is the
+   * other, for the same structural reason and no other. Every sibling states
+   * its platform (see the union's doc comment for the rule and why it
+   * exists); this one is returned by
    * the branch that runs BEFORE a platform is established, because
    * establishing it is exactly what failed. Every list above describes text
    * we declined to identify: `javascript:hello` belongs to no platform, a
@@ -574,6 +598,19 @@ export type ImportResult =
    * until tomorrow. `unidentified_caller` collapses into the first — see
    * `scope` — because "we cannot tell who you are" is not a sentence any
    * user of this app can act on, and is never true for one of them.
+   *
+   * WHY IT CARRIES NO `platform`, WHICH THE UNION'S RULE OBLIGES THIS
+   * COMMENT TO ARGUE RATHER THAN ASSUME. The budget gate runs before the
+   * `{ url }` / `{ text }` fork in index.ts, so `normalizeRecipeUrl` has not
+   * run and no route exists to name. That is the same absence
+   * `unsupported_url` carries, reached from the other side: there, we looked
+   * at the string and declined to identify it; here, we declined to look at
+   * all. A `'text'` default would be worse than the gap — it would file every
+   * throttled URL under the one route that has no URL, and SRC-09's numbers
+   * are read off exactly these counts. (`recordablePlatform` in index.ts does
+   * floor both to `'text'`, but that is the attempts TABLE, where the row
+   * exists to record that a caller knocked; the telemetry line carries `null`
+   * and renders `-`. Two different questions, two different answers.)
    *
    * NO COUNTS, NO CEILING, NO REMAINING BUDGET. The client is told to wait
    * and how long; it is never told how close it was. A number a caller can

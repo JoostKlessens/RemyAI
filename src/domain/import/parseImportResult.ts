@@ -39,17 +39,20 @@
  * test is never "how important is this field", it is "is there something
  * true to say when the response says nothing".
  *
- * `platform` LANDS ON THE STRICT SIDE, ON EIGHT OF THE NINE VARIANTS.
- * types.ts requires it everywhere except `unsupported_url`, on the grounds
+ * `platform` LANDS ON THE STRICT SIDE, ON EIGHT OF THE TEN VARIANTS.
+ * types.ts requires it everywhere except the two refused before a route
+ * exists — `unsupported_url` and `import_throttled` — on the grounds
  * that the value is settled by `normalizeRecipeUrl` before any network call
  * and is therefore in hand at every producer. That argument is exactly what
  * makes silence here meaningless: a function that answered at all had
  * already computed the platform, so an omitted one is not an old function
  * being modest, it is a response this client cannot account for. There is
  * no true sentence to fall back on and no default that does not fabricate
- * one — see `readPlatform`. The single exception is narrowed as an
- * exception rather than by omission: `unsupported_url` reads no platform
- * because the outcome exists precisely because none was established.
+ * one — see `readPlatform`. Both exceptions are narrowed as exceptions
+ * rather than by omission, and they are one exception wearing two faces:
+ * `unsupported_url` reads no platform because the outcome exists precisely
+ * because none was established, and `import_throttled` reads none because
+ * the budget gate answers before the route fork is even reached.
  *
  * `sourceUrl` BECAME NULLABLE ON `parsed` (SRC-08) AND THIS FILE IS WHERE
  * THAT DOES NOT BECOME A HOLE. A `'text'` import has no URL by
@@ -507,9 +510,10 @@ export function parseImportResult(raw: unknown): ImportResult | null {
       return platform !== null && typeof raw.reason === 'string' && SOURCE_FETCH_FAILURE_REASONS.has(raw.reason)
         ? { kind: 'source_fetch_failed', reason: raw.reason as SourceFetchFailureReason, platform }
         : null;
-    // The one arm that reads no platform, because there is none to read:
-    // this outcome is produced by the branch that runs before a URL has
-    // been identified at all. types.ts's variant comment argues why a
+    // The first of the two arms that read no platform, because there is
+    // none to read: this outcome is produced by the branch that runs before
+    // a URL has been identified at all. `import_throttled` below is the
+    // second, for the same structural reason. types.ts's variant comment argues why a
     // nullable field or a `'web'` default would both be worse than the
     // honest absence.
     case 'unsupported_url':

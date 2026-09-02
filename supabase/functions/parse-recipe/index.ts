@@ -188,9 +188,11 @@
  * than conventional: the web and YouTube branches return before it, which
  * leaves `effective.platform` narrowed to `'tiktok' | 'instagram'` — which
  * is exactly `OembedPlatform` — everywhere below them. (A type-checker
- * would enforce that; this directory is excluded from `tsc --noEmit`, so
- * what it actually buys here is that the claim is verifiable by reading one
- * screen instead of trusting a comment.)
+ * enforces that as of `npm run check:functions`; this parenthesis used to
+ * say no type-checker saw this directory at all, which stopped being true
+ * the day that script landed. What the ordering additionally buys is that
+ * the claim is verifiable by reading one screen instead of trusting a
+ * comment.)
  *
  * ---
  *
@@ -335,7 +337,7 @@ import type { OembedPlatform } from '../../../src/lib/oembed.ts';
 // handles them (finishImport.ts). This file routes and answers; it no longer
 // touches a `ParsedRecipe` on the way past.
 import type { ImportPlatform, ImportResult } from '../../../src/domain/import/types.ts';
-// The nine sibling modules of this function, each owning one thing this file
+// The ELEVEN sibling modules of this function, each owning one thing this file
 // therefore no longer does. `importRequest.ts` owns what a client is allowed
 // to send, so the boundary is a place with a header rather than the opening
 // lines of a handler; `canonicalRecipeStore.ts` owns every read and write of
@@ -353,7 +355,17 @@ import type { ImportPlatform, ImportResult } from '../../../src/domain/import/ty
 // `resolveYouTubeImport.ts` each own one route's whole pipeline, which is
 // what keeps this file a fan-out rather than a fan-out plus two of the five
 // things it fans out to; `env.ts` owns the credential readers the
-// others share. Three of the nine exist so that a secret's blast radius is
+// others share; and `importBudget.ts` and `supabaseImportBudgetStore.ts`
+// own the throttle's two halves, the pure decision and the impure counter,
+// split so that only one of them ever touches PostgREST.
+//
+// THIS COUNT SAID NINE UNTIL 2 SEPTEMBER 2026, AND THE TWO IT OMITTED WERE
+// THE TWO ABOVE — the same IMP-06/IMP-10 work that left `import_throttled`
+// undocumented in importResult.ts. A count in prose is a claim that decays
+// the moment a sibling is added and nothing in the toolchain checks it,
+// which is the argument for naming the modules rather than counting them;
+// the count survives here only because the list beside it is what makes it
+// falsifiable. Three of the eleven exist so that a secret's blast radius is
 // one importable file rather than this one, and two are now further away
 // still: the Gemini key is not imported here at all and the canonical WRITE
 // no longer is either — both are reached through `finishImport.ts`, leaving
