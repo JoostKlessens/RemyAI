@@ -5,12 +5,23 @@
  * a household with forty saved recipes whose search matched none are both
  * "nothing to show", and they are not the same sentence: the first-run
  * copy says "plak een link", which would be actively wrong advice to
- * someone who already has forty recipes and mistyped a search term. That
- * first-run copy stays exactly where it already lives, hardcoded inline in
- * recipes.tsx — it existed before search did, and nothing about shipping
- * search should have to touch it. This module owns only the state search
- * introduces: a non-empty library, a search that was actually run, zero
- * rows left standing.
+ * someone who already has forty recipes and mistyped a search term. This
+ * module owns only the state search introduces: a non-empty library, a
+ * search that was actually run, zero rows left standing.
+ *
+ * WHERE THAT FIRST-RUN COPY LIVES CHANGED, AND THE ARGUMENT DID NOT. This
+ * header used to say it "stays exactly where it already lives, hardcoded
+ * inline in recipes.tsx — it existed before search did, and nothing about
+ * shipping search should have to touch it", which was the right call for
+ * shipping search and the wrong resting place to leave it in: being inline
+ * is exactly why nothing could assert it, and the sentence spent four
+ * additions to `ImportPlatform` telling new households Remy accepts two
+ * platforms when it accepts six (ENT-05). It now lives in
+ * emptyLibraryCopy.ts, beside the Kiezen state that says the same thing on
+ * another tab. Nothing about the SEPARATION changes: the two states are
+ * still two states, still worded differently on purpose, and the last test
+ * in tests/librarySearchCopy.test.ts still refuses to let a "plak"-shaped
+ * sentence appear here.
  *
  * WHY THE BODY NAMES WHAT WAS TYPED. "Niets gevonden" alone leaves someone
  * staring at a dead end wondering whether the screen is broken; quoting the

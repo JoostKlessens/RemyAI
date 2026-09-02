@@ -1,12 +1,20 @@
 /**
  * "Zero search results" empty view for Mijn recepten (LIB-01) — the sibling
- * of the screen's hardcoded first-run empty state that must never say the
- * same thing (see recipes.tsx's file header and librarySearchCopy.ts's own
- * header for why they are two states, not one). Purely presentational:
- * every word comes from `describeLibrarySearchEmpty`, this component only
- * lays it out — the same title2/bodySmall/secondary-Button shape the
- * first-run empty view in recipes.tsx already uses, so the two states look
- * like siblings even though they say different things.
+ * of the screen's first-run empty state that must never say the same thing
+ * (see recipes.tsx's file header and librarySearchCopy.ts's own header for
+ * why they are two states, not one). Purely presentational: every word
+ * comes from `describeLibrarySearchEmpty`, this component only lays it out
+ * — the same title2/bodySmall/Button shape the first-run empty view in
+ * recipes.tsx already uses, so the two states look like siblings even
+ * though they say different things.
+ *
+ * THAT SIBLING IS NO LONGER "HARDCODED", which is why this sentence lost
+ * the word. Its copy moved out of recipes.tsx into emptyLibraryCopy.ts
+ * under ENT-05, for exactly the reason this component was built the way it
+ * was: words nothing can import are words nothing can assert, and the
+ * first-run sentence had been naming two of six accepted platforms for
+ * four route additions. The two states are still separate, and this one
+ * still owns none of its own words.
  */
 
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';

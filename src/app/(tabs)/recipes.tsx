@@ -15,9 +15,14 @@
  *
  * The entry point into the import flow (src/app/import/paste.tsx) is a
  * persistent header button, always visible (not just in the empty state) —
- * pasting a link is the ONLY way this library grows, since the old
+ * that screen is the ONLY way this library grows, since the old
  * "type 10-15 meals" onboarding is gone, and it is the one control this
- * screen's header carries. The household settings screen
+ * screen's header carries. This sentence used to say "pasting a LINK is the
+ * only way", which had quietly become false twice over: since SRC-08 the
+ * same screen accepts the recipe as TEXT with no link at all, and manual
+ * entry has always been reachable from it. Naming the link route as the
+ * only way in is the same defect ENT-05 fixed in the empty state below, one
+ * comment above the code it describes. The household settings screen
  * (src/app/settings.tsx) is reachable from here too, as a quiet text link
  * on the title line rather than a second button beneath it, and never a
  * gating step before any tab is usable. `LibraryHeader` below carries the
@@ -138,6 +143,7 @@ import {
 } from '@/domain/recipeSearch';
 import type { CookEvent, HouseholdId, Meal, MealId } from '@/domain/types';
 import { Button } from '@/components/Button';
+import { describeEmptyLibrary } from '@/components/emptyLibraryCopy';
 import { LibraryHeader } from '@/components/LibraryHeader';
 import { LibrarySearchBar } from '@/components/LibrarySearchBar';
 import { LibrarySearchEmptyState } from '@/components/LibrarySearchEmptyState';
@@ -176,6 +182,23 @@ type ScreenPhase = 'loading' | 'error' | 'ready';
 
 const GRID_COLUMNS = 2;
 const LOADING_TILE_COUNT = 6;
+
+/**
+ * The first-run empty state's words (ENT-05), resolved once at module load
+ * rather than per render: this surface's copy depends on nothing — not on
+ * props, not on state, not on the household — so deriving it inside the
+ * component would be a `useMemo` guarding a `Record` lookup, which costs
+ * more to read than it saves to run.
+ *
+ * It is a CONSTANT and not a literal because of where it comes from: a
+ * sentence written inline in this file is one no test can reach (vitest
+ * collects `.test.ts` only, with react-native stubbed), and the sentence
+ * that used to sit here spent four route additions telling new users Remy
+ * accepts two platforms when it accepts six. emptyLibraryCopy.ts carries
+ * that whole argument, and shares this state with Kiezen's `empty_rotation`
+ * so the two screens cannot drift into describing one fact two ways.
+ */
+const LIBRARY_EMPTY_COPY = describeEmptyLibrary('library');
 
 interface LoadedLibraryRows {
   readonly rows: readonly ScheduledMealRow[];
@@ -607,18 +630,22 @@ export default function RecipesScreen(): JSX.Element {
         </View>
       ) : null}
 
+      {/* ENT-05. Every word below comes from `emptyLibraryCopy.ts`; none of
+          it is written inline any more, because a sentence typed into a
+          route module is one vitest cannot import — which is exactly how
+          the old copy survived four additions to `ImportPlatform` still
+          naming two platforms out of six. That module carries the argument
+          in full, and it is deliberately not repeated here. */}
       {phase === 'ready' && rows.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>Nog geen recepten</Text>
-          <Text style={[typeScale.bodySmall, styles.emptyBody, { color: colors.textMuted }]}>
-            Plak een link naar een TikTok- of Instagram-video om te beginnen.
-          </Text>
+          <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>{LIBRARY_EMPTY_COPY.title}</Text>
+          <Text style={[typeScale.bodySmall, styles.emptyBody, { color: colors.textMuted }]}>{LIBRARY_EMPTY_COPY.body}</Text>
           <View style={styles.emptyAction}>
             <Button
-              label="Plak je eerste link"
+              label={LIBRARY_EMPTY_COPY.actionLabel}
               variant="primary"
               onPress={() => router.push('/import/paste')}
-              accessibilityLabel="Plak je eerste link, importeer een recept"
+              accessibilityLabel={LIBRARY_EMPTY_COPY.actionAccessibilityLabel}
             />
           </View>
         </View>

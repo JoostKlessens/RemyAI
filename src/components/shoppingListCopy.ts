@@ -27,13 +27,17 @@
  * that no caller could accidentally re-derive a total from it.
  *
  * TWO EMPTY STATES, NEVER COLLAPSED INTO ONE, for the same reason
- * recipes.tsx's first-run empty state and librarySearchCopy.ts's
- * zero-results state must stay apart: "nothing was ever planned this week"
- * and "everything planned this week is already in the cart" both look like
- * "no rows left to check off," and they are not the same fact. Telling a
- * shopper who just finished their trip "plan a meal to get started" would
- * be actively wrong, and telling a household that saved nothing "well
- * done, you got it all" is worse.
+ * emptyLibraryCopy.ts's first-run state and librarySearchCopy.ts's
+ * zero-results state must stay apart (that first one lived inline in
+ * recipes.tsx when this paragraph was written; ENT-05 moved it out, and the
+ * move is the point — a sentence typed into a route module is one no test
+ * can reach, which is exactly how it spent four platform additions telling
+ * new users Remy accepts two sources when it accepts six): "nothing was
+ * ever planned this week" and "everything planned this week is already in
+ * the cart" both look like "no rows left to check off," and they are not
+ * the same fact. Telling a shopper who just finished their trip "plan a
+ * meal to get started" would be actively wrong, and telling a household
+ * that saved nothing "well done, you got it all" is worse.
  */
 
 import type { CanonicalUnit, IngredientUnit, ShoppingListItem, ShoppingListMeasure } from '@/domain/shopping/types';
@@ -49,8 +53,22 @@ import type { CanonicalUnit, IngredientUnit, ShoppingListItem, ShoppingListMeasu
  * a vulgar-fraction quantity ("⅓ tl") is "exact enough for a shopping list,"
  * so a raw `0.3333333333333333` reaching this far is a floating-point
  * artifact of that arithmetic, not a fact worth reproducing digit for digit.
+ *
+ * EXPORTED FOR RCP-01's portionScalingCopy.ts, which needs the identical
+ * rule for the identical reason — `scaleRecipe.ts` rounds a scaled value to
+ * the same two decimals (`DISPLAY_DECIMAL_PLACES`) and hands it over with
+ * the same floating-point tail already trimmed, and Dutch writes "1,5" on a
+ * recipe card exactly as it does on a shopping list. Exported rather than
+ * copied for the reason this module family keeps repeating about parsers:
+ * two implementations of "how does a quantity look in Dutch" WILL drift,
+ * and the day they do, the same ingredient reads "0,67" on one screen and
+ * "0,7" on the other with nothing telling a user which is right. Precedent
+ * is `describeAllergenTag`, exported out of allergenTaggingCopy.ts for
+ * friendFeedPresentation.ts on exactly this argument. The alternative
+ * considered — a shared `src/components/quantityFormatting.ts` holding one
+ * six-line function — was rejected as a file created to avoid an import.
  */
-function formatQuantityNumber(value: number): string {
+export function formatQuantityNumber(value: number): string {
   const rounded = Math.round(value * 100) / 100;
   if (Number.isInteger(rounded)) {
     return String(rounded).replace('.', ',');

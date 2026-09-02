@@ -25,6 +25,33 @@ import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { NoCandidateReason } from '@/domain/types';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';
+import { describeEmptyLibrary } from './emptyLibraryCopy';
+
+/**
+ * ENT-05. The one reason in this component whose copy is NOT written here.
+ *
+ * `empty_rotation` is not really a fact about tonight's decision at all —
+ * it is a fact about the library being empty, which the Mijn recepten tab
+ * states in its own words a tab away. Two screens wording one fact
+ * independently is the drift recipeProvenanceCopy.ts's header records
+ * having shipped once already, and this pair had in fact already drifted:
+ * the sentence below named no platform while the button's accessibility
+ * label beneath it still enumerated two. Resolved once, in
+ * emptyLibraryCopy.ts, where a test can hold both surfaces to the same
+ * rule.
+ *
+ * THE OTHER THREE REASONS STAY INLINE, deliberately. `all_excluded`,
+ * `filtered_out` and `swaps_exhausted` all describe a library that is full
+ * and a filter, a restriction or a swap budget that emptied tonight — they
+ * have nothing in common with an empty library and nothing to share with
+ * another screen. Moving them out too would have bought a tidier-looking
+ * file at the cost of weakening the `never` guard below, which is the thing
+ * that makes a new `NoCandidateReason` a compile error here.
+ *
+ * Resolved at module load rather than per render for the reason the library
+ * screen's own constant gives: this lookup depends on nothing.
+ */
+const EMPTY_ROTATION_COPY = describeEmptyLibrary('rotation');
 
 export interface NoCandidateStateProps {
   readonly reason: NoCandidateReason;
@@ -60,11 +87,20 @@ export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
       <Text style={[typeScale.bodySmall, styles.body, { color: colors.textMuted }]}>{copy.body}</Text>
       <View style={styles.actions}>
         {reason === 'empty_rotation' ? (
+          /* ENT-05. This button's `accessibilityLabel` read "Recept
+             plakken, plak een link naar een TikTok- of Instagram-video" —
+             the same platform enumeration the library's empty state had,
+             hiding in the one channel where nobody reviews it and where a
+             screen-reader user hears it INSTEAD of the honest sentence
+             rendered two lines above. Both label and a11y label now come
+             from emptyLibraryCopy.ts, which is also where the library
+             state gets its words, so the two first-run surfaces cannot
+             drift into describing one fact two different ways. */
           <Button
-            label="Recept plakken"
+            label={EMPTY_ROTATION_COPY.actionLabel}
             variant="primary"
             onPress={onOpenImport}
-            accessibilityLabel="Recept plakken, plak een link naar een TikTok- of Instagram-video"
+            accessibilityLabel={EMPTY_ROTATION_COPY.actionAccessibilityLabel}
           />
         ) : (
           <>
@@ -98,10 +134,17 @@ export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
 
 function getCopyForReason(reason: NoCandidateReason): ReasonCopy {
   switch (reason) {
+    // Delegated, not written here — see `EMPTY_ROTATION_COPY` above for the
+    // whole argument. The body also stopped saying "Plak een link": that
+    // sentence named no platform and was never part of the enumeration
+    // defect, but it did name the link route as though it were the only
+    // route, which SRC-08 made untrue. The promise about tomorrow, which is
+    // the half of this state the library screen cannot make, is carried
+    // over word for word.
     case 'empty_rotation':
       return {
-        title: 'Nog niets om uit te kiezen',
-        body: 'Plak een link en Remy kan morgen iets voorstellen.',
+        title: EMPTY_ROTATION_COPY.title,
+        body: EMPTY_ROTATION_COPY.body,
       };
     case 'all_excluded':
       return {
