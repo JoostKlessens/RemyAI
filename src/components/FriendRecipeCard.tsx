@@ -57,6 +57,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getPlatformDisplayName } from './creatorPresentation';
+import { useThumbnailFallback } from './useThumbnailFallback';
 import {
   buildAllergenCollisionLabel,
   buildFriendRecipeCardAccessibilityLabel,
@@ -109,6 +110,7 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
   const metaLine = buildFriendRecipeMetaLine(model.estimatedMinutes, model.rating);
   const collisionLabel = buildAllergenCollisionLabel(model.collidingTags);
   const monogram = model.title.trim().charAt(0).toUpperCase() || '?';
+  const thumbnail = useThumbnailFallback(model.thumbnailUrl);
 
   useEffect(() => {
     if (entranceDelayMs === null) {
@@ -161,11 +163,12 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
         style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
         <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
-          {model.thumbnailUrl !== null ? (
+          {thumbnail.showsImage ? (
             <Image
-              source={{ uri: model.thumbnailUrl }}
+              source={{ uri: model.thumbnailUrl ?? undefined }}
               style={styles.thumbnail}
               resizeMode="cover"
+              onError={thumbnail.onError}
               accessibilityIgnoresInvertColors
             />
           ) : (

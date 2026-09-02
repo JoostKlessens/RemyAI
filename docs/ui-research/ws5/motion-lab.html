@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Remy WS-5 — Motion lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* ---------------------------------------------------------------------
+   Remy WS-5 motion lab. Every duration, easing and spring below is read
+   from src/theme/tokens.ts — nothing here invents a number. The artboard
+   is a fixed 393x852 element on a wide page (UI-RESEARCH-PLAN §3), so it
+   is a true phone-width render at any browser width.
+   NOT A SPEC FOR COLOUR OR MEASUREMENT. WS-1 owns hex, WS-2 owns points.
+   The hex values here are today's tokens, present only so motion can be
+   judged against something real.
+   --------------------------------------------------------------------- */
+:root{
+  --dur-instant:80ms; --dur-fast:150ms; --dur-normal:250ms;
+  --dur-slow:400ms;   --dur-deliberate:600ms;
+  --ease-standard:cubic-bezier(.4,0,.2,1);
+  --ease-decelerate:cubic-bezier(0,0,.2,1);
+  --ease-accelerate:cubic-bezier(.4,0,1,1);
+
+  --background:#E9EBEC; --surface:#F4F5F6; --surfaceRaised:#FFFFFF;
+  --surfaceSunken:#DADDDF; --border:#CBCFD1; --borderStrong:#666B6F;
+  --textPrimary:#14171A; --textSecondary:#484D51; --textMuted:#555A5E;
+  --accent:#1F4FA6; --onAccent:#F5F7FA; --accentMuted:#DCE6F5; --accentOnMuted:#163A7A;
+  --positive:#256B4A; --onPositive:#F1F7F3; --positiveMuted:#DCEBE2;
+  --overlay:rgba(20,23,26,.55);
+  --sans:'Archivo',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+[data-scheme="dark"]{
+  --background:#121417; --surface:#191C1F; --surfaceRaised:#23272B;
+  --surfaceSunken:#0A0C0E; --border:#33383D; --borderStrong:#82878C;
+  --textPrimary:#F1F2F0; --textSecondary:#C7CBCE; --textMuted:#9CA1A5;
+  --accent:#6C9BEF; --onAccent:#0B1626; --accentMuted:#1B2A44; --accentOnMuted:#8FB4F5;
+  --positive:#6FBE93; --onPositive:#08150F; --positiveMuted:#16281F;
+  --overlay:rgba(0,0,0,.66);
+}
+/* Reduced motion means INSTANT, not faster (resolveDuration). The toggle
+   below sets --dur-* to 0ms wholesale; it never scales them down. */
+[data-reduce="on"]{
+  --dur-instant:0ms; --dur-fast:0ms; --dur-normal:0ms;
+  --dur-slow:0ms; --dur-deliberate:0ms;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#2A2E33;color:#E8EAEC;font-family:var(--sans);padding:32px;min-height:100vh}
+h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:13px;font-family:var(--mono);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#9AA0A6;margin:28px 0 10px}
+.lede{max-width:80ch;color:#B6BBC0;font-size:14px;line-height:1.55;margin-top:8px}
+.bar{position:sticky;top:0;z-index:50;background:#2A2E33;padding:14px 0 16px;margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #3C4147}
+button{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.04em;background:#3C4147;color:#E8EAEC;border:1px solid #52585F;border-radius:6px;padding:8px 12px;cursor:pointer}
+button:hover{background:#484E55}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.grid{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.cell{display:flex;flex-direction:column;gap:8px}
+.cap{font-family:var(--mono);font-size:11px;color:#9AA0A6;letter-spacing:.05em;max-width:393px;line-height:1.5}
+.cap b{color:#E8EAEC;font-weight:600}
+.cap.bad b{color:#E5766D}.cap.good b{color:#7FD0A4}
+
+/* ---- the artboard: a real 393x852 phone, per §3 ---- */
+.art{width:393px;height:852px;background:var(--background);border-radius:24px;
+  overflow:hidden;position:relative;font-family:var(--sans);color:var(--textPrimary);
+  box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.art.short{height:440px}
+.pad{padding:0 20px}
+
+/* type scale, close enough to judge motion against */
+.display{font-family:var(--sans);font-weight:700;font-size:34px;line-height:1.12;letter-spacing:-.02em}
+.title1{font-weight:700;font-size:28px;line-height:1.18}
+.title2{font-weight:700;font-size:22px}
+.title3{font-weight:600;font-size:18px}
+.body{font-size:16px;line-height:1.45}
+.bodyLarge{font-size:20px;line-height:1.45}
+.bodySmall{font-size:14px;line-height:1.45}
+.label{font-family:var(--mono);font-weight:600;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.caption{font-family:var(--mono);font-weight:500;font-size:12px}
+.numeral{font-family:var(--mono);font-weight:500;font-size:14px}
+.timerD{font-family:var(--mono);font-weight:600;font-size:44px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+
+.btn{display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:10px;cursor:pointer;
+  font-family:var(--mono);font-weight:600;font-size:15px;transition:transform var(--dur-instant) var(--ease-standard)}
+.btn:active{transform:scale(.98)}
+.btn.p{background:var(--accent);color:var(--onAccent)}
+.btn.s{background:var(--surface);color:var(--textPrimary);border:1px solid var(--borderStrong)}
+.btn.t{color:var(--textMuted);font-size:14px;min-height:44px}
+.btn.pos{background:var(--positive);color:var(--onPositive)}
+
+/* ---------- 1. KIEZEN reveal + accept stroke ---------- */
+.kz{position:absolute;inset:0;display:flex;flex-direction:column}
+.kz .mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 20px}
+.reveal{opacity:0;transform:translateY(8px)}
+.reveal.in{opacity:1;transform:translateY(0);
+  transition:opacity var(--dur-deliberate) var(--ease-decelerate),transform var(--dur-deliberate) var(--ease-decelerate)}
+.dishwrap{position:relative;display:inline-block;margin-bottom:20px}
+.stroke{position:absolute;left:22.5%;right:22.5%;bottom:-8px;height:2px;background:var(--accent);
+  transform:scaleX(0);transition:transform var(--dur-fast) var(--ease-standard)}
+.stroke.left{left:0;right:0;transform-origin:left;transition-timing-function:var(--ease-decelerate)}
+.stroke.on{transform:scaleX(1)}
+.kz .actions{padding:0 20px 34px;display:flex;flex-direction:column;gap:12px}
+.leaving{transition:opacity var(--dur-fast) var(--ease-accelerate),transform var(--dur-fast) var(--ease-accelerate)}
+.leaving.gone{opacity:0;transform:translateY(-12px)}
+.cookslide{position:absolute;inset:0;background:var(--background);transform:translateY(100%);
+  transition:transform var(--dur-normal) var(--ease-decelerate);display:flex;align-items:center;justify-content:center}
+.cookslide.up{transform:translateY(0)}
+
+/* ---------- 2. closed loop card ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;
+  display:flex;flex-direction:column;gap:8px}
+.chip{align-self:flex-start;background:var(--positiveMuted);color:var(--positive);
+  font-family:var(--mono);font-size:12px;padding:4px 10px;border-radius:6px;
+  opacity:0;transform:scale(.9);transition:opacity var(--dur-fast) var(--ease-decelerate),transform var(--dur-fast) var(--ease-decelerate)}
+.chip.on{opacity:1;transform:scale(1)}
+.stroke.pos{background:var(--positive)}
+
+/* ---------- 3. unseen stagger ---------- */
+.stack{display:flex;flex-direction:column;gap:12px;padding:16px 20px}
+.scard{opacity:0;transform:translateY(8px)}
+.scard.in{opacity:1;transform:translateY(0);
+  transition:opacity var(--dur-normal) var(--ease-decelerate),transform var(--dur-normal) var(--ease-decelerate)}
+.thumb{width:100%;aspect-ratio:16/9;background:var(--surfaceSunken);border-radius:8px}
+
+/* ---------- 4. rating commit ---------- */
+.rcard{background:var(--surfaceRaised);border-radius:16px;padding:24px;margin:0 20px;
+  box-shadow:0 4px 10px rgba(0,0,0,.10);opacity:1;transform:scale(1)}
+.rcard.out{opacity:0;transform:scale(.96);
+  transition:opacity var(--dur-fast) var(--ease-accelerate),transform var(--dur-fast) var(--ease-accelerate)}
+.track{height:4px;background:var(--surfaceSunken);border-radius:999px;position:relative;margin:12px 14px 0;cursor:pointer}
+.fill{height:4px;background:var(--accent);border-radius:999px;width:50%}
+.knob{position:absolute;top:50%;width:28px;height:28px;border-radius:999px;background:var(--accent);
+  border:2px solid var(--surface);left:50%;transform:translate(-50%,-50%) scale(1);
+  transition:transform var(--dur-fast) var(--ease-standard)}
+.knob.act{transform:translate(-50%,-50%) scale(1.15)}
+.anch{display:flex;justify-content:space-between;margin:8px 14px 0;color:var(--textMuted)}
+
+/* ---------- 5. the sheet ---------- */
+.scrim{position:absolute;inset:0;background:var(--overlay);opacity:0;
+  transition:opacity var(--dur-normal) var(--ease-standard)}
+.scrim.on{opacity:1}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surfaceRaised);
+  border-radius:20px 20px 0 0;padding:12px 20px 32px;touch-action:none;will-change:transform;
+  transform:translateY(100%)}
+.grab{width:32px;height:4px;border-radius:999px;background:var(--border);margin:0 auto 16px}
+.grab.real{width:40px;height:5px;background:var(--borderStrong);opacity:.55;cursor:grab}
+.row{min-height:52px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;
+  border-bottom:1px solid var(--border);position:relative;overflow:hidden}
+.row:last-of-type{border-bottom:0}
+.flash{position:absolute;inset:0;background:var(--positiveMuted);opacity:0}
+.flash.go{animation:fl var(--dur-fast) var(--ease-standard)}
+@keyframes fl{from{opacity:1}to{opacity:0}}
+
+/* ---------- 6. loading vocabulary ---------- */
+.ck{display:flex;align-items:center;gap:12px;min-height:32px}
+.dot{width:12px;height:12px;border-radius:999px;border:1.5px solid var(--border);background:transparent;flex:none;
+  transition:background var(--dur-normal) var(--ease-standard),border-color var(--dur-normal) var(--ease-standard),transform var(--dur-fast) var(--ease-decelerate)}
+.dot.on{background:var(--accent);border-color:var(--accent);transform:scale(1.15)}
+.dot.on.settled{transform:scale(1)}
+.ckl{color:var(--textMuted);transition:color var(--dur-normal) var(--ease-standard)}
+.ckl.on{color:var(--textPrimary)}
+.ckcol{display:flex;flex-direction:column;gap:0}
+.ckstem{width:1.5px;height:14px;background:var(--border);margin-left:5.25px;
+  transform-origin:top;transform:scaleY(0);transition:transform var(--dur-normal) var(--ease-standard)}
+.ckstem.on{transform:scaleY(1);background:var(--accent)}
+.breathe{animation:br 2.4s var(--ease-standard) infinite}
+@keyframes br{0%,100%{opacity:1}50%{opacity:.62}}
+[data-reduce="on"] .breathe{animation:none}
+.skel{background:var(--surfaceSunken);border-radius:6px;height:34px}
+.skelgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 20px}
+.skeltile{aspect-ratio:9/16;background:var(--surfaceSunken);border-radius:8px}
+
+/* pulse: opacity only, never scale (jitter) */
+.pulse.go{animation:pl calc(var(--dur-slow)*2) var(--ease-standard) 3}
+@keyframes pl{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
+.note{font-family:var(--mono);font-size:11px;color:#9AA0A6;max-width:78ch;line-height:1.65}
+.note b{color:#E8EAEC}
+.hz{width:100%;height:1px;background:#3C4147;margin:36px 0 4px}
+</style>
+</head>
+<body>
+<h1>Remy — WS-5 motion lab</h1>
+<p class="lede">Every duration, easing and spring on this page is read from <code>src/theme/tokens.ts</code>.
+Each artboard is a fixed 393&times;852 element, so this is a true phone-width render at any browser width.
+<b>Reduced motion</b> sets every duration to <code>0ms</code> — instant, never merely faster — exactly as
+<code>resolveDuration()</code> does. Haptic moments are marked <span style="color:#7FD0A4">&#9679;</span> and reported
+in the top bar; they fire under reduced motion too, because a haptic is feedback rather than motion.</p>
+
+<div class="bar">
+  <button id="theme">Licht / donker</button>
+  <button id="reduce" aria-pressed="false">Reduced motion: uit</button>
+  <button id="replay">Alles opnieuw afspelen &#8635;</button>
+  <span class="cap" style="margin-left:auto" id="state"></span>
+</div>
+
+<h2>1 &middot; Kiezen — de onthulling en de streep</h2>
+<p class="note">Left: what ships today. The stroke draws over <code>durationFast</code> and the screen navigates after
+<code>durationFast</code> — the grease-pencil mark is spent at the exact instant it completes, and nobody ever sees it at rest.
+Right: the proposal. Left transform-origin (a pencil is drawn; it does not grow from its middle), a 180&nbsp;ms hold, the
+action row leaving under an accelerating curve, then Kookmodus arriving. Tap <b>Ja</b> in either.</p>
+<div class="grid">
+  <div class="cell">
+    <div class="art" id="art-kz-now">
+      <div class="kz">
+        <div class="mid">
+          <div class="reveal" id="kz1-rev">
+            <div class="label" style="color:var(--textMuted);margin-bottom:12px">KIEZEN</div>
+            <div class="dishwrap"><div class="display">Kip kerrie<br>met rijst</div>
+              <div class="stroke" id="kz1-str"></div></div>
+            <div class="label" style="color:var(--textMuted)">REDEN</div>
+            <div class="body" style="color:var(--textSecondary);margin-top:4px">Je at dit al 3 weken niet,<br>en het past binnen 25 minuten.</div>
+            <div class="numeral" style="color:var(--textMuted);margin-top:16px">25 min &nbsp;&middot;&nbsp; voor 4</div>
+          </div>
+        </div>
+        <div class="actions" id="kz1-act">
+          <div class="btn p" id="kz1-ja">Ja</div>
+          <div class="btn s">Iets anders</div>
+          <div class="btn t">Niet koken</div>
+        </div>
+      </div>
+      <div class="cookslide" id="kz1-cook"><span class="caption" style="color:var(--textMuted)">Kookmodus</span></div>
+    </div>
+    <div class="cap bad">vandaag &middot; <b>streep 150 ms, navigatie op 150 ms — de streep wordt nooit gezien</b></div>
+  </div>
+  <div class="cell">
+    <div class="art" id="art-kz-new">
+      <div class="kz">
+        <div class="mid">
+          <div class="reveal" id="kz2-rev">
+            <div class="label" style="color:var(--textMuted);margin-bottom:12px">KIEZEN</div>
+            <div class="dishwrap"><div class="display">Kip kerrie<br>met rijst</div>
+              <div class="stroke left" id="kz2-str"></div></div>
+            <div class="label" style="color:var(--textMuted)">REDEN</div>
+            <div class="body" style="color:var(--textSecondary);margin-top:4px">Je at dit al 3 weken niet,<br>en het past binnen 25 minuten.</div>
+            <div class="numeral" style="color:var(--textMuted);margin-top:16px">25 min &nbsp;&middot;&nbsp; voor 4</div>
+          </div>
+        </div>
+        <div class="actions" id="kz2-act">
+          <div class="btn p" id="kz2-ja">Ja</div>
+          <div class="btn s">Iets anders</div>
+          <div class="btn t">Niet koken</div>
+        </div>
+      </div>
+      <div class="cookslide" id="kz2-cook"><span class="caption" style="color:var(--textMuted)">Kookmodus</span></div>
+    </div>
+    <div class="cap good">voorstel &middot; <b>links-origin, 150 ms + 180 ms hold</b> &nbsp;<span style="color:#7FD0A4">&#9679; impactLight</span></div>
+  </div>
+</div>
+
+<div class="hz"></div>
+<h2>2 &middot; De gesloten lus, en de trage stapel</h2>
+<p class="note">Left: PD-020.2's closed-loop card. The <code>positive</code> stroke is built and mounted; the success haptic
+the same decision specifies is <b>not in the code at all</b> — there are exactly two haptic call sites in the repo,
+<code>SendRecipeSheet</code> and <code>TimerDisplay</code>, and neither is this one. Right: PD-020.1's unseen band,
+40&nbsp;ms apart, capped at four. Watch cards 5 and 6: they carry <code>null</code>, not a delay — they are already at
+rest on their first frame, which is what stops the entrance saying "everything here is new".</p>
+<div class="grid">
+  <div class="cell">
+    <div class="art short" id="art-cl">
+      <div style="padding:20px">
+        <div class="card">
+          <div class="label" style="color:var(--positive)">SANNE MAAKTE JOUW RECEPT</div>
+          <div class="dishwrap" style="margin-bottom:2px"><div class="title2">Traybake kip &amp; citroen</div>
+            <div class="stroke pos left" id="cl-str"></div></div>
+          <div class="numeral" style="color:var(--textMuted);margin-top:6px">35 min &nbsp;&middot;&nbsp; 8,5</div>
+          <div class="chip" id="cl-chip">gemaakt</div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">entree 250 ms &rarr; streep 150 ms &nbsp;<span style="color:#7FD0A4">&#9679; notificationSuccess</span> <b style="color:#E5766D">ontbreekt in code</b></div>
+  </div>
+  <div class="cell">
+    <div class="art short" id="art-stag" style="overflow:hidden">
+      <div class="stack" id="stag"></div>
+    </div>
+    <div class="cap">40 ms &times; index, cap 4 &middot; <b>0 / 40 / 80 / 120 / null / null</b></div>
+  </div>
+</div>
+
+<div class="hz"></div>
+<h2>3 &middot; Het cijfer — vasthouden en verdwijnen</h2>
+<p class="note">Drag the knob. Today the whole control is silent: 91 grades and not one tick.
+The proposal adds a <code>selectionAsync</code> on every whole grade crossed (nine ticks end to end, never ninety) and one
+<code>impactMedium</code> on commit. Watch the hold: <code>durationNormal</code> is long enough to read "8,0" and short
+enough never to read as loading.</p>
+<div class="grid">
+  <div class="cell">
+    <div class="art short" id="art-rate">
+      <div style="height:100%;display:flex;align-items:center">
+        <div class="rcard" id="rcard">
+          <div class="title1" style="text-align:center">Gemaakt!</div>
+          <div class="body" style="text-align:center;color:var(--textSecondary);margin:6px 0 18px">Hoe was het?</div>
+          <div class="timerD" style="text-align:center" id="grade">&ndash;</div>
+          <div class="track" id="track"><div class="fill" id="fill"></div><div class="knob" id="knob"></div></div>
+          <div class="anch caption"><span>Nooit meer</span><span>Graag weer</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">sleep &amp; laat los &middot; <span style="color:#7FD0A4">&#9679; selection per hele cijfer &middot; &#9679; impactMedium bij commit</span></div>
+  </div>
+  <div class="cell">
+    <div class="note" style="padding-top:8px;max-width:393px">
+      <b>Ticks per gesture, end to end</b><br>
+      1,0 &rarr; 10,0 crossing whole grades: <b>9 ticks</b>.<br>
+      The same drag bound to <code>RATING_STEP</code> (0,1): <b>90 ticks</b> — that is what "buzzes too much" looks like,
+      and it is exactly why the tick binds to the whole grade and not to the step.<br><br>
+      <b>Why this control above all others</b><br>
+      It is the only place in Remy where a finger sets a continuous value. A slider with no tactile
+      detent is the commonest single source of "this app feels cheap", and it is the cheapest thing on
+      this page to fix: roughly six lines inside the <code>PanResponder</code> that already exists.
+    </div>
+  </div>
+</div>
+
+<div class="hz"></div>
+<h2>4 &middot; Het blad — een handvat dat liegt, en een dat dat niet doet</h2>
+<p class="note">Left: today. A drag handle is drawn on three of the four sheets and <b>none of them drags</b>;
+the sheet also has no exit at all — <code>visible</code> flips false and it is simply gone.
+Right: <code>motion.springDefault</code> (damping&nbsp;20, mass&nbsp;1, stiffness&nbsp;180) integrated for real, not
+approximated with a bezier. Drag it by the handle or the body. Past 25&nbsp;% of its height, or on a fast flick, it
+dismisses; short of that it springs home. That token is defined in <code>tokens.ts</code> and is consumed by nothing.</p>
+<div class="grid">
+  <div class="cell">
+    <div class="art short" id="art-sh1">
+      <div class="pad" style="padding-top:24px"><div class="title2">Mijn recepten</div></div>
+      <div class="scrim" id="sh1-scrim"></div>
+      <div class="sheet" id="sh1">
+        <div class="grab"></div>
+        <div class="title3" style="text-align:center">Bewaard. Wanneer?</div>
+        <div class="bodySmall" style="text-align:center;color:var(--textMuted);margin:2px 0 16px">Traybake kip &amp; citroen</div>
+        <div class="row"><div class="flash"></div><div class="body">Deze week</div><div class="bodySmall" style="color:var(--textMuted)">kan vanavond verschijnen</div></div>
+        <div class="row"><div class="flash"></div><div class="body">Ooit</div><div class="bodySmall" style="color:var(--textMuted)">komt vanzelf een keer voorbij</div></div>
+      </div>
+      <div style="position:absolute;left:20px;right:20px;bottom:20px"><div class="btn s" id="sh1-open">Open blad</div></div>
+    </div>
+    <div class="cap bad">vandaag &middot; <b>handvat sleept niet, geen exit-animatie</b></div>
+  </div>
+  <div class="cell">
+    <div class="art short" id="art-sh2">
+      <div class="pad" style="padding-top:24px"><div class="title2">Mijn recepten</div></div>
+      <div class="scrim" id="sh2-scrim"></div>
+      <div class="sheet" id="sh2">
+        <div class="grab real"></div>
+        <div class="title3" style="text-align:center">Bewaard. Wanneer?</div>
+        <div class="bodySmall" style="text-align:center;color:var(--textMuted);margin:2px 0 16px">Traybake kip &amp; citroen</div>
+        <div class="row"><div class="flash"></div><div class="body">Deze week</div><div class="bodySmall" style="color:var(--textMuted)">kan vanavond verschijnen</div></div>
+        <div class="row"><div class="flash"></div><div class="body">Ooit</div><div class="bodySmall" style="color:var(--textMuted)">komt vanzelf een keer voorbij</div></div>
+      </div>
+      <div style="position:absolute;left:20px;right:20px;bottom:20px"><div class="btn s" id="sh2-open">Open blad</div></div>
+    </div>
+    <div class="cap good">voorstel &middot; <b>springDefault, sleepbaar, &zeta;=0,75</b> &nbsp;<span style="color:#7FD0A4">&#9679; impactLight bij commit</span></div>
+  </div>
+</div>
+<p class="note" style="margin-top:10px">The arithmetic of <code>springDefault</code>, so nobody has to take it on faith:
+&zeta; = 20 / (2&radic;180) = <b>0,745</b>; &omega;<sub>n</sub> = 13,4 rad/s; overshoot <b>3,0&nbsp;%</b>;
+2&nbsp;% settling in <b>~400 ms</b>. It is a good, slightly lively sheet spring — closer to iOS than to Material — and
+whoever wrote it into <code>tokens.ts</code> chose well. It has simply never been used.</p>
+
+<div class="hz"></div>
+<h2>5 &middot; De wachtwoorden — checkpoints, skeletten, de puls</h2>
+<p class="note">Left: the import narration. Today each circle flips as a hard boolean with no transition, and the third
+never fills on a timer (correct — and the one thing about this screen that is already right). The proposal fills the
+circle over <code>durationNormal</code>, draws the stem down to the next row, and lets the <i>in-flight</i> row breathe
+on a 2,4&nbsp;s opacity cycle — calm waiting, not a spinner, and dead still under reduced motion. Right: skeletons with
+no shimmer, and the timer pulse: opacity only, three times, never scale.</p>
+<div class="grid">
+  <div class="cell">
+    <div class="art short" id="art-ck">
+      <div class="pad" style="padding-top:28px">
+        <div class="title2">Recept plakken</div>
+        <div class="bodySmall" style="color:var(--textMuted);margin-top:4px">TikTok</div>
+        <div style="margin-top:28px" id="cklist"></div>
+      </div>
+      <div style="position:absolute;left:20px;right:20px;bottom:20px"><div class="btn s" id="ckgo">Speel narratie af</div></div>
+    </div>
+    <div class="cap">500 ms &rarr; 1400 ms &rarr; het echte resultaat, nooit een timer</div>
+  </div>
+  <div class="cell">
+    <div class="art short">
+      <div class="pad" style="padding-top:28px">
+        <div class="label" style="color:var(--textMuted)">KIEZEN</div>
+        <div class="skel" style="width:70%;height:38px;margin-top:14px"></div>
+        <div class="skel" style="width:44%;height:14px;margin-top:12px"></div>
+      </div>
+      <div class="skelgrid" style="margin-top:14px">
+        <div class="skeltile" style="max-height:120px"></div><div class="skeltile" style="max-height:120px"></div>
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:56px;display:flex;align-items:center;justify-content:center;gap:20px">
+        <div class="timerD pulse" id="pz" style="color:var(--positive)">00:00</div>
+        <div style="width:56px;height:56px;border-radius:999px;background:var(--positive);flex:none"></div>
+      </div>
+      <div style="position:absolute;left:20px;right:20px;bottom:8px"><div class="btn t" id="pgo">Puls de timer</div></div>
+    </div>
+    <div class="cap">geen shimmer, ooit &middot; puls = alleen opacity &nbsp;<span style="color:#7FD0A4">&#9679; notificationSuccess</span></div>
+  </div>
+</div>
+
+<script>
+/* --------------------------------------------------------------------
+   No framework. Every number below is a token value from tokens.ts,
+   except HOLD_AFTER_STROKE, which is this workstream's one proposal.
+   -------------------------------------------------------------------- */
+const T = { instant:80, fast:150, normal:250, slow:400, deliberate:600 };
+const SPRING = { damping:20, mass:1, stiffness:180 };
+const STAGGER_MS = 40, STAGGER_CAP = 4;
+const HOLD_AFTER_STROKE = 180;   // the proposal's one new number
+const $ = (id)=>document.getElementById(id);
+let reduced = false;
+const D = (ms)=> reduced ? 0 : ms;          // resolveDuration(), in a browser
+
+/* A haptic is feedback, not motion: it survives reduced motion. Here it is
+   a line in the bar, because a browser cannot buzz. */
+function haptic(kind){
+  const el = $('state');
+  el.innerHTML = '<b style="color:#7FD0A4">● ' + kind + '</b>';
+  clearTimeout(haptic.t);
+  haptic.t = setTimeout(()=>{ el.textContent=''; }, 1200);
+  console.log('[haptic]', kind);
+}
+
+/* ---------- controls ---------- */
+let dark = false;
+$('theme').onclick = ()=>{ dark=!dark;
+  document.querySelectorAll('.art').forEach(a=>a.setAttribute('data-scheme', dark?'dark':'light')); };
+$('reduce').onclick = (e)=>{ reduced=!reduced;
+  document.documentElement.setAttribute('data-reduce', reduced?'on':'off');
+  e.target.setAttribute('aria-pressed', String(reduced));
+  e.target.textContent = 'Reduced motion: ' + (reduced?'AAN':'uit'); replayAll(); };
+$('replay').onclick = ()=>replayAll();
+
+/* ---------- 1. Kiezen ---------- */
+function kiezen(prefix, holdMs){
+  const rev=$(prefix+'-rev'), str=$(prefix+'-str'), act=$(prefix+'-act'), cook=$(prefix+'-cook');
+  rev.classList.remove('in'); str.classList.remove('on');
+  act.classList.remove('leaving','gone'); cook.classList.remove('up');
+  void rev.offsetWidth;
+  requestAnimationFrame(()=>rev.classList.add('in'));
+  $(prefix+'-ja').onclick = ()=>{
+    str.classList.add('on');
+    haptic('impactLight — de keuze is gemaakt');
+    // The whole point of the comparison: how long the mark is allowed to exist.
+    setTimeout(()=>{
+      act.classList.add('leaving'); void act.offsetWidth; act.classList.add('gone');
+      cook.classList.add('up');
+      setTimeout(()=>{ cook.classList.remove('up'); act.classList.remove('gone','leaving'); str.classList.remove('on'); }, 1500);
+    }, D(T.fast) + D(holdMs));
+  };
+}
+
+/* ---------- 2a. closed loop ---------- */
+function closedLoop(){
+  const s=$('cl-str'), c=$('cl-chip');
+  s.classList.remove('on'); c.classList.remove('on'); void s.offsetWidth;
+  setTimeout(()=>{ c.classList.add('on'); }, D(T.normal));
+  setTimeout(()=>{ s.classList.add('on'); haptic('notificationSuccess — de lus is rond'); }, D(T.normal)+D(T.fast));
+}
+
+/* ---------- 2b. stagger ---------- */
+function stagger(){
+  const host=$('stag'); host.innerHTML='';
+  const titles=['Traybake kip','Pasta pesto','Soep van pompoen','Rijst met ei','Ovenschotel','Wraps'];
+  titles.forEach((t,i)=>{
+    const d=document.createElement('div'); d.className='scard';
+    // resolveUnseenEntranceDelay(): null below the band, and null under reduced motion.
+    const inBand = i<4;
+    const delay = (reduced||!inBand) ? null : Math.min(i,STAGGER_CAP-1)*STAGGER_MS;
+    d.innerHTML='<div class="card" style="padding:10px"><div class="thumb"></div>'+
+      '<div class="title3" style="margin-top:8px">'+t+'</div>'+
+      '<div class="numeral" style="color:var(--textMuted)">Sanne stuurde dit</div></div>';
+    if(delay===null){ d.classList.add('in'); d.style.transition='none'; }
+    else setTimeout(()=>d.classList.add('in'), delay);
+    host.appendChild(d);
+  });
+}
+
+/* ---------- 3. rating ---------- */
+let resetRating = ()=>{};
+(function rating(){
+  const track=$('track'), fill=$('fill'), knob=$('knob'), grade=$('grade'), card=$('rcard');
+  let dragging=false, lastWhole=null, committed=false;
+  const fmt=(v)=> v.toFixed(1).replace('.',',');
+  function set(f){
+    f=Math.max(0,Math.min(1,f));
+    const val=1+f*9, w=Math.round(val*10)/10;
+    fill.style.width=(f*100)+'%'; knob.style.left=(f*100)+'%'; grade.textContent=fmt(w);
+    grade.style.color='var(--textPrimary)';
+    const whole=Math.floor(w);
+    if(lastWhole!==null && whole!==lastWhole) haptic('selectionAsync — ' + whole + ',0');
+    lastWhole=whole;
+  }
+  function frac(e){ const r=track.getBoundingClientRect();
+    return ((e.touches?e.touches[0].clientX:e.clientX)-r.left)/r.width; }
+  function down(e){ if(committed)return; dragging=true; knob.classList.add('act'); lastWhole=null; set(frac(e)); e.preventDefault(); }
+  function move(e){ if(!dragging)return; set(frac(e)); e.preventDefault(); }
+  function up(){ if(!dragging)return; dragging=false; knob.classList.remove('act');
+    committed=true; haptic('impactMedium — cijfer vastgelegd');
+    setTimeout(()=>{ card.classList.add('out');
+      setTimeout(resetRate, D(T.fast)+900); }, D(T.normal)); }
+  function resetRate(){ card.classList.remove('out'); committed=false; lastWhole=null;
+    fill.style.width='50%'; knob.style.left='50%'; grade.textContent='–'; grade.style.color='var(--textMuted)'; }
+  track.addEventListener('mousedown',down); track.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
+  resetRating=resetRate;
+})();
+
+/* ---------- 4a. today's sheet: a translate in, and nothing on the way out ---------- */
+(function sheetNow(){
+  const sh=$('sh1'), sc=$('sh1-scrim');
+  $('sh1-open').onclick=()=>{
+    sh.style.transition='transform '+D(T.normal)+'ms cubic-bezier(0,0,.2,1)';
+    sh.style.transform='translateY(0)'; sc.classList.add('on');
+    setTimeout(()=>{ sh.style.transition='none'; sh.style.transform='translateY(100%)'; sc.classList.remove('on'); }, 2800);
+  };
+  document.querySelectorAll('#sh1 .row').forEach(r=>{
+    r.addEventListener('click',()=>{ const f=r.querySelector('.flash');
+      f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+      setTimeout(()=>{ sh.style.transition='none'; sh.style.transform='translateY(100%)'; sc.classList.remove('on'); }, D(T.fast)); });
+  });
+})();
+
+/* ---------- 4b. the proposal: real springDefault physics ---------- */
+(function sheetSpring(){
+  const sh=$('sh2'), sc=$('sh2-scrim');
+  let y=0, v=0, target=0, H=300, raf=null, dragging=false, startY=0, startPos=0, open=false;
+  let lastT=0, samples=[];
+  function height(){ return sh.getBoundingClientRect().height || 300; }
+  function apply(){ sh.style.transform='translateY('+y+'px)';
+    sc.style.opacity = String(Math.max(0, Math.min(1, 1-y/H))); }
+  function settle(){
+    y=target; v=0; apply(); raf=null; lastT=0;
+    if(target>0){ open=false; }
+  }
+  function tick(now){
+    if(!lastT) lastT=now;
+    const dt=Math.min((now-lastT)/1000, 1/30); lastT=now;
+    if(reduced){ settle(); return; }
+    // semi-implicit Euler on m*a = -k*x - c*v, the exact springDefault config
+    const steps=Math.max(1,Math.ceil(dt/(1/240))), h=dt/steps;
+    for(let i=0;i<steps;i++){
+      const a=(-SPRING.stiffness*(y-target) - SPRING.damping*v)/SPRING.mass;
+      v+=a*h; y+=v*h;
+    }
+    apply();
+    if(Math.abs(y-target)<0.4 && Math.abs(v)<0.6){ settle(); return; }
+    raf=requestAnimationFrame(tick);
+  }
+  function run(){ if(raf===null){ lastT=0; raf=requestAnimationFrame(tick); } }
+  $('sh2-open').onclick=()=>{
+    sh.style.transform='translateY(0px)'; H=height();
+    y=H; v=0; target=0; open=true; apply(); run();
+  };
+  function down(e){ if(!open)return; dragging=true;
+    startY=(e.touches?e.touches[0].clientY:e.clientY); startPos=y; samples=[];
+    if(raf){cancelAnimationFrame(raf);raf=null;lastT=0;} }
+  function move(e){ if(!dragging)return; const cy=(e.touches?e.touches[0].clientY:e.clientY);
+    const raw=startPos+(cy-startY);
+    // rubber-band upward: a sheet may be pulled past its stop, reluctantly
+    y = raw<0 ? raw*0.28 : raw;
+    samples.push({t:performance.now(),y}); if(samples.length>5)samples.shift();
+    apply(); e.preventDefault(); }
+  function up(){ if(!dragging)return; dragging=false;
+    let vel=0;
+    if(samples.length>1){ const a=samples[0], b=samples[samples.length-1];
+      vel=(b.y-a.y)/Math.max(1,(b.t-a.t))*1000; }
+    v=vel;
+    const dismiss = y > H*0.25 || vel > 700;
+    target = dismiss ? H : 0;
+    if(!dismiss) haptic('impactLight — terug op zijn plek');
+    run(); }
+  sh.addEventListener('mousedown',down); sh.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
+  document.querySelectorAll('#sh2 .row').forEach(r=>{
+    r.addEventListener('click',(e)=>{ if(Math.abs(y)>2) return;
+      const f=r.querySelector('.flash');
+      f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+      haptic('impactLight — bewaard');
+      setTimeout(()=>{ target=height(); H=height(); v=0; run(); }, D(T.fast)); });
+  });
+})();
+
+/* ---------- 5. checkpoints ---------- */
+const CK=['Video gevonden','Bijschrift gelezen','Recept samengesteld'];
+function buildCk(){
+  const host=$('cklist'); host.innerHTML='';
+  CK.forEach((label,i)=>{
+    const wrap=document.createElement('div'); wrap.className='ckcol';
+    wrap.innerHTML='<div class="ck"><div class="dot" data-i="'+i+'"></div>'+
+      '<div class="caption ckl" data-i="'+i+'">'+label+'</div></div>'+
+      (i<CK.length-1?'<div class="ckstem" data-i="'+i+'"></div>':'');
+    host.appendChild(wrap);
+  });
+}
+function playCk(){
+  buildCk();
+  const q=(sel)=>document.querySelectorAll('#cklist '+sel);
+  const light=(i)=>{
+    q('.dot[data-i="'+i+'"]').forEach(d=>{ d.classList.add('on');
+      setTimeout(()=>d.classList.add('settled'), D(T.fast)); });
+    q('.ckl[data-i="'+i+'"]').forEach(l=>{ l.classList.add('on'); l.classList.remove('breathe'); });
+    q('.ckstem[data-i="'+i+'"]').forEach(s=>s.classList.add('on'));
+  };
+  const breathe=(i)=>q('.ckl[data-i="'+i+'"]').forEach(l=>l.classList.add('breathe'));
+  breathe(0);
+  setTimeout(()=>{ light(0); breathe(1); }, 500);
+  setTimeout(()=>{ light(1); breathe(2); }, 1400);
+  // The third only fills when the real result lands. Never on a timer.
+  setTimeout(()=>{ light(2); haptic('notificationSuccess — recept binnen'); }, 3300);
+}
+$('ckgo').onclick=playCk;
+$('pgo').onclick=()=>{ const p=$('pz'); p.classList.remove('go'); void p.offsetWidth; p.classList.add('go');
+  haptic('notificationSuccess — timer klaar'); };
+
+/* ---------- run ---------- */
+function replayAll(){
+  kiezen('kz1', 0);
+  kiezen('kz2', HOLD_AFTER_STROKE);
+  closedLoop(); stagger(); resetRating(); buildCk();
+}
+replayAll();
+</script>
+</body>
+</html>

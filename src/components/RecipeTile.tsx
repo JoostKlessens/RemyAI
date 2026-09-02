@@ -67,6 +67,7 @@ import { Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-
 import type { Meal } from '@/domain/types';
 import { LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL, LIBRARY_TILE_ACTIONS_HINT } from './libraryTileActionCopy';
 import { buildSchedulingLabel, type RecipeSchedulingInfo } from './recipeScheduling';
+import { useThumbnailFallback } from './useThumbnailFallback';
 import { type ColorTokens, fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 export interface RecipeTileProps {
@@ -103,6 +104,7 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
   const colors = getColors(scheme);
   const badge = resolveBadgeStyle(scheduling.state, colors);
   const monogram = meal.title.trim().charAt(0).toUpperCase() || '?';
+  const thumbnail = useThumbnailFallback(meal.thumbnailUrl);
   const hasActions = onLongPress !== undefined;
 
   return (
@@ -127,11 +129,12 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
       style={styles.tile}
     >
       <View style={[styles.frame, { backgroundColor: colors.surfaceSunken }]}>
-        {meal.thumbnailUrl !== null ? (
+        {thumbnail.showsImage ? (
           <Image
-            source={{ uri: meal.thumbnailUrl }}
+            source={{ uri: meal.thumbnailUrl ?? undefined }}
             style={styles.thumbnail}
             resizeMode="cover"
+            onError={thumbnail.onError}
             accessibilityIgnoresInvertColors
           />
         ) : (

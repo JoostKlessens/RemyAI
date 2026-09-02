@@ -5,15 +5,51 @@
  * opacity (never scale — scale would jitter the digits) and fires a
  * success haptic; it never auto-advances the step, the cook confirms by
  * tapping "Volgende" themselves.
+ *
+ * This component owns no time. It is *controlled*: the countdown lives
+ * in `@/domain/cookTimer` as a deadline, and the screen holds one such
+ * state per step id. Two bugs made that necessary. The timer used to
+ * decrement a counter inside `setInterval`, so a backgrounded phone
+ * silently stopped the clock and handed the cook back minutes they had
+ * already spent. And the state lived here, in a component mounted as a
+ * sibling of the current step — so reading one step ahead unmounted the
+ * timer and threw a running simmer away. Both are properties of *where
+ * the state lived*, which is why the fix moved it rather than patching
+ * it in place.
+ *
+ * The interval below is therefore a rendering concern and nothing more:
+ * it re-asks "what time is it" once a second, and missing a hundred of
+ * those ticks changes no answer. `AppState` snaps the clock forward the
+ * instant the app returns to the foreground, so a cook who unlocks their
+ * phone sees the truth on that frame rather than up to a second later.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
-import { AccessibilityInfo, Animated, PixelRatio, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import {
+  AccessibilityInfo,
+  Animated,
+  AppState,
+  PixelRatio,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+} from 'react-native';
+import {
+  formatCookTimer,
+  isCookTimerFinished,
+  pauseCookTimer,
+  remainingSecondsAt,
+  startCookTimer,
+  type CookTimerState,
+} from '@/domain/cookTimer';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 export interface TimerDisplayProps {
-  readonly durationMinutes: number;
+  readonly state: CookTimerState;
+  readonly onChangeState: (next: CookTimerState) => void;
   readonly reduceMotionEnabled: boolean;
 }
 
@@ -21,12 +57,11 @@ const CIRCLE_SIZE = 56;
 const TICK_MS = 1000;
 
 export function TimerDisplay(props: TimerDisplayProps): JSX.Element {
-  const { durationMinutes, reduceMotionEnabled } = props;
+  const { state, onChangeState, reduceMotionEnabled } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  const [remainingSeconds, setRemainingSeconds] = useState(() => Math.round(durationMinutes * 60));
-  const [isRunning, setIsRunning] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const pulse = useRef(new Animated.Value(1)).current;
   const hasPulsedForZero = useRef(false);
   // A5 (documented in tokens.ts alongside the Dynamic Type rules): the
@@ -36,28 +71,42 @@ export function TimerDisplay(props: TimerDisplayProps): JSX.Element {
   // to match, so the glyph never bleeds past a fixed 56pt hit target.
   const circleSize = CIRCLE_SIZE * PixelRatio.getFontScale();
 
-  useEffect(() => {
-    setRemainingSeconds(Math.round(durationMinutes * 60));
-    setIsRunning(false);
-    hasPulsedForZero.current = false;
-  }, [durationMinutes]);
+  const isComplete = isCookTimerFinished(state, nowMs);
+  const isRunning = state.status === 'running';
 
   useEffect(() => {
-    if (!isRunning || remainingSeconds <= 0) {
+    if (!isRunning || isComplete) {
       return undefined;
     }
     const interval = setInterval(() => {
-      setRemainingSeconds((current) => Math.max(0, current - 1));
+      setNowMs(Date.now());
     }, TICK_MS);
     return () => clearInterval(interval);
-  }, [isRunning, remainingSeconds]);
+  }, [isRunning, isComplete]);
+
+  // Background timers are throttled, or suspended outright, so the
+  // interval above cannot be trusted to have kept pace while the phone
+  // was locked. Re-reading the clock on foreground is what turns
+  // "eventually correct" into "correct on the frame the cook looks at".
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        setNowMs(Date.now());
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
-    if (remainingSeconds !== 0 || hasPulsedForZero.current) {
+    if (!isComplete) {
+      // Reset rather than latch, so a restarted timer can announce again.
+      hasPulsedForZero.current = false;
+      return;
+    }
+    if (hasPulsedForZero.current) {
       return;
     }
     hasPulsedForZero.current = true;
-    setIsRunning(false);
 
     const duration = resolveDuration(motion.durationSlow, reduceMotionEnabled);
     Animated.sequence([
@@ -72,17 +121,18 @@ export function TimerDisplay(props: TimerDisplayProps): JSX.Element {
     // opacity pulse is silent to a screen reader — without this, a blind
     // user has no signal the timer finished at all.
     AccessibilityInfo.announceForAccessibility('Timer klaar');
-  }, [remainingSeconds, pulse, reduceMotionEnabled]);
+  }, [isComplete, pulse, reduceMotionEnabled]);
 
   const toggleRunning = (): void => {
-    if (remainingSeconds === 0) {
+    if (isComplete) {
       return;
     }
-    setIsRunning((current) => !current);
+    const now = Date.now();
+    setNowMs(now);
+    onChangeState(isRunning ? pauseCookTimer(state, now) : startCookTimer(state, now));
   };
 
-  const isComplete = remainingSeconds === 0;
-  const formatted = formatClock(remainingSeconds);
+  const formatted = formatCookTimer(remainingSecondsAt(state, nowMs));
 
   return (
     <View style={styles.container}>
@@ -109,16 +159,6 @@ export function TimerDisplay(props: TimerDisplayProps): JSX.Element {
       </Pressable>
     </View>
   );
-}
-
-function formatClock(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${pad(minutes)}:${pad(seconds)}`;
-}
-
-function pad(value: number): string {
-  return value.toString().padStart(2, '0');
 }
 
 const styles = StyleSheet.create({

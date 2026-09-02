@@ -42,6 +42,7 @@
 import { Image, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
 import { buildKringRowAccessibilityLabel, type KringRowModel } from './kringPresentation';
+import { useThumbnailFallback } from './useThumbnailFallback';
 
 export interface KringRowProps {
   readonly row: KringRowModel;
@@ -52,6 +53,7 @@ export function KringRow(props: KringRowProps): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const monogram = row.title.trim().charAt(0).toUpperCase() || '?';
+  const thumbnail = useThumbnailFallback(row.thumbnailUrl);
 
   return (
     <View
@@ -61,11 +63,12 @@ export function KringRow(props: KringRowProps): JSX.Element {
       <Text style={[typeScale.numeral, styles.rank, { color: colors.textMuted }]}>{row.rank}</Text>
 
       <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
-        {row.thumbnailUrl !== null ? (
+        {thumbnail.showsImage ? (
           <Image
-            source={{ uri: row.thumbnailUrl }}
+            source={{ uri: row.thumbnailUrl ?? undefined }}
             style={styles.thumbnail}
             resizeMode="cover"
+            onError={thumbnail.onError}
             accessibilityIgnoresInvertColors
           />
         ) : (

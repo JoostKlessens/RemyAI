@@ -38,6 +38,7 @@ import { ProgressRule } from '@/components/ProgressRule';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { StepView } from '@/components/StepView';
 import { TimerDisplay } from '@/components/TimerDisplay';
+import { createCookTimer, type CookTimerState } from '@/domain/cookTimer';
 import type { CookEventId, DecisionId, HouseholdId, Meal, MealStep } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
@@ -93,6 +94,14 @@ export default function CookModeScreen(): JSX.Element {
   const [cookEventId, setCookEventId] = useState<CookEventId | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [phase, setPhase] = useState<CookPhase>('steps');
+  /**
+   * One timer per step id, held here rather than inside `TimerDisplay`,
+   * because that component unmounts the moment the cook reads ahead —
+   * which used to throw a running simmer away. Keyed by step id and not
+   * by index so it survives any future reordering. Updated immutably;
+   * a step the cook never started simply has no entry.
+   */
+  const [timers, setTimers] = useState<Readonly<Record<string, CookTimerState>>>({});
   const currentStep = steps[stepIndex];
 
   useEffect(() => {
@@ -314,9 +323,30 @@ export default function CookModeScreen(): JSX.Element {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <View style={styles.progressBlock}>
-        <Text style={[typeScale.numeral, styles.stepCounter, { color: colors.textMuted }]}>
-          Stap {stepIndex + 1} / {steps.length}
-        </Text>
+        {/* This screen is `presentation: 'fullScreenModal'` (src/app/_layout.tsx),
+            and an iOS full-screen modal has no swipe-to-dismiss. Until this
+            row existed, every `router.back()` in this file sat in a branch a
+            cook never reaches — the error state, the no-steps state and the
+            outcome phase — so opening a recipe from a library tile trapped you
+            in the steps until you walked all the way to the last one. Rendered
+            unconditionally rather than behind a prop, because a control that
+            depends on a caller passing something is exactly how OutcomeCard's
+            `onSendRecipe` shipped to nobody (handover §7). A counter plus
+            exactly one control of the screen's own is docs/DESIGN.md's header
+            rule, so this row obeys it rather than inventing a second one. */}
+        <View style={styles.progressHeader}>
+          <Text style={[typeScale.numeral, { color: colors.textMuted }]}>
+            Stap {stepIndex + 1} / {steps.length}
+          </Text>
+          <Button
+            label="Stoppen"
+            variant="secondary"
+            onPress={() => router.back()}
+            minHeight={spacing.touchTargetMin}
+            accessibilityLabel="Stoppen met koken"
+            accessibilityHint="Sluit de kookmodus. Er wordt niets opgeslagen."
+          />
+        </View>
         <ProgressRule
           progress={(stepIndex + 1) / steps.length}
           accessibilityLabel={`Stap ${stepIndex + 1} van ${steps.length}`}
@@ -330,7 +360,11 @@ export default function CookModeScreen(): JSX.Element {
           reduceMotionEnabled={reduceMotionEnabled}
         />
         {currentStep.durationMinutes !== null ? (
-          <TimerDisplay durationMinutes={currentStep.durationMinutes} reduceMotionEnabled={reduceMotionEnabled} />
+          <TimerDisplay
+            state={timers[currentStep.id] ?? createCookTimer(currentStep.durationMinutes)}
+            onChangeState={(next) => setTimers((current) => ({ ...current, [currentStep.id]: next }))}
+            reduceMotionEnabled={reduceMotionEnabled}
+          />
         ) : null}
       </View>
 
@@ -385,7 +419,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenPaddingHorizontal,
     paddingTop: spacing.space4,
   },
-  stepCounter: {
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.space3,
     marginBottom: spacing.space2,
   },
   stepBlock: {

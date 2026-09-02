@@ -176,6 +176,11 @@ const styles = StyleSheet.create({
     right: '22.5%',
     bottom: -spacing.space2,
     height: 2,
+    // Draws left-to-right like a pencil mark, rather than growing out
+    // from its own middle, which is what an untouched scaleX does.
+    // FriendProofCard and SendRecipeSheet both set this already; this
+    // stroke — the app's signature one — was the one that missed it.
+    transformOrigin: 'left',
   },
   reasonBlock: {
     alignItems: 'center',

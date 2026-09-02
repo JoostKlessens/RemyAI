@@ -90,7 +90,8 @@
  * read-receipt system (§3.2), and `seen_at` is never shown to the sender.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -116,7 +117,6 @@ import {
   resolveUnseenEntranceDelay,
   type GekooktCard,
 } from '@/components/gekooktPresentation';
-import type { RecipeId } from '@/domain/social/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useSession } from '@/hooks/useSession';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
@@ -165,6 +165,40 @@ export default function FriendsScreen(): JSX.Element {
 
   const [source, setSource] = useState<FriendsSource>('live');
   const [state, setState] = useState<FriendsState>(INITIAL_STATE);
+
+  /**
+   * PD-020.2's closed-loop haptic. The decision specified a `positive`
+   * stroke *and* a haptic for the moment you learn somebody cooked the
+   * thing you sent them; only the stroke was ever built, so the warmest
+   * event in the product landed silently.
+   *
+   * ON THE SCREEN, NOT ON THE CARD. "Once, when you arrive and it is
+   * true" is a property of the visit, and `FriendProofCard` has no way to
+   * know whether it is the first closed loop in the list or the third —
+   * a card-level haptic would buzz once per closed loop, turning a
+   * greeting into a rattle.
+   *
+   * NOT GATED ON REDUCED MOTION. A haptic is feedback, not motion, and
+   * docs/DESIGN.md already establishes that for the closed loop: someone
+   * who has turned animation off still gets told.
+   *
+   * The ref latches for the lifetime of the mount, so switching dev
+   * scenarios or refreshing does not re-fire it.
+   */
+  const hasBuzzedForClosedLoop = useRef(false);
+  useEffect(() => {
+    if (hasBuzzedForClosedLoop.current || state.status !== 'ready') {
+      return;
+    }
+    const hasClosedLoop = state.cards.some((card) => isProofCard(card) && card.closedLoop);
+    if (!hasClosedLoop) {
+      return;
+    }
+    hasBuzzedForClosedLoop.current = true;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
+      // Haptics unsupported here — the positive stroke still lands.
+    });
+  }, [state.status, state.cards]);
 
   const load = useCallback(
     async (next: FriendsSource, profileId: string | null, isCurrent: () => boolean): Promise<void> => {
@@ -275,30 +309,31 @@ export default function FriendsScreen(): JSX.Element {
         <Text style={[typeScale.bodySmall, styles.headerSubtitle, { color: colors.textMuted }]}>{SUBTITLE_COPY}</Text>
       </View>
 
+      {/*
+        A PROOF CARD HAS NOWHERE TO GO YET, and no `onOpenProof` is passed
+        for it, which is the whole point rather than an omission.
+
+        It would open the CANONICAL recipe — the world-readable `recipes`
+        row — and no screen in this app reads one: `/friends/[feedItemId]`
+        resolves a feed item and would answer a recipe id with "Dit recept
+        staat er niet meer", a lie about a recipe that exists. Routing
+        somewhere wrong is worse than routing nowhere.
+
+        This used to pass `() => undefined`, which routed nowhere but still
+        let the card announce itself as a button, hint "Open het volledige
+        recept" and depress under a thumb that got nothing back. `KringRow`
+        met the same question and answered it properly by not being
+        pressable at all; `FriendProofCard` now takes that answer too, via
+        an optional handler whose absence removes the affordance rather
+        than emptying it. The fix for the missing destination is still the
+        canonical-recipe screen.
+      */}
       <FriendsBody
         state={state}
         reduceMotionEnabled={reduceMotionEnabled}
         onOpenLibrary={() => router.push('/recipes')}
         onAddFriend={() => router.push(ADD_FRIEND_ROUTE)}
         onOpenSend={(feedItemId: string) => router.push(`/friends/${feedItemId}?scenario=${detailScenario}`)}
-        /**
-         * A PROOF CARD HAS NOWHERE TO GO YET, and this states that rather
-         * than inventing a destination.
-         *
-         * It opens the CANONICAL recipe — the world-readable `recipes` row
-         * — and no screen in this app reads one: `/friends/[feedItemId]`
-         * resolves a feed item and would answer a recipe id with "Dit
-         * recept staat er niet meer", which is a lie about a recipe that
-         * exists. Routing somewhere wrong is worse than routing nowhere.
-         *
-         * This is the same conclusion `KringRow` reached for the same
-         * reason — see src/components/KringRow.tsx, which states it in
-         * those words — with one difference: the kring row simply is not
-         * pressable, while `FriendProofCard` owns its own press affordance
-         * and so still depresses. That is a real rough edge and the fix is
-         * the canonical-recipe screen, not a handler that pretends.
-         */
-        onOpenProof={() => undefined}
       />
     </SafeAreaView>
   );
@@ -310,16 +345,19 @@ interface FriendsBodyProps {
   readonly onOpenLibrary: () => void;
   /** §4.4's handle exchange — the second of the two doors §4.2 puts on the empty state. */
   readonly onAddFriend: () => void;
-  /** A send opens the SENDER'S OWN MEAL, readable only while `has_active_send_to_me()` says so. */
-  readonly onOpenSend: (feedItemId: string) => void;
   /**
-   * Proof opens the CANONICAL, world-readable `recipes` row. Two
-   * callbacks rather than one taking a union, because the difference
-   * between them is the privacy model: one destination is a private
-   * household row and the other is public, and a single handler would
-   * make that a runtime branch instead of two named things.
+   * A send opens the SENDER'S OWN MEAL, readable only while
+   * `has_active_send_to_me()` says so.
+   *
+   * There is deliberately no `onOpenProof` beside it. Proof would open
+   * the CANONICAL, world-readable `recipes` row, and nothing reads one
+   * yet. When that screen exists this becomes two callbacks rather than
+   * one taking a union, because the difference between them is the
+   * privacy model: one destination is a private household row and the
+   * other is public, and a single handler would make that a runtime
+   * branch instead of two named things.
    */
-  readonly onOpenProof: (recipeId: RecipeId) => void;
+  readonly onOpenSend: (feedItemId: string) => void;
 }
 
 /**
@@ -364,7 +402,6 @@ function FriendsBody(props: FriendsBodyProps): JSX.Element {
           // could outlive the visit it describes.
           entranceDelayMs: resolveUnseenEntranceDelay(index, state.unseenBandSize, props.reduceMotionEnabled),
           onOpenSend: props.onOpenSend,
-          onOpenProof: props.onOpenProof,
         })
       }
       ItemSeparatorComponent={ListGap}
@@ -380,7 +417,6 @@ interface FeedCardOptions {
   /** PD-020.1's entrance, or null for a card that renders already at rest. Proof cards are always null. */
   readonly entranceDelayMs: number | null;
   readonly onOpenSend: (feedItemId: string) => void;
-  readonly onOpenProof: (recipeId: RecipeId) => void;
 }
 
 /**
@@ -409,11 +445,7 @@ interface FeedCardOptions {
 function renderFeedCard(card: GekooktCard, options: FeedCardOptions): JSX.Element {
   if (isProofCard(card)) {
     return (
-      <FriendProofCard
-        model={card}
-        reduceMotionEnabled={options.reduceMotionEnabled}
-        onOpenCanonicalRecipe={options.onOpenProof}
-      />
+      <FriendProofCard model={card} reduceMotionEnabled={options.reduceMotionEnabled} />
     );
   }
 

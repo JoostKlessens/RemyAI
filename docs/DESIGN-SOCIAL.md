@@ -229,15 +229,23 @@ line — never "nog niemand die je kent", which would read as a verdict.
 
 The shipped subtitle is already *"Wat vrienden echt gekookt hebben."* —
 what friends **cooked**, not what they sent. The DM-only draft
-contradicted live copy; this model makes the copy exactly true. The tab
-now holds two friend-scoped views behind a `SegmentedControl` (§4.2):
+contradicted live copy; this model makes the copy exactly true.
 
-- **Gekookt** — the ranked feed: ambient proof cards (friends' cook
-  events) with directed sends rendered in the same list as the
-  higher-intent subset they are. Ordering stays `rankFeedItems`
-  cookability; the list stays finite and says so. This is the default
-  view on every visit, and the unseen-send count (§3.2) belongs to it.
-- **Kring** — §2.2's ranked aggregate of the same circle's votes.
+> **SUPERSEDED, 2026-08-27.** This section described two friend-scoped
+> views behind a `SegmentedControl` on Vrienden, `Gekookt` and `Kring`.
+> **That control no longer exists.** The owner ruled: *"I want the top
+> ranking recipes from my friends on the ranking tab, not in that 'kring'
+> list."* Vrienden is now one list, and the friends' ranking moved to
+> Trending as an `Iedereen | Vrienden` scope. The argument below for why a
+> mode switch was *safe here* is therefore moot; the argument for why it
+> was wrong on a protected global object still stands, and is why the
+> scope switch now on Trending is a different thing. The word "kring" was
+> retired from user-facing copy at the same time.
+
+The tab holds the ranked feed: ambient proof cards (friends' cook events)
+with directed sends rendered in the same list as the higher-intent subset
+they are. Ordering stays `rankFeedItems` cookability; the list stays
+finite and says so. The unseen-send count (§3.2) belongs to it.
 
 A mode switch was removed from Ranglijst and is safe here, and the
 difference is worth stating: on Ranglijst the toggle re-ordered a
@@ -406,11 +414,13 @@ Everything §8 establishes stands unless named here: the finite list,
 `rankFeedItems`, the PD-007a chip, the color discipline, the withdrawn
 state, the end line "Dat is alles wat er gedeeld is." Changes:
 
-- **A `SegmentedControl` under the header:** `Gekookt` | `Kring`,
-  defaulting to `Gekookt` on every visit, never persisted. The header
-  subtitle swaps with the mode: "Wat vrienden echt gekookt hebben." /
-  "Wat je kring het beste vindt."
-- **Gekookt holds two card kinds in one list.** A *proof card*
+- ~~**A `SegmentedControl` under the header:** `Gekookt` | `Kring`~~
+  **SUPERSEDED, 2026-08-27 — see the note in §2.4.** There is no mode
+  switch on Vrienden. It is one list with one subtitle, *"Wat vrienden
+  echt gekookt hebben."*, and the friends' ranking lives on Trending
+  behind an `Iedereen | Vrienden` scope. Everything below about the two
+  card kinds still applies to that single list.
+- **The list holds two card kinds.** A *proof card*
   (ambient): eyebrow `SANNE MAAKTE DIT`, dish, key ingredients, meta
   "30 min · 8,5" (her public `recipe_ratings` vote; absent if she never
   voted), creator line (attribution is not optional — these are
@@ -592,8 +602,15 @@ is shared by a migration, ever.
    defaulting to `private`. Sharing is an act, never a default."
    Proposed: the *act* is the global opt-in (one deliberate, revocable
    consent to name your cooks to friends), narrowed per dish by `Deel
-   deze niet`, or a per-recipe send; `meals.visibility` remains as the
-   fail-closed gate for send-shared meals, and the proof layer never
+   deze niet`, or a per-recipe send; ~~`meals.visibility` remains as the
+   fail-closed gate for send-shared meals~~ **(CORRECTED, 2026-08-27:
+   this is not what shipped. Migration 0009 reads a send through its own
+   predicate `has_active_send_to_me`, added as an additional permissive
+   policy on `meals`, `meal_ingredients` and `meal_steps`. A send never
+   sets `visibility = 'friends'`. The shipped shape is strictly narrower
+   and is binding — `'friends'` would expose the dish to the whole friend
+   list in order to hand it to one person. Recorded in PD-015.)**, and the
+   proof layer never
    reads a meal at all — it reads a projection of cook events onto
    canonical recipes (§7), which are already world-readable. Off by
    default; no `public` member appears; all five PD-010 mitigations

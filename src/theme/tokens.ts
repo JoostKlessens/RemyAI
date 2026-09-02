@@ -374,7 +374,14 @@ export const typeScale: Record<TypeScaleKey, TypeStyle> = {
   timerDisplay: {
     fontFamily: fontFamily.monoSemiBold,
     fontSize: 64,
-    lineHeight: 68,
+    // 84, not 68: IBM Plex Mono declares ascent + descent of 1.3 em, so
+    // at 64pt the font asks for 83.2pt of vertical room. A 68pt line box
+    // is 15.2pt shorter than the glyphs it has to hold — invisible on
+    // iOS, which lets text overflow its line box, and a clipping risk on
+    // Android, which does not. This is the largest element in the app,
+    // and RatingScale's grade borrows the same treatment, so the fix
+    // lands on "8,70" as well as on "05:00".
+    lineHeight: 84,
     fontWeight: '600',
     letterSpacing: 0,
     fontVariant: ['tabular-nums'],

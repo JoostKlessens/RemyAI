@@ -106,7 +106,7 @@ import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repo
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import { supabase } from '@/lib/supabase';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
-import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { getColors, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
 type VanavondView = 'decision' | 'declined';
@@ -114,6 +114,23 @@ type DevScenario = 'normal' | 'empty_rotation' | 'all_excluded' | 'filtered_out'
 
 /** How far back "recent" decisions/cook history reach for novelty-tier classification — see novelty.ts. */
 const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
+
+/**
+ * How long "Ja" holds the screen before Kookmodus takes over.
+ *
+ * DecisionCard draws its accent stroke over `motion.durationFast`
+ * (150ms), and this used to wait exactly `motion.durationFast` too — so
+ * navigation landed on the very frame the stroke finished, and the one
+ * gesture the whole screen is built around was never actually seen.
+ * DecisionCard's own header says the stroke lands "before the screen
+ * navigates to Kookmodus"; this is the number that makes that true.
+ *
+ * Deliberately not a `motion` token: it is not a duration anything
+ * animates over, it is the beat after one. It still goes through
+ * `resolveDuration`, so reduced motion navigates instantly rather than
+ * merely sooner.
+ */
+const ACCEPT_STROKE_HOLD_MS = 180;
 
 interface LiveSession {
   readonly householdId: HouseholdId;
@@ -370,7 +387,7 @@ export default function VanavondScreen(): JSX.Element {
     }
     setTimeout(() => {
       router.push(`/cook/${result.mealId}`);
-    }, resolveDuration(motion.durationFast, reduceMotionEnabled));
+    }, resolveDuration(ACCEPT_STROKE_HOLD_MS, reduceMotionEnabled));
   };
 
   const handleRequestAlternative = (): void => {

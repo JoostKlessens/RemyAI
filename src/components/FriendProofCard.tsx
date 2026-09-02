@@ -65,6 +65,7 @@ import {
   buildFriendProofMetaLine,
   type FriendProofCardModel,
 } from './friendFeedPresentation';
+import { useThumbnailFallback } from './useThumbnailFallback';
 import type { RecipeId } from '@/domain/social/types';
 import { fontFamily, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
@@ -75,8 +76,19 @@ export interface FriendProofCardProps {
    * holds. It is passed as an argument rather than closed over by the
    * caller so that a screen wiring this up has a publicly readable recipe
    * id in hand and no household row anywhere in reach.
+   *
+   * OPTIONAL, AND ITS ABSENCE IS MEANINGFUL. No screen in this app reads
+   * a canonical recipe yet, so the only caller passed `() => undefined` —
+   * and the card still announced itself as a button, hinted "Open het
+   * volledige recept", and depressed under a thumb that got nothing back.
+   * `KringRow` met the identical question and answered it by not being
+   * pressable at all, arguing in its own header that "an action that
+   * silently does nothing is worse than no action". This prop now carries
+   * that same answer: given a handler the card is a button, given none it
+   * is a card. The fix for the missing destination is the
+   * canonical-recipe screen, not a handler that pretends.
    */
-  readonly onOpenCanonicalRecipe: (recipeId: RecipeId) => void;
+  readonly onOpenCanonicalRecipe?: (recipeId: RecipeId) => void;
   /** Read once per screen and passed down, per docs/DESIGN.md "Global rules". */
   readonly reduceMotionEnabled: boolean;
 }
@@ -101,6 +113,7 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
   const metaLine = buildFriendProofMetaLine(model.estimatedMinutes, model.grade);
   const collisionLabel = buildAllergenCollisionLabel(model.collidingTags);
   const monogram = model.title.trim().charAt(0).toUpperCase() || '?';
+  const thumbnail = useThumbnailFallback(model.thumbnailUrl);
 
   useEffect(() => {
     if (!model.closedLoop) {
@@ -127,24 +140,38 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
     }).start();
   };
 
+  /**
+   * Every affordance that claims this card is a button lives here
+   * together, so the claim and the destination cannot drift apart. With
+   * no handler there is no role, no hint and no press-scale — the card
+   * keeps only its accessibility label, exactly as `KringRow` does.
+   */
+  const pressAffordance =
+    onOpenCanonicalRecipe === undefined
+      ? {}
+      : {
+          onPress: () => onOpenCanonicalRecipe(model.recipeId),
+          onPressIn: () => animateTo(PRESS_SCALE),
+          onPressOut: () => animateTo(1),
+          accessibilityRole: 'button' as const,
+          accessibilityHint: 'Open het volledige recept',
+        };
+
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
-        onPress={() => onOpenCanonicalRecipe(model.recipeId)}
-        onPressIn={() => animateTo(PRESS_SCALE)}
-        onPressOut={() => animateTo(1)}
+        {...pressAffordance}
         accessible
-        accessibilityRole="button"
         accessibilityLabel={buildFriendProofCardAccessibilityLabel(model)}
-        accessibilityHint="Open het volledige recept"
         style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
         <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
-          {model.thumbnailUrl !== null ? (
+          {thumbnail.showsImage ? (
             <Image
-              source={{ uri: model.thumbnailUrl }}
+              source={{ uri: model.thumbnailUrl ?? undefined }}
               style={styles.thumbnail}
               resizeMode="cover"
+              onError={thumbnail.onError}
               accessibilityIgnoresInvertColors
             />
           ) : (

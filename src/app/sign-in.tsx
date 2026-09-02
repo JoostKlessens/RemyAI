@@ -65,8 +65,8 @@ export default function SignInScreen(): JSX.Element {
           Eén gerecht, elke avond
         </Text>
         <Text style={[typeScale.body, styles.body, { color: colors.textSecondary }]}>
-          Remy bewaart de recepten die je tegenkomt en kiest er elke avond één uit. Je hebt een
-          account nodig, zodat je bibliotheek blijft bestaan als je telefoon dat niet doet.
+          Remy bewaart de recepten die je tegenkomt en kiest er elke avond één uit. Met een
+          account blijven je recepten bestaan, ook als je telefoon dat niet doet.
         </Text>
 
         <Text style={[typeScale.label, styles.fieldLabel, { color: colors.textMuted }]}>E-MAILADRES</Text>
