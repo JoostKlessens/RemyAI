@@ -31,6 +31,25 @@ export interface ImportConfirmParams {
   /** oEmbed's thumbnail, when parsing succeeded and one was returned — see Meal.thumbnailUrl (src/domain/types.ts). Always null in 'manual' mode. */
   readonly thumbnailUrl: string | null;
   /**
+   * IMP-09. The text the import actually read — `ImportResult`'s
+   * `no_recipe_in_caption.caption` — carried so the manual screen can show
+   * it back to somebody now typing the recipe out by hand.
+   *
+   * IT MUST TRAVEL FOR THE SAME REASON `recipeId` MUST: the far side cannot
+   * get it back. The caption was fetched by an edge function, handed to a
+   * model, and returned in a response the paste screen is holding and about
+   * to navigate away from. Nothing on the confirmation screen could ask for
+   * it again without repeating the fetch AND the model call — paying twice
+   * for text already in memory, on the one route that just failed.
+   *
+   * Null on every parsed import (there is a recipe; nobody needs the source
+   * text), on a from-scratch add, and on any failure that happened before
+   * text existed. Whether it is SHOWN is not decided here — see
+   * src/components/sourceTextCopy.ts, which refuses a display-only platform
+   * on PD-011 grounds even though today none can reach this field.
+   */
+  readonly sourceText: string | null;
+  /**
    * The canonical `recipes` row (0006) this import resolved to, straight
    * off `ImportResult.recipeId` — the shared object `meals.recipe_id`
    * points at, and the only thing a friend's cook can be joined to
@@ -198,6 +217,7 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
     thumbnailUrl: null,
     recipeId: null,
     provenance: null,
+    sourceText: null,
   };
   if (raw === undefined) {
     return empty;
@@ -211,6 +231,12 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
       return empty;
     }
     if (!isNullableString(parsed.authorUrl) || !isNullableString(parsed.thumbnailUrl)) {
+      return empty;
+    }
+    // Same rule as every other scalar here, and for the reason spelled out
+    // under `recipeId` below: paste.tsx always writes this key, so a payload
+    // missing it did not come from the screen this decoder trusts.
+    if (!isNullableString(parsed.sourceText)) {
       return empty;
     }
     // Held to the same rule as every other scalar here rather than a
@@ -239,6 +265,7 @@ export function decodeImportConfirmParams(raw: string | undefined): ImportConfir
       thumbnailUrl: parsed.thumbnailUrl,
       recipeId: parsed.recipeId,
       provenance: readProvenance(parsed.provenance),
+      sourceText: parsed.sourceText,
     };
   } catch {
     return empty;

@@ -80,6 +80,7 @@ import { readCreditableAuthorName } from '@/components/importCreatorCopy';
 import { RecipeProvenanceNote } from '@/components/RecipeProvenanceNote';
 import { buildImportConfirmGuidance } from '@/components/recipeProvenanceCopy';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
+import { SourceTextPanel } from '@/components/SourceTextPanel';
 import { SaveIntentSheet } from '@/components/SaveIntentSheet';
 import { useHouseholdAllergenRestriction } from '@/hooks/useHouseholdAllergenRestriction';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
@@ -468,7 +469,8 @@ export default function ImportConfirmScreen(): JSX.Element {
 
   const params = useLocalSearchParams<{ data?: string }>();
   const [confirmParams] = useState(() => decodeImportConfirmParams(params.data));
-  const { mode, recipe, platform, authorName, authorUrl, sourceUrl, recipeId, provenance } = confirmParams;
+  const { mode, recipe, platform, authorName, authorUrl, sourceUrl, recipeId, provenance, sourceText } =
+    confirmParams;
   const friendProofLine = useFriendProofLine(recipeId);
 
   const [title, setTitle] = useState(recipe?.title ?? '');
@@ -624,6 +626,16 @@ export default function ImportConfirmScreen(): JSX.Element {
             recipeProvenanceCopy.ts's; this screen only decides where it
             sits. */}
         <RecipeProvenanceNote provenance={provenance} />
+
+        {/* IMP-09. Under the provenance note and above the fields it helps
+            fill, which is the only position that reads correctly: it is
+            reference material for the typing below it, not a statement
+            about the recipe like the two blocks above. It renders nothing
+            unless an import actually read text and failed to find a recipe
+            in it — see sourceTextCopy.ts, which also holds the PD-011
+            refusal. Every string is that module's; this screen only
+            decides where it sits. */}
+        <SourceTextPanel sourceText={sourceText} platform={platform} />
 
         <View style={styles.field}>
           <Text style={[typeScale.title3, { color: colors.textPrimary }]}>Titel</Text>

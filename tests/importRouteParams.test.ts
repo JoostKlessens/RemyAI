@@ -24,6 +24,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: 'https://p16-sign.tiktokcdn.com/thumb.jpg',
       recipeId: RECIPE_ID,
       provenance: 'model_from_caption',
+      sourceText: null,
     };
 
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
@@ -40,6 +41,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: null,
+      sourceText: null,
     };
     expect(decodeImportConfirmParams(encodeImportConfirmParams(params))).toEqual(params);
   });
@@ -55,6 +57,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: null,
+      sourceText: null,
     });
   });
 
@@ -94,6 +97,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
       provenance: 'model_from_caption',
+      sourceText: null,
     });
     expect(decodeImportConfirmParams(raw).recipeId).toBe(RECIPE_ID);
   });
@@ -109,6 +113,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: null,
+      sourceText: null,
     });
     expect(decodeImportConfirmParams(raw).recipeId).toBeNull();
   });
@@ -161,6 +166,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
         thumbnailUrl: null,
         recipeId: RECIPE_ID,
         provenance: 'publisher_structured_data',
+        sourceText: null,
       });
       const decoded = decodeImportConfirmParams(raw);
       expect(decoded.platform).toBe(platform);
@@ -190,6 +196,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: null,
+      sourceText: null,
     });
   });
 
@@ -211,6 +218,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: 'publisher_structured_data',
+      sourceText: null,
     });
     expect(decodeImportConfirmParams(raw).authorUrl).toBe('https://www.leukerecepten.nl/over-sanne');
   });
@@ -226,6 +234,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: 'model_from_caption',
+      sourceText: null,
     });
     const decoded = decodeImportConfirmParams(raw);
     expect(decoded.authorName).toBe('De Kookkanaal');
@@ -251,6 +260,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
         authorUrl: null,
         thumbnailUrl: null,
         recipeId: null,
+        sourceText: null,
         provenance,
       });
       expect(decodeImportConfirmParams(raw).provenance).toBe(provenance);
@@ -268,6 +278,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: null,
       provenance: null,
+      sourceText: null,
     });
     expect(decodeImportConfirmParams(raw).provenance).toBeNull();
   });
@@ -290,6 +301,11 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
       provenance: 'vibes',
+      // Stated so this payload isolates the provenance question. Without
+      // it the strict `sourceText` guard rejects the whole thing and this
+      // test passes for the wrong reason — asserting that a bad provenance
+      // is survivable, while actually measuring a missing key.
+      sourceText: null,
     });
     const decoded = decodeImportConfirmParams(raw);
     expect(decoded.provenance).toBeNull();
@@ -308,6 +324,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       authorUrl: null,
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
+      sourceText: null,
     });
     expect(decodeImportConfirmParams(withoutKey).provenance).toBeNull();
     expect(decodeImportConfirmParams(withoutKey).mode).toBe('parsed');
@@ -322,6 +339,7 @@ describe('encodeImportConfirmParams / decodeImportConfirmParams', () => {
       thumbnailUrl: null,
       recipeId: RECIPE_ID,
       provenance: 7,
+      sourceText: null,
     });
     expect(decodeImportConfirmParams(wrongType).provenance).toBeNull();
     expect(decodeImportConfirmParams(wrongType).mode).toBe('parsed');

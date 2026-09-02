@@ -224,6 +224,13 @@ interface ConfirmNavigationContext {
   /** oEmbed's thumbnail, when one was found — see Meal.thumbnailUrl's own comment in src/domain/types.ts. Always null for manual entry. */
   readonly thumbnailUrl: string | null;
   /**
+   * IMP-09. The text this attempt read, when it read any — carried onward
+   * only by the manual route, which is the only one that has a use for it.
+   * A parsed import already has the recipe; showing the caption beside it
+   * would be offering the working next to the answer.
+   */
+  readonly sourceText: string | null;
+  /**
    * The canonical `recipes` row the import resolved to
    * (`ImportResult.recipeId`), carried straight through so the
    * confirmation screen can write `meals.recipe_id` — the link a friend's
@@ -304,6 +311,7 @@ export default function ImportPasteScreen(): JSX.Element {
           // nothing, which is a real answer.
           recipeId: context.recipeId ?? null,
           provenance: context.provenance,
+          sourceText: context.sourceText,
         }),
       },
     });
@@ -352,6 +360,10 @@ export default function ImportPasteScreen(): JSX.Element {
         recipe: attempt.result.recipe,
         authorName: attempt.authorName,
         authorUrl: attempt.authorUrl,
+        // Stated rather than omitted: a parsed import HAS the recipe, so
+        // there is nothing the source text could add, and that is an answer
+        // rather than a gap.
+        sourceText: null,
         // Null for a pasted-text import, and that is the truth rather than
         // a gap: nothing was fetched, so there is no address to record.
         normalizedUrl: attempt.result.sourceUrl,
@@ -484,6 +496,15 @@ export default function ImportPasteScreen(): JSX.Element {
 
   const handleManualEntry = (): void => {
     const source = manualEntrySource(failedAttempt?.retrySource ?? null);
+    // IMP-09. Exactly one outcome carries the text that was read, and this
+    // reads it off the discriminated union rather than off a field that
+    // might exist: `no_recipe_in_caption` is the only variant with a
+    // `caption`, and it is also the only failure where showing it helps —
+    // the others failed before there was anything to show. Named here
+    // rather than inlined at the call site because "which outcome has the
+    // text" is a fact about ImportResult, not about this screen.
+    const readText =
+      failedAttempt?.result.kind === 'no_recipe_in_caption' ? failedAttempt.result.caption : null;
     navigateToConfirm('manual', {
       recipe: null,
       authorName: failedAttempt?.authorName ?? null,
@@ -493,6 +514,7 @@ export default function ImportPasteScreen(): JSX.Element {
       authorUrl: failedAttempt?.authorUrl ?? null,
       normalizedUrl: source.normalizedUrl,
       platform: source.platform,
+      sourceText: readText,
       // Manual entry normally carries no thumbnail: when oEmbed resolved one
       // and the LLM step then failed, a manually-typed recipe still falls
       // back to the library's monogram tile, per docs/DESIGN.md §2.
@@ -568,6 +590,7 @@ export default function ImportPasteScreen(): JSX.Element {
         recipe: attempt.result.recipe,
         authorName: attempt.authorName,
         authorUrl: attempt.authorUrl,
+        sourceText: null,
         normalizedUrl: attempt.result.sourceUrl,
         platform: attempt.result.platform,
         thumbnailUrl: attempt.thumbnailUrl,
