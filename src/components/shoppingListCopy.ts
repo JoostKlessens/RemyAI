@@ -246,7 +246,10 @@ export interface ShoppingListStateCopy {
 
 const NOTHING_PLANNED_COPY: ShoppingListStateCopy = {
   title: 'Nog niets gepland voor deze week',
-  body: 'Bewaar een recept met “Deze week” in Mijn recepten en het verschijnt hier vanzelf als boodschappenlijst.',
+  // The same correction weekPlanCopy.ts's empty body carries, and for the
+  // same reason: until the long-press sheet gained a "Deze week" row, this
+  // sentence described a path that did not exist.
+  body: 'Houd een recept in Mijn recepten ingedrukt en kies “Deze week”, dan verschijnt het hier als boodschappenlijst.',
 };
 
 /** No meal has an active "deze week" save yet — there is nothing to have bought, so there is nothing to check off. */

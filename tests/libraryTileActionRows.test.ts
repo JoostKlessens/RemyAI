@@ -31,7 +31,26 @@ import {
   reduceCookProofExclusion,
   type CookProofExclusionState,
 } from '@/components/libraryTileActionCopy';
+import {
+  INITIAL_LIBRARY_SCHEDULING,
+  LIBRARY_SCHEDULE_LABEL,
+  type LibrarySchedulingState,
+} from '@/components/librarySchedulingCopy';
 import { buildLibraryTileActionRows, type LibraryTileActionRow } from '@/components/libraryTileActionRows';
+
+/**
+ * The scheduling row's inputs, spread into every case that is not about
+ * scheduling — so the existing order and separator assertions keep testing
+ * what they were written to test, and a change to this row's defaults
+ * cannot quietly rewrite them.
+ */
+const SCHEDULING_DEFAULTS: {
+  readonly scheduling: LibrarySchedulingState;
+  readonly onPressSchedulingRow: () => void;
+} = {
+  scheduling: INITIAL_LIBRARY_SCHEDULING,
+  onPressSchedulingRow: () => undefined,
+};
 
 /** The state a sheet reaches after a successful read, ready to be toggled. */
 function readyState(excluded: boolean): CookProofExclusionState {
@@ -64,6 +83,22 @@ function rowAt(rows: readonly LibraryTileActionRow[], index: number): LibraryTil
 }
 
 /**
+ * Looked up by KEY rather than by position, for every assertion that is not
+ * about order. These tests were written against a three-row sheet and
+ * indexed into it; a fourth row then landed at the head and moved all of
+ * them, which is a failure that says nothing about the property under test.
+ * The order suite above still indexes, because order is precisely what it
+ * is asserting.
+ */
+function rowByKey(rows: readonly LibraryTileActionRow[], key: string): LibraryTileActionRow {
+  const row = rows.find((candidate) => candidate.key === key);
+  if (row === undefined) {
+    throw new Error(`expected a row keyed ${key}, but the sheet built ${rows.map((r) => r.key).join(', ')}`);
+  }
+  return row;
+}
+
+/**
  * The separator the sheet actually draws, expressed exactly as the JSX
  * does it: keyed on position, blind to what the row is called. Asserting
  * through this rather than against a hardcoded list of keys is the point —
@@ -74,9 +109,10 @@ function rowsWithSeparator(rows: readonly LibraryTileActionRow[]): readonly bool
   return rows.map((_row, index) => index < rows.length - 1);
 }
 
-describe('row order — §3.1 puts Sturen first, Verwijderen (LIB-04) last', () => {
-  test('Sturen, then the sharing row, then Verwijderen when the surface can send', () => {
+describe('row order — Deze week first, Verwijderen (LIB-04) last', () => {
+  test('Deze week, Sturen, the sharing row, then Verwijderen when the surface can send', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -84,12 +120,19 @@ describe('row order — §3.1 puts Sturen first, Verwijderen (LIB-04) last', () 
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rows.map((row) => row.key)).toEqual(['sturen', 'cook-proof-exclusion', 'remove']);
-    expect(rowAt(rows, 0).label).toBe(LIBRARY_TILE_SEND_LABEL);
-    expect(rowAt(rows, 1).label).toBe(COOK_PROOF_EXCLUDE_LABEL);
+    // §3.1 put `Sturen` at the head because "sending is the reason someone
+    // long-presses" — true of the sheet it was written for, where every
+    // other row withheld something. Planning is the app's central loop (it
+    // fills the week screen, the shopping list is computed from it, and the
+    // nightly decision chooses between its dishes), so the ORDERING RULE
+    // §3.1 encoded — most likely first, rarest last — now puts it ahead.
+    expect(rows.map((row) => row.key)).toEqual(['scheduling', 'sturen', 'cook-proof-exclusion', 'remove']);
+    expect(rowAt(rows, 0).label).toBe(LIBRARY_SCHEDULE_LABEL);
+    expect(rowAt(rows, 1).label).toBe(LIBRARY_TILE_SEND_LABEL);
+    expect(rowAt(rows, 2).label).toBe(COOK_PROOF_EXCLUDE_LABEL);
   });
 
-  test('Sturen still sorts first when the sharing row is excluded, loading or failed', () => {
+  test('the order holds when the sharing row is excluded, loading or failed', () => {
     const states: readonly CookProofExclusionState[] = [
       INITIAL_COOK_PROOF_EXCLUSION,
       readyState(true),
@@ -101,31 +144,35 @@ describe('row order — §3.1 puts Sturen first, Verwijderen (LIB-04) last', () 
 
     for (const cookProofExclusion of states) {
       const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
         cookProofExclusion,
         onPressCookProofRow: noop,
         onSturen: noop,
         removal: IDLE_REMOVAL,
         ...REMOVAL_HANDLERS,
       });
-      expect(rowAt(rows, 0).key).toBe('sturen');
+      expect(rowAt(rows, 0).key).toBe('scheduling');
+      expect(rowAt(rows, 1).key).toBe('sturen');
       expect(rowAt(rows, rows.length - 1).key).toBe('remove');
     }
   });
 
   test('a missing onSturen removes the row rather than disabling it — Verwijderen still renders', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: IDLE_REMOVAL,
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rows.map((row) => row.key)).toEqual(['cook-proof-exclusion', 'remove']);
+    expect(rows.map((row) => row.key)).toEqual(['scheduling', 'cook-proof-exclusion', 'remove']);
     expect(rows.some((row) => row.key === 'sturen')).toBe(false);
   });
 
   test('Sturen is never disabled — its refusals belong to the sheet it opens', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: INITIAL_COOK_PROOF_EXCLUSION,
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -133,14 +180,15 @@ describe('row order — §3.1 puts Sturen first, Verwijderen (LIB-04) last', () 
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rowAt(rows, 0).disabled).toBe(false);
-    expect(rowAt(rows, 0).errorNote).toBeNull();
+    expect(rowByKey(rows, 'sturen').disabled).toBe(false);
+    expect(rowByKey(rows, 'sturen').errorNote).toBeNull();
   });
 });
 
 describe('the separator keys off position, never off a row name', () => {
-  test('three rows: a border under the first two only', () => {
+  test('four rows: a border under the first three only', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -148,23 +196,25 @@ describe('the separator keys off position, never off a row name', () => {
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rowsWithSeparator(rows)).toEqual([true, true, false]);
+    expect(rowsWithSeparator(rows)).toEqual([true, true, true, false]);
   });
 
-  test('two rows (no Sturen): a border under the first only, with no special case for the row that is missing', () => {
+  test('three rows (no Sturen): a border under the first two, with no special case for the row that is missing', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: IDLE_REMOVAL,
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rowsWithSeparator(rows)).toEqual([true, false]);
+    expect(rowsWithSeparator(rows)).toEqual([true, true, false]);
   });
 
   test('the array is dense and its keys are unique — the separator has nothing else to stand on', () => {
     for (const onSturen of [undefined, noop]) {
       const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
         cookProofExclusion: readyState(false),
         onPressCookProofRow: noop,
         onSturen,
@@ -174,7 +224,7 @@ describe('the separator keys off position, never off a row name', () => {
 
       expect(rows.every((row) => row !== undefined && row !== null)).toBe(true);
       expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
-      expect(rows.length).toBe(onSturen === undefined ? 2 : 3);
+      expect(rows.length).toBe(onSturen === undefined ? 3 : 4);
     }
   });
 });
@@ -182,6 +232,7 @@ describe('the separator keys off position, never off a row name', () => {
 describe('the rows the sheet renders carry what the sheet renders them with', () => {
   test('the scope note sits on the exclusion row, never on Sturen or Verwijderen', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -189,14 +240,16 @@ describe('the rows the sheet renders carry what the sheet renders them with', ()
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rowAt(rows, 0).footnote).toBeNull();
-    expect(rowAt(rows, 1).footnote).toBe(COOK_PROOF_SCOPE_NOTE);
-    expect(rowAt(rows, 2).footnote).toBeNull();
+    expect(rowByKey(rows, 'scheduling').footnote).toBeNull();
+    expect(rowByKey(rows, 'sturen').footnote).toBeNull();
+    expect(rowByKey(rows, 'cook-proof-exclusion').footnote).toBe(COOK_PROOF_SCOPE_NOTE);
+    expect(rowByKey(rows, 'remove').footnote).toBeNull();
   });
 
   test('each row presses its own handler, and none presses another', () => {
     const pressed: string[] = [];
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: () => pressed.push('cook-proof'),
       onSturen: () => pressed.push('sturen'),
@@ -204,17 +257,22 @@ describe('the rows the sheet renders carry what the sheet renders them with', ()
       onRequestRemoval: () => pressed.push('remove'),
       onCancelRemoval: noop,
       onConfirmRemoval: noop,
+      onPressSchedulingRow: () => pressed.push('scheduling'),
     });
 
-    rowAt(rows, 0).onPress();
-    rowAt(rows, 1).onPress();
-    rowAt(rows, 2).onPress();
+    for (const row of rows) {
+      row.onPress();
+    }
 
-    expect(pressed).toEqual(['sturen', 'cook-proof', 'remove']);
+    // Pressed in render order, which is also what pins that no row's handler
+    // is wired to another's — a copy-paste between two rows in the builder
+    // would show up here as a repeated or missing name.
+    expect(pressed).toEqual(['scheduling', 'sturen', 'cook-proof', 'remove']);
   });
 
   test('the exclusion row is disabled exactly while its state is not actionable', () => {
     const loading = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: INITIAL_COOK_PROOF_EXCLUSION,
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -222,6 +280,7 @@ describe('the rows the sheet renders carry what the sheet renders them with', ()
       ...REMOVAL_HANDLERS,
     });
     const ready = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -229,12 +288,13 @@ describe('the rows the sheet renders carry what the sheet renders them with', ()
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rowAt(loading, 1).disabled).toBe(true);
-    expect(rowAt(ready, 1).disabled).toBe(false);
+    expect(rowByKey(loading, 'cook-proof-exclusion').disabled).toBe(true);
+    expect(rowByKey(ready, 'cook-proof-exclusion').disabled).toBe(false);
   });
 
   test('every row but Verwijderen carries the default tone and no cancel action', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       onSturen: noop,
@@ -242,16 +302,17 @@ describe('the rows the sheet renders carry what the sheet renders them with', ()
       ...REMOVAL_HANDLERS,
     });
 
-    expect(rowAt(rows, 0).tone).toBe('default');
-    expect(rowAt(rows, 0).cancelAction).toBeNull();
-    expect(rowAt(rows, 1).tone).toBe('default');
-    expect(rowAt(rows, 1).cancelAction).toBeNull();
+    for (const row of rows.filter((candidate) => candidate.key !== 'remove')) {
+      expect(row.tone).toBe('default');
+      expect(row.cancelAction).toBeNull();
+    }
   });
 });
 
 describe('Verwijderen (LIB-04) — always present, danger-toned, and confirms in place', () => {
   test('is present even with no onSturen and a loading exclusion — every dish in the library can be removed', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: INITIAL_COOK_PROOF_EXCLUSION,
       onPressCookProofRow: noop,
       removal: IDLE_REMOVAL,
@@ -263,6 +324,7 @@ describe('Verwijderen (LIB-04) — always present, danger-toned, and confirms in
 
   test('carries the danger tone, unlike every other row', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: IDLE_REMOVAL,
@@ -277,6 +339,7 @@ describe('Verwijderen (LIB-04) — always present, danger-toned, and confirms in
     let requested = false;
     let confirmed = false;
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: IDLE_REMOVAL,
@@ -300,6 +363,7 @@ describe('Verwijderen (LIB-04) — always present, danger-toned, and confirms in
     let confirmed = false;
     let cancelled = false;
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: { phase: 'confirming' },
@@ -323,6 +387,7 @@ describe('Verwijderen (LIB-04) — always present, danger-toned, and confirms in
 
   test('pending: disabled, and no cancel action — a write already in flight cannot be cancelled mid-air', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: { phase: 'pending' },
@@ -336,6 +401,7 @@ describe('Verwijderen (LIB-04) — always present, danger-toned, and confirms in
 
   test('failed: an error note under the row, back to the plain label, and no cancel action', () => {
     const rows = buildLibraryTileActionRows({
+      ...SCHEDULING_DEFAULTS,
       cookProofExclusion: readyState(false),
       onPressCookProofRow: noop,
       removal: { phase: 'failed' },

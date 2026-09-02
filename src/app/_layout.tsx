@@ -111,6 +111,20 @@ export default function RootLayout(): JSX.Element | null {
             browsing. It is also the same editor confirm.tsx is, which makes
             matching its presentation the honest choice rather than a
             coincidence. */}
+        {/*
+         * Declared, though expo-router would mount them from the filesystem
+         * regardless — both shipped undeclared and worked. The point is that
+         * this list is read as "the screens this app has", and a list that
+         * is silently a subset teaches whoever reads it next to distrust it.
+         *
+         * NOT `fullScreenModal`, unlike every neighbour here. These two are
+         * ordinary pushes: they are places in the app rather than
+         * interruptions of it, and each carries its own "Sluiten" back to
+         * Mijn recepten. deze-week.tsx's header argues the navigation shape
+         * between the pair.
+         */}
+        <Stack.Screen name="deze-week" />
+        <Stack.Screen name="boodschappen" />
         <Stack.Screen name="recipe-edit/[mealId]" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/paste" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/confirm" options={{ presentation: 'fullScreenModal' }} />

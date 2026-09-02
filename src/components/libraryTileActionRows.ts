@@ -33,6 +33,7 @@
  */
 
 import { describeLibraryRemovalRow, type LibraryRemovalState } from './libraryRemovalCopy';
+import { describeLibrarySchedulingRow, type LibrarySchedulingState } from './librarySchedulingCopy';
 import {
   RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL,
   RECIPE_EDIT_ROW_EXPLAINER,
@@ -130,6 +131,26 @@ export interface LibraryTileActionRowInput {
    * it. A row that merely opens a door needs no error note.
    */
   readonly onAanpassen?: () => void;
+  /**
+   * "Deze week" / "Uit de week halen" — the library-side half of planning,
+   * which the app shipped without: `createSave` was reachable from the
+   * import confirmation screen and nowhere else, so a dish could only be
+   * planned at the moment it arrived. librarySchedulingCopy.ts's header
+   * carries what that cost.
+   *
+   * NEVER OPTIONAL, unlike `onSturen` and `onAanpassen`. Every dish in this
+   * library can be planned — there is no surface that mounts this sheet
+   * where the week does not exist — so there is no call site that would
+   * have to omit it, and making it optional would invite one.
+   */
+  readonly scheduling: LibrarySchedulingState;
+  /**
+   * One handler, not a plan-and-unplan pair: what a press means depends on
+   * the state, and the state lives with the screen that owns the repository
+   * calls. Splitting it would put half that decision here. Same posture as
+   * `onPressCookProofRow` above.
+   */
+  readonly onPressSchedulingRow: () => void;
   /**
    * LIB-04 — "Verwijderen". Owned by the screen, exactly like
    * `cookProofExclusion` above: the state lives with the repository call
@@ -269,7 +290,41 @@ export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): re
           },
   };
 
+  const scheduling = describeLibrarySchedulingRow(input.scheduling);
+
   return [
+    /**
+     * FIRST, AHEAD OF `Sturen`, AND THAT REORDERS §3.1 ON PURPOSE.
+     *
+     * §3.1 put `Sturen` at the head with the reasoning that "sending is the
+     * reason someone long-presses" — which was TRUE OF THE SHEET IT WAS
+     * WRITTEN FOR, where every other row withheld something. It stops being
+     * true the moment this row exists. Planning a dish is the app's central
+     * loop: it is what fills the week screen, what the shopping list is
+     * computed from, and what the nightly decision chooses between. Sending
+     * a recipe to a friend is the social layer on top of that loop.
+     *
+     * The ordering rule §3.1 actually encoded — most likely reason first,
+     * rarest last — is therefore kept rather than broken; it is applied to a
+     * row that did not exist when the list was written. The rest of the
+     * order is untouched: send, then correct, then withhold, then remove.
+     */
+    {
+      key: 'scheduling',
+      label: scheduling.label,
+      explainer: scheduling.explainer,
+      accessibilityLabel: scheduling.accessibilityLabel,
+      disabled: scheduling.disabled,
+      errorNote: scheduling.errorNote,
+      // No footnote. The explainer already says the dish stays in Mijn
+      // recepten, which is the one thing a user unplanning something needs
+      // to be sure of, and a note under the first row of a five-row sheet
+      // would read as being about the sheet.
+      footnote: null,
+      onPress: input.onPressSchedulingRow,
+      tone: 'default',
+      cancelAction: null,
+    },
     ...sturenRow,
     ...aanpassenRow,
     {

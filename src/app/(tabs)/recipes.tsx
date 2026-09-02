@@ -57,7 +57,8 @@
  * then reversed it: proof is the tier that has to be earned, and a send is
  * "ik moest aan jou denken". `sortMealsByScheduling` already knows which
  * meals have cook events; that knowledge is for the grid's ordering and
- * must never reach `openSendSheet`.
+ * must never reach `useLibrarySendSheet` (src/lib), which takes a meal and a
+ * profile and has no parameter a cook event could arrive through.
  *
  * THE EXCLUSION IS NEVER READ OFF `Meal.excludedFromCookProof`, not even
  * off the `Meal` that `setMealCookProofExclusion` hands back. That field is
@@ -135,8 +136,6 @@ import {
   filterLibraryRows,
   type LibrarySearchState,
 } from '@/domain/recipeSearch';
-import { collectAcceptedFriendIds } from '@/domain/social/friendship';
-import type { ProfileId } from '@/domain/social/types';
 import type { CookEvent, HouseholdId, Meal, MealId } from '@/domain/types';
 import { Button } from '@/components/Button';
 import { LibraryHeader } from '@/components/LibraryHeader';
@@ -149,6 +148,14 @@ import {
   describeLibraryRemovedAnnouncement,
   reduceLibraryRemoval,
 } from '@/components/libraryRemovalCopy';
+import {
+  INITIAL_LIBRARY_SCHEDULING,
+  LIBRARY_SCHEDULE_FAILED_NOTE,
+  LIBRARY_UNSCHEDULE_FAILED_NOTE,
+  describeLibraryScheduledAnnouncement,
+  describeLibraryUnscheduledAnnouncement,
+  reduceLibraryScheduling,
+} from '@/components/librarySchedulingCopy';
 import { LibraryTileActionSheet } from '@/components/LibraryTileActionSheet';
 import {
   COOK_PROOF_WRITE_FAILED_ANNOUNCEMENT,
@@ -159,18 +166,10 @@ import {
 import { RecipeTile } from '@/components/RecipeTile';
 import { sortMealsByScheduling, type ScheduledMealRow } from '@/components/recipeScheduling';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
-import {
-  INITIAL_SEND_SHEET,
-  SEND_FAILED_ANNOUNCEMENT,
-  describeSendAnnouncement,
-  reduceSendSheet,
-  type SendFriendIdentity,
-} from '@/components/sendRecipeSheetCopy';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useSession } from '@/hooks/useSession';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
-import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import { supabase } from '@/lib/supabase';
+import { useLibrarySendSheet } from '@/lib/useLibrarySendSheet';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
@@ -203,37 +202,6 @@ async function loadRows(householdId: HouseholdId): Promise<LoadedLibraryRows> {
   // matching this screen's own file header.
   const ownMeals = meals.filter((meal) => meal.householdId === householdId);
   return { rows: sortMealsByScheduling(ownMeals, saves, cookEvents), cookEvents };
-}
-
-/**
- * The friends a dish could go to: every mutually accepted friend, named.
- *
- * NO PRE-FLIGHT PERMISSION CHECK HERE OR ANYWHERE BELOW IT. `recipe_shares`
- * carries a three-clause insert policy — the sender is you, the recipient
- * is a friend, the meal is your household's — and RLS enforces every one
- * on the write. A client-side copy of a permission rule is the copy that
- * drifts, and the supabase implementation says so about the same three
- * clauses. This read answers "who do I know", never "who may I write to";
- * a refusal surfaces as a failed send, on the row that asked for it.
- *
- * AND NO COOK CHECK. PD-016: anything in the library may be sent. There is
- * no cook event in this function's inputs and none belongs there.
- *
- * A friend whose profile row fails to load is dropped rather than listed
- * nameless — a blank name beside a `Stuur` action is a tap nobody should
- * be invited to take.
- */
-async function loadSendFriends(profileId: ProfileId): Promise<readonly SendFriendIdentity[]> {
-  const repository = createSupabaseSocialRepository(supabase);
-  const friendIds = collectAcceptedFriendIds(await repository.listFriendships(profileId), profileId);
-  if (friendIds.size === 0) {
-    return [];
-  }
-
-  const profiles = await Promise.all([...friendIds].map((friendId) => repository.getProfile(friendId)));
-  return profiles.flatMap((profile) =>
-    profile === null ? [] : [{ profileId: profile.id, displayName: profile.displayName, handle: profile.handle }],
-  );
 }
 
 export default function RecipesScreen(): JSX.Element {
@@ -295,17 +263,23 @@ export default function RecipesScreen(): JSX.Element {
   const [removal, dispatchRemoval] = useReducer(reduceLibraryRemoval, INITIAL_LIBRARY_REMOVAL);
   const removalMealRef = useRef<MealId | null>(null);
 
-  const [sendSheetMeal, setSendSheetMeal] = useState<Meal | null>(null);
-  const [sendState, dispatchSend] = useReducer(reduceSendSheet, INITIAL_SEND_SHEET);
   /**
-   * Raw as typed, and cleared per dish rather than kept between them. A
-   * note is written about one meal for one person; carrying it to the next
-   * long-press would attach words somebody chose for a traybake to a
-   * curry, without them ever seeing it happen.
+   * "Deze week" / "Uit de week halen" — the library-side half of planning,
+   * which this app shipped without: `createSave` was reachable from the
+   * import confirmation screen and nowhere else, so a dish could only ever
+   * be planned at the moment it arrived. See librarySchedulingCopy.ts.
+   *
+   * NO `loadScheduling` BESIDE `loadExclusion`, and the absence is the
+   * design. Whether this dish is in the week is already resolved for every
+   * tile in the grid by `resolveRecipeSchedulingState` — it is what draws
+   * the badge the user just long-pressed — so `openActionSheet` is handed
+   * that answer rather than reading it again. A second read would be a
+   * second definition of "deze week", which `listPendingSaves`' own doc
+   * comment warns against.
    */
-  const [sendNote, setSendNote] = useState('');
-  /** The dish the send sheet is about, for `exclusionMealRef`'s reason: a slow read must not land on the next dish. */
-  const sendMealRef = useRef<MealId | null>(null);
+  const [scheduling, dispatchScheduling] = useReducer(reduceLibraryScheduling, INITIAL_LIBRARY_SCHEDULING);
+  const schedulingMealRef = useRef<MealId | null>(null);
+
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -350,7 +324,12 @@ export default function RecipesScreen(): JSX.Element {
   }, []);
 
   const openActionSheet = useCallback(
-    (meal: Meal): void => {
+    /**
+     * `isPlanned` is passed IN, from the row the user long-pressed, rather
+     * than read here — see the `scheduling` reducer above for why the sheet
+     * must not answer that question a second time.
+     */
+    (meal: Meal, isPlanned: boolean): void => {
       exclusionMealRef.current = meal.id;
       setActionSheetMeal(meal);
       loadExclusion(meal.id);
@@ -359,6 +338,8 @@ export default function RecipesScreen(): JSX.Element {
       // read here, unlike the exclusion above.
       removalMealRef.current = meal.id;
       dispatchRemoval({ type: 'reset' });
+      schedulingMealRef.current = meal.id;
+      dispatchScheduling({ type: 'opened', isPlanned });
     },
     [loadExclusion],
   );
@@ -368,6 +349,7 @@ export default function RecipesScreen(): JSX.Element {
     setActionSheetMeal(null);
     removalMealRef.current = null;
     dispatchRemoval({ type: 'reset' });
+    schedulingMealRef.current = null;
   }, []);
 
   /**
@@ -376,8 +358,8 @@ export default function RecipesScreen(): JSX.Element {
    * CLOSES THE SHEET FIRST, then navigates. The sheet is a modal over this
    * screen; pushing a full-screen route out from under an open one leaves
    * it mounted behind the editor and standing there on the way back, which
-   * is the same reason `openSendSheet` closes this sheet before opening
-   * its own.
+   * is the same reason the send sheet's `onBeforeOpen` closes this one
+   * before opening its own.
    *
    * NO REPOSITORY CALL HERE, unlike every other row on that sheet. This one
    * only opens a door — the edit screen does its own load, its own write and
@@ -513,143 +495,103 @@ export default function RecipesScreen(): JSX.Element {
     void commitRemoval(actionSheetMeal);
   }, [actionSheetMeal, removal, commitRemoval]);
 
-  // -------------------------------------------------------------------------
-  // Sturen (DESIGN-SOCIAL.md §3.1 / §4.1) — the second thing the long-press
-  // sheet offers, and the only one that writes to the social seam.
-  // -------------------------------------------------------------------------
-
-  const loadFriends = useCallback((mealId: MealId, profileId: string | null): void => {
-    dispatchSend({ type: 'load-started' });
-    // Not a signed-out branch — PD-012 means the root layout answers that
-    // before this tab ever renders, so a null id here only means the
-    // identity has not resolved yet. Reading without one would ask the
-    // database a question with no `auth.uid()` behind it; the sheet stays
-    // on its loading line instead, which is the truthful state.
-    if (profileId === null) {
-      return;
-    }
-    loadSendFriends(profileId)
-      .then((friends: readonly SendFriendIdentity[]) => {
-        if (sendMealRef.current === mealId) {
-          dispatchSend({ type: 'load-succeeded', friends });
-        }
-      })
-      .catch(() => {
-        if (sendMealRef.current === mealId) {
-          dispatchSend({ type: 'load-failed' });
-        }
-      });
-  }, []);
-
-  const openSendSheet = useCallback(
-    (meal: Meal): void => {
-      // The action sheet closes as this one opens. Two stacked modals over
-      // one dish means two scrims and a back gesture whose meaning depends
-      // on which one is on top.
-      exclusionMealRef.current = null;
-      setActionSheetMeal(null);
-      sendMealRef.current = meal.id;
-      setSendNote('');
-      setSendSheetMeal(meal);
-      loadFriends(meal.id, userId);
-    },
-    [loadFriends, userId],
-  );
-
-  const closeSendSheet = useCallback((): void => {
-    sendMealRef.current = null;
-    setSendSheetMeal(null);
-  }, []);
-
-  const retryFriends = useCallback((): void => {
-    if (sendSheetMeal === null) {
-      return;
-    }
-    loadFriends(sendSheetMeal.id, userId);
-  }, [sendSheetMeal, loadFriends, userId]);
-
   /**
-   * One send, one row. Optimistic in the same shape the exclusion write
-   * is: the row goes into flight immediately, and one of two things
-   * follows — the write lands and the row commits, or it fails and the row
-   * says so with nothing pretending to have been sent.
+   * The write behind the "Deze week" row, in whichever direction the row is
+   * currently pointing.
    *
-   * THERE IS NO RE-READ AFTER THE WRITE, unlike `commitExclusion` above.
-   * That one re-reads because `getMealCookProofExclusion` refuses to
-   * invent a fail-open answer and the returned row cannot be trusted for
-   * it. Here `sendRecipe` returns the `RecipeShare` it just upserted, and
-   * there is no second question to ask: a send either exists or the write
-   * threw. Asking again would also be the first step toward a sender-side
-   * list of what you have sent whom, which §3.5 has not asked for.
+   * IT DOES NOT CLOSE THE SHEET, unlike `commitRemoval`. Removal ends the
+   * dish's presence in this grid, so there is nothing left to be on screen;
+   * planning is reversible in one tap, and the row morphing in place is the
+   * confirmation (librarySchedulingCopy.ts). Closing would take that
+   * feedback away at the moment it is earned.
    *
-   * The note goes in RAW. `normalizeSendNote` trims it, turns
-   * whitespace-only into null, and REJECTS an over-long one rather than
-   * cutting it short — one implementation of that rule, at the write. The
-   * sheet has already disabled every row while the note is too long, so
-   * this path is reached with a note the repository will accept; if that
-   * ever stops being true, the throw lands on the row that asked for it.
+   * IT REFRESHES RATHER THAN PATCHING `rows` LOCALLY, which is the opposite
+   * of what removal does and for a reason worth stating: a save changes the
+   * SCHEDULING of a meal, and `resolveRecipeSchedulingState` computes that
+   * from saves and cook events together, then `sortMealsByScheduling`
+   * reorders the grid around it. Reproducing that here would be a second
+   * implementation of the ordering rule; removal only had to drop a row,
+   * which is genuinely local.
+   *
+   * `memberId: null` — the same value the import confirmation screen
+   * writes. A save belongs to the household, and nothing in this app asks
+   * which member planned a dish.
    */
-  const commitSend = useCallback(
-    async (
-      mealId: MealId,
-      senderProfileId: ProfileId,
-      recipient: SendFriendIdentity,
-      note: string,
-    ): Promise<void> => {
-      const recipientProfileId = recipient.profileId;
-      dispatchSend({ type: 'send-started', recipientProfileId });
+  const commitScheduling = useCallback(
+    async (meal: Meal, isPlanned: boolean): Promise<void> => {
+      dispatchScheduling({ type: 'toggle-started' });
 
       try {
-        await createSupabaseSocialRepository(supabase).sendRecipe({
-          mealId,
-          senderProfileId,
-          recipientProfileId,
-          note,
-        });
+        const repository = getAppRepository();
+        const householdId = await repository.getCurrentHouseholdId();
+        if (isPlanned) {
+          await repository.removeSaves(householdId, meal.id, 'this_week');
+        } else {
+          await repository.createSave({
+            householdId,
+            memberId: null,
+            mealId: meal.id,
+            intent: 'this_week',
+            sourceUrl: null,
+          });
+        }
       } catch {
-        if (sendMealRef.current === mealId) {
-          dispatchSend({ type: 'send-failed', recipientProfileId });
-          AccessibilityInfo.announceForAccessibility(SEND_FAILED_ANNOUNCEMENT);
+        // The ref guard `commitRemoval` and `commitExclusion` both use: a
+        // slow write must not report its failure onto whichever dish the
+        // sheet has since been reopened on.
+        if (schedulingMealRef.current === meal.id) {
+          dispatchScheduling({ type: 'toggle-failed' });
+          AccessibilityInfo.announceForAccessibility(
+            isPlanned ? LIBRARY_UNSCHEDULE_FAILED_NOTE : LIBRARY_SCHEDULE_FAILED_NOTE,
+          );
         }
         return;
       }
 
-      if (sendMealRef.current === mealId) {
-        dispatchSend({ type: 'send-succeeded', recipientProfileId });
-        // The sheet stays open and the accent stroke is silent, so this is
-        // the whole confirmation for anyone who cannot see it. Word for
-        // word identical on a re-send: `sendRecipe` upserts on (meal,
-        // recipient), moves no `sentAt` and resets no seen state, so there
-        // is no second delivery to announce.
-        AccessibilityInfo.announceForAccessibility(describeSendAnnouncement(recipient.displayName));
+      if (schedulingMealRef.current !== meal.id) {
+        return;
       }
+      dispatchScheduling({ type: 'toggle-succeeded' });
+      AccessibilityInfo.announceForAccessibility(
+        isPlanned ? describeLibraryUnscheduledAnnouncement(meal.title) : describeLibraryScheduledAnnouncement(meal.title),
+      );
+      refresh();
     },
-    [],
+    [refresh],
   );
 
-  const handleSendRow = useCallback(
-    (recipientProfileId: ProfileId): void => {
-      if (sendSheetMeal === null || userId === null) {
-        return;
-      }
-      const recipient = sendState.friends.find((friend) => friend.profileId === recipientProfileId);
-      // `idle` or `failed` only — the reducer would ignore anything else,
-      // and a write fired against an ignored transition is a request
-      // nothing on screen would ever account for.
-      if (recipient === undefined || (recipient.status !== 'idle' && recipient.status !== 'failed')) {
-        return;
-      }
-      void commitSend(sendSheetMeal.id, userId, recipient, sendNote);
-    },
-    [sendSheetMeal, sendState, userId, sendNote, commitSend],
-  );
+  const handleSchedulingRowPress = useCallback((): void => {
+    if (actionSheetMeal === null || scheduling.phase === 'pending') {
+      return;
+    }
+    void commitScheduling(actionSheetMeal, scheduling.isPlanned);
+  }, [actionSheetMeal, scheduling, commitScheduling]);
+
+  /**
+   * Sturen (DESIGN-SOCIAL.md §3.1 / §4.1) — the second thing the long-press
+   * sheet offers, and the only one that writes to the social seam. Its state,
+   * its friend read and its one write live in src/lib/useLibrarySendSheet.ts;
+   * that file's header carries why they are not this screen's and why they are
+   * not `useOutcomeSend`'s either.
+   *
+   * `onBeforeOpen` closes the action sheet. Two stacked modals over one dish
+   * means two scrims and a back gesture whose meaning depends on which is on
+   * top — and this screen is the only thing that can close the other one.
+   */
+  const send = useLibrarySendSheet({
+    userId,
+    onBeforeOpen: useCallback((): void => {
+      exclusionMealRef.current = null;
+      setActionSheetMeal(null);
+    }, []),
+  });
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <LibraryHeader
         onPasteLink={() => router.push('/import/paste')}
         onOpenSettings={() => router.push('/settings')}
-        onOpenShoppingList={() => router.push('/boodschappen')}
+        onOpenWeekPlan={() => router.push('/deze-week')}
       />
 
       {phase === 'loading' ? <LoadingGrid /> : null}
@@ -709,7 +651,11 @@ export default function RecipesScreen(): JSX.Element {
           numColumns={GRID_COLUMNS}
           columnWrapperStyle={styles.gridRow}
           renderItem={({ item }: { item: ScheduledMealRow }) => (
-            <RecipeTile meal={item.meal} scheduling={item.scheduling} onLongPress={() => openActionSheet(item.meal)} />
+            <RecipeTile
+              meal={item.meal}
+              scheduling={item.scheduling}
+              onLongPress={() => openActionSheet(item.meal, item.scheduling.state === 'deze_week')}
+            />
           )}
           contentContainerStyle={styles.gridContent}
         />
@@ -723,8 +669,10 @@ export default function RecipesScreen(): JSX.Element {
           dishTitle={actionSheetMeal.title}
           cookProofExclusion={exclusion}
           onPressCookProofRow={handleCookProofRowPress}
-          onSturen={() => openSendSheet(actionSheetMeal)}
+          onSturen={() => send.open(actionSheetMeal)}
           onAanpassen={() => openRecipeEdit(actionSheetMeal)}
+          scheduling={scheduling}
+          onPressSchedulingRow={handleSchedulingRowPress}
           removal={removal}
           onRequestRemoval={handleRequestRemoval}
           onCancelRemoval={handleCancelRemoval}
@@ -736,17 +684,17 @@ export default function RecipesScreen(): JSX.Element {
 
       {/* Mounted only while a dish is chosen, for the sheet above's reason:
           the title IS that dish. Never mounted at the same time as the
-          action sheet — `openSendSheet` closes that one first. */}
-      {sendSheetMeal !== null ? (
+          action sheet — the hook's `onBeforeOpen` closes that one first. */}
+      {send.meal !== null ? (
         <SendRecipeSheet
           visible
-          dishTitle={sendSheetMeal.title}
-          friends={sendState}
-          note={sendNote}
-          onChangeNote={setSendNote}
-          onSend={handleSendRow}
-          onRetryFriends={retryFriends}
-          onDismiss={closeSendSheet}
+          dishTitle={send.meal.title}
+          friends={send.state}
+          note={send.note}
+          onChangeNote={send.onChangeNote}
+          onSend={send.onSend}
+          onRetryFriends={send.onRetryFriends}
+          onDismiss={send.close}
           reduceMotionEnabled={reduceMotionEnabled}
         />
       ) : null}

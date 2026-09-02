@@ -52,16 +52,19 @@
  * other, so the back gesture and "Sluiten" always land back on Mijn
  * recepten.
  *
- * ITS ENTRY POINT TODAY IS THE SHOPPING LIST, AND THAT IS BACKWARDS.
- * `LibraryHeader` puts one door on Mijn recepten's title line and it says
- * "Boodschappen", so a household reaches the derived view first and the
- * plan behind it second. The right arrangement is the reverse — plan first,
- * list one step on from it — but LibraryHeader.tsx belongs to another
- * change in flight; this file therefore adds the "Deze week" door to
- * boodschappen.tsx and the wish is reported rather than silently taken.
- * Standing alone at `/deze-week` in the meantime is exactly how
- * `/boodschappen` itself shipped: expo-router mounts every file under
- * src/app whether or not `_layout.tsx`'s `<Stack>` declares it.
+ * ITS ENTRY POINT IS NOW MIJN RECEPTEN, WHICH IS THE RIGHT WAY ROUND.
+ * `LibraryHeader`'s door used to say "Boodschappen", so a household reached
+ * the derived view first and the plan behind it second — the consequence
+ * before its cause, with the plan reachable only through the list computed
+ * from it. That door now says "Deze week" and lands here, and this screen's
+ * footer carries the step onward to the list. The chain reads in the order
+ * the household works in: pick recipes, plan the week, shop for the plan.
+ *
+ * Both this route and `/boodschappen` are now declared in `_layout.tsx`'s
+ * `<Stack>`. They did not have to be — expo-router mounts every file under
+ * src/app whether or not the stack names it — and the declarations were
+ * added so the route list reads as the set of screens this app has, rather
+ * than as the subset somebody remembered to write down.
  *
  * ---
  *

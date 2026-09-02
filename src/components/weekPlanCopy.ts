@@ -112,7 +112,21 @@ export const WEEK_PLAN_END_COPY = 'Dat is alles voor deze week.';
 // ---------------------------------------------------------------------------
 
 export const WEEK_PLAN_EMPTY_TITLE = 'Nog niets gepland voor deze week';
-export const WEEK_PLAN_EMPTY_BODY = 'Bewaar een recept met “Deze week” in Mijn recepten, dan staat het hier.';
+/**
+ * NAMES THE GESTURE NOW, BECAUSE THE PATH FINALLY EXISTS. This sentence
+ * used to say "Bewaar een recept met 'Deze week' in Mijn recepten" — which
+ * described no reachable action: `createSave` was reachable only from the
+ * import confirmation screen, so the one way to plan a dish was to import
+ * it again. The app was giving directions to a room with no door.
+ *
+ * The door is the long-press sheet (librarySchedulingCopy.ts), so the copy
+ * names the press rather than a vague "bewaar". Long-press is not
+ * discoverable on its own, which is exactly why an empty state — the one
+ * screen where somebody is looking for what to do next — is the right place
+ * to teach it.
+ */
+export const WEEK_PLAN_EMPTY_BODY =
+  'Houd een recept in Mijn recepten ingedrukt en kies “Deze week”, dan staat het hier.';
 
 // ---------------------------------------------------------------------------
 // Counts

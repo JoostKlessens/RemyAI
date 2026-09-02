@@ -45,11 +45,16 @@ import { Button } from './Button';
 export interface LibraryHeaderProps {
   readonly onPasteLink: () => void;
   readonly onOpenSettings: () => void;
-  readonly onOpenShoppingList: () => void;
+  /**
+   * Opens `/deze-week`, NOT `/boodschappen` — the door was pointed at the
+   * derived view and now points at the plan it derives from. See the
+   * comment on the control itself.
+   */
+  readonly onOpenWeekPlan: () => void;
 }
 
 export function LibraryHeader(props: LibraryHeaderProps): JSX.Element {
-  const { onPasteLink, onOpenSettings, onOpenShoppingList } = props;
+  const { onPasteLink, onOpenSettings, onOpenWeekPlan } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -58,21 +63,35 @@ export function LibraryHeader(props: LibraryHeaderProps): JSX.Element {
       <View style={styles.titleRow}>
         <Text style={[typeScale.title2, styles.title, { color: colors.textPrimary }]}>Mijn recepten</Text>
         {/*
-         * Boodschappen rides the title line for exactly the reason
+         * "Deze week" rides the title line for exactly the reason
          * Instellingen does, argued above: it is a door out of this screen,
          * not something you do to it, so it is not shaped like the action
          * slot's button. It sits BEFORE Instellingen because it is the one
          * a household reaches for weekly, where Instellingen is reached for
          * roughly never after setup — nearest the title is the more
          * travelled door.
+         *
+         * IT SAID "BOODSCHAPPEN" AND POINTED AT THE LIST, WHICH WAS THE
+         * LOOP READ BACKWARDS. deze-week.tsx's own header called that out
+         * and could not fix it — "its entry point today is the shopping
+         * list, and that is backwards... LibraryHeader.tsx belongs to
+         * another change in flight" — so it added a "Deze week" door to
+         * boodschappen.tsx and reported the wish rather than silently
+         * taking it. This is that wish, taken.
+         *
+         * The chain now reads in the order the household actually works in:
+         * pick recipes, plan the week, then shop for the plan. A door
+         * straight to the derived view put the consequence before its
+         * cause, and left the plan itself reachable only through the list
+         * computed from it.
          */}
         <Pressable
-          onPress={onOpenShoppingList}
+          onPress={onOpenWeekPlan}
           accessibilityRole="button"
-          accessibilityLabel="Boodschappen, de lijst voor wat je deze week gepland hebt"
+          accessibilityLabel="Deze week, wat je gepland hebt en de boodschappen daarvoor"
           style={styles.settingsLink}
         >
-          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Boodschappen</Text>
+          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Deze week</Text>
         </Pressable>
         <Pressable
           onPress={onOpenSettings}
