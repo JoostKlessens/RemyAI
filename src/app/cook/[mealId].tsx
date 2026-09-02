@@ -17,6 +17,30 @@
  * no clear step breakdown) is a real, common case now, not just a demo
  * limitation, so the empty state below describes it honestly.
  *
+ * RCP-01's portion panel hangs off this screen too, and deliberately NOT
+ * as a phase. `CookPhase` stays `steps | outcome`: the ingredient list is
+ * a reference surface a cook consults and dismisses, not a sixth thing to
+ * walk through, and putting it in the union would either make "Stap 3 / 7"
+ * lie or force a second counter beside it. It opens as a `Modal`
+ * (`PortionScalingSheet`), from a control at the foot of the step block
+ * rather than from the progress header — docs/DESIGN.md's one header rule
+ * is "a name, then exactly one control of the screen's own", and this
+ * screen already spends that one on `Stoppen`. The arithmetic is
+ * src/domain/scaleRecipe.ts's, finished and tested; the Dutch is
+ * src/components/portionScalingCopy.ts's, for the same reason the send
+ * wiring lives in useOutcomeSend — a route module cannot be imported by
+ * the test suite, so nothing written in this file can be asserted on.
+ *
+ * WHERE THE TWO SERVING COUNTS COME FROM. The baseline is `Meal.servings`,
+ * already loaded here and, until now, read by nothing. The target is the
+ * household's member count from `listMembers` — settings.tsx labels
+ * exactly that number "Aantal eters", so this is not a new interpretation
+ * of what a member is, it is the one the product already ships. There is
+ * deliberately no portions input on this screen: scaleRecipe.ts's header
+ * opens by saying the household "already told Remy once", and a text field
+ * here would ask them again in the least convenient place in the app, with
+ * wet hands.
+ *
  * That same outcome card is DESIGN-SOCIAL.md §3.1's first entry point into
  * Sturen, and this screen is one of its two hosts (Kiezen's overlay is the
  * other). It owns none of the work: `useOutcomeSend` holds the state and
@@ -27,19 +51,25 @@
  * wrote (PD-016) — proof is the tier you earn by cooking; a send is not.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { AccessibilityInfo, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { OutcomeCard } from '@/components/OutcomeCard';
+import { PortionScalingSheet } from '@/components/PortionScalingSheet';
+import {
+  describePortionTriggerAccessibilityLabel,
+  describePortionTriggerLabel,
+} from '@/components/portionScalingCopy';
 import { ProgressRule } from '@/components/ProgressRule';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { StepView } from '@/components/StepView';
 import { TimerDisplay } from '@/components/TimerDisplay';
 import { createCookTimer, type CookTimerState } from '@/domain/cookTimer';
-import type { CookEventId, DecisionId, HouseholdId, Meal, MealStep } from '@/domain/types';
+import { scaleRecipe } from '@/domain/scaleRecipe';
+import type { CookEventId, DecisionId, HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
@@ -60,22 +90,68 @@ const NAV_BUTTON_MIN_HEIGHT = 56;
 interface LoadedMealData {
   readonly meal: Meal | null;
   readonly steps: readonly MealStep[];
+  /**
+   * RCP-01's input. Held as `MealIngredient` rather than converted to
+   * `RawIngredientLine` on the way in, because no conversion is needed:
+   * shopping/types.ts's `RawIngredientLine` doc comment says in as many
+   * words that `MealIngredient` "already satisfies `RawIngredientLine`
+   * with zero adapter code" and that a caller holding one "can pass either
+   * straight through". src/app/boodschappen.tsx:132 does have a
+   * `toRawIngredientLine` mapper, but it lives in a route module (so it is
+   * unreachable from here without importing a screen from a screen) and,
+   * by that same doc comment, it is a copy this codebase never needed.
+   * Writing a second one here would be the drift scaleRecipe.ts's header
+   * warns about, in miniature.
+   */
+  readonly ingredients: readonly MealIngredient[];
   readonly householdId: HouseholdId;
+  /**
+   * RCP-01's target serving count: how many people eat in this household.
+   * A COUNT, not a stored field — there is no `size` on `Household`
+   * (src/domain/types.ts), and settings.tsx renders this very number under
+   * the heading "Aantal eters". `Member` carries no active/inactive/
+   * pending flag to filter on either: `authUserId: null` explicitly means
+   * a partner or child profile without an account of their own, who very
+   * much still eats, and `removeMember` is a real delete, so there is no
+   * soft-deleted row left in the table to exclude. Zero is therefore a
+   * reachable value (remove the last member) and is passed through to
+   * `scaleRecipe` unaltered rather than floored to some default — it
+   * returns `cannot_scale`, which is the honest answer, and the panel has
+   * a state that says so and points at Instellingen.
+   */
+  readonly householdSize: number;
   /** Set only when today's decision (if any) offers exactly this meal — links a cook event back to the decision that led to it. */
   readonly decisionId: DecisionId | null;
 }
 
+/**
+ * The two RCP-01 reads join the existing `Promise.all` rather than being
+ * fetched separately and tolerated on failure. They are reads of the same
+ * local repository, through the same path as `getMealSteps` two lines up;
+ * a fault that loses the ingredient rows loses the steps too, and a Cook
+ * Mode that rendered its steps while silently dropping the portion panel
+ * would be a half-loaded screen with nothing on it admitting so. Widening
+ * the existing "Kon dit recept niet laden" state is the honest behaviour,
+ * and it is a state this screen already draws and already offers `Terug`
+ * from.
+ */
 async function loadMealData(mealId: string): Promise<LoadedMealData> {
   await ensureSeeded();
   const repository = getAppRepository();
-  const [meal, steps, householdId] = await Promise.all([
+  const [meal, steps, ingredients, householdId] = await Promise.all([
     repository.getMeal(mealId),
     repository.getMealSteps(mealId),
+    repository.getMealIngredients(mealId),
     repository.getCurrentHouseholdId(),
   ]);
-  const todaysDecision = await repository.getDecisionByDate(householdId, todayIso());
+  // Both of these need `householdId`, so they wait for the batch above and
+  // then run together rather than one after the other.
+  const [todaysDecision, members] = await Promise.all([
+    repository.getDecisionByDate(householdId, todayIso()),
+    repository.listMembers(householdId),
+  ]);
   const decisionId = todaysDecision !== null && todaysDecision.mealId === mealId ? todaysDecision.id : null;
-  return { meal, steps, householdId, decisionId };
+  return { meal, steps, ingredients, householdId, householdSize: members.length, decisionId };
 }
 
 export default function CookModeScreen(): JSX.Element {
@@ -89,6 +165,8 @@ export default function CookModeScreen(): JSX.Element {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [meal, setMeal] = useState<Meal | null>(null);
   const [steps, setSteps] = useState<readonly MealStep[]>([]);
+  const [ingredients, setIngredients] = useState<readonly MealIngredient[]>([]);
+  const [householdSize, setHouseholdSize] = useState(0);
   const [householdId, setHouseholdId] = useState<HouseholdId | null>(null);
   const [decisionId, setDecisionId] = useState<DecisionId | null>(null);
   const [cookEventId, setCookEventId] = useState<CookEventId | null>(null);
@@ -102,6 +180,13 @@ export default function CookModeScreen(): JSX.Element {
    * a step the cook never started simply has no entry.
    */
   const [timers, setTimers] = useState<Readonly<Record<string, CookTimerState>>>({});
+  /**
+   * RCP-01's panel is closed until asked for. Local to the steps phase and
+   * never persisted: a cook who checked the ingredients on step 2 has not
+   * expressed a preference about step 3, and a panel that reopened itself
+   * would cover the instruction they came back for.
+   */
+  const [portionSheetVisible, setPortionSheetVisible] = useState(false);
   const currentStep = steps[stepIndex];
 
   useEffect(() => {
@@ -117,6 +202,8 @@ export default function CookModeScreen(): JSX.Element {
         }
         setMeal(data.meal);
         setSteps(data.steps);
+        setIngredients(data.ingredients);
+        setHouseholdSize(data.householdSize);
         setHouseholdId(data.householdId);
         setDecisionId(data.decisionId);
         setLoadState('ready');
@@ -164,6 +251,31 @@ export default function CookModeScreen(): JSX.Element {
    * "ik moest aan jou denken", not a reward for having finished.
    */
   const outcomeSend = useOutcomeSend(phase === 'outcome' ? (meal?.id ?? null) : null);
+
+  /**
+   * RCP-01, computed once per change of its three inputs rather than on
+   * every render. The memo is not a micro-optimisation for the arithmetic
+   * — `scaleRecipe` is pure and cheap — it is because this component
+   * re-renders once a second for the whole of a running step timer
+   * (`timers` lives here, see above), and re-deriving a fresh
+   * `ScaleRecipeResult` object each tick would hand `PortionScalingSheet` a
+   * new `result` prop 60 times a minute for data that did not change.
+   *
+   * `ingredients` is passed straight in as `RawIngredientLine[]` — see
+   * `LoadedMealData.ingredients` for why no adapter exists or should.
+   * `meal?.servings ?? null` is not a fallback dressed as one: `null` is
+   * precisely what `scaleRecipe` wants for "this recipe never said", and a
+   * meal row that failed to load is exactly as unknown as a recipe with no
+   * serving count. Both land on `no_baseline_servings`, which is true in
+   * both cases.
+   *
+   * Called above every early return below, per the Rules of Hooks, for the
+   * same reason the step announcement and `useOutcomeSend` are.
+   */
+  const scaleResult = useMemo(
+    () => scaleRecipe(ingredients, meal?.servings ?? null, householdSize),
+    [ingredients, meal?.servings, householdSize],
+  );
 
   const handleCooked = (cooked: boolean): void => {
     if (!cooked || householdId === null || meal === null) {
@@ -366,6 +478,32 @@ export default function CookModeScreen(): JSX.Element {
             reduceMotionEnabled={reduceMotionEnabled}
           />
         ) : null}
+        {/* RCP-01's door. It sits at the foot of the step block and not in
+            the progress header, because docs/DESIGN.md's one header rule
+            allows "a name, then exactly one control of the screen's own"
+            and `Stoppen` already is that one. `secondary`, not `primary`:
+            the loudest control on a cooking screen is the one that moves
+            you to the next step, and an ingredient list is a thing you
+            glance at, not the reason you are here.
+
+            RENDERED UNCONDITIONALLY, including when the recipe cannot be
+            scaled at all. Hiding it in that case would hide the very
+            sentence that explains why — and a control that appears and
+            disappears based on data the cook cannot see is exactly the
+            failure the progress header's own comment records about
+            `onSendRecipe`. Its label carries the household count only when
+            there honestly is one; `describePortionTriggerLabel` owns that
+            branch. */}
+        <View style={styles.portionRow}>
+          <Button
+            label={describePortionTriggerLabel(scaleResult)}
+            variant="secondary"
+            onPress={() => setPortionSheetVisible(true)}
+            minHeight={spacing.touchTargetMin}
+            accessibilityLabel={describePortionTriggerAccessibilityLabel(scaleResult)}
+            accessibilityHint="Opent de ingrediënten van dit gerecht."
+          />
+        </View>
       </View>
 
       <View style={styles.navRow}>
@@ -389,6 +527,20 @@ export default function CookModeScreen(): JSX.Element {
           />
         </View>
       </View>
+
+      {/* Mounted unconditionally with `visible`, exactly as the outcome
+          phase mounts `SendRecipeSheet`: the sheet owns its entry
+          animation, and a conditional mount would replay it from scratch
+          on every render of this branch — which, with a step timer
+          running, is once a second. */}
+      <PortionScalingSheet
+        visible={portionSheetVisible}
+        result={scaleResult}
+        recipeServings={meal?.servings ?? null}
+        householdSize={householdSize}
+        onDismiss={() => setPortionSheetVisible(false)}
+        reduceMotionEnabled={reduceMotionEnabled}
+      />
     </SafeAreaView>
   );
 }
@@ -429,6 +581,13 @@ const styles = StyleSheet.create({
   stepBlock: {
     flex: 1,
     paddingHorizontal: spacing.screenPaddingHorizontal,
+  },
+  portionRow: {
+    // Sits between the instruction area (which is the only region allowed
+    // to grow and scroll at 200% Dynamic Type — docs/DESIGN.md §6) and the
+    // nav row, and keeps its own fixed height like the nav row does, so
+    // the growing region stays exactly one.
+    paddingTop: spacing.space3,
   },
   navRow: {
     flexDirection: 'row',
