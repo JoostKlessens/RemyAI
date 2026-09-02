@@ -35,6 +35,15 @@
  * be a weaker, easier-to-get-wrong reimplementation of what the platform
  * already does in front of it.
  *
+ * READ THAT NARROWLY (IMP-06 / IMP-10): it stops a caller with NO token,
+ * and nothing else. It does not stop a signed-in user calling this endpoint
+ * in a loop, nor this project's own anon key — a validly-signed JWT with no
+ * `sub` that ships inside the app bundle. Neither is rate limited nor cost
+ * capped today, and the reason is storage rather than oversight.
+ * importBudget.ts beside this file carries that argument in full and the
+ * marked gate in `Deno.serve` below carries the position;
+ * src/domain/import/importBudgetPolicy.ts carries the tested decision.
+ *
  * ---
  *
  * DEDUPLICATION (Fase 1b): before any third-party call, this function
@@ -777,6 +786,21 @@ Deno.serve(async (request) => {
     // as a typed 200.
     return jsonResponse({ error: importRequest.message }, 400);
   }
+
+  // IMP-06 / IMP-10 — THE GATE GOES HERE, AND DOES NOT EXIST YET: NOTHING
+  // BELOW IS THROTTLED. This line is the position, and the position is the
+  // argument. It is the single point at which a request becomes an import —
+  // past the boundary checks, before the `{ url }` / `{ text }` fork, and
+  // therefore before every third-party call, before the canonical-cache
+  // lookup and before Gemini. One door in, mirroring
+  // `respondWithImportResult` as the one door out, so no branch added later
+  // can skip it. NOT inside `resolveImport`: a `{ text }` body never enters
+  // that function, and a gate placed there would leave the one route with no
+  // cache, nothing to fetch and a guaranteed model call as the only
+  // unthrottled one. What plugs in here, what is still missing, and why an
+  // isolate-local counter is not a rate limit: importBudget.ts, beside this
+  // file. `decideImportBudget` itself is pure and tested in
+  // src/domain/import/importBudgetPolicy.ts.
 
   try {
     // The two routes, and the only place either is entered. They converge

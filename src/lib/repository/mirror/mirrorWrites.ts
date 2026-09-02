@@ -96,9 +96,15 @@
  * pure renumber among RETAINED ids (steps 1 and 2 swapping): that arrives
  * as a 23505, is classified `rejected`, and parks — with the PREVIOUS,
  * COMPLETE step list still standing in Postgres, which is the failure
- * direction to want. When a meal-edit path lands it should rewrite steps
- * with fresh ids, which reduces every edit to "delete all the old, insert
- * all the new" and removes the case entirely.
+ * direction to want. THE MEAL-EDIT PATH HAS SINCE LANDED AND TOOK THE
+ * ADVICE THIS NOTE USED TO GIVE: `updateMealRecipe`
+ * (src/lib/repository/local/meals.ts) replaces both child sets outright and
+ * mints fresh ids for every row, so an edit reaches here as "delete all the
+ * old, insert all the new" and no id is ever retained across a renumber.
+ * The residual case is therefore unreachable from this app's own write
+ * paths; it is documented rather than deleted because the ordering above is
+ * what makes that true, and a future caller that reused ids would bring it
+ * straight back.
  *
  * `cook_events` — UPSERT on the primary key, for the same reason `meals`
  * is: `would_repeat` and `rating` are both answered AFTER the row exists

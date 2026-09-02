@@ -13,6 +13,13 @@
  *                                  the ingredients and steps it wrote)
  *     * `setMealCookProofExclusion`, `addMealDishMood`
  *                               -> a `meal` job for the updated meal
+ *     * `updateMealRecipe`      -> a `meal` job for the edited meal, whose
+ *                                  ingredients and steps are re-read AFTER
+ *                                  the local replace, so the job carries the
+ *                                  new child rows and their new ids. This is
+ *                                  the only meal write whose children move,
+ *                                  and it is what `pruneChildren` in
+ *                                  mirrorWrites.ts exists for.
  *     * `createCookEvent`, `setCookEventRepeat`, `setCookEventRating`
  *                               -> a `cook_event` job
  *     * `setHouseholdCookSharing`

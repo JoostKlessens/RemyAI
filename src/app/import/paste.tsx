@@ -1,30 +1,77 @@
 /**
- * Recipe import, step 1: paste a link — a TikTok or Instagram post, a
- * YouTube video, or an ordinary recipe page. Client-side validation
- * (`normalizeRecipeUrl`, src/domain/import/urlParsing.ts — the same pure
- * function the real edge function uses) runs first, synchronously, so a
- * link Remy will not open fails instantly with no spinner at all. Only a
- * URL that passes that check goes on to the real parse step, which
- * genuinely takes several seconds (a fetch plus, for the three video
- * platforms, an LLM call).
+ * Recipe import, step 1: PASTE SOMETHING. Either a link — a TikTok or
+ * Instagram post, a YouTube video, an ordinary recipe page — or, since
+ * SRC-08, the recipe text itself, out of a message, a mail, or typed off a
+ * photo. Whichever the user picks, exactly one of the two is sent, and the
+ * screen goes on to the confirmation step or to an honest failure state.
+ *
+ * THE TWO SOURCES ARE AN EXPLICIT CHOICE, MADE WITH A SEGMENTED CONTROL,
+ * AND THE SCREEN NEVER INSPECTS THE PASTED STRING TO DECIDE. That is the
+ * load-bearing decision here, so here is the whole argument.
+ *
+ * `readImportRequest` (supabase/functions/parse-recipe/importRequest.ts)
+ * refuses a body carrying BOTH `url` and `text`, and refuses one carrying
+ * neither, precisely so that nothing downstream ever has to guess which the
+ * caller meant — its header says so at length, and names this screen as the
+ * reason "both" is unrepresentable rather than merely unlikely. Sniffing
+ * the input here ("does it start with http…") would hand that guess back to
+ * the one layer that must not make it, and being wrong is silent in both
+ * directions AND billable in one: a link posted as `{ text }` spends a
+ * metered model call asking Gemini to find a recipe in a web address, and a
+ * recipe posted as `{ url }` shows "Onbekende link" to somebody holding a
+ * perfectly good recipe. A control the user has already answered cannot be
+ * wrong about what they meant.
+ *
+ * WHY A SEGMENTED CONTROL AND NOT THE ALTERNATIVES. Two ROUTES (or tabs)
+ * would make one paste screen into two, splitting a single question across
+ * a navigation event and duplicating the loading, failure and dev-scenario
+ * machinery below. A SECONDARY ACTION that swaps the field ("of plak de
+ * tekst") hides half the feature behind a line nobody reads — and
+ * discoverability is the entire reason this route exists, since people who
+ * cannot paste a link currently just give up. `SegmentedControl` is the
+ * control this app already uses for two scopes of one question (Ranglijst's
+ * iedereen/vrienden, Household's time budget), it shows both answers at once
+ * at equal weight, and it is a `radiogroup` — exactly one always selected,
+ * which is the UI mirror of the function's exactly-one contract. THIS
+ * SCREEN ANSWERS ONE QUESTION AND DOES NOT BECOME A FORM: the switch adds
+ * one row and no field, because only ever one input is rendered.
+ *
+ * The client-side URL check (`normalizeRecipeUrl`,
+ * src/domain/import/urlParsing.ts — the same pure function the real edge
+ * function uses) still runs first on the link route, synchronously, so a
+ * link Remy will not open fails instantly with no spinner at all. The text
+ * route has its own pre-flight, for the same reason and with the same
+ * posture: `readPastedText` (./pastedTextLimit.ts) refuses a blank paste and
+ * one longer than the pipeline will read, both before any request exists. A
+ * request the function would only refuse should not cost a round trip, and
+ * an over-long paste must reach the user as a sentence under the field
+ * rather than as a 400 that the transport mapping would mistranslate into
+ * "probeer het opnieuw" — advice guaranteed to fail forever.
  *
  * SINCE `'web'` JOINED THE UNION, THE CLIENT-SIDE CHECK REJECTS FAR LESS.
  * Almost any http(s) address is now a real import attempt, so this screen's
  * copy stopped listing platforms: a sentence enumerating what Remy accepts
  * has been wrong twice already (see importFailureCopy.ts's
  * `unsupported_url` note), and "een video of een receptpagina" survives the
- * union growing again.
+ * union growing again. Every sentence that BRANCHES on the source now lives
+ * in importPasteCopy.ts where a test can hold it to its route — a screen
+ * narrating "Video gevonden" to somebody who pasted an email is telling the
+ * same kind of lie as a spinner that resolves into nothing.
  *
- * **The loading state is the point of this screen** (docs/DESIGN.md §3):
- * three checkpoint rows — "Video gevonden" → "Bijschrift gelezen" →
- * "Recept samengesteld" — each an unfilled-`border`-to-filled-`accent`
- * circle. The first two advance on a short fixed timer purely to narrate
- * progress; the third is NEVER completed by a timer — it only reflects the
- * real result arriving, which is why `runImport` transitions straight to
- * navigation/failure the instant that happens rather than ever setting a
- * "last checkpoint filled" state to render. If the real call runs long,
- * the second-to-last row simply stays lit — calm waiting, not a spinner resolving into
- * nothing.
+ * **The loading state is the point of this screen** (docs/DESIGN.md §3): a
+ * short list of checkpoint rows, each an unfilled-`border`-to-filled-
+ * `accent` circle. The LEADING rows advance on a short fixed timer purely
+ * to narrate progress; the LAST one is NEVER completed by a timer — it only
+ * reflects the real result arriving, which is why `settleAttempt`
+ * transitions straight to navigation/failure the instant that happens
+ * rather than ever setting a "last checkpoint filled" state to render. If
+ * the real call runs long, the second-to-last row simply stays lit — calm
+ * waiting, not a spinner resolving into nothing.
+ *
+ * WHICH rows those are is `buildImportCheckpointLabels`'s answer, not this
+ * file's: four pipeline shapes, four honest narrations, all of them in
+ * importPasteCopy.ts. The pasted-text list is the newest and the shortest,
+ * because that route fetches nothing at all.
  *
  * ONE OF THOSE OUTCOMES IS NOT A FAILURE. A display-only platform
  * (PD-011 — Instagram today) resolves its post and stops there on purpose:
@@ -46,37 +93,49 @@
  *
  * A `__DEV__`-only scenario row (mirroring the one on Kiezen) lets every
  * `ImportResult` kind be exercised on device without a backend; it never
- * renders in production builds.
+ * renders in production builds. It stays LINK-SHAPED: every fixture in
+ * ./_fixtures.ts is keyed on a link platform (`FixtureLinkPlatform`
+ * excludes `'text'` deliberately), so demoing the text route would mean
+ * inventing a fixture that does not exist rather than exercising one that
+ * does.
+ *
+ * THE FAILURE PANEL'S ESCAPE HATCH IS MODE-AWARE, and was not always. It
+ * read "Andere link proberen", hard-coded, which after a failed TEXT import
+ * offered to try another one of something the user never had. The action
+ * was always right — it clears the field and starts over — so only the word
+ * was wrong, which is the same shape of defect the checkpoint narration
+ * had: link-shaped language surviving into a route with no link in it.
+ * `ImportFailureState` now takes the mode and reads its label from
+ * `buildImportStartOverCopy`, and the mode it is handed is the one that
+ * FAILED (`retrySource.kind`), not whatever the switch shows now — those
+ * diverge the moment somebody fails a link, flips to Tekst, and looks back
+ * at the panel still on screen.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { Feather } from '@expo/vector-icons';
-import {
-  AccessibilityInfo,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useColorScheme,
-} from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { buildFixtureImportAttempt, type FixtureImportScenario } from './_fixtures';
+import { DevScenarioRow, buildDevScenarioDemo, type DevScenarioValue } from './_devScenarios';
+import { readPastedText } from './pastedTextLimit';
 import { encodeImportConfirmParams } from './routeParams';
 import type { ImportPlatform, ParsedRecipe, RecipeProvenance } from '@/domain/import/types';
-import { isDisplayOnlyPlatform } from '@/domain/import/displayOnlyPolicy';
 import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
-import { requestImport } from '@/lib/importRecipe';
+import { requestImport, requestTextImport, type ImportAttempt } from '@/lib/importRecipe';
 import { Button } from '@/components/Button';
 import { ImportFailureState } from '@/components/ImportFailureState';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
-import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
+import { ImportCheckpointList } from '@/components/ImportCheckpointList';
+import { ImportSourceField } from '@/components/ImportSourceField';
+import {
+  buildImportCheckpointLabels,
+  buildImportSourceModeCopy,
+  type ImportSourceMode,
+} from '@/components/importPasteCopy';
+import { getColors, spacing, typeScale } from '@/theme/tokens';
 
 type PastePhase = 'idle' | 'loading';
-type DevScenarioValue = FixtureImportScenario | 'unsupported_url' | 'normal';
 /** How many leading checkpoint rows are filled — the last row of whichever list is showing is never driven by this, see the file header. */
 type LoadingCheckpoint = 0 | 1 | 2;
 
@@ -84,89 +143,25 @@ const CHECKPOINT_ONE_DELAY_MS = 500;
 const CHECKPOINT_TWO_DELAY_MS = 1400;
 
 /**
- * The loading narration, one list per pipeline shape. The last entry of
- * either list is the step actually in flight and is NEVER filled by a timer
- * — see the file header.
+ * EXACTLY WHAT AN ATTEMPT WOULD RE-SEND, and never more than one of them.
  *
- * A display-only import gets its own list because the standard one would
- * lie: it lights "Bijschrift gelezen" on a fixed timer, and for a
- * display-only platform no bijschrift is ever read. Narrating a step we
- * deliberately do not perform is the same sin as a spinner that resolves
- * into nothing, just better dressed.
- */
-const CHECKPOINT_LABELS_EXTRACTION: readonly string[] = [
-  'Video gevonden',
-  'Bijschrift gelezen',
-  'Recept samengesteld…',
-];
-const CHECKPOINT_LABELS_DISPLAY_ONLY: readonly string[] = ['Post gevonden', 'Maker erbij gezocht…'];
-/**
- * A web import gets its own list for exactly the reason display-only does.
- * The extraction list narrates "Video gevonden" and "Bijschrift gelezen",
- * and for a recipe page both are false twice over: there is no video, and
- * there is no bijschrift — the recipe comes out of the page's own
- * structured data, with no model in the loop at all. Reusing that list
- * because it happens to be the default would narrate three steps we do not
- * perform, which this screen already refuses to do elsewhere.
- */
-const CHECKPOINT_LABELS_WEB: readonly string[] = ['Pagina opgehaald', 'Recept van de pagina gelezen…'];
-
-/**
- * Which narration is honest for a given platform. A function rather than a
- * `Record<ImportPlatform, …>` because the question is not really
- * per-platform: display-only is a POLICY (`isDisplayOnlyPlatform`, PD-011)
- * that any platform could in principle fall under, and it has to be asked
- * first — a Record keyed on platform would encode today's answer to that
- * policy as a fact about Instagram.
- */
-function checkpointLabelsFor(platform: ImportPlatform | null): readonly string[] {
-  if (platform === null) {
-    return CHECKPOINT_LABELS_EXTRACTION;
-  }
-  if (isDisplayOnlyPlatform(platform)) {
-    return CHECKPOINT_LABELS_DISPLAY_ONLY;
-  }
-  return platform === 'web' ? CHECKPOINT_LABELS_WEB : CHECKPOINT_LABELS_EXTRACTION;
-}
-
-/**
- * The __DEV__ scenario row's demo data. Both are exhaustive Records so a
- * new scenario or a new platform has to be given a demo rather than
- * inheriting a wrong one — the previous version was
- * `scenario === 'display_only' ? 'instagram' : 'tiktok'`, which would have
- * demoed the two web-only failures under a TikTok URL.
+ * The two routes are retried by different means — a link by its normalized
+ * URL and the platform that came out of the same `normalizeRecipeUrl` call,
+ * a paste by the trimmed string itself — and this union is the shape that
+ * makes "both" impossible to hold. Two nullable fields (`normalizedUrl`
+ * plus `pastedText`) would have been the smaller diff and would have
+ * reintroduced, in the screen's own state, the exact ambiguity
+ * `readImportRequest` refuses on the wire: a stale URL sitting beside a
+ * fresh paste, with a `retry` reading whichever it happened to check first.
  *
- * Each scenario is paired with the platform that can actually produce it:
- * display-only is Instagram's alone (PD-011), the two page-shaped outcomes
- * belong to `'web'`, and a TikTok link stands in for everything the
- * original caption pipeline produces. A demo showing a state that cannot
- * happen is worse than no demo.
+ * It doubles as what a failed attempt still knows about WHERE its recipe
+ * was coming from, which is why manual entry reads its source URL and its
+ * platform off it (`manualEntrySource`) rather than off two fields that
+ * could disagree with it.
  */
-// Keyed by the link-paste platforms only — see `FixtureLinkPlatform` in
-// _fixtures.ts for why `'text'` has no entry here rather than a fake one.
-const DEMO_URL_BY_PLATFORM: Readonly<Record<Exclude<ImportPlatform, 'text'>, string>> = {
-  tiktok: 'https://www.tiktok.com/@kokenmetkees/video/000009',
-  instagram: 'https://www.instagram.com/reel/000009',
-  youtube: 'https://www.youtube.com/watch?v=demo000009',
-  web: 'https://www.voorbeeldkeuken.nl/recepten/ovenschotel-zoete-aardappel',
-};
-
-const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, Exclude<ImportPlatform, 'text'>>> = {
-  parsed: 'tiktok',
-  // RCP-06's other route. `'parsed'` above demos a caption a model read;
-  // this one demos a page whose publisher wrote the recipe out in machine-
-  // readable form, so the two provenance notes on the confirmation screen
-  // can both be seen on device. Pairing it with anything but `'web'` would
-  // demo a structured-data import from a platform that has none.
-  parsed_from_page: 'web',
-  display_only: 'instagram',
-  no_recipe_in_caption: 'tiktok',
-  no_recipe_on_page: 'web',
-  source_fetch_failed: 'web',
-  oembed_failed: 'tiktok',
-  llm_request_failed: 'tiktok',
-  parse_failed: 'tiktok',
-};
+type ImportRetrySource =
+  | { readonly kind: 'link'; readonly normalizedUrl: string; readonly platform: ImportPlatform }
+  | { readonly kind: 'text'; readonly text: string };
 
 /**
  * Everything the screen still knows after an attempt that produced no
@@ -181,10 +176,40 @@ interface FailedAttemptContext {
   readonly authorName: string | null;
   /** Travels beside the name because it cannot be rebuilt from it — see `ImportAttempt.authorUrl` (src/lib/importRecipe.ts). */
   readonly authorUrl: string | null;
-  readonly normalizedUrl: string | null;
-  readonly platform: ImportPlatform | null;
+  /**
+   * What "Opnieuw proberen" would send again, or `null` when there is
+   * nothing to send — `unsupported_url`, the one outcome reached before any
+   * request was built, which is exactly why its copy offers no retry.
+   */
+  readonly retrySource: ImportRetrySource | null;
   /** oEmbed's thumbnail when the attempt resolved one. Only ever carried onward for `display_only` — see `handleManualEntry`. */
   readonly thumbnailUrl: string | null;
+}
+
+/**
+ * What manual entry inherits from a failed attempt: the address the recipe
+ * was coming from, and the route that was taken to it.
+ *
+ * A PASTED-TEXT ATTEMPT REPORTS `platform: 'text'` WITH NO URL, and that
+ * pairing is deliberate rather than a shrug at a missing field. The confirm
+ * screen treats `platform === null` as meaning something precise — no route
+ * at all, nothing ever fetched or pasted, the from-scratch add — and after
+ * a paste that is simply untrue: something WAS read, it just had no
+ * address. Reporting `'text'` keeps that screen's branch honest; the row it
+ * writes is identical either way, since `toMealDraft` maps `'text'` to no
+ * `source_platform` at all.
+ */
+function manualEntrySource(source: ImportRetrySource | null): {
+  readonly normalizedUrl: string | null;
+  readonly platform: ImportPlatform | null;
+} {
+  if (source === null) {
+    return { normalizedUrl: null, platform: null };
+  }
+  if (source.kind === 'text') {
+    return { normalizedUrl: null, platform: 'text' };
+  }
+  return { normalizedUrl: source.normalizedUrl, platform: source.platform };
 }
 
 interface ConfirmNavigationContext {
@@ -230,7 +255,20 @@ export default function ImportPasteScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
+  /**
+   * The user's answer to "what are you handing over", and the only thing
+   * that decides which body is posted. Never derived from the field
+   * contents — see the file header.
+   */
+  const [mode, setMode] = useState<ImportSourceMode>('link');
   const [url, setUrl] = useState('');
+  /**
+   * Kept alongside `url` rather than sharing one field, so that switching
+   * modes cannot silently turn a half-typed link into a recipe or the other
+   * way round. Nothing here can leak into the other route's request: the
+   * body is built from `mode` in `handleSubmit`, one key, never both.
+   */
+  const [pastedText, setPastedText] = useState('');
   const [phase, setPhase] = useState<PastePhase>('idle');
   const [failedAttempt, setFailedAttempt] = useState<FailedAttemptContext | null>(null);
   const [loadingCheckpoint, setLoadingCheckpoint] = useState<LoadingCheckpoint>(0);
@@ -269,62 +307,106 @@ export default function ImportPasteScreen(): JSX.Element {
     });
   };
 
-  const runImport = (normalizedUrl: string, platform: ImportPlatform): void => {
+  /**
+   * Enter the loading state and start the narration timers. Split out of
+   * `runImport` when the text route arrived so that both routes light the
+   * same checkpoints in the same order — a second copy of this would be a
+   * second place for the "last row is never timed" rule to be broken.
+   *
+   * `platform` is what decides which narration is honest, and nothing else.
+   */
+  const beginLoading = (platform: ImportPlatform): void => {
     setFailedAttempt(null);
     setPhase('loading');
     setLoadingCheckpoint(0);
     setLoadingPlatform(platform);
     clearCheckpointTimers();
-    // Checkpoints 1/2 narrate progress on a short fixed timer — never
-    // checkpoint 3, which only ever reflects the real promise below
+    // The leading checkpoints narrate progress on a short fixed timer —
+    // never the last one, which only ever reflects the real promise
     // settling (see the file header).
     checkpointTimers.current = [
       setTimeout(() => setLoadingCheckpoint(1), CHECKPOINT_ONE_DELAY_MS),
       setTimeout(() => setLoadingCheckpoint(2), CHECKPOINT_TWO_DELAY_MS),
     ];
+  };
+
+  /**
+   * What happens when a real attempt comes back — shared by both routes,
+   * because nothing here differs between them. The response states its own
+   * platform, its own attribution and its own provenance whichever body was
+   * posted (`toAttempt`, src/lib/importRecipe.ts), so a fork would only
+   * create two places for the same handling to drift.
+   *
+   * `retrySource` is the one thing the response cannot state: it is what
+   * this screen SENT, and it is remembered so "Opnieuw proberen" re-sends
+   * exactly that rather than a reconstruction of it.
+   */
+  const settleAttempt = (attempt: ImportAttempt, retrySource: ImportRetrySource): void => {
+    clearCheckpointTimers();
+    setPhase('idle');
+    if (attempt.result.kind === 'parsed') {
+      AccessibilityInfo.announceForAccessibility('Recept gevonden.');
+      navigateToConfirm('parsed', {
+        recipe: attempt.result.recipe,
+        authorName: attempt.authorName,
+        authorUrl: attempt.authorUrl,
+        // Null for a pasted-text import, and that is the truth rather than
+        // a gap: nothing was fetched, so there is no address to record.
+        normalizedUrl: attempt.result.sourceUrl,
+        platform: attempt.result.platform,
+        thumbnailUrl: attempt.thumbnailUrl,
+        // Reported by the attempt, never inferred here from
+        // `attempt.result.platform` — see `ImportAttempt.provenance`.
+        provenance: attempt.provenance,
+        // The one place a real canonical id enters the app. Straight off
+        // the function's answer — the row it inserted, or the stored row
+        // a cache hit served — never rebuilt from `sourceUrl`.
+        recipeId: attempt.result.recipeId,
+      });
+      return;
+    }
+    setFailedAttempt({
+      result: attempt.result,
+      authorName: attempt.authorName,
+      authorUrl: attempt.authorUrl,
+      retrySource,
+      thumbnailUrl: attempt.thumbnailUrl,
+    });
+    AccessibilityInfo.announceForAccessibility(buildImportFailureCopy(attempt.result).title);
+  };
+
+  const runImport = (normalizedUrl: string, platform: ImportPlatform): void => {
+    beginLoading(platform);
     // `platform` travels with the URL because a failed round trip has no
     // response to read a platform off, and `llm_request_failed` now states
     // one (types.ts). This is the same value `normalizeRecipeUrl` handed
-    // `handleSubmit`, passed on rather than recomputed — see
+    // `handleSubmitLink`, passed on rather than recomputed — see
     // `requestImport`.
     requestImport(normalizedUrl, platform).then((attempt) => {
-      clearCheckpointTimers();
-      setPhase('idle');
-      if (attempt.result.kind === 'parsed') {
-        AccessibilityInfo.announceForAccessibility('Recept gevonden.');
-        navigateToConfirm('parsed', {
-          recipe: attempt.result.recipe,
-          authorName: attempt.authorName,
-          authorUrl: attempt.authorUrl,
-          normalizedUrl: attempt.result.sourceUrl,
-          platform: attempt.result.platform,
-          thumbnailUrl: attempt.thumbnailUrl,
-          // Reported by the attempt, never inferred here from
-          // `attempt.result.platform` — see `ImportAttempt.provenance`.
-          provenance: attempt.provenance,
-          // The one place a real canonical id enters the app. Straight off
-          // the function's answer — the row it inserted, or the stored row
-          // a cache hit served — never rebuilt from `sourceUrl`.
-          recipeId: attempt.result.recipeId,
-        });
-        return;
-      }
-      const context: FailedAttemptContext = {
-        result: attempt.result,
-        authorName: attempt.authorName,
-        authorUrl: attempt.authorUrl,
-        normalizedUrl,
-        platform,
-        thumbnailUrl: attempt.thumbnailUrl,
-      };
-      setFailedAttempt(context);
-      AccessibilityInfo.announceForAccessibility(buildImportFailureCopy(attempt.result).title);
+      settleAttempt(attempt, { kind: 'link', normalizedUrl, platform });
     });
   };
 
-  const handleSubmit = (): void => {
+  /**
+   * SRC-08's route. `requestTextImport` takes no platform argument and this
+   * function invents none: `'text'` is a fact about which body was posted,
+   * not a conclusion about a string, so the only place it is stated is
+   * `beginLoading` (for the narration) and the request builder itself.
+   *
+   * `text` is already trimmed and already within the cap — `readPastedText`
+   * decided both before this was called, and the string measured is the
+   * string sent.
+   */
+  const runTextImport = (text: string): void => {
+    beginLoading('text');
+    requestTextImport(text).then((attempt) => {
+      settleAttempt(attempt, { kind: 'text', text });
+    });
+  };
+
+  const handleSubmitLink = (): void => {
     const trimmed = url.trim();
-    if (trimmed.length === 0 || phase === 'loading') {
+    if (trimmed.length === 0) {
       return;
     }
     const normalized = normalizeRecipeUrl(trimmed);
@@ -333,8 +415,8 @@ export default function ImportPasteScreen(): JSX.Element {
         result: { kind: 'unsupported_url' },
         authorName: null,
         authorUrl: null,
-        normalizedUrl: null,
-        platform: null,
+        // Nothing was ever sent, so there is nothing to send again.
+        retrySource: null,
         thumbnailUrl: null,
       });
       AccessibilityInfo.announceForAccessibility('Onbekende link.');
@@ -343,14 +425,63 @@ export default function ImportPasteScreen(): JSX.Element {
     runImport(normalized.normalizedUrl, normalized.platform);
   };
 
-  const handleRetry = (): void => {
-    if (failedAttempt === null || failedAttempt.normalizedUrl === null || failedAttempt.platform === null) {
+  /**
+   * The text route's pre-flight, and it refuses rather than sends in both
+   * of the states the edge function would refuse anyway. Neither refusal
+   * announces anything: a blank field is the resting state and says
+   * nothing, and an over-long paste already has its sentence rendered under
+   * the field the moment it became over-long — long before this button
+   * could be reached, since the button is disabled in both cases.
+   */
+  const handleSubmitText = (): void => {
+    const submission = readPastedText(pastedText);
+    if (submission.readiness !== 'ready') {
       return;
     }
-    runImport(failedAttempt.normalizedUrl, failedAttempt.platform);
+    runTextImport(submission.text);
+  };
+
+  const handleSubmit = (): void => {
+    if (phase === 'loading') {
+      return;
+    }
+    if (mode === 'text') {
+      handleSubmitText();
+      return;
+    }
+    handleSubmitLink();
+  };
+
+  const handleRetry = (): void => {
+    const source = failedAttempt?.retrySource ?? null;
+    if (source === null) {
+      return;
+    }
+    if (source.kind === 'text') {
+      runTextImport(source.text);
+      return;
+    }
+    runImport(source.normalizedUrl, source.platform);
+  };
+
+  /**
+   * Switching the question clears the previous answer's failure panel: a
+   * "Geen recept in het bijschrift" notice left sitting under the text
+   * field would describe an attempt that has nothing to do with what the
+   * user is now typing. The FIELDS are deliberately left alone — a
+   * half-typed link is still there when you switch back, and cannot leak
+   * into the other route's request because the body is built from `mode`.
+   */
+  const handleModeChange = (nextMode: ImportSourceMode): void => {
+    if (nextMode === mode) {
+      return;
+    }
+    setMode(nextMode);
+    setFailedAttempt(null);
   };
 
   const handleManualEntry = (): void => {
+    const source = manualEntrySource(failedAttempt?.retrySource ?? null);
     navigateToConfirm('manual', {
       recipe: null,
       authorName: failedAttempt?.authorName ?? null,
@@ -358,8 +489,8 @@ export default function ImportPasteScreen(): JSX.Element {
       // resolved a creator, the manual-entry route keeps both, so a recipe
       // the user types still credits — and links to — whoever it came from.
       authorUrl: failedAttempt?.authorUrl ?? null,
-      normalizedUrl: failedAttempt?.normalizedUrl ?? null,
-      platform: failedAttempt?.platform ?? null,
+      normalizedUrl: source.normalizedUrl,
+      platform: source.platform,
       // Manual entry normally carries no thumbnail: when oEmbed resolved one
       // and the LLM step then failed, a manually-typed recipe still falls
       // back to the library's monogram tile, per docs/DESIGN.md §2.
@@ -379,17 +510,33 @@ export default function ImportPasteScreen(): JSX.Element {
     });
   };
 
-  const handleTryDifferentLink = (): void => {
+  /**
+   * The failure panel's escape hatch: clear everything and start over.
+   * BOTH fields are emptied, not just the current mode's, because the user
+   * pressing this has said the thing they gave Remy was the wrong thing —
+   * and a stale link left behind in the other mode is a trap waiting for
+   * whoever switches back. (Its button still reads "Andere link proberen"
+   * in both modes; see the known copy gap in the file header.)
+   */
+  const handleStartOver = (): void => {
     setFailedAttempt(null);
     setUrl('');
+    setPastedText('');
   };
 
+  /** Fills whichever field the user is actually looking at — the mode decides, exactly as it does for the request body. */
   const handlePasteFromClipboard = (): void => {
     Clipboard.getStringAsync()
-      .then((text) => {
-        if (text.trim().length > 0) {
-          setUrl(text.trim());
+      .then((clipboardText) => {
+        const trimmed = clipboardText.trim();
+        if (trimmed.length === 0) {
+          return;
         }
+        if (mode === 'text') {
+          setPastedText(trimmed);
+          return;
+        }
+        setUrl(trimmed);
       })
       .catch(() => {
         // Clipboard access can be denied by the OS; nothing to paste is a
@@ -408,15 +555,12 @@ export default function ImportPasteScreen(): JSX.Element {
         result: { kind: 'unsupported_url' },
         authorName: null,
         authorUrl: null,
-        normalizedUrl: null,
-        platform: null,
+        retrySource: null,
         thumbnailUrl: null,
       });
       return;
     }
-    const demoPlatform = DEMO_PLATFORM_BY_SCENARIO[scenario];
-    const demoUrl = DEMO_URL_BY_PLATFORM[demoPlatform];
-    const attempt = buildFixtureImportAttempt(scenario, demoPlatform, demoUrl);
+    const { attempt, demoUrl, demoPlatform } = buildDevScenarioDemo(scenario);
     if (attempt.result.kind === 'parsed') {
       navigateToConfirm('parsed', {
         recipe: attempt.result.recipe,
@@ -434,14 +578,24 @@ export default function ImportPasteScreen(): JSX.Element {
       result: attempt.result,
       authorName: attempt.authorName,
       authorUrl: attempt.authorUrl,
-      normalizedUrl: demoUrl,
-      platform: demoPlatform,
+      // The demo row is link-shaped throughout (see the file header), so a
+      // demoed retry re-sends a demo link — the same shape a real one would.
+      retrySource: { kind: 'link', normalizedUrl: demoUrl, platform: demoPlatform },
       thumbnailUrl: attempt.thumbnailUrl,
     });
   };
 
-  const canRetry = failedAttempt !== null && failedAttempt.normalizedUrl !== null && failedAttempt.platform !== null;
-  const checkpointLabels = checkpointLabelsFor(loadingPlatform);
+  const modeCopy = buildImportSourceModeCopy(mode);
+  /**
+   * Recomputed on every keystroke rather than held in state, so the button
+   * and the helper line below cannot disagree with each other about the
+   * same string — and so neither can disagree with what `handleSubmitText`
+   * decides a moment later. Meaningless in link mode and never read there.
+   */
+  const pastedTextSubmission = readPastedText(pastedText);
+  const canSubmit = mode === 'text' ? pastedTextSubmission.readiness === 'ready' : url.trim().length > 0;
+  const canRetry = failedAttempt !== null && failedAttempt.retrySource !== null;
+  const checkpointLabels = buildImportCheckpointLabels(loadingPlatform);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -460,59 +614,21 @@ export default function ImportPasteScreen(): JSX.Element {
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Recept importeren</Text>
-        {/*
-          Names a shape of thing, not a list of platforms. This sentence
-          said "een TikTok- of Instagram-video" while YouTube and ordinary
-          recipe pages were already accepted — the same drift that made the
-          `unsupported_url` copy wrong twice (see importFailureCopy.ts).
-          "Een video of een receptpagina" stays true whatever joins
-          `ImportPlatform` next.
-        */}
-        <Text style={[typeScale.bodySmall, styles.subtitle, { color: colors.textMuted }]}>
-          Plak een link naar een video of een receptpagina. Remy probeert er een recept van te maken.
-        </Text>
-
-        <TextInput
-          value={url}
-          onChangeText={setUrl}
-          onSubmitEditing={handleSubmit}
-          placeholder="https://…"
-          placeholderTextColor={colors.textMuted}
-          keyboardType="url"
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="go"
-          editable={phase !== 'loading'}
-          style={[
-            typeScale.body,
-            styles.input,
-            { color: colors.textPrimary, backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-          accessibilityLabel="Link naar een video of receptpagina"
+        <ImportSourceField
+          mode={mode}
+          onModeChange={handleModeChange}
+          url={url}
+          onUrlChange={setUrl}
+          pastedText={pastedText}
+          onPastedTextChange={setPastedText}
+          isPastedTextTooLong={pastedTextSubmission.readiness === 'too_long'}
+          isBusy={phase === 'loading'}
+          onSubmitLink={handleSubmit}
+          onPasteFromClipboard={handlePasteFromClipboard}
         />
 
-        <Pressable
-          onPress={handlePasteFromClipboard}
-          accessibilityRole="button"
-          accessibilityLabel="Plak link uit klembord"
-          style={styles.pasteRow}
-        >
-          <Feather name="clipboard" size={16} color={colors.textSecondary} />
-          <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]}>Plak uit klembord</Text>
-        </Pressable>
-
         {phase === 'loading' ? (
-          <View style={styles.checkpointBlock}>
-            {checkpointLabels.map((label, index) => (
-              <CheckpointRow
-                key={label}
-                label={label}
-                // The last row is the step genuinely in flight and is never
-                // driven by loadingCheckpoint/a timer — see the file header.
-                filled={index < checkpointLabels.length - 1 && loadingCheckpoint > index}
-              />
-            ))}
-          </View>
+          <ImportCheckpointList labels={checkpointLabels} filledCount={loadingCheckpoint} />
         ) : null}
 
         {failedAttempt !== null ? (
@@ -521,7 +637,11 @@ export default function ImportPasteScreen(): JSX.Element {
               result={failedAttempt.result}
               onRetry={canRetry ? handleRetry : null}
               onManualEntry={handleManualEntry}
-              onTryDifferentLink={handleTryDifferentLink}
+              onStartOver={handleStartOver}
+              // The mode that actually failed, falling back to the current
+              // switch only when the attempt kept no source at all (an
+              // `unsupported_url` never got far enough to have one).
+              mode={failedAttempt.retrySource?.kind ?? mode}
             />
           </View>
         ) : null}
@@ -532,86 +652,20 @@ export default function ImportPasteScreen(): JSX.Element {
           label="Importeren"
           variant="primary"
           onPress={handleSubmit}
-          disabled={url.trim().length === 0 || phase === 'loading'}
+          disabled={!canSubmit || phase === 'loading'}
           loading={phase === 'loading'}
           accessibilityLabel="Recept importeren"
         />
         {phase === 'loading' ? null : (
           <Button
-            label="Ik heb geen link, recept zelf invoeren"
+            label={modeCopy.manualEntryLabel}
             variant="tertiary"
             onPress={handleManualEntry}
-            accessibilityLabel="Recept handmatig invoeren zonder link"
+            accessibilityLabel={modeCopy.manualEntryAccessibilityLabel}
           />
         )}
       </View>
     </SafeAreaView>
-  );
-}
-
-/** One row of docs/DESIGN.md §3's loading checkpoint list — an unfilled `border` circle that fills solid `accent` once this step is done. */
-interface CheckpointRowProps {
-  readonly label: string;
-  readonly filled: boolean;
-}
-
-const TRANSPARENT_FILL = 'transparent';
-
-function CheckpointRow(props: CheckpointRowProps): JSX.Element {
-  const { label, filled } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-  const circleColor = filled ? colors.accent : colors.border;
-  const circleFill = filled ? colors.accent : TRANSPARENT_FILL;
-
-  return (
-    <View style={styles.checkpointRow} accessible accessibilityLabel={`${label}${filled ? ', klaar' : ''}`}>
-      <View style={[styles.checkpointCircle, { borderColor: circleColor, backgroundColor: circleFill }]} />
-      <Text style={[typeScale.caption, { color: filled ? colors.textPrimary : colors.textMuted }]}>{label}</Text>
-    </View>
-  );
-}
-
-interface DevScenarioRowProps {
-  readonly onSelect: (scenario: DevScenarioValue) => void;
-}
-
-const DEV_SCENARIOS: ReadonlyArray<{ value: DevScenarioValue; label: string }> = [
-  { value: 'normal', label: 'Normaal' },
-  // Two "gelukt" buttons, because there are two ways to succeed and they
-  // say different things on the confirmation screen (RCP-06). Labelled by
-  // the route rather than by the outcome, since the outcome is identical.
-  { value: 'parsed', label: 'Gelukt (bijschrift)' },
-  { value: 'parsed_from_page', label: 'Gelukt (pagina)' },
-  { value: 'no_recipe_in_caption', label: 'Geen recept' },
-  { value: 'no_recipe_on_page', label: 'Pagina zonder recept' },
-  { value: 'display_only', label: 'Alleen tonen' },
-  { value: 'unsupported_url', label: 'Onbekende link' },
-  { value: 'source_fetch_failed', label: 'Niet opgehaald' },
-  { value: 'oembed_failed', label: 'Video-fout' },
-  { value: 'llm_request_failed', label: 'Model-fout' },
-  { value: 'parse_failed', label: 'Parse-fout' },
-];
-
-function DevScenarioRow(props: DevScenarioRowProps): JSX.Element {
-  const { onSelect } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.devRow} accessibilityLabel="Ontwikkelaarsmodus: demoscenario kiezen">
-      {DEV_SCENARIOS.map((scenario) => (
-        <Pressable
-          key={scenario.value}
-          onPress={() => onSelect(scenario.value)}
-          style={styles.devButton}
-          accessibilityRole="button"
-          accessibilityLabel={`Demoscenario: ${scenario.label}`}
-        >
-          <Text style={[typeScale.caption, { color: colors.textMuted }]}>{scenario.label}</Text>
-        </Pressable>
-      ))}
-    </View>
   );
 }
 
@@ -634,41 +688,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space3,
     paddingBottom: spacing.space10,
   },
-  subtitle: {
-    marginTop: spacing.space1,
-    marginBottom: spacing.space5,
-  },
-  input: {
-    minHeight: spacing.touchTargetMin,
-    borderWidth: 1,
-    borderRadius: radii.radiusSm,
-    paddingHorizontal: spacing.space3,
-  },
-  pasteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space2,
-    minHeight: spacing.touchTargetMin,
-    marginTop: spacing.space2,
-  },
-  checkpointBlock: {
-    marginTop: spacing.space5,
-    gap: spacing.space2,
-  },
-  checkpointRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space3,
-    paddingVertical: spacing.space1,
-  },
-  checkpointCircle: {
-    // A small status dot, not a spacing-scale size — mirrors
-    // TimerDisplay.tsx's own local CIRCLE_SIZE constant precedent.
-    width: 10,
-    height: 10,
-    borderRadius: radii.radiusFull,
-    borderWidth: 1.5,
-  },
   failureBlock: {
     marginTop: spacing.space5,
   },
@@ -678,16 +697,5 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space4,
     paddingBottom: spacing.space6,
     gap: spacing.space3,
-  },
-  devRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
-    gap: spacing.space3,
-  },
-  devButton: {
-    minHeight: spacing.touchTargetMin,
-    justifyContent: 'center',
   },
 });

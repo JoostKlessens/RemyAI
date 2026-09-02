@@ -18,4 +18,5 @@ export type {
   RemyRepository,
   RespondToDecisionInput,
   UpdateHouseholdSettingsInput,
+  UpdateMealRecipeInput,
 } from './types';

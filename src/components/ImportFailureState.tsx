@@ -16,6 +16,7 @@
 
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { buildImportFailureCopy, type ImportFailureResult } from './importFailureCopy';
+import { buildImportStartOverCopy, type ImportSourceMode } from './importPasteCopy';
 import { Button } from './Button';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
@@ -24,14 +25,27 @@ export interface ImportFailureStateProps {
   /** Null when there's no URL context left to retry (e.g. `unsupported_url`) — see importFailureCopy.ts's `canRetry`. */
   readonly onRetry: (() => void) | null;
   readonly onManualEntry: () => void;
-  readonly onTryDifferentLink: () => void;
+  /**
+   * Discards the failed attempt and starts a fresh one. Named for what it
+   * does rather than for what the user retypes: the previous name,
+   * `onTryDifferentLink`, was accurate only while every import began with a
+   * link, and a pasted-text attempt has none to try another of.
+   */
+  readonly onStartOver: () => void;
+  /**
+   * The mode of the attempt that FAILED — not whatever the switch shows
+   * now. Only the start-over label reads it; see `buildImportStartOverCopy`
+   * for why the distinction is load-bearing.
+   */
+  readonly mode: ImportSourceMode;
 }
 
 export function ImportFailureState(props: ImportFailureStateProps): JSX.Element {
-  const { result, onRetry, onManualEntry, onTryDifferentLink } = props;
+  const { result, onRetry, onManualEntry, onStartOver, mode } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const copy = buildImportFailureCopy(result);
+  const startOverCopy = buildImportStartOverCopy(mode);
 
   const primaryAction = copy.manualEntryIsPrimary
     ? { label: 'Recept handmatig invoeren', onPress: onManualEntry, accessibilityLabel: 'Recept handmatig invoeren' }
@@ -72,10 +86,10 @@ export function ImportFailureState(props: ImportFailureStateProps): JSX.Element 
           <Button label="Opnieuw proberen" variant="secondary" onPress={onRetry} accessibilityLabel="Import opnieuw proberen" />
         ) : null}
         <Button
-          label="Andere link proberen"
+          label={startOverCopy.label}
           variant="tertiary"
-          onPress={onTryDifferentLink}
-          accessibilityLabel="Een andere link proberen"
+          onPress={onStartOver}
+          accessibilityLabel={startOverCopy.accessibilityLabel}
         />
       </View>
     </View>

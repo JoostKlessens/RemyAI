@@ -49,13 +49,29 @@
  * list — the list stays mounted on purpose, so ticking something off by
  * mistake is one tap to undo, not a screen to re-navigate to.
  *
- * NAVIGATION: this route is deliberately NOT wired into any tab bar or
- * existing screen — that is explicitly out of scope for this change, owned
- * by whoever adds the entry point. It works standing alone at
- * `/boodschappen` (expo-router mounts every file under src/app as a route
- * whether or not `_layout.tsx`'s `<Stack>` declares it — see that file's
- * own `AuthGate` comment) and reachable today via `router.push('/boodschappen')`
- * from anywhere in the app.
+ * NAVIGATION, AND THE SIBLING THIS SCREEN NOW HAS. This paragraph used to
+ * say the route was deliberately wired into nothing, its entry point owned
+ * by whoever added one. It has been wired twice since: `LibraryHeader` puts
+ * the way in on Mijn recepten's title line, and LIB-06 added a door out to
+ * `/deze-week` — the plan this list is built from.
+ *
+ * THAT DOOR IS A `replace`, NOT A `push`, because the two screens are
+ * siblings rather than parent and child. Both read the one query stated
+ * above, so moving between them switches which reading of the week you are
+ * looking at; it does not descend into anything. Pushing would stack
+ * list-on-plan-on-list and leave "Sluiten" walking back through a corridor
+ * of alternating views of the same seven days, while replacing keeps the
+ * stack one deep so "Sluiten" always lands back on Mijn recepten.
+ *
+ * IT IS THE DERIVED VIEW THAT HOLDS THE ENTRY POINT, WHICH IS BACKWARDS.
+ * Mijn recepten's one door says "Boodschappen", so a household meets the
+ * ingredients before the plan they came from. The better arrangement is the
+ * reverse — plan first, list one step on from it — but LibraryHeader.tsx is
+ * owned by another change in flight, so this is recorded rather than taken.
+ *
+ * Either route still works standing alone: expo-router mounts every file
+ * under src/app as a route whether or not `_layout.tsx`'s `<Stack>`
+ * declares it — see that file's own `AuthGate` comment.
  */
 
 import { useCallback, useState } from 'react';
@@ -180,7 +196,11 @@ export default function ShoppingListScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-      <Header onClose={() => router.back()} subtitle={subtitle} />
+      <Header
+        onClose={() => router.back()}
+        onOpenWeekPlan={() => router.replace('/deze-week')}
+        subtitle={subtitle}
+      />
 
       {phase === 'loading' ? <LoadingRows /> : null}
 
@@ -228,12 +248,14 @@ export default function ShoppingListScreen(): JSX.Element {
 
 interface HeaderProps {
   readonly onClose: () => void;
+  /** Switches to `/deze-week`, the plan this list is derived from. See this file's NAVIGATION note on why it replaces rather than pushes. */
+  readonly onOpenWeekPlan: () => void;
   /** `describeShoppingListMealCount`'s output, or null while there is nothing to summarize yet. */
   readonly subtitle: string | null;
 }
 
 function Header(props: HeaderProps): JSX.Element {
-  const { onClose, subtitle } = props;
+  const { onClose, onOpenWeekPlan, subtitle } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -241,11 +263,27 @@ function Header(props: HeaderProps): JSX.Element {
     <View style={styles.header}>
       <View style={styles.headerTopRow}>
         <Text style={[typeScale.title2, styles.title, { color: colors.textPrimary }]}>Boodschappen</Text>
+        {/*
+         * "Deze week" is a door to the other reading of this same query, so
+         * it is quiet muted text on the title line rather than a button in
+         * an action slot — LibraryHeader.tsx's rule, argued there: the
+         * title line carries doors out of a screen, the action slot carries
+         * things you do TO it. It sits before "Sluiten" because leaving is
+         * always the last thing on the line.
+         */}
+        <Pressable
+          onPress={onOpenWeekPlan}
+          accessibilityRole="button"
+          accessibilityLabel="Deze week, wat je gepland hebt"
+          style={styles.headerLink}
+        >
+          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Deze week</Text>
+        </Pressable>
         <Pressable
           onPress={onClose}
           accessibilityRole="button"
           accessibilityLabel="Sluiten, terug naar vorig scherm"
-          style={styles.closeButton}
+          style={styles.headerLink}
         >
           <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Sluiten</Text>
         </Pressable>
@@ -339,7 +377,8 @@ const styles = StyleSheet.create({
   title: {
     flexShrink: 1,
   },
-  closeButton: {
+  /** Shared by both title-line doors ("Deze week", "Sluiten") — one shape, so neither reads as the more important of the two. */
+  headerLink: {
     minHeight: spacing.touchTargetMin,
     justifyContent: 'center',
     paddingLeft: spacing.space2,

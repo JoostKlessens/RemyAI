@@ -1,8 +1,8 @@
 /**
  * Root layout. The tab navigator (Kiezen, Bibliotheek, Vrienden) lives one
  * level down, at `(tabs)/_layout.tsx`, wrapped here in a `Stack` alongside
- * Cook Mode, the recipe import flow, a friend's shared recipe, and the
- * settings screen as full-screen siblings.
+ * Cook Mode, the recipe import flow, the recipe editor, a friend's shared
+ * recipe, and the settings screen as full-screen siblings.
  *
  * Why: expo-router mounts every sibling route of a `<Tabs>` layout as an
  * additional tab unless explicitly hidden, and even hidden tab entries
@@ -14,7 +14,7 @@
  * `(tabs)` route group — which does not appear in the URL — keeps the
  * public routes exactly as specified (`/`, `/recipes`, `/friends`,
  * `/cook/[mealId]`, `/import/paste`, `/import/confirm`,
- * `/friends/[feedItemId]`, `/settings`) while giving the full-screen
+ * `/friends/[feedItemId]`, `/recipe-edit/[mealId]`, `/settings`) while giving the full-screen
  * siblings a clean, tab-free presentation.
  *
  * Note the deliberate pairing of `/friends` (the tab, from the route
@@ -104,6 +104,14 @@ export default function RootLayout(): JSX.Element | null {
             lists them. */}
         <Stack.Screen name="friends/add" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="friends/[feedItemId]" options={{ presentation: 'fullScreenModal' }} />
+        {/* RCP-03. Full-screen over the tabs, the same treatment
+            import/confirm gets below and for the same reason: it is one
+            focused editing task you go into and come back from, and the
+            Bibliotheek tab lit underneath would suggest you were still
+            browsing. It is also the same editor confirm.tsx is, which makes
+            matching its presentation the honest choice rather than a
+            coincidence. */}
+        <Stack.Screen name="recipe-edit/[mealId]" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/paste" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/confirm" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="settings" options={{ presentation: 'fullScreenModal' }} />

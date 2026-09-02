@@ -371,6 +371,34 @@ export default function RecipesScreen(): JSX.Element {
   }, []);
 
   /**
+   * RCP-03 — "Aanpassen" on the long-press sheet.
+   *
+   * CLOSES THE SHEET FIRST, then navigates. The sheet is a modal over this
+   * screen; pushing a full-screen route out from under an open one leaves
+   * it mounted behind the editor and standing there on the way back, which
+   * is the same reason `openSendSheet` closes this sheet before opening
+   * its own.
+   *
+   * NO REPOSITORY CALL HERE, unlike every other row on that sheet. This one
+   * only opens a door — the edit screen does its own load, its own write and
+   * its own error state, because a correction is a multi-field task with a
+   * real failure mode and a sheet row has nowhere to put either.
+   *
+   * THE GRID IS REFRESHED ON THE WAY BACK BY `useFocusEffect`, which this
+   * screen already runs on every focus (see the file header). An edited
+   * title has to reappear on the tile, so unlike the exclusion — which no
+   * tile renders — this genuinely needs the reload, and it needs no new code
+   * to get it.
+   */
+  const openRecipeEdit = useCallback(
+    (meal: Meal) => {
+      closeActionSheet();
+      router.push(`/recipe-edit/${meal.id}`);
+    },
+    [closeActionSheet, router],
+  );
+
+  /**
    * Optimistic, then confirmed. The row flips the instant it is tapped
    * (`write-started`), and one of exactly three things follows:
    *
@@ -696,6 +724,7 @@ export default function RecipesScreen(): JSX.Element {
           cookProofExclusion={exclusion}
           onPressCookProofRow={handleCookProofRowPress}
           onSturen={() => openSendSheet(actionSheetMeal)}
+          onAanpassen={() => openRecipeEdit(actionSheetMeal)}
           removal={removal}
           onRequestRemoval={handleRequestRemoval}
           onCancelRemoval={handleCancelRemoval}

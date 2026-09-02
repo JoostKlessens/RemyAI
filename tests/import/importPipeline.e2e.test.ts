@@ -177,6 +177,55 @@ const RECIPE_PAGE_NODE = {
   ],
 };
 
+// --- The pasted-text route's fixtures: a recipe with no link anywhere behind it. ---
+
+/**
+ * A recipe as it actually arrives in a message — a greeting on top, prose
+ * quantities, a line that is not part of the recipe at all. Nothing here is
+ * ever parsed by anything under `src/`: the model does that inside the edge
+ * function. It exists so the assertions below can state something this
+ * pipeline must never do, which is turn a pasted string into a source.
+ */
+const PASTED_RECIPE_TEXT = [
+  'Hoi! Hierbij het recept van gisteren 😊',
+  '',
+  'Linzendal met zoete aardappel — 4 personen, ongeveer 40 min',
+  '250 g rode linzen, 2 zoete aardappels, 1 blik kokosmelk (400 ml),',
+  '2 el rode currypasta, 1 ui, verse koriander',
+  '',
+  'Ui fruiten, currypasta erbij. Linzen en zoete aardappel toevoegen met de',
+  'kokosmelk en 300 ml water. 25 minuten laten pruttelen. Koriander erover.',
+  '',
+  'Groetjes!',
+].join('\n');
+
+/**
+ * What the model made of that text. Six ingredients, two of which state no
+ * amount — the same deliberate untidiness the caption fixture uses, so a
+ * layer that quietly drops or sorts anything fails an assertion instead of
+ * passing by luck.
+ */
+const PASTED_TEXT_RECIPE = {
+  title: 'Linzendal met zoete aardappel',
+  ingredients: [
+    { name: 'rode linzen', quantity: '250', unit: 'g' },
+    { name: 'zoete aardappel', quantity: '2', unit: null },
+    { name: 'kokosmelk', quantity: '400', unit: 'ml' },
+    { name: 'rode currypasta', quantity: '2', unit: 'el' },
+    { name: 'ui', quantity: '1', unit: null },
+    { name: 'verse koriander', quantity: null, unit: null },
+  ],
+  steps: [
+    'Fruit de ui en bak de currypasta kort mee.',
+    'Voeg de linzen en de zoete aardappel toe met de kokosmelk en 300 ml water.',
+    'Laat 25 minuten pruttelen tot alles gaar is.',
+    'Werk af met verse koriander.',
+  ],
+  estimatedMinutes: 40,
+  servings: 4,
+  dishTags: ['vegetarisch', 'curry'],
+} as const;
+
 function ldJsonBlock(value: unknown): string {
   return `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
 }
@@ -233,6 +282,34 @@ function webRouteResponseBody(sourceUrl: string, recipe: ParsedRecipe, attributi
     attribution,
     recipeId: null,
     provenance: 'publisher_structured_data',
+  };
+}
+
+/**
+ * The `parse-recipe` response body for a PASTED-TEXT import. Every field
+ * that differs from the two link routes differs for a structural reason,
+ * and each is asserted below rather than merely written here:
+ *
+ *  - `sourceUrl: null` — nothing was fetched, so there is no address. The
+ *    field became nullable for this route alone (`readSourceUrl`,
+ *    src/domain/import/parseImportResult.ts).
+ *  - an ALL-NULL `attribution` — not a gap the function forgot to fill, but
+ *    the truth: a text somebody pasted has no creator to credit. See
+ *    `NO_CREATOR_TO_CREDIT` in src/domain/import/buildAttribution.ts.
+ *  - `recipeId: null` — a canonical `recipes` row is keyed on a normalized
+ *    URL, and this route has none to key one on.
+ *  - `provenance: 'model_from_pasted_text'` — a model read the user's own
+ *    text, which is neither a publisher's structured data nor a caption.
+ */
+function textRouteResponseBody(): unknown {
+  return {
+    kind: 'parsed',
+    recipe: PASTED_TEXT_RECIPE,
+    sourceUrl: null,
+    platform: 'text',
+    attribution: { authorName: null, authorUrl: null, thumbnailUrl: null },
+    recipeId: null,
+    provenance: 'model_from_pasted_text',
   };
 }
 
@@ -348,6 +425,26 @@ function draftFrom(parsed: ParsedImport, householdId: HouseholdId): MealDraftIns
   return toMealDraft(parsed.recipe, {
     householdId,
     sourceUrl: requireSourceUrl(parsed.sourceUrl),
+    platform: parsed.platform,
+    thumbnailUrl: parsed.attribution.thumbnailUrl,
+    recipeId: parsed.recipeId,
+  });
+}
+
+/**
+ * The text route's draft, and it needs its own builder for one reason:
+ * `draftFrom` above runs `requireSourceUrl`, which is right for every route
+ * that resolved an address and wrong for the one that never had one.
+ * Passing `null` here is a statement, not a shortcut — the assertion
+ * directly below it proves the response really carried none, so a future
+ * response that started attaching a URL to a paste fails loudly rather than
+ * having it silently written onto a meal.
+ */
+function textDraftFrom(parsed: ParsedImport, householdId: HouseholdId): MealDraftInsert {
+  expect(parsed.sourceUrl).toBeNull();
+  return toMealDraft(parsed.recipe, {
+    householdId,
+    sourceUrl: null,
     platform: parsed.platform,
     thumbnailUrl: parsed.attribution.thumbnailUrl,
     recipeId: parsed.recipeId,
@@ -613,6 +710,186 @@ describe("import pipeline, structured-data route — paste a recipe page, read t
   test('PD-006: a publisher-structured import is never born verified either — no route earns that status without a person', () => {
     expect(saved.meal.allergenTagStatus).toBe('unknown');
     expect(saved.meal.ingredientTags).toEqual([]);
+  });
+});
+
+// --- Route 3: the pasted-text route (SRC-08). ---
+
+/**
+ * THE ROUTE WITH NO URL, AND THEREFORE THE ONE THIS FILE EARNS ITS KEEP ON.
+ *
+ * Both routes above resolve an address first, and every layer of this
+ * pipeline was written while that was true of every import. SRC-08 broke
+ * the assumption without breaking a single type: `sourceUrl` became
+ * nullable, `platform` gained a member that is not a platform, and
+ * `attribution` started arriving all-null on a SUCCESSFUL parse. Not one of
+ * those makes a wrong layer fail to compile — a `null` flows through a
+ * spread, an unfamiliar platform falls into a `default`, and an all-null
+ * attribution looks exactly like a forgotten one.
+ *
+ * So the assertions below are deliberately about ABSENCES SURVIVING AS
+ * ABSENCES. That is the harder direction, and it is the direction all three
+ * historical bugs went: this pipeline is good at carrying values, and has
+ * repeatedly been caught turning "nothing" into "something" — or dropping a
+ * nothing that should have been stated out loud.
+ */
+describe('import pipeline, pasted-text route — paste a recipe with no link behind it, parse it, save it, read it back', () => {
+  let parsed: ParsedImport;
+  let saved: SavedMeal;
+
+  beforeEach(async () => {
+    const { repository, householdId } = await createImportHarness();
+    parsed = expectParsedImport(overTheWire(textRouteResponseBody()));
+    saved = await saveAndReadBack(repository, textDraftFrom(parsed, householdId));
+  });
+
+  test("the paste seam: the user's own text is never mistaken for a source — the saved meal has no URL at all", () => {
+    expect(PASTED_RECIPE_TEXT.length).toBeGreaterThan(0);
+    expect(parsed.sourceUrl).toBeNull();
+
+    expect(saved.meal.sourceUrl).toBeNull();
+  });
+
+  /**
+   * `'text'` is the one member of `ImportPlatform` naming the ABSENCE of a
+   * platform rather than a platform the column ran out of words for, and
+   * `toMealDraft`'s own switch says so. What is asserted is that the two
+   * different reasons for a null `source_platform` — "no word for YouTube"
+   * and "no platform at all" — both arrive as null, without either being
+   * quietly written as `'reels'` the way the ternary that switch replaced
+   * would have done.
+   */
+  test('a pasted-text import stores no source platform, because there was no platform — not because we lacked a word', () => {
+    expect(parsed.platform).toBe('text');
+
+    expect(saved.meal.sourcePlatform).toBeNull();
+  });
+
+  /**
+   * ALL-NULL BY CONSTRUCTION, NOT BY OMISSION, which is the distinction
+   * this test exists to pin. A pasted text has no creator: no post was
+   * opened, no name was resolved, and there is no profile to link to. A
+   * change that started filling any of these in for this route would be
+   * inventing a person — the one thing this pipeline must never do — and it
+   * would do it on the screen whose whole job is crediting creators.
+   */
+  test('a pasted-text import credits nobody, and carries a complete all-null attribution rather than a partial one', () => {
+    expect(parsed.attribution.authorName).toBeNull();
+    expect(parsed.attribution.authorUrl).toBeNull();
+    expect(parsed.attribution.thumbnailUrl).toBeNull();
+
+    expect(saved.meal.thumbnailUrl).toBeNull();
+  });
+
+  /**
+   * `null` here is permanent and correct rather than pending, and the guard
+   * is asserted beside the value so that widening it fails this test rather
+   * than quietly invalidating its premise — the same pairing the web route
+   * uses. `canStoreCanonicalRecipe` is a `Set` that excludes by default, so
+   * `'text'` needed no edit to be refused; it is refused for a real reason,
+   * which is that a canonical row is keyed on a normalized URL this route
+   * does not have.
+   */
+  test('a pasted-text import saves no canonical recipe id, because there is no URL to key a shared row on', () => {
+    expect(canStoreCanonicalRecipe('text')).toBe(false);
+    expect(parsed.recipeId).toBeNull();
+
+    expect(saved.meal.recipeId).toBeNull();
+  });
+
+  /**
+   * PD-006, ASSERTED A THIRD TIME BECAUSE THIS ROUTE REACHES IT BY A THIRD
+   * ARGUMENT — and the most seductive one. The caption route is unverified
+   * because a model read a stranger's post; the web route because a
+   * publisher is not a household. Here the text came from the USER: they
+   * chose it, they pasted it, they can see it on screen. It still earns
+   * nothing. `verified` means somebody in this household read the
+   * ingredients against their own members' allergies and pressed
+   * "Bevestigen" on the confirmation screen, and pasting is not that. A
+   * meal born verified is a meal the exclusion gate
+   * (src/domain/exclusions.ts) trusts, and the cost of being wrong is
+   * somebody's reaction.
+   */
+  test('PD-006: a pasted-text import is never born verified either — allergenTagStatus is unknown and ingredientTags is empty', () => {
+    expect(saved.meal.allergenTagStatus).toBe('unknown');
+    expect(saved.meal.ingredientTags).toEqual([]);
+  });
+
+  test("PD-006: the model's dish categories never cross into ingredientTags on this route either", () => {
+    expect(saved.meal.dishTags).toContain('curry');
+
+    expect(saved.meal.ingredientTags).not.toContain('curry');
+    expect(saved.meal.ingredientTags).not.toContain('vegetarisch');
+  });
+
+  test('dish tags survive the seam from the parse-recipe response all the way to the saved meal', () => {
+    expect(parsed.recipe.dishTags).toEqual(['vegetarisch', 'curry']);
+
+    expect(saved.meal.dishTags).toEqual(['vegetarisch', 'curry']);
+  });
+
+  test('ingredient quantity and unit survive the seam from the response to the stored ingredient rows', () => {
+    expect(measuredIngredients(saved.ingredients)).toEqual(measuredIngredients(PASTED_TEXT_RECIPE.ingredients));
+  });
+
+  test('an ingredient the pasted text gave no amount for is stored as a real absence, not as an empty string', () => {
+    const koriander = saved.ingredients.find((ingredient) => ingredient.name === 'verse koriander');
+
+    expect(koriander?.quantity).toBeNull();
+    expect(koriander?.unit).toBeNull();
+  });
+
+  test("ingredient ORDER survives the seam — sortOrder is the recipe's order, not a sort of the names", () => {
+    expect(saved.ingredients.map((ingredient) => ingredient.name)).toEqual(
+      PASTED_TEXT_RECIPE.ingredients.map((ingredient) => ingredient.name),
+    );
+    expect(saved.ingredients.map((ingredient) => ingredient.sortOrder)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  test('step ORDER survives the seam — stepNumber counts from 1 in the order the recipe stated', () => {
+    expect(saved.steps.map((step) => step.instruction)).toEqual(PASTED_TEXT_RECIPE.steps);
+    expect(saved.steps.map((step) => step.stepNumber)).toEqual([1, 2, 3, 4]);
+  });
+
+  test('estimatedMinutes and servings survive the seam, and are never re-estimated on the way', () => {
+    expect(saved.meal.estimatedMinutes).toBe(PASTED_TEXT_RECIPE.estimatedMinutes);
+    expect(saved.meal.servings).toBe(PASTED_TEXT_RECIPE.servings);
+  });
+
+  test('a pasted-text import is stored as a save, owned by the household that imported it', () => {
+    expect(saved.meal.source).toBe('saved');
+    expect(saved.meal.householdId).not.toBeNull();
+  });
+
+  /**
+   * RCP-06's third value, and the one easiest to derive wrongly: a screen
+   * could conclude "no URL, so a model must have read something" and be
+   * right today by luck. Provenance is reported by the thing that resolved
+   * the import, never inferred from the shape of what arrived — and, like
+   * the other two, it is spent on the confirmation screen rather than
+   * persisted onto the meal.
+   */
+  test('provenance says the model read the pasted text, and is not persisted onto the meal', () => {
+    expect(parsed.provenance).toBe('model_from_pasted_text');
+
+    expect(saved.meal).not.toHaveProperty('provenance');
+  });
+
+  /**
+   * The three routes differ in what they can state about their own origin,
+   * and this asserts they stay distinguishable at the far end. Two imports
+   * of the same dish — one from a page, one pasted out of a message — must
+   * not arrive at the repository looking identical: a saved meal that lost
+   * the distinction has lost the link back to a publisher.
+   */
+  test('the pasted-text meal is distinguishable from a link import at the far end: no URL, no platform, no canonical row', () => {
+    expect([saved.meal.sourceUrl, saved.meal.sourcePlatform, saved.meal.recipeId, saved.meal.thumbnailUrl]).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(saved.meal.title).toBe(PASTED_TEXT_RECIPE.title);
   });
 });
 

@@ -59,8 +59,9 @@
  * filter and this file's setter agree by construction.
  */
 
-import type { CreateMealInput, MealIngredientInput, MealStepInput } from '../types';
+import type { CreateMealInput, MealIngredientInput, MealStepInput, UpdateMealRecipeInput } from '../types';
 import { isDishMood, readMealDishMoods } from '@/domain/dishMoods';
+import { resolveAllergenStateAfterEdit } from '@/domain/mealAllergenReverification';
 import { normalizeTag } from '@/domain/normalizeTag';
 import type { Meal, MealId, MealIngredient, MealStep } from '@/domain/types';
 import { generateLocalId } from '../id';
@@ -333,6 +334,108 @@ async function updateMeal(
   }
   await tables.meals.replaceAll(next);
   return updated;
+}
+
+/**
+ * RCP-03 — "Aanpassen". The only write path in this file that touches a
+ * meal's children after it exists. See `updateMealRecipe`'s comment on
+ * `RemyRepository` (src/lib/repository/types.ts) for what it may and may not
+ * change, and `UpdateMealRecipeInput`'s for why the children are replaced
+ * wholesale.
+ *
+ * THE ORDER IS PARENT-LAST, DELIBERATELY. `updateMeal` throws on an unknown
+ * meal id, so doing it first would leave the two child tables rewritten for
+ * a meal that does not exist — orphan ingredient rows nothing can ever read
+ * or clean up. Reading the meal first and writing it last means a bad id
+ * costs zero writes, and the child rewrite only happens for a row we have
+ * already proved is there.
+ *
+ * THE THREE WRITES ARE NOT ATOMIC, AND NOTHING HERE PRETENDS THEY ARE. This
+ * is a KeyValueStore, not a transaction; a process killed between the
+ * ingredient write and the step write leaves the new ingredients beside the
+ * old steps. That failure is accepted rather than papered over, for the same
+ * reason mirrorWrites.ts accepts its own: the alternative is a
+ * write-ahead-log inside AsyncStorage, which is a storage engine and not a
+ * meal editor. What IS defended is the direction of the damage — the parent
+ * row's title and allergen state land last, so a half-applied edit reads as
+ * the OLD recipe with some new lines rather than as a NEW title vouching for
+ * an old ingredient list.
+ *
+ * PD-006 IS APPLIED BEFORE THE PARENT IS WRITTEN, from the stored row and
+ * the stored ingredient list — never from anything the caller asserted about
+ * them. That matters: reading `storedIngredients` here rather than trusting
+ * a "did it change?" boolean from the screen is what makes the demotion
+ * impossible to skip from the outside. A screen that forgets to compare, or
+ * compares wrongly, still gets the fail-closed answer.
+ */
+export async function updateMealRecipe(
+  tables: RepositoryTables,
+  mealId: MealId,
+  input: UpdateMealRecipeInput,
+): Promise<Meal> {
+  const stored = await getMeal(tables, mealId);
+  if (stored === null) {
+    throw new Error(`No meal found with id "${mealId}".`);
+  }
+
+  const allergens = resolveAllergenStateAfterEdit({
+    stored: {
+      ingredientTags: stored.ingredientTags,
+      // The same `?? 'unknown'` fail-safe reading exclusions.ts gives a row
+      // that predates the column. Resolved at this seam so the pure ruling
+      // never has to invent one.
+      allergenTagStatus: stored.allergenTagStatus ?? 'unknown',
+    },
+    storedIngredients: await getMealIngredients(tables, mealId),
+    editedIngredients: input.ingredients,
+    check: input.allergenCheck,
+  });
+
+  await replaceMealChildren(tables, mealId, input.ingredients, input.steps);
+
+  return updateMeal(tables, mealId, (meal) => ({
+    ...meal,
+    title: input.title,
+    estimatedMinutes: input.estimatedMinutes,
+    servings: input.servings,
+    ingredientTags: allergens.ingredientTags,
+    allergenTagStatus: allergens.allergenTagStatus,
+  }));
+}
+
+/**
+ * Drops this meal's ingredient and step rows and writes the new ones — the
+ * "replace" half of the edit, shared by nothing else because nothing else
+ * rewrites children.
+ *
+ * Both tables are filtered on `mealId` and rebuilt with `map`/spread rather
+ * than spliced, so no other meal's rows are read, reordered or written, and
+ * neither stored array is mutated. Fresh ids come from `buildIngredientRows`
+ * and `buildStepRows`, the same builders `createMeal` uses — which is what
+ * makes an edit indistinguishable from a create to everything downstream,
+ * the mirror's prune-by-id included.
+ */
+async function replaceMealChildren(
+  tables: RepositoryTables,
+  mealId: MealId,
+  ingredients: readonly MealIngredientInput[],
+  steps: readonly MealStepInput[],
+): Promise<void> {
+  const [existingIngredients, existingSteps] = await Promise.all([
+    tables.mealIngredients.list(),
+    tables.mealSteps.list(),
+  ]);
+
+  await Promise.all([
+    tables.mealIngredients.replaceAll([
+      ...existingIngredients.filter((ingredient) => ingredient.mealId !== mealId),
+      ...buildIngredientRows(mealId, ingredients),
+    ]),
+    tables.mealSteps.replaceAll([
+      ...existingSteps.filter((step) => step.mealId !== mealId),
+      ...buildStepRows(mealId, steps),
+    ]),
+  ]);
 }
 
 export async function createMeal(tables: RepositoryTables, input: CreateMealInput): Promise<Meal> {

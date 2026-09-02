@@ -10,7 +10,7 @@
  * THE WRITE-THROUGH MIRROR IS INJECTED, NEVER IMPORTED
  * ============================================================================
  *
- * Seven of the methods below announce what they wrote to a `MirrorJobSink`,
+ * Eight of the methods below announce what they wrote to a `MirrorJobSink`,
  * so src/lib/repository/mirror/** can put those rows in Postgres. The sink
  * is a PARAMETER with a no-op default, and that is the single most
  * important decision in this file.
@@ -46,8 +46,9 @@
  * would be failing a save because a phone is in a lift.
  *
  * WHICH METHODS, AND THE ONE DELIBERATE ABSENCE. Meals (`createMeal`,
- * `setMealCookProofExclusion`, `archiveMeal`, `addMealDishMood`), cook events
- * (`createCookEvent`, `setCookEventRepeat`, `setCookEventRating`) and
+ * `updateMealRecipe`, `setMealCookProofExclusion`, `archiveMeal`,
+ * `addMealDishMood`), cook events (`createCookEvent`, `setCookEventRepeat`,
+ * `setCookEventRating`) and
  * cook-sharing consent (`setHouseholdCookSharing`) — exactly the rows the
  * social surfaces read. NOT `updateHouseholdSettings`: consent was kept
  * out of that method on purpose (see `RemyRepository`'s comment on it) so
@@ -86,6 +87,7 @@ import {
   getMealSteps,
   listHouseholdMeals,
   setMealCookProofExclusion,
+  updateMealRecipe,
 } from './local/meals';
 import { createSave, listPendingSaves, listSaves } from './local/saves';
 import { createCookEvent, listCookEvents, setCookEventRating, setCookEventRepeat } from './local/cookEvents';
@@ -199,6 +201,18 @@ export function createLocalRepository(store: KeyValueStore, mirror: MirrorJobSin
     getMealCookProofExclusion: (mealId) => getMealCookProofExclusion(tables, mealId),
     setMealCookProofExclusion: async (mealId, excludedFromCookProof) => {
       const meal = await setMealCookProofExclusion(tables, mealId, excludedFromCookProof);
+      announceMeal(meal);
+      return meal;
+    },
+    // RCP-03. Mirrors for a reason `archiveMeal` above does not share: this
+    // is the one meal write that changes the CHILD rows, and
+    // `announceMeal`'s two re-reads happen after the local write, so the
+    // job carries the edited ingredients and steps rather than the replaced
+    // ones. An edit that stopped at the device would leave a friend who was
+    // sent this dish reading the version with the wrong ingredient
+    // (`meal_ingredients_select_sent_to_me`, 0009) forever.
+    updateMealRecipe: async (mealId, input) => {
+      const meal = await updateMealRecipe(tables, mealId, input);
       announceMeal(meal);
       return meal;
     },

@@ -34,6 +34,11 @@
 
 import { describeLibraryRemovalRow, type LibraryRemovalState } from './libraryRemovalCopy';
 import {
+  RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL,
+  RECIPE_EDIT_ROW_EXPLAINER,
+  RECIPE_EDIT_ROW_LABEL,
+} from './recipeEditCopy';
+import {
   COOK_PROOF_SCOPE_NOTE,
   LIBRARY_TILE_SEND_ACCESSIBILITY_LABEL,
   LIBRARY_TILE_SEND_EXPLAINER,
@@ -107,6 +112,25 @@ export interface LibraryTileActionRowInput {
    */
   readonly onSturen?: () => void;
   /**
+   * RCP-03 — "Aanpassen". Opens the recipe-edit screen for this dish.
+   *
+   * OPTIONAL, AND ITS ABSENCE REMOVES THE ROW rather than disabling it —
+   * `onSturen`'s posture above, adopted deliberately rather than by
+   * imitation. A call site with no handler is one mounted somewhere the
+   * edit route is not reachable, and a greyed-out `Aanpassen` there would
+   * advertise a capability that surface does not have. It also keeps every
+   * existing caller and every existing assertion in
+   * tests/libraryTileActionRows.test.ts valid unchanged: a sheet built
+   * without this prop returns exactly the rows it always did.
+   *
+   * NO STATE, UNLIKE THE TWO ROWS BESIDE IT. The exclusion row and the
+   * removal row each carry a phase because their repository call happens
+   * inside the sheet; this one only navigates, and everything that can go
+   * wrong belongs to the screen it opens, where there is room to explain
+   * it. A row that merely opens a door needs no error note.
+   */
+  readonly onAanpassen?: () => void;
+  /**
    * LIB-04 — "Verwijderen". Owned by the screen, exactly like
    * `cookProofExclusion` above: the state lives with the repository call
    * (`RemyRepository.archiveMeal`), this row only renders it. Unlike
@@ -147,13 +171,17 @@ export interface LibraryTileActionRowInput {
  * THE ORDER IS THE POINT. §3.1 puts `Sturen` at the head, before the
  * sharing rows; `Verwijderen` goes LAST, after both, for the same logic one
  * more step out — sending is why you long-press, withholding is rarer,
- * removing rarer still. This is also why the sheet's separator keys off
- * `index < rows.length - 1` rather than naming a row: with the order owned
- * here, any count of rows renders correctly.
+ * removing rarer still. RCP-03's `Aanpassen` slots in second on that same
+ * scale: correcting a wrong ingredient is the next most likely reason to be
+ * here after sending, and it is nowhere near as rare as withholding a dish
+ * or taking one out of rotation. This is also why the sheet's separator
+ * keys off `index < rows.length - 1` rather than naming a row: with the
+ * order owned here, any count of rows renders correctly — which is what
+ * lets a fourth row land without a line of JSX changing.
  */
 export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): readonly LibraryTileActionRow[] {
   const cookProof = describeCookProofExclusionRow(input.cookProofExclusion);
-  const { onSturen } = input;
+  const { onAanpassen, onSturen } = input;
 
   /**
    * Spread rather than `unshift`, for the house's immutability rule; the
@@ -177,6 +205,36 @@ export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): re
             errorNote: null,
             footnote: null,
             onPress: onSturen,
+            tone: 'default',
+            cancelAction: null,
+          },
+        ];
+
+  /**
+   * RCP-03, after `Sturen` and before the two withholding rows. The order
+   * argument in this file's header extends one step: sending is why you
+   * long-press, correcting a wrong ingredient is the next most likely
+   * reason to be here, and both withholding and removing are rarer than
+   * either. Spread rather than pushed, for the same immutability rule the
+   * `Sturen` row above follows.
+   */
+  const aanpassenRow: readonly LibraryTileActionRow[] =
+    onAanpassen === undefined
+      ? []
+      : [
+          {
+            key: 'aanpassen',
+            label: RECIPE_EDIT_ROW_LABEL,
+            explainer: RECIPE_EDIT_ROW_EXPLAINER,
+            accessibilityLabel: RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL,
+            // Never disabled and never an error: this row opens a screen,
+            // and every failure that matters — a recipe that will not load,
+            // a save that will not land — happens there, where it can be
+            // said in a sentence and retried.
+            disabled: false,
+            errorNote: null,
+            footnote: null,
+            onPress: onAanpassen,
             tone: 'default',
             cancelAction: null,
           },
@@ -213,6 +271,7 @@ export function buildLibraryTileActionRows(input: LibraryTileActionRowInput): re
 
   return [
     ...sturenRow,
+    ...aanpassenRow,
     {
       key: 'cook-proof-exclusion',
       label: cookProof.label,

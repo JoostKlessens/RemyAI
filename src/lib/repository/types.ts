@@ -15,6 +15,7 @@
  * redesign.
  */
 
+import type { MealAllergenCheck } from '@/domain/mealAllergenReverification';
 import type {
   AllergenTagStatus,
   CookEvent,
@@ -115,6 +116,98 @@ export interface CreateMealInput {
   readonly thumbnailUrl: string | null;
   readonly ingredients: readonly MealIngredientInput[];
   readonly steps: readonly MealStepInput[];
+}
+
+/**
+ * RCP-03 — correcting a recipe AFTER it is saved.
+ *
+ * WHY THIS INPUT IS NOT `Partial<CreateMealInput>`, WHICH IS THE OBVIOUS
+ * SHAPE AND THE WRONG ONE. A partial says "any field, or none", and the set
+ * of fields a person may correct about a dish they already own is much
+ * smaller than the set a create path had to state. `source`, `sourceUrl`,
+ * `sourcePlatform`, `thumbnailUrl` and `recipeId` are facts about WHERE THE
+ * RECIPE CAME FROM — an edit does not change where it came from, and a
+ * writable `recipeId` in particular would let a screen re-point a
+ * household's copy at a different canonical recipe, silently rewriting whose
+ * cook proof it can ever be joined to (`shared_cooks`, 0009). `archivedAt`
+ * has its own verb (`archiveMeal`) and its own argument;
+ * `excludedFromCookProof` and `dishMoods` are consent and outcome acts with
+ * their own methods, kept apart for exactly the reason
+ * `setHouseholdCookSharing` is kept out of `updateHouseholdSettings`: a
+ * field reachable from a bulk save is a field a stale spread can flip.
+ * `dishTags` are the extraction path's categories and no screen edits them
+ * today; adding them here is that screen's job, not a field left open in
+ * advance. So this input names the five things the confirmation screen
+ * already lets a person correct on the way IN — title, time, servings,
+ * ingredients, steps — and NOTHING ELSE IS TOUCHED by the write. That is a
+ * guarantee tests hold, not a convention.
+ *
+ * THE CHILD LISTS ARE A REPLACE, NOT A DIFF, AND THE REASON IS THAT THERE IS
+ * NO IDENTITY TO DIFF ON. The edit screen edits an ingredient as ONE
+ * free-text line (see src/domain/import/editedIngredients.ts on why), so
+ * what comes back from it is an ordered list of lines with no row ids
+ * anywhere — matching a line to the `meal_ingredients` row it came from
+ * would mean inventing an identity the screen never had, which is the same
+ * guessing that module refuses on quantity/unit. `MealIngredientInput` and
+ * `MealStepInput` above are therefore reused verbatim: the shapes a create
+ * already uses, carrying no id, because an edit genuinely knows no more
+ * about row identity than a create does.
+ *
+ * WHAT THE REPLACE COSTS, STATED RATHER THAN GLOSSED. Row ids churn: every
+ * save mints fresh `meal_ingredients`/`meal_steps` ids and the old ones are
+ * gone. Nothing joins to them — no migration in supabase/migrations/**
+ * declares a foreign key onto either table's `id`, no domain type stores
+ * one, and both screens that read them (boodschappen.tsx via
+ * `RawIngredientLine`, cook/[mealId].tsx via `MealStep`) use the ids as
+ * render keys and nothing more. `meal_ingredients.allergen_tags` is reset to
+ * `[]`, which costs nothing because this app has never written anything else
+ * to it (see local/meals.ts's header: whole-meal `Meal.ingredientTags` is
+ * the source of truth exclusions.ts filters on). And the mirror was DESIGNED
+ * for this: mirrorWrites.ts's `meal_steps` note already asks a meal-edit
+ * path to "rewrite steps with fresh ids", because that reduces every edit to
+ * "delete all the old, insert all the new" and removes the one 23505 a
+ * renumber among retained ids would otherwise earn against
+ * `unique (meal_id, step_number)`.
+ *
+ * NO MIGRATION AND NO NEW TABLE. `meals`, `meal_ingredients` and `meal_steps`
+ * (0001_init.sql) already carry every column this writes, and 0001 already
+ * declares `meals_update`, `meal_ingredients_update`/`_delete`/`_insert` and
+ * `meal_steps_update`/`_delete`/`_insert` policies gated on
+ * `is_household_member`. Editing a saved recipe needed no schema change and
+ * did not get one.
+ */
+export interface UpdateMealRecipeInput {
+  readonly title: string;
+  readonly estimatedMinutes: number | null;
+  readonly servings: number | null;
+  readonly ingredients: readonly MealIngredientInput[];
+  readonly steps: readonly MealStepInput[];
+  /**
+   * PD-006. REQUIRED, and required for the same reason
+   * `CreateMealInput.allergenTagStatus` is: its absent state is the
+   * dangerous one. But note it is NOT that field — it is
+   * `MealAllergenCheck`, a statement about whether a human tagged the
+   * ingredient list IN THIS EDIT, and it cannot be produced by spreading
+   * `meal.allergenTagStatus` off a row.
+   *
+   * That distinction is the whole point. The natural, diligent-looking way
+   * to write this call is to carry the meal's current status forward — and
+   * that line would have the app assert that somebody confirmed an
+   * ingredient list they never saw, which is PD-006.4's forbidden state
+   * reached through a door PD-006 did not enumerate. A caller with nothing
+   * to say passes `NOT_RECHECKED` and gets the fail-closed answer: the
+   * status drops to 'unknown' if and only if the ingredient list actually
+   * moved, and the existing `ingredientTags` are KEPT either way, because a
+   * tag is an exclusion and dropping one is the direction that can hurt
+   * somebody. The full argument is
+   * src/domain/mealAllergenReverification.ts's module header; this method
+   * only applies it.
+   *
+   * Deliberately NOT `ingredientTags` + `allergenTagStatus` as two fields.
+   * Two fields is how one gets updated without the other, and a tag list
+   * nobody vouched for is not a smaller answer, it is a wrong one.
+   */
+  readonly allergenCheck: MealAllergenCheck;
 }
 
 export interface CreateSaveInput {
@@ -374,6 +467,53 @@ export interface RemyRepository {
    * every other single-meal setter in this file.
    */
   archiveMeal(mealId: MealId): Promise<Meal>;
+  /**
+   * RCP-03 — "Aanpassen": correcting a recipe the household already saved.
+   *
+   * THE GAP THIS CLOSES. `src/app/import/confirm.tsx` can edit every one of
+   * these fields on the way IN, and until this method existed there was no
+   * way to touch any of them afterwards — one wrong ingredient, read out of
+   * a caption by a model, was a wrong ingredient forever. `createMeal` was
+   * the only write path onto `meal_ingredients`/`meal_steps` in the whole
+   * interface, and it only ever appends a new meal.
+   *
+   * AN EDIT IS A REPLACE OF CHILD ROWS, NOT A FIELD UPDATE, because
+   * `meal_ingredients` and `meal_steps` are separate tables from `meals`
+   * (0001_init.sql). See `UpdateMealRecipeInput`'s own comment for why the
+   * replace is total (fresh ids, old rows gone) rather than a per-row diff,
+   * and for the exact cost of that.
+   *
+   * PD-006 IS ENFORCED HERE AND CANNOT BE OPTED OUT OF. The caller states
+   * whether a human tagged the ingredient list during this edit
+   * (`input.allergenCheck`); this method then applies
+   * src/domain/mealAllergenReverification.ts's ruling, which is that a
+   * `verified` flag does not survive its ingredient list changing. The
+   * screen cannot pass a status through, so no screen can carry a stale
+   * `verified` forward by spreading a row. What it CAN do is say a person
+   * just checked the new list, which is the only act PD-006.1 recognises as
+   * earning `verified` and therefore the only way back.
+   *
+   * TOUCHES NOTHING ELSE ON THE MEAL, and the list of what it leaves alone
+   * is the interesting half: `source`, `sourceUrl`, `sourcePlatform`,
+   * `thumbnailUrl`, `recipeId`, `dishTags`, `dishMoods`,
+   * `excludedFromCookProof`, `archivedAt`, `createdAt`, `skillLevel` and
+   * `householdId` all survive an edit untouched. A household's copy stays
+   * pointed at the same canonical recipe, stays as private or as excluded
+   * as they last left it, and keeps its cook history — none of which is
+   * something a person fixing a typo asked to change.
+   *
+   * MIRRORS, LIKE EVERY OTHER MEAL WRITE. An edited recipe that never
+   * reaches Postgres is a friend reading the version with the wrong
+   * ingredient (`meal_ingredients_select_sent_to_me`, 0009), so this
+   * announces the same `meal` job `createMeal` does — parent plus BOTH
+   * child sets, re-read after the write. The mirror's replace-then-prune
+   * strategy (mirrorWrites.ts) then deletes the departed rows remotely
+   * rather than leaving an append-only copy behind.
+   *
+   * Rejects an unknown meal id rather than silently doing nothing, matching
+   * every other single-meal setter in this file.
+   */
+  updateMealRecipe(mealId: MealId, input: UpdateMealRecipeInput): Promise<Meal>;
   /**
    * The second descriptive axis (src/domain/dishMoods.ts) — one person's
    * mood for one dish, added in the outcome moment after they cooked it.
