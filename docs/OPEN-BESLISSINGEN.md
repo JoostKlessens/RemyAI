@@ -47,9 +47,24 @@ opengooit:
 
 ---
 
-## Wat er vóór een deploy moet gebeuren
+## Wat er vóór een deploy moest gebeuren — gedaan
 
-Dit is de enige lijst met blokkerende acties. Alles erna is een keuze.
+**Afgerond op 2 september 2026.** Alle drie de punten hieronder zijn dicht:
+de migraties draaien (`0001` t/m `0013`, nagemeten tegen de database), de
+drie secrets staan er, en de functie is gedeployed. Dat laatste is gemeld
+door de eigenaar en niet machinaal geverifieerd — dezelfde herkomstregel als
+bij de secrets, en hij staat er expres bij.
+
+**Wat dat betekent.** De throttlepoort van IMP-06/IMP-10 en de dichting van
+het anon-key-gat uit `89a436c` draaien nu werkelijk, in plaats van alleen
+gecommit te zijn. Een `✅` in `LONGLIST.md` mag vanaf hier gelezen worden als
+"dit werkt live" en niet langer als "de code bestaat".
+
+De punten hieronder blijven staan als naslag. Ze beschrijven wat er moest
+gebeuren en waarom, en die redenen gelden onverkort voor een volgende
+omgeving of een volgend project.
+
+Dit was de enige lijst met blokkerende acties. Alles erna is een keuze.
 
 ### 1. Nog één migratie: `0013`
 

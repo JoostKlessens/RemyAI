@@ -40,11 +40,14 @@ Vier checks groen, nagemeten op de eindstand: typecheck 0,
 
 ---
 
-## ⚠ Lees dit vóór je een ✅ vertrouwt
+## Een ✅ betekent nu wat het zegt
 
-Drie dingen uit `OPEN-BESLISSINGEN.md` staan tussen deze lijst en een
-werkende deploy. Het zijn geen backlogitems maar acties, en tot ze gedaan zijn
-betekent `✅` hier "de code staat er", niet "het werkt live":
+**Sinds 2 september 2026 staat er niets meer tussen deze lijst en een
+werkende deploy.** De drie acties die er stonden zijn alle drie gedaan, en
+daarmee vervalt het voorbehoud dat hier jarenlang stond: `✅` betekende "de
+code staat er", en betekent nu "dit draait". De drie, met hun herkomst,
+omdat dit document één keer een onbevestigde zin als feit heeft
+doorgegeven:
 
 1. ~~Migraties~~ — **klaar, en dit blok beweerde jarenlang het
    tegendeel.** Op 2 september nagemeten tegen de live database: `0011` en
@@ -59,7 +62,9 @@ betekent `✅` hier "de code staat er", niet "het werkt live":
    `YOUTUBE_API_KEY` én `GEMINI_API_KEY`. Die derde stond nooit in dit
    lijstje terwijl de hele modelroute erop draait (`env.ts:33`) — hij
    ontbrak omdát hij er al was en dus nooit gemist werd.
-3. **Eén echte import door de flow, plus de throttle-test.** De
+3. **Eén echte import door de flow, plus de throttle-test** — het enige
+   losse eindje, en geen blokkade. 21 imports binnen tien minuten hoort de
+   21e te weigeren met `import_throttled`. De
    resolutiekant is sinds deze sessie deels afgedekt door een ESLint-regel
    over `src/domain/import/**` (zie OPS-09), en er staat vandaag geen
    extensieloze value-import in de Deno-graaf — nagemeten: 0 van de 87
