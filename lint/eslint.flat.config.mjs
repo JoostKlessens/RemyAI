@@ -111,4 +111,67 @@ export default tseslint.config(
       'react-native/no-color-literals': 'off',
     },
   },
+  {
+    // OPS-09 — THE ONE DEPLOY-BREAKING ERROR NO EXISTING CHECK CAN SEE.
+    //
+    // supabase/functions/parse-recipe/ runs on Deno, and Deno resolves a
+    // relative specifier literally: `./foo` names a file called `foo`, not
+    // `foo.ts`. Eighteen modules under src/domain/import/ are pulled into
+    // that function's import graph, so an extensionless relative VALUE
+    // import in any of them breaks the DEPLOY and nothing else. It does not
+    // break `npm run typecheck`, and — this is the part that matters — it
+    // does not break `npm run check:functions` either: both tsconfigs set
+    // `allowImportingTsExtensions`, which makes the extension OPTIONAL, never
+    // mandatory. tsc structurally cannot report this class, which is why it
+    // went unguarded until now, and why a green `check:functions` was never
+    // the reassurance it looked like.
+    //
+    // WHY `allowTypeImports` IS LOAD-BEARING, not a convenience. Fourteen
+    // extensionless relative imports in this directory are `import type`,
+    // and every one is CORRECT: TypeScript erases a type-only import before
+    // Deno's loader resolves anything, so it cannot fail at runtime. The
+    // convention is argued at src/domain/import/parseImportResult.ts:75-85.
+    // A guard without this option would flag all fourteen and demand
+    // fourteen pointless edits — which is how a rule teaches people to
+    // disable it. With it, the rule reports zero problems here today
+    // (verified by running it) while still firing on a real value import
+    // (verified against src/lib/auth.ts:29). A mixed `import { type A, b }`
+    // correctly remains a value import and is still caught.
+    //
+    // WHY THIS SCOPE AND NOT A WIDER ONE. The same rule over `src/**` would
+    // flag 174 imports, every one of them fine: the rest of the app is
+    // bundled by Metro, where extensionless is the norm. The Deno-reachable
+    // risk sits entirely inside src/domain/import/, so that is where the
+    // rule lives. dishTags.ts, normalizeTag.ts and lib/oembed.ts are in the
+    // graph too, but are leaves with no relative imports at all — nothing
+    // to guard.
+    //
+    // WHAT THIS DOES NOT COVER, said plainly so nobody mistakes it for the
+    // whole job: supabase/functions/** is still in this config's `ignores`
+    // above, so a new sibling module added there is unguarded. All thirteen
+    // files there are compliant today and index.ts:280-312 documents the
+    // convention, but covering them means removing that ignore and
+    // declaring Deno's globals — a larger change, and the one that would
+    // finally make OPS-09's "ESLint" half true. Nor does this catch a
+    // present-but-wrong extension (`./x.js` naming an `x.ts`); only
+    // `deno check` catches that, and it stays worth installing the day a
+    // real `npm:`/`jsr:` specifier enters the function and tsc stops being
+    // a meaningful proxy at all.
+    files: ['src/domain/import/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^[.]{1,2}/(?!.*[.](ts|tsx|js|mjs|cjs|json)$)',
+              allowTypeImports: true,
+              message:
+                'This file is in the Deno-reachable graph of supabase/functions/parse-recipe. A relative VALUE import must carry its explicit .ts extension or the deploy breaks — see OPS-09. Type-only imports are exempt and need no extension.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
