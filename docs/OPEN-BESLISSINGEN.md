@@ -51,28 +51,68 @@ opengooit:
 
 Dit is de enige lijst met blokkerende acties. Alles erna is een keuze.
 
-### 1. Twee migraties draaien
+### 1. Nog één migratie: `0013`
 
-`0011` en `0012` staan in `supabase/migrations/` en zijn **nog niet tegen
-de database gedraaid**. De code die erop rekent is wél gecommit, dus tot je
-dit doet:
+**Op 2 september tegen de live database nagemeten, en het antwoord was niet
+wat hier stond.** `0011` en `0012` zijn allebei toegepast:
 
-- schrijft een YouTube-import nog steeds `recipeId: null` (geen schade,
-  `canStoreCanonicalRecipe` staat al open maar de CHECK weigert de rij);
-- **faalt élke import**, omdat de poort `import_attempts` leest en die tabel
-  niet bestaat — en de poort faalt bewust dicht.
+- `recipes_platform_check` noemt `'tiktok'`, `'instagram'` én `'youtube'`;
+- `public.import_attempts` staat er met alle zes kolommen, beide indexen plus
+  de pkey, RLS aan en nul policies — precies wat `0012` beschrijft — en nul
+  rijen;
+- `supabase_migrations.schema_migrations` registreert `0001` t/m `0012`, dus
+  ze zijn met de CLI gepusht, niet half met de hand aangebracht.
 
-Het tweede punt is de reden dat dit bovenaan staat.
+De vorige versie van deze paragraaf beweerde dat geen van de drie gedraaid
+was. Die zin is nooit tegen de database gecontroleerd: hij is van versie op
+versie overgeschreven en bij de laatste herschrijving alleen preciezer
+gemaakt — twee werd drie — wat een onjuiste bewering scherper formuleerde in
+plaats van hem te betrappen. Een document nakijken kan dat niet vinden;
+alleen de database vragen kan dat.
+
+**Daarmee vervalt de zwaarste claim die hier stond.** "Faalt élke import"
+gold uitsluitend zolang `import_attempts` ontbrak, en die tabel bestaat. Er
+is vandaag geen deploy-blokkade op de importpijplijn.
+
+**En `0013` is er inmiddels ook.** Dezelfde middag toegepast via de
+SQL-editor van het dashboard — de CLI staat niet op deze machine en
+`supabase/config.toml` ontbreekt, dus `supabase db push` kan hier niet
+draaien. `pg_cron` is geïnstalleerd, de retentie-job staat, en het grootboek
+leest `0001` t/m `0013`.
+
+**Er staat op dit moment geen enkele migratie meer open.** Wat vóór een
+werkende deploy nog moet gebeuren staat hieronder in 2 en 3, en dat gaat over
+secrets en over de functie zelf — niet meer over de database.
 
 ```
 supabase db push
 ```
 
-### 2. Twee secrets zetten
+### 2. De secrets — gezet
+
+**Alle drie staan er.** De eigenaar heeft op 2 september 2026 de
+secrets-pagina van het project bekeken en `IMPORT_FINGERPRINT_SALT`,
+`YOUTUBE_API_KEY` én `GEMINI_API_KEY` alle drie in de lijst zien staan.
+Herkomst: afgelezen van het dashboard, niet machinaal geverifieerd — secrets
+zijn niet leesbaar zonder CLI of dashboard. Dat onderscheid staat er expres
+bij, want dit document heeft één keer eerder een onbevestigde zin als feit
+doorgegeven; zie punt 1.
+
+**HET ZIJN ER DRIE, EN DE KOP HIERBOVEN ZEI JARENLANG TWEE.** `env.ts:33`
+noemt de functie zonder `GEMINI_API_KEY` "useless" — dat is waar
+`callExtractionModel.ts` op draait, en dus de hele modelroute. Hij ontbrak in
+dit lijstje precies omdát hij er al was: een secret dat nooit gemist werd,
+werd nooit opgeschreven, en een checklist die je niet ziet falen is een
+checklist die je niet controleert. `INSTAGRAM_OEMBED_ACCESS_TOKEN` bestaat
+ook nog, maar is legacy en doet niets: Instagram is display-only onder
+PD-011.
+
+Voor als er ooit een nieuw project opgezet wordt:
 
 ```
 supabase secrets set IMPORT_FINGERPRINT_SALT=<32+ willekeurige bytes, hex>
 supabase secrets set YOUTUBE_API_KEY=<...>
+supabase secrets set GEMINI_API_KEY=<...>
 ```
 
 De functie **weigert te starten** zonder het zout. Dat is opzet: zonder zout
@@ -101,6 +141,30 @@ plaats van verplicht.
 ```
 deno check supabase/functions/parse-recipe/index.ts
 ```
+
+**Sinds 2 september (avond) is hier een goedkopere half-afdekking voor, en
+het is een echte stap — maar het vervangt `deno check` niet.**
+`lint/eslint.flat.config.mjs` draagt nu een
+`@typescript-eslint/no-restricted-imports`-regel over `src/domain/import/**`
+die een relatieve **value**-import zonder `.ts` afkeurt. `allowTypeImports:
+true` is het dragende stuk: de veertien extensieloze imports in die map zijn
+allemaal `import type`, en die wist TypeScript vóór Deno's loader iets
+resolveert — een regel die ze alsnog afkeurt vraagt veertien zinloze edits en
+leert mensen hem uit te zetten. Empirisch nagemeten: 0 fouten op
+`src/domain/import`, en de regel vuurt wél op een echte overtreding
+(`src/lib/auth.ts:29`). Nul nieuwe dependencies; `typescript-eslint` zat er
+al.
+
+De graaf is bovendien vandaag schoon: van de 87 relatieve specifiers die de
+functie bereikt is er **geen enkele** een extensieloze value-import, dus de
+deploy-brekende situatie is nu afwezig, niet alleen ongezien.
+
+Wat de regel **niet** dekt, en waarvoor `deno check` op de lijst blijft:
+`supabase/functions/**` staat nog steeds in ESLint's `ignores` (die dertien
+bestanden zijn vandaag correct, maar onbewaakt), en een aanwezige-maar-
+verkeerde extensie (`./x.js` die een `x.ts` bedoelt) ziet alleen Deno. Zodra
+er een echte `npm:`- of `jsr:`-specifier in de functie komt houdt `tsc` op
+een zinnige proxy te zijn en is Deno installeren de juiste zet.
 
 Plus één echte `vm.tiktok.com`-URL door de importflow, en één throttle-test:
 21 imports binnen tien minuten hoort de 21e te weigeren met
@@ -142,12 +206,43 @@ geïnterpreteerd is.
 
 ### B. De opschoning van `import_attempts` is niet ingepland
 
-Retentie is 48 uur, de `delete` staat in `0012`, maar deze repo heeft geen
-pg_cron-migratie en die introduceren als bijvangst van een throttle-tabel was
-de verkeerde plek. **Tot iemand dit inplant groeit de tabel onbegrensd.**
+**Beantwoord én toegepast op 2 september (avond).** De vraag was wáár de job
+hoort; het antwoord is: in een eigen migratie, in de database. Die migratie
+is gedraaid — zie het slot van deze paragraaf.
 
-Plan hem naast de bestaande 16:00-beslissingsjob, of draai hem vanuit die
-functie:
+`0013_import_attempts_retention.sql` doet `create extension if not exists
+pg_cron` en plant `remy-import-attempts-retention` elk uur op :17, met exact
+de `delete` die hieronder staat. De twee huizen die `0012` voorstelde vielen
+allebei af om dezelfde reden: de 16:00-job is een ontwerp in
+`ARCHITECTURE.md`, geen migratie — hij bestaat niet. Wachten op een job die
+nog gebouwd moet worden was precies de faalmodus die dit punt openhield. In
+de database plannen heeft bovendien een eigenschap die de functieroute mist:
+retentie blijft werken of die functie er ooit komt of niet, en een deploy van
+ongerelateerde functiecode kan hem niet breken.
+
+Onafhankelijk nagekeken in een database-review. Wat standhield: de
+RLS-redenering (de job draait als `postgres`, die de tabel bezit en dus
+RLS-exempt is — een policy toevoegen zou de toegang verbreden om iets te
+kopen dat de job al heeft), idempotentie op jobnaam sinds pg_cron 1.4, en het
+bewust **niet** indexeren van `attempted_at`: een derde index wordt op élke
+insert geschreven, en die insert staat op het importpad vóór een betaalde
+modelaanroep. Wat de review blootlegde, en wat daarna toegevoegd is:
+`cron.schedule` parst zijn command nóóit, dus een job die op een
+niet-bestaande tabel mikt wordt vrolijk ingepland en faalt daarna elk uur in
+`cron.job_run_details`, waar niets in deze repo kijkt — dezelfde
+groene-push-over-een-kapotte-staat die dit document afwijst, één laag lager
+en uit het zicht. `select 'public.import_attempts'::regclass;` staat er nu
+vóór en faalt hardop als `0012` niet gedraaid is.
+
+**TOEGEPAST OP 2 SEPTEMBER.** `pg_cron` is geïnstalleerd en
+`remy-import-attempts-retention` staat ingepland, via de SQL-editor van het
+dashboard in plaats van `supabase db push` — de CLI staat niet op deze
+machine. Het grootboek registreert nu `0001` t/m `0013`, en omdat de
+grootboek-insert ná de `commit` staat, is die regel zelf het bewijs dat de
+transactie erdoor is: `create extension` en `cron.schedule` zijn allebei
+geslaagd. De tabel groeit niet meer onbegrensd. Dit punt is dicht.
+
+De `delete` zelf, ongewijzigd sinds `0012` hem uitschreef:
 
 ```sql
 delete from public.import_attempts
@@ -238,6 +333,30 @@ van YouTube — is straks af te lezen zonder iets te bouwen.
 **Eerstvolgende moment om te kijken: begin oktober 2026.** Grep op
 `import_event outcome=no_recipe_in_caption` in de functielogs; de teller
 staat naast `outcome=parsed` op dezelfde route.
+
+**⚠ HET MEETVENSTER HEEFT EEN GAT, EN DAT MOET JE IN OKTOBER WETEN.** De
+Gemini-facturering heeft ergens vóór 2 september 2026 gefaald; de eigenaar
+heeft het die dag opgelost. Wat dat met de cijfers doet, en wat níét:
+
+- **Het telt níét mee in de teller die telt.** Een geweigerde modelaanroep
+  wordt `llm_request_failed`, niet `no_recipe_in_caption`
+  (`callExtractionModel.ts:35-43` → `finishImport.ts:222`). De breuk waar
+  SRC-09 op draait wordt dus niet opgeblazen door een betaalprobleem.
+- **Maar de noemer is korter.** Elke import in die periode die `parsed` of
+  `no_recipe_in_caption` had moeten worden, stierf als `llm_request_failed`.
+  Het venster is dus niet representatief, en de periode hoort uit de
+  oktober-meting geknipt of apart gerapporteerd te worden.
+- **Hoe je de grens terugvindt:** `outcome=llm_request_failed` in de
+  functielogs, en dan de `console.error` uit `callExtractionModel.ts` ernaast
+  — dáár staat de HTTP-status. In de gestructureerde regel staat hij niet.
+
+**En dat laatste is het punt dat blijft staan.** Een geweigerde betaling, een
+uitgeputte quota, een verkeerd model-id en een TLS-timeout zijn één outcome.
+Dat is bewust en verdedigd — het product kan niets met het verschil — maar
+het betekent dat een facturatiestoring in álles wat je kunt tellen niet te
+onderscheiden is van een netwerkhikje, en alleen zichtbaar is voor wie de
+logregels ernaast leest. Het is bovendien exact de emmer waarin IMP-05's
+zwevende `gemini-3.6-flash`-alias zou vallen als die ooit verschuift.
 
 ### PRF-02 — de backlog beschreef het verkeerd
 
@@ -330,23 +449,72 @@ Bron: [Expo — Upgrade Expo SDK](https://docs.expo.dev/workflow/upgrading-expo-
 
 ## Kleine hygiëne — wat er nog ligt
 
-Van de vijf items uit de vorige versie zijn er drie meegelift. Twee resten:
+Van de vijf items uit de vorige versie zijn er drie meegelift. De twee die
+restten zijn op 2 september (avond) opgepakt — de eerste is af, de tweede
+uitgezocht maar niet uitgevoerd.
 
-1. Twee verouderde `'text'`-doccomments in `importResult.ts`, plus een dode
-   `'text'`-guard in `resolveImport` waarvan de echte fix het versmallen van
-   `NormalizedUrlResult.platform` naar `Exclude<ImportPlatform, 'text'>` is.
-2. `CreateMealInput.dishTags` naar verplicht (uitgesteld sinds wave 4;
-   ripplet door naar `tests/repository/`).
+1. **Gedaan (GAP-07), en de omschrijving hierboven klopte niet.**
+   `NormalizedUrlResult.platform` is versmald naar
+   `Exclude<ImportPlatform, 'text'>`, de versmalling loopt door via
+   `validateShortLinkTarget` en `resolveEffectiveUrl`, en de dode guard in
+   `resolveImport` is weg. Maar: alle zes `'text'`-vermeldingen in
+   `importResult.ts` bleken **accuraat**, en het verwijderen van de guard
+   repareerde juist de claim op `:78-85`. De écht verouderde comments
+   noemden het woord `'text'` niet — dáárom kon een grep erop ze per
+   definitie niet vinden, en dat is de les die het onthouden waard is. Ze
+   zijn alsnog gerepareerd: `parse_failed` beweerde dat alleen `'tiktok'` en
+   `'youtube'` een model aanroepen, terwijl de plaktekstroute dat sinds
+   SRC-08 óók doet; en `index.ts` telde "the three returns above" waar er nu
+   twee platformtakken staan — nu bij naam genoemd, want een telling vergaat
+   stil en een platformnaam niet.
+
+2. **Uitgezocht én beslist (GAP-08) — het veld blijft optioneel.**
+   `CreateMealInput.dishTags` naar verplicht. De backlog had gelijk, maar
+   niet om de reden die er stond. Het comment dat het veld optioneel
+   verdedigt is géén post-hoc rationalisatie: `git blame` legt veld én
+   verdediging in dezelfde commit (`9503caf`, 25 augustus). Het is een echte
+   ontwerpbeslissing die sindsdien door **drie incidenten** weerlegd is en
+   nooit is bijgewerkt — precies omgekeerd aan PRF-02, waar de backlog
+   verouderd bleek. De premisse ("elke aanroeper is een scherm dat misschien
+   nog geen categorieën te bieden heeft") is empirisch onwaar: negen van de
+   negen constructieplekken noemen het veld al, en élke literal die het ooit
+   oversloeg was een bug — alle drie opgeschreven, in `confirm.tsx:201-208`
+   en `parsedRecipe.ts:65-95`, waarvan de laatste letterlijk zegt dat alleen
+   het type dit kan vangen. En "ripplet door naar `tests/repository/`" is
+   onjuist: de blast radius is **nul aanroepplekken** — één `?` weghalen, en
+   het verouderde comment herschrijven, wat bij het werk hoort en niet erna.
+   Zijn tweelingveld `recipeId?` ligt anders: dat wordt op drie plekken wél
+   echt weggelaten, en is dus een apart en groter item.
+
+   **HET OORDEEL, 2 september: optioneel blijven — tegen de analyse in, en
+   dat is precies waarom het hier staat en niet weggestreept is.** De reden
+   is die tweeling. Beide velden rusten in hetzelfde bestand op hetzelfde
+   argument, en er één verplicht maken breekt de symmetrie die dat bestand
+   verdedigt — terwijl `recipeId` niet mee kán, omdat het op drie plekken
+   echt wordt weggelaten. Wie dit heropent behandelt béíde velden in één
+   wijziging, of laat ze allebei staan. De blast radius is los daarvan
+   nagemeten en nul: `readonly dishTags:` plus `tsc --noEmit` gaf exit 0,
+   dus de kosten van het besluit zijn bekend en het is geen uitstel bij
+   gebrek aan informatie.
 
 ---
 
 ## Aanbevolen volgorde
 
-1. **`supabase db push`** — zonder de tabellen faalt élke import, want de
-   poort faalt bewust dicht.
-2. **De twee secrets.** De functie start niet zonder het zout.
+1. ~~Migraties draaien~~ — **klaar.** `0001` t/m `0013` staan live,
+   nagemeten tegen de database. De volgende stap is punt 2.
+2. ~~De secrets~~ — **klaar** volgens de eigenaar. Zie punt 2 hierboven, en
+   let op dat het er drie zijn: `GEMINI_API_KEY` hoorde er altijd al bij.
 3. **`deno check` en één echte import**, plus de throttle-test.
-4. **De opschoning inplannen** (B hierboven) voordat de tabel maanden
-   ongelimiteerd groeit.
-5. Dan pas de productvragen: A, D, E, F, G, H — en OPS-01/02 wanneer ENT-01
+4. ~~De opschoning inplannen~~ — **geschreven** (B hierboven, migratie
+   `0013`). Hij zit in stap 1: dezelfde push, of de tabel groeit alsnog
+   onbegrensd.
+5. ~~GAP-08~~ — **beslist: de `?` blijft.** Zie punt 2 hierboven voor de
+   afweging; er staat niets meer open.
+6. **ENT-03** — de backlog vraagt om klembord-*detectie*, en dat botst
+   frontaal met `paste.tsx`'s vastgelegde "het scherm inspecteert de invoer
+   nooit om de modus te kiezen". Kiezen: de zwakke-maar-verenigbare variant
+   (aanbieden binnen de al gekozen modus), of schrappen. Niet stilzwijgend
+   bouwen — die header voert een kostenargument, geen smaakargument.
+7. Dan pas de productvragen: A, D, E, F, G, H — en OPS-01/02 wanneer ENT-01
    aan de beurt is.
