@@ -533,11 +533,26 @@ export type ImportResult =
   | {
       readonly kind: 'parse_failed';
       /**
-       * `'tiktok'` or `'youtube'`: only the caption routes call a model, so
-       * only they can be answered badly by one. Worth counting apart for
-       * the same reason `no_recipe_in_caption` is — a model that mangles
-       * one platform's prose and not the other's is a prompt problem, and
-       * a single merged number cannot show that.
+       * `'tiktok'`, `'youtube'` or — since SRC-08 — `'text'`: the three
+       * routes that call a model, so the three that can be answered badly
+       * by one. Worth counting apart for the same reason
+       * `no_recipe_in_caption` is — a model that mangles one platform's
+       * prose and not another's is a prompt problem, and a single merged
+       * number cannot show that.
+       *
+       * THIS SAID "`'tiktok'` or `'youtube'`" UNTIL GAP-07, AND HAD BEEN
+       * WRONG SINCE THE DAY SRC-08 SHIPPED. The pasted-text route runs the
+       * same model tail as the caption routes — index.ts hands it to
+       * `finishImport`, which calls `callExtractionModel` and returns
+       * `{ kind: 'parse_failed', platform }` with whatever platform it was
+       * handed — so `parse_failed` with `platform: 'text'` was reachable
+       * all along. The sibling variant above WAS updated for SRC-08 and
+       * this one was not, which is the tell: half an edit, not a decision.
+       * Recorded rather than quietly corrected because of how it hid — the
+       * comment was stale precisely BY NOT SAYING `'text'`, so the grep
+       * that audited every other `'text'` claim could never have found it.
+       * A search for the word a stale comment omits is a search that
+       * cannot succeed, and that is the lesson worth keeping.
        */
       readonly platform: ImportPlatform;
     }

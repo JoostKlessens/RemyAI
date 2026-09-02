@@ -82,7 +82,22 @@ import type { ImportPlatform } from './types';
 export type NormalizedUrlResult =
   | {
       readonly kind: 'ok';
-      readonly platform: ImportPlatform;
+      /**
+       * NARROWED TO EXCLUDE `'text'` (SRC-08), for `HostResolution`'s reason
+       * below and one more besides. A pasted-text import has no URL, so it
+       * never reaches this module and `'text'` is a value this shape cannot
+       * hold — but admitting it was not free. The edge function's
+       * `resolveImport` carried a whole branch, a `console.error` and an
+       * `unsupported_url` return, whose only job was to discharge a case the
+       * type allowed and reality did not, and whose own comment named this
+       * narrowing as the better fix. Narrowing here is what deleted it.
+       *
+       * `'web'` STAYS, unlike in `HostResolution`: that shape describes a
+       * hostname that matched, where `'web'` is by definition the absence of
+       * a match; this one describes a normalized URL, and `normalizeWebUrl`
+       * genuinely produces one.
+       */
+      readonly platform: Exclude<ImportPlatform, 'text'>;
       readonly normalizedUrl: string;
       /**
        * True only for `vm.tiktok.com` / `vt.tiktok.com` — see file header.

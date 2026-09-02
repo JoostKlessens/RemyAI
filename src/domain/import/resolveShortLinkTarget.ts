@@ -200,7 +200,7 @@ const SHORT_LINK_TARGET_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportP
  */
 export function validateShortLinkTarget(
   resolvedUrl: string,
-): { readonly normalizedUrl: string; readonly platform: ImportPlatform } | null {
+): { readonly normalizedUrl: string; readonly platform: Exclude<ImportPlatform, 'text'> } | null {
   const result = normalizeRecipeUrl(resolvedUrl);
   if (result.kind !== 'ok' || result.isShortLink) {
     return null;

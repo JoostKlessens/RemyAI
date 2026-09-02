@@ -431,9 +431,9 @@ const INSTAGRAM_OEMBED_ACCESS_TOKEN = Deno.env.get('INSTAGRAM_OEMBED_ACCESS_TOKE
  */
 async function resolveEffectiveUrl(
   normalizedUrl: string,
-  platform: ImportPlatform,
+  platform: Exclude<ImportPlatform, 'text'>,
   isShortLink: boolean,
-): Promise<{ readonly normalizedUrl: string; readonly platform: ImportPlatform }> {
+): Promise<{ readonly normalizedUrl: string; readonly platform: Exclude<ImportPlatform, 'text'> }> {
   if (!isShortLink) {
     return { normalizedUrl, platform };
   }
@@ -552,7 +552,12 @@ function resolveTextImport(text: string, spend: ImportSpendRecorder): Promise<Im
  *
  * A `{ text }` body never reaches this function at all: it has no URL to
  * validate and no short link to resolve, so `resolveTextImport` above is its
- * entire route and the `'text'` branch below is only a type-level guard.
+ * entire route. There is no `'text'` branch below saying so any more:
+ * `NormalizedUrlResult.platform` excludes it (urlParsing.ts), so the
+ * impossibility is the type's rather than a guard's, and the claim in
+ * importResult.ts — that every `return` here is either the one naming no
+ * platform or one inside a branch already handed a platform — is true with no
+ * exception left to explain.
  *
  * The fan-out is the shape of this function now, and its ORDER carries
  * meaning. It sits after short-link resolution, so the platform is final
@@ -597,20 +602,23 @@ async function resolveImport(rawUrl: string, spend: ImportSpendRecorder): Promis
     return resolveYouTubeImport(effective.normalizedUrl, spend);
   }
 
-  // Unreachable in fact and loud on purpose, like the YouTube video-id
-  // branch: `'text'` describes a body with NO URL in it (SRC-08) and this
-  // function is only ever entered with one. It exists so the narrowing below
-  // is the type-checker's conclusion rather than a comment's claim; narrowing
-  // `NormalizedUrlResult.platform` to `Exclude<ImportPlatform, 'text'>` in
-  // urlParsing.ts would delete it, and is the better fix.
-  if (effective.platform === 'text') {
-    console.error(`parse-recipe: a URL classified as the URL-less 'text' platform. url=${effective.normalizedUrl}`);
-    return { kind: 'unsupported_url' };
-  }
-
   // Past this line only `'tiktok'` and `'instagram'` remain — the platforms
   // oEmbed serves and the ones `recipes`' CHECK accepts — as a consequence
-  // of the three returns above rather than as an assumption.
+  // of the `'web'` and `'youtube'` returns above rather than as an
+  // assumption.
+  //
+  // NAMED RATHER THAN COUNTED, deliberately, and GAP-07 is why. This read
+  // "the three returns above", meaning the three that narrow
+  // `effective.platform` — web, youtube, and a `'text'` guard that used to
+  // sit just below this comment. Narrowing `NormalizedUrlResult.platform`
+  // to `Exclude<ImportPlatform, 'text'>` deleted that guard and left two,
+  // and the sentence survived saying three. Worse, it then read as
+  // accidentally true: three `return` statements do still appear above,
+  // they are simply not the three it meant. A count is a claim about the
+  // file, and it decays silently every time the file moves; the platform
+  // names are a claim about the union, which is what the narrowing
+  // actually rests on. Add a platform and the compiler drags someone back
+  // to this block — a number never would have.
 
   // PD-011. Everything below — the cache, the model, the write — is skipped
   // for a display-only platform, and this sits BEFORE the cache lookup so
