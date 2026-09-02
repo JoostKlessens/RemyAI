@@ -1,0 +1,102 @@
+-- Remy — let web and YouTube imports have a canonical recipe row.
+--
+-- PROPOSAL, NOT YET APPLIED. Written so the decision is a diff to read
+-- rather than a question to hold in your head. Nothing in the app changes
+-- until this runs AND `canStoreCanonicalRecipe`
+-- (src/domain/import/canonicalRecipe.ts) is widened to match — that guard
+-- is what currently keeps a `'web'` import from attempting an insert this
+-- constraint would reject, so the two must move together or the app starts
+-- failing writes it used to skip.
+--
+-- ---------------------------------------------------------------------
+-- WHAT IS BROKEN TODAY
+--
+-- 0006 wrote `check (platform in ('tiktok', 'instagram'))` when those were
+-- the only two platforms that existed. Since then the importer has gained
+-- YouTube, the open web, and pasted text. A web or YouTube import
+-- therefore gets `recipeId: null`, permanently, and that costs two things
+-- that are not obvious from the constraint itself:
+--
+--   1. NO DEDUPLICATION. The whole point of `recipes` is that the second
+--      household to import the same URL pays no oEmbed call and no model
+--      call. Web imports are the route most likely to be shared between
+--      households — a popular blog recipe is a single canonical URL, where
+--      a TikTok is usually found once — so the route that would benefit
+--      most from the cache is the one excluded from it.
+--
+--   2. NO COOK PROOF. `shared_cooks` (0009) joins on the canonical recipe.
+--      A meal with `recipe_id null` can never be proof to a friend. So a
+--      dinner someone actually cooked, from a recipe they actually
+--      imported, is invisible to the social layer purely because of where
+--      the recipe came from. That is the app's differentiating surface
+--      silently excluding its two newest sources.
+--
+-- ---------------------------------------------------------------------
+-- WHY `'text'` IS NOT IN THE NEW LIST
+--
+-- This table deduplicates on `normalized_url`, which is its whole
+-- identity: `unique (normalized_url)` is what makes "has anyone imported
+-- this before" a single indexed lookup. A pasted-text import has no URL —
+-- not a missing one, not an empty one, none — so there is nothing to key
+-- a canonical row on and nothing a second household could match against.
+--
+-- Adding `'text'` here would require inventing a synthetic key, most
+-- obviously a hash of the pasted text. That is a different feature with a
+-- different failure mode (two people pasting the same recipe with one
+-- character of difference get two rows; two people pasting it identically
+-- get one row and one of them silently reads the other's extraction), and
+-- it should be argued for on its own rather than smuggled in beside a
+-- constraint widening. Pasted text stays uncached, which is also the
+-- cheaper miss: it costs no oEmbed call either way, so the cache would
+-- save only the model call.
+--
+-- ---------------------------------------------------------------------
+-- THE PART THAT IS A REAL DECISION, NOT A MECHANICAL WIDENING
+--
+-- A video caption is frozen. Once posted, a TikTok caption essentially
+-- never changes, so a canonical row derived from it stays true
+-- indefinitely and caching it forever is free correctness.
+--
+-- A WEB PAGE IS NOT. Publishers edit recipes — they fix a quantity a
+-- commenter flagged, adjust an oven temperature, rewrite a step. A
+-- canonical row cached from a blog in March and served to a new household
+-- in November hands them a recipe the publisher has since corrected, with
+-- no signal that it is stale. That is the same class of wrongness this
+-- codebase refuses everywhere else: presenting something as the source's
+-- own words when it is our copy of an older version.
+--
+-- This migration does NOT solve that, and deliberately does not pretend
+-- to. It widens the constraint and leaves the staleness question open,
+-- because the fix is a policy question with at least three defensible
+-- answers (never re-fetch; re-fetch after N days; re-fetch and compare,
+-- keeping the row but marking it superseded) and picking one silently
+-- inside a constraint change would be the wrong place to decide it.
+--
+-- IF YOU WANT THE CONSERVATIVE VERSION, apply this with `'web'` removed
+-- from the list. YouTube descriptions are as frozen as captions, so
+-- YouTube alone carries none of the staleness risk and still unblocks cook
+-- proof and dedup for that route. That is a genuinely reasonable place to
+-- stop, not a half-measure.
+--
+-- ---------------------------------------------------------------------
+-- WHY DROP-AND-ADD RATHER THAN ALTER
+--
+-- Postgres has no `alter constraint` for a CHECK expression; the pair
+-- below is the standard replacement and is atomic inside the migration's
+-- transaction. Every existing row is `'tiktok'` or `'instagram'`, so the
+-- new constraint validates against all of them and the ADD cannot fail on
+-- legacy data.
+
+alter table public.recipes
+  drop constraint if exists recipes_platform_check;
+
+alter table public.recipes
+  add constraint recipes_platform_check
+  check (platform in ('tiktok', 'instagram', 'youtube', 'web'));
+
+-- `meals.source_platform` needs NO migration. It is nullable, and the
+-- import path already writes `null` for a platform its legacy vocabulary
+-- ('tiktok' | 'reels') cannot express, rather than fabricating a value.
+-- That was fixed when the web route landed; it is recorded here so the
+-- next person reading this file does not go looking for a matching change
+-- that deliberately does not exist.
