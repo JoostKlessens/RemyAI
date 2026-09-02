@@ -209,7 +209,28 @@ export type ImportOutcome = ImportResult['kind'];
  * and a reader chasing a reason back to its source is never sent to the
  * wrong file — the same care types.ts takes in its `oembed_failed` note.
  */
-export type ImportFailureDetail = OembedErrorReason | SourceFetchFailureReason;
+export type ImportFailureDetail = OembedErrorReason | SourceFetchFailureReason | ImportThrottleScope;
+
+/**
+ * The third vocabulary, added with `import_throttled` (IMP-06 / IMP-10).
+ *
+ * A THIRD ONE RATHER THAN A REUSED ONE, on the rule the paragraph above
+ * states: `outcome` says whose vocabulary `failureDetail` is speaking, so a
+ * new outcome with a new reason set gets its own literals instead of
+ * borrowing words that mean something else two files away.
+ *
+ * IT IS THE ONE FACT WORTH COUNTING ABOUT A REFUSAL. "How often do we
+ * throttle" is a number nobody can act on; "are these bursts, or are
+ * households finishing their day" is two different problems with two
+ * different fixes — the first is a loop or a limit set too tight, the
+ * second is a ceiling that no longer matches how people use the app. The
+ * scope is also a COUNT and not CONTENT: it names which of two limits
+ * closed and says nothing whatsoever about who, or about what they were
+ * importing.
+ *
+ * Mirrors `ImportResult`'s `import_throttled.scope` and must keep doing so.
+ */
+export type ImportThrottleScope = 'caller' | 'household';
 
 /**
  * The complete set of facts Remy records about an import. Four fields, all
@@ -219,14 +240,16 @@ export type ImportFailureDetail = OembedErrorReason | SourceFetchFailureReason;
  * this module cannot see.
  */
 export interface ImportTelemetryEvent {
-  /** Which of the nine outcomes this import reached. Always present — an uncounted import is the blind spot. */
+  /** Which of the ten outcomes this import reached. Always present — an uncounted import is the blind spot. */
   readonly outcome: ImportOutcome;
   /**
-   * The platform, read off the result and never inferred. `null` for
-   * `unsupported_url` alone, which is rejected before we know what the URL
-   * points at; the other eight outcomes all carry one (types.ts). It stays
-   * NULLABLE for that single case and must: making it required would force
-   * a value for the one outcome that honestly has none.
+   * The platform, read off the result and never inferred. `null` for the
+   * two outcomes decided before a route is entered — `unsupported_url`,
+   * rejected before we know what the URL points at, and `import_throttled`,
+   * refused at the gate that runs before the `{ url }` / `{ text }` fork.
+   * The other eight all carry one (types.ts). It stays NULLABLE for those
+   * two and must: making it required would force a value for the outcomes
+   * that honestly have none.
    */
   readonly platform: ImportPlatform | null;
   /** Set on `parsed` and nowhere else: no other outcome produced a recipe, so no other outcome has a provenance to state. */
@@ -331,6 +354,21 @@ export function buildImportTelemetryEvent(result: ImportResult): ImportTelemetry
       // guessed platform is worse than an honest absence for precisely the
       // denominator this module exists to produce.
       return { outcome: result.kind, platform: null, provenance: null, failureDetail: null };
+    case 'import_throttled':
+      // PLATFORM IS NULL, AND IT IS THE SECOND HONEST ABSENCE RATHER THAN
+      // AN OVERSIGHT. The gate sits at the one point where a request
+      // becomes an import — before the `{ url }` / `{ text }` fork — so at
+      // the moment of refusal no route has been entered and no platform has
+      // been established. That is `unsupported_url`'s argument arriving at
+      // a different door: a guessed platform here would file every refusal
+      // under whichever route we assumed, and corrupt the very denominator
+      // the SRC-09 question is asked against.
+      //
+      // The scope goes in `failureDetail` because it is the actionable
+      // half: bursts and daily ceilings are different problems. Neither the
+      // wait nor any count is recorded — a retry-after is a derived number
+      // that tells an operator nothing a timestamp does not already say.
+      return { outcome: result.kind, platform: null, provenance: null, failureDetail: result.scope };
     default: {
       const exhaustiveCheck: never = result;
       return { outcome: (exhaustiveCheck as ImportResult).kind, platform: null, provenance: null, failureDetail: null };

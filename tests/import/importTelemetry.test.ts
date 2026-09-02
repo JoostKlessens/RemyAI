@@ -18,9 +18,9 @@
  * logs.
  *
  * The third thing, added with the platform widening, sits between those
- * two and belongs to both. Eight of the nine outcomes now REPORT their
- * platform and one — `unsupported_url` — reports none, and both halves are
- * asserted: the reporting, because `no_recipe_in_caption` split by platform
+ * two and belongs to both. Eight of the ten outcomes REPORT their platform
+ * and two — `unsupported_url` and `import_throttled` — report none, and
+ * both halves are asserted: the reporting, because `no_recipe_in_caption` split by platform
  * is the SRC-09 evidence and a merged count would answer nothing; and the
  * single absence, because the moment somebody "completes" it with a default
  * the denominator stops being a measurement. A platform is a count, not
@@ -120,8 +120,11 @@ const ONE_OF_EACH: Readonly<Record<ImportOutcome, ImportResult>> = {
   },
   no_recipe_on_page: { kind: 'no_recipe_on_page', platform: 'web' },
   source_fetch_failed: { kind: 'source_fetch_failed', reason: 'rate_limited', platform: 'web' },
-  // The one outcome with no platform, and the only one. See types.ts.
+  // The two outcomes with no platform, and the only two: one is rejected
+  // before the URL is identified, the other refused before a route is
+  // entered at all. See types.ts.
   unsupported_url: { kind: 'unsupported_url' },
+  import_throttled: { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 240 },
   oembed_failed: { kind: 'oembed_failed', reason: 'missing_credentials', platform: 'instagram' },
   llm_request_failed: { kind: 'llm_request_failed', platform: 'tiktok' },
   parse_failed: { kind: 'parse_failed', platform: 'tiktok' },
@@ -142,7 +145,7 @@ function captionFailureFor(platform: ImportPlatform): ImportResult {
 /** The four keys, in the order the line renders them. Written out by hand so a rename is a test failure. */
 const EVENT_KEYS: readonly string[] = ['outcome', 'platform', 'provenance', 'failureDetail'];
 
-const OUTCOME_COUNT = 9;
+const OUTCOME_COUNT = 10;
 
 describe('buildImportTelemetryEvent — every outcome is counted', () => {
   test('a parsed TikTok import records its platform and its provenance and nothing else', () => {
@@ -370,7 +373,7 @@ describe('buildImportTelemetryEvent — every outcome is counted', () => {
     expect(outcomes).toEqual(['parsed']);
   });
 
-  test('a failure detail appears only on the two outcomes that carry a typed reason', () => {
+  test('a failure detail appears only on the three outcomes that carry a typed reason', () => {
     // Arrange
     const withDetail = EVERY_RESULT.map(buildImportTelemetryEvent).filter((event) => event.failureDetail !== null);
 
@@ -378,7 +381,12 @@ describe('buildImportTelemetryEvent — every outcome is counted', () => {
     const outcomes = withDetail.map((event) => event.outcome).sort();
 
     // Assert
-    expect(outcomes).toEqual(['oembed_failed', 'source_fetch_failed']);
+    // `import_throttled` joined the two original reason-carriers when the
+    // budget gate shipped: its scope is the actionable half of a refusal
+    // (a burst and a spent daily ceiling are different problems), and it is
+    // a count rather than content, so it belongs in the same field under
+    // its own closed vocabulary. See `ImportThrottleScope`.
+    expect(outcomes).toEqual(['import_throttled', 'oembed_failed', 'source_fetch_failed']);
   });
 
   test('the input result is never mutated', () => {
@@ -564,12 +572,13 @@ describe('formatImportTelemetryLine', () => {
 
   /**
    * The rule stated as an assertion rather than as prose: eight outcomes
-   * name a platform and one does not, and the one that does not is the one
-   * that never learned of a URL. A regression in either direction — a
-   * second null creeping back, or a default invented for `unsupported_url`
-   * — fails here.
+   * name a platform and two do not, and both of those are decided before a
+   * route is ever entered — one never learned of a URL, the other was
+   * refused at the gate that runs before the `{ url }` / `{ text }` fork. A
+   * regression in either direction — a THIRD null creeping back, or a
+   * default invented for either of these two — fails here.
    */
-  test('every outcome but unsupported_url names its platform, in the event and in the line', () => {
+  test('only the two pre-route outcomes omit a platform, in the event and in the line', () => {
     // Arrange
     const events = EVERY_RESULT.map(buildImportTelemetryEvent);
     const absentMarker = `platform=${TELEMETRY_ABSENT}`;
@@ -581,8 +590,8 @@ describe('formatImportTelemetryLine', () => {
       .map((event) => event.outcome);
 
     // Assert
-    expect(withoutPlatform).toEqual(['unsupported_url']);
-    expect(absentInLine).toEqual(['unsupported_url']);
+    expect(withoutPlatform.sort()).toEqual(['import_throttled', 'unsupported_url']);
+    expect(absentInLine.sort()).toEqual(['import_throttled', 'unsupported_url']);
   });
 
   /**
@@ -647,7 +656,7 @@ describe('formatImportTelemetryLine', () => {
     expect(lines.join('\n')).not.toContain('parse-recipe:');
   });
 
-  test('produces a distinct line for each of the nine outcomes, so a grep can count them apart', () => {
+  test('produces a distinct line for each of the ten outcomes, so a grep can count them apart', () => {
     // Arrange
     const lines = EVERY_RESULT.map((result) => formatImportTelemetryLine(buildImportTelemetryEvent(result)));
 

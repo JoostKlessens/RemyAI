@@ -1,12 +1,41 @@
--- Remy — let web and YouTube imports have a canonical recipe row.
+-- Remy — let YouTube imports have a canonical recipe row.
 --
--- PROPOSAL, NOT YET APPLIED. Written so the decision is a diff to read
--- rather than a question to hold in your head. Nothing in the app changes
--- until this runs AND `canStoreCanonicalRecipe`
--- (src/domain/import/canonicalRecipe.ts) is widened to match — that guard
--- is what currently keeps a `'web'` import from attempting an insert this
--- constraint would reject, so the two must move together or the app starts
--- failing writes it used to skip.
+-- DECIDED 2 SEPTEMBER 2026: THE CONSERVATIVE SHAPE. This migration was
+-- written offering two forms, `'youtube'` alone or `'youtube'` plus
+-- `'web'`. The owner chose YouTube alone, and the section headed "THE PART
+-- THAT IS A REAL DECISION" below is why: a YouTube description is as frozen
+-- as a TikTok caption, so it carries none of the staleness risk a web page
+-- does, and it unblocks dedup and cook proof for that route today without
+-- leaving an unanswered question behind in the schema.
+--
+-- `'web'` IS STILL OUT, AND THE COST IS REAL RATHER THAN NOTIONAL: a
+-- popular blog recipe is one canonical URL many households share, so it is
+-- the route that would benefit most from the cache and it remains excluded.
+-- That stays true until somebody answers the staleness question — never
+-- re-fetch, re-fetch after N days, or re-fetch and mark superseded. Adding
+-- `'web'` to the list below is then a one-word change plus the matching
+-- widening of `canStoreCanonicalRecipe`; see the second warning under
+-- APPLYING THIS.
+--
+-- ---------------------------------------------------------------------
+-- APPLYING THIS
+--
+-- Nothing in the app changes until this runs AND `canStoreCanonicalRecipe`
+-- (src/domain/import/canonicalRecipe.ts) matches it — that guard is what
+-- keeps an import from attempting an insert this constraint would reject,
+-- so the two must move together or the app starts failing writes it used to
+-- skip. The guard was widened to `'youtube'` in the same commit as this
+-- file.
+--
+-- ⚠ IF YOU LATER ADD `'web'`, `STORED_ROW_PROVENANCE` IN THAT SAME FILE
+-- BECOMES A LIE ON THE SAME DAY. It reports every stored row as
+-- `'model_from_caption'`, which is a deduction from which platforms can be
+-- stored, and it survives THIS migration only because YouTube is a caption
+-- route too (resolveYouTubeImport.ts states `provenance:
+-- 'model_from_caption'`). A web row comes from a page's JSON-LD and is
+-- `'publisher_structured_data'`; storing one without changing that constant
+-- would tell a user their publisher-written recipe was a model's reading of
+-- prose. That constant's own comment carries the full argument.
 --
 -- ---------------------------------------------------------------------
 -- WHAT IS BROKEN TODAY
@@ -72,11 +101,11 @@
 -- keeping the row but marking it superseded) and picking one silently
 -- inside a constraint change would be the wrong place to decide it.
 --
--- IF YOU WANT THE CONSERVATIVE VERSION, apply this with `'web'` removed
--- from the list. YouTube descriptions are as frozen as captions, so
--- YouTube alone carries none of the staleness risk and still unblocks cook
--- proof and dedup for that route. That is a genuinely reasonable place to
--- stop, not a half-measure.
+-- THIS IS THE CONSERVATIVE VERSION, AND IT IS WHAT SHIPPED: `'web'` is
+-- absent from the list below. YouTube descriptions are as frozen as
+-- captions, so YouTube alone carries none of the staleness risk and still
+-- unblocks cook proof and dedup for that route. A genuinely reasonable
+-- place to stop, not a half-measure.
 --
 -- ---------------------------------------------------------------------
 -- WHY DROP-AND-ADD RATHER THAN ALTER
@@ -92,7 +121,7 @@ alter table public.recipes
 
 alter table public.recipes
   add constraint recipes_platform_check
-  check (platform in ('tiktok', 'instagram', 'youtube', 'web'));
+  check (platform in ('tiktok', 'instagram', 'youtube'));
 
 -- `meals.source_platform` needs NO migration. It is nullable, and the
 -- import path already writes `null` for a platform its legacy vocabulary

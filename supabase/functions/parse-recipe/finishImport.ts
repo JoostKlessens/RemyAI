@@ -69,6 +69,7 @@ import type {
 } from '../../../src/domain/import/types.ts';
 import { storeCanonicalRecipe } from './canonicalRecipeStore.ts';
 import { callExtractionModel } from './callExtractionModel.ts';
+import type { ImportSpendRecorder } from './importBudget.ts';
 
 export interface ParsedRecipeCompletion {
   readonly recipe: ParsedRecipe;
@@ -180,6 +181,15 @@ export interface CaptionExtraction {
   readonly attribution: ImportAttribution;
   /** Stated by the caller, never assumed here — see the file header. */
   readonly provenance: RecipeProvenance;
+  /**
+   * IMP-06 / IMP-10. Marked immediately before the model request goes out,
+   * so the budget can tell a fresh extraction from a cache hit — which the
+   * `ImportResult` deliberately cannot (see `parseStoredRecipe`). REQUIRED
+   * rather than optional, on this union's own rule: an optional field is a
+   * field a caller can forget while still compiling, and forgetting this one
+   * means a route that spends money and records that it did not.
+   */
+  readonly spend: ImportSpendRecorder;
 }
 
 /**
@@ -204,6 +214,10 @@ export async function extractRecipeFromCaption(input: CaptionExtraction): Promis
     return { kind: 'no_recipe_in_caption', caption: null, attribution, platform };
   }
 
+  // BEFORE the call and not after it: a request that times out or is refused
+  // still cost the round trip, and a limiter that only counts successes is
+  // one an abuser can walk straight past by sending garbage.
+  input.spend.markModelCalled();
   const llmResult = await callExtractionModel(caption, attribution.authorName);
   if (llmResult.kind === 'error') {
     return { kind: 'llm_request_failed', platform };

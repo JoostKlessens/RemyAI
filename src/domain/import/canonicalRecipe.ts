@@ -82,15 +82,15 @@
  * stops being sound the moment that guard widens. That whole argument, and
  * the warning attached to it, lives on `STORED_ROW_PROVENANCE` below.
  *
- * THREE OF THE FIVE PLATFORMS GET NONE OF THIS, FOR TWO DIFFERENT
- * REASONS, AND THE DIFFERENCE MATTERS MORE THAN THE COUNT.
- * `recipes.platform` (0006) accepts only `'tiktok'` and `'instagram'`, so
- * a YouTube or web import cannot be stored here at all and permanently
- * reports `recipeId: null` — no deduplication, and no `shared_cooks`
- * join, which is the social half of everything argued above. That is a
- * CEILING: one migration lifts it, and `canStoreCanonicalRecipe` below
- * states it once, with the SQL and with the reason writing that SQL is
- * not this change's decision to make.
+ * TWO OF THE FIVE PLATFORMS GET NONE OF THIS, FOR TWO DIFFERENT REASONS,
+ * AND THE DIFFERENCE MATTERS MORE THAN THE COUNT. `recipes.platform`
+ * accepts `'tiktok'`, `'instagram'` and — since migration 0011 —
+ * `'youtube'`. A WEB import still cannot be stored and permanently reports
+ * `recipeId: null`: no deduplication, and no `shared_cooks` join, which is
+ * the social half of everything argued above. That is a CEILING and it is
+ * now a deliberate one: 0011 was applied in its conservative form because a
+ * publisher edits a page under a row we cached, where a video description
+ * is frozen. `canStoreCanonicalRecipe` below states what lifting it costs.
  *
  * `'text'` is excluded by something no migration can lift. Every argument
  * on this page rests on `normalized_url`: it is the deduplication key, it
@@ -101,8 +101,8 @@
  * people who paste the same recipe out of the same WhatsApp group are not
  * even in principle recognisable as having done so, because the only
  * thing this table can compare is an address neither of them has. So
- * `'text'` is not waiting on a decision the way YouTube and web are; it
- * is outside what this table can express.
+ * `'text'` is not waiting on a decision the way web is; it is outside what
+ * this table can express.
  *
  * THE TRADEOFF WE ARE ACCEPTING. Deduplication makes a bad extraction
  * sticky: once a mediocre parse of a URL is stored, every later importer
@@ -122,7 +122,7 @@ import { validateParsedRecipe } from './validateParsed.ts';
 export interface RecipeRowInsert {
   /** THE deduplication key: the post-redirect, normalized URL, unique in the table. See the edge function on why it must be resolved before this is read. */
   readonly normalized_url: string;
-  /** Typed as the full `ImportPlatform`, but the COLUMN accepts only two of its members — call `canStoreCanonicalRecipe` before building a row, and read that function for why the gap is a decision someone still has to make rather than a bug to route around. */
+  /** Typed as the full `ImportPlatform`, but the COLUMN accepts only three of its members — call `canStoreCanonicalRecipe` before building a row, and read that function for why `'web'` is still outside and `'text'` can never be inside. */
   readonly platform: ImportPlatform;
   readonly title: string;
   readonly thumbnail_url: string | null;
@@ -161,19 +161,20 @@ export interface CanonicalRecipeContext {
  * The platforms the `recipes` table will actually accept a row for. Not a
  * preference — a mirror of a database constraint:
  *
- *   platform text not null check (platform in ('tiktok', 'instagram'))
- *      — supabase/migrations/0006_canonical_recipes.sql
+ *   platform text not null check (platform in ('tiktok', 'instagram', 'youtube'))
+ *      — supabase/migrations/0011_canonical_recipes_platform_widening.sql,
+ *        which replaced 0006's two-member CHECK
  *
  * The column is NOT NULL, so there is no "leave it blank" escape either: a
- * `'youtube'` or `'web'` canonical row is not undesirable, it is REJECTED,
- * and the INSERT fails. Defined here as "the values that CHECK accepts",
+ * `'web'` canonical row is not undesirable, it is REJECTED, and the INSERT
+ * fails. Defined here as "the values that CHECK accepts",
  * deliberately not as "the platforms we want to cache" — if the two ever
  * diverge, this constant is wrong and the fix is to reread the migration,
  * not to relitigate the product question.
  *
- * WHAT THIS COSTS, STATED PLAINLY BECAUSE IT IS NOT A DETAIL. A YouTube or
- * web import returns `recipeId: null`, permanently. That means it
- * deduplicates against nothing — the twentieth household to import the
+ * WHAT THIS STILL COSTS, STATED PLAINLY BECAUSE IT IS NOT A DETAIL. A WEB
+ * import returns `recipeId: null`, permanently. That means it deduplicates
+ * against nothing — the twentieth household to import the
  * same food blog pays the same fetch and gets its own unrelated meal — and
  * it means the social layer can never fire for it: `shared_cooks` (0009)
  * joins two households on a shared `recipes` row, and
@@ -181,12 +182,21 @@ export interface CanonicalRecipeContext {
  * A web-imported dinner therefore cannot be proof to a friend, however
  * many friends cook it. That is a real product hole, not a rough edge.
  *
- * WHAT WOULD LIFT IT. One migration, widening 0006's CHECK to the two
- * further routes that HAVE a URL:
+ * WHAT WOULD LIFT IT, AND WHY IT WAS NOT LIFTED. One migration, adding
+ * `'web'` to the list 0011 already widened:
  *
  *   alter table public.recipes drop constraint recipes_platform_check;
  *   alter table public.recipes add constraint recipes_platform_check
  *     check (platform in ('tiktok', 'instagram', 'youtube', 'web'));
+ *
+ * 0011 deliberately stopped one member short of that. A video description
+ * is frozen; a web page is edited under us, so a row cached in March and
+ * served in November hands a household a recipe the publisher has since
+ * corrected, with no signal that it is stale. Adding `'web'` means first
+ * answering that — never re-fetch, re-fetch after N days, or re-fetch and
+ * mark superseded — AND changing `STORED_ROW_PROVENANCE` below, which would
+ * otherwise report a publisher's own structured data as a model's reading
+ * of prose on the same day.
  *
  * ⚠ `'text'` IS ABSENT FROM THAT LIST ON PURPOSE AND MUST STAY ABSENT.
  * Whoever eventually writes this migration will be reading a five-member
@@ -228,7 +238,26 @@ export interface CanonicalRecipeContext {
  * same thing quietly and truthfully: this platform has no canonical row,
  * by construction.
  */
-const STORABLE_CANONICAL_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>(['tiktok', 'instagram']);
+const STORABLE_CANONICAL_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>([
+  'tiktok',
+  'instagram',
+  // Added with migration 0011, and NOT the mechanical widening the comment
+  // above warned about. Two facts had to hold before this member could be
+  // listed, and both are worth naming here because the day either stops
+  // being true is the day this line has to move again:
+  //
+  //  1. A YOUTUBE DESCRIPTION IS FROZEN, exactly as a caption is. So the
+  //     staleness argument that keeps `'web'` out — a publisher edits the
+  //     page under a row we cached in March — simply does not apply. This
+  //     is the whole reason 0011 shipped in its conservative form.
+  //  2. YOUTUBE IS A CAPTION ROUTE. resolveYouTubeImport.ts hands the Data
+  //     API description to the same shared tail TikTok's caption goes to,
+  //     and states `provenance: 'model_from_caption'` while doing it. That
+  //     is what keeps `STORED_ROW_PROVENANCE` below a deduction rather than
+  //     a lie — see its comment, which is the thing to read before adding a
+  //     fourth member here.
+  'youtube',
+]);
 
 /**
  * DELIBERATELY UNCHANGED BY SRC-08, WHICH IS WORTH ONE LINE BECAUSE THE
@@ -426,19 +455,23 @@ function isImportPlatform(value: unknown): value is ImportPlatform {
  * THE CHAIN THAT MAKES `'model_from_caption'` A DEDUCTION AND NOT A
  * GUESS. It is three links, all of them already in this file:
  *
- *  1. `canStoreCanonicalRecipe` above permits exactly `'tiktok'` and
- *     `'instagram'`, mirroring 0006's CHECK constraint. A `'youtube'` or
- *     `'web'` row cannot be inserted; the write is never attempted. Nor
- *     can a `'text'` one, and that member strengthens rather than
- *     threatens this chain: it is refused by the table's shape (no URL,
- *     no key) rather than by a constraint someone might widen, so it
- *     cannot arrive here even in the future this warning is about.
+ *  1. `canStoreCanonicalRecipe` above permits exactly `'tiktok'`,
+ *     `'instagram'` and `'youtube'`, mirroring 0011's CHECK constraint. A
+ *     `'web'` row cannot be inserted; the write is never attempted. Nor can
+ *     a `'text'` one, and that member strengthens rather than threatens
+ *     this chain: it is refused by the table's shape (no URL, no key)
+ *     rather than by a constraint someone might widen, so it cannot arrive
+ *     here even in the future this warning is about.
  *  2. Instagram is display-only (PD-011, displayOnlyPolicy.ts). An
  *     Instagram import returns `display_only` and never reaches a
  *     `ParsedRecipe`, so it never reaches a canonical write either.
- *  3. That leaves TikTok as the only platform that can actually put a row
- *     in this table, and the TikTok route is the caption route: oEmbed
- *     caption in, model out.
+ *  3. That leaves TikTok and YouTube, AND BOTH ARE CAPTION ROUTES. TikTok
+ *     sends an oEmbed caption to the model; YouTube sends a Data API
+ *     description to the very same shared tail, stating `provenance:
+ *     'model_from_caption'` as it goes (resolveYouTubeImport.ts). Link 3
+ *     is the one 0011 could have broken and did not — which is exactly
+ *     why 0011 stopped short of `'web'`, whose route produces
+ *     `'publisher_structured_data'` instead.
  *
  * Every row that can exist in `recipes` today therefore came from the
  * caption pipeline. This constant reports that, and reports nothing the

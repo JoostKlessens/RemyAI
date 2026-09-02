@@ -7,13 +7,13 @@
  * earns the length. The vocabularies (importVocabulary.ts) enumerate words;
  * the content shapes (parsedRecipe.ts) describe a dish; attribution
  * (importAttribution.ts) names a creator. `ImportResult` is where all three
- * meet a decision a user can see: nine variants, each owed different copy
+ * meet a decision a user can see: ten variants, each owed different copy
  * and a different way forward, because the failure this whole feature was
  * built around — a caption that simply contains no recipe — must never be
  * indistinguishable from a network blip in a grey toast.
  *
  * THE RULES THIS UNION ENFORCES ARE STATED ONCE AND INHERITED BY WHATEVER
- * COMES NEXT, which is the only reason nine variants stay reviewable. Every
+ * COMES NEXT, which is the only reason ten variants stay reviewable. Every
  * variant carries a `platform` except `unsupported_url`, whose absence is a
  * fact rather than a gap. Every field a producer knows for free is REQUIRED
  * rather than optional, because an optional field is a field a hand-written
@@ -119,7 +119,7 @@ import type { ParsedRecipe } from './parsedRecipe.ts';
  * SO THE RULE IS A RULE AND NOT A COLLECTION OF CASES. "Everything but
  * `unsupported_url`" is one sentence a reader can hold and a reviewer can
  * check; "whichever variants somebody got round to widening" is a state
- * nobody can verify without reading all nine. The next variant added
+ * nobody can verify without reading all ten. The next variant added
  * inherits the rule by default and has to argue its way out of it, which is
  * the direction the burden of proof belongs in.
  */
@@ -540,4 +540,54 @@ export type ImportResult =
        * a single merged number cannot show that.
        */
       readonly platform: ImportPlatform;
+    }
+  /**
+   * IMP-06 / IMP-10. Refused before the pipeline was entered, because this
+   * caller — or their household — has spent its budget for the window.
+   *
+   * WHY IT IS A VARIANT AND NOT A 429. index.ts reserves non-2xx for a
+   * request that is MALFORMED, and a throttle is the opposite of that: the
+   * request was perfectly well-formed and we chose not to serve it. That is
+   * an anticipated outcome, which is exactly what this union is for. A bare
+   * 429 would also strand the client with an HTTP status to translate into
+   * Dutch at the fetch layer, which is the one place in this app that does
+   * no copy.
+   *
+   * WHY IT IS ONE VARIANT WITH A `scope` RATHER THAN TWO. The three
+   * refusals `decideImportBudget` can produce differ in what a person
+   * should DO, and that difference is exactly two-valued: wait, or wait
+   * until tomorrow. `unidentified_caller` collapses into the first — see
+   * `scope` — because "we cannot tell who you are" is not a sentence any
+   * user of this app can act on, and is never true for one of them.
+   *
+   * NO COUNTS, NO CEILING, NO REMAINING BUDGET. The client is told to wait
+   * and how long; it is never told how close it was. A number a caller can
+   * read is a number a caller can sit just underneath, which is the whole
+   * argument for 0012's zero-policy RLS, applied to the response body.
+   */
+  | {
+      readonly kind: 'import_throttled';
+      /**
+       * Which limit closed, and therefore which sentence the UI shows.
+       *
+       * `'caller'` is the ten-minute burst window: a human who really did
+       * import twenty things in ten minutes, or a loop. Either way the
+       * advice is the same and the wait is short.
+       *
+       * `'household'` is the daily model ceiling, shared by everyone in the
+       * house — so the copy has to avoid blaming the person holding the
+       * phone for spending someone else did.
+       */
+      readonly scope: 'caller' | 'household';
+      /**
+       * Whole seconds until the count drops back below the limit, from
+       * `decideImportBudget` and never computed at the edge.
+       *
+       * ALWAYS A REAL WAIT. The policy clamps it to at least one second and
+       * at most its own window, so this can never advise an instant retry
+       * that is guaranteed to fail, nor a wait longer than the limit that
+       * produced it — the case a clock skew between Postgres and the
+       * function would otherwise create.
+       */
+      readonly retryAfterSeconds: number;
     };

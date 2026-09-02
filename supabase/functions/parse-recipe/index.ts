@@ -38,11 +38,17 @@
  * READ THAT NARROWLY (IMP-06 / IMP-10): it stops a caller with NO token,
  * and nothing else. It does not stop a signed-in user calling this endpoint
  * in a loop, nor this project's own anon key — a validly-signed JWT with no
- * `sub` that ships inside the app bundle. Neither is rate limited nor cost
- * capped today, and the reason is storage rather than oversight.
- * importBudget.ts beside this file carries that argument in full and the
- * marked gate in `Deno.serve` below carries the position;
- * src/domain/import/importBudgetPolicy.ts carries the tested decision.
+ * `sub` that ships inside the app bundle, which a live test on 2 September
+ * 2026 confirmed reaches this handler. BOTH ARE NOW STOPPED, by the gate in
+ * `Deno.serve` below: a signed-in caller is metered against two windows,
+ * and a caller with no `sub` is refused outright. The three pieces are
+ * importBudget.ts (the argument), supabaseImportBudgetStore.ts (the durable
+ * counter, over `import_attempts` from migration 0012) and
+ * src/domain/import/importBudgetPolicy.ts (the pure, tested decision).
+ *
+ * THE FUNCTION NO LONGER BOOTS WITHOUT `IMPORT_FINGERPRINT_SALT`. It is
+ * what pseudonymises an unidentified caller's address; 0012's header argues
+ * why a missing salt must be a refusal to start rather than a default.
  *
  * ---
  *
@@ -356,7 +362,26 @@ import type { ImportPlatform, ImportResult } from '../../../src/domain/import/ty
 import { findStoredRecipe } from './canonicalRecipeStore.ts';
 import { expandShortLink } from './fetchSourceText.ts';
 import { extractRecipeFromCaption } from './finishImport.ts';
+import {
+  createImportSpendRecorder,
+  readCallerId,
+  type ImportSpendRecorder,
+} from './importBudget.ts';
 import { readImportRequest } from './importRequest.ts';
+// IMP-06 / IMP-10. The counter and the decision, in that order: the store is
+// the impure half (PostgREST, a fingerprint, a household lookup) and lives
+// beside this file; the policy is pure, unit-tested, and lives in
+// src/domain/**, which is the only half anything in this repo type-checks.
+import {
+  buildCallerFingerprint,
+  ImportBudgetUnavailableError,
+  readCallerBudget,
+  readClientAddress,
+  recordAttempt,
+  type CallerBudgetContext,
+} from './supabaseImportBudgetStore.ts';
+import { classifyImportCost, decideImportBudget } from '../../../src/domain/import/importBudgetPolicy.ts';
+import type { ImportBudgetDecision } from '../../../src/domain/import/importBudgetPolicy.ts';
 import { corsPreflightResponse, jsonResponse, respondWithImportResult } from './importResponse.ts';
 // The two routes that are whole pipelines rather than branches, each now
 // arguing for itself beside its own code. This file reaches them from the
@@ -497,8 +522,9 @@ async function resolveDisplayOnlyImport(normalizedUrl: string, platform: OembedP
  * It returns the tail's promise rather than awaiting it: the whole route IS
  * the shared tail, and a wrapper `await` would only obscure that.
  */
-function resolveTextImport(text: string): Promise<ImportResult> {
+function resolveTextImport(text: string, spend: ImportSpendRecorder): Promise<ImportResult> {
   return extractRecipeFromCaption({
+    spend,
     // No URL EXISTS, as distinct from one we failed to resolve — the
     // difference `ImportResult.parsed.sourceUrl` was widened to hold.
     sourceUrl: null,
@@ -547,7 +573,7 @@ function resolveTextImport(text: string): Promise<ImportResult> {
  * is load-bearing — see the DEDUPLICATION section in the header for why
  * neither one step earlier nor one step later is correct.
  */
-async function resolveImport(rawUrl: string): Promise<ImportResult> {
+async function resolveImport(rawUrl: string, spend: ImportSpendRecorder): Promise<ImportResult> {
   const normalized = normalizeRecipeUrl(rawUrl);
   if (normalized.kind === 'unsupported_url') {
     // THE ONE RETURN IN THIS FILE THAT NAMES NO PLATFORM, and the line
@@ -568,7 +594,7 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
 
   // SRC-02/SRC-03. The YouTube Data API, then the shared caption pipeline.
   if (effective.platform === 'youtube') {
-    return resolveYouTubeImport(effective.normalizedUrl);
+    return resolveYouTubeImport(effective.normalizedUrl, spend);
   }
 
   // Unreachable in fact and loud on purpose, like the YouTube video-id
@@ -623,6 +649,7 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
   // from the other's anti-hallucination behaviour. `payload.title` is the
   // caption; `extractRecipeFromCaption` owns every decision after it.
   return extractRecipeFromCaption({
+    spend,
     sourceUrl: effective.normalizedUrl,
     platform: effective.platform,
     caption: oembedResult.payload.title,
@@ -631,6 +658,61 @@ async function resolveImport(rawUrl: string): Promise<ImportResult> {
     // reason: prose written for humans, read by a model.
     provenance: 'model_from_caption',
   });
+}
+
+/**
+ * How long a caller is told to wait when the COUNTER ITSELF is unreachable.
+ *
+ * Sixty seconds, and deliberately short: this is not a limit being enforced,
+ * it is an outage being survived, so the number should express "try again
+ * shortly" rather than any real window. Long enough that a retry storm does
+ * not arrive while the database is still down; short enough that a working
+ * deployment recovers on its own without anyone being told to wait out a
+ * limit they never hit.
+ */
+const BUDGET_UNAVAILABLE_RETRY_SECONDS = 60;
+
+/**
+ * The policy's three refusals as the one `ImportResult` the client knows.
+ *
+ * `unidentified_caller` COLLAPSES INTO THE CALLER SCOPE, and that is the
+ * decision that actually closes the anon-key hole. Two facts make it safe:
+ * src/app/_layout.tsx redirects a signed-out person to `/sign-in` before any
+ * tab renders, so no real user of this app can produce it; and "we cannot
+ * tell who you are" is not a sentence anybody can act on, so giving it its
+ * own copy would be writing Dutch for a caller that is not a person. What it
+ * IS, in practice, is something holding the anon key out of the app bundle —
+ * and the honest answer to that is a refusal, not an explanation.
+ *
+ * The wait it is given is the caller window, which is the truth for the one
+ * case that reaches it from a real device: an app whose session expired
+ * mid-import. Signing in again resolves it long before the wait elapses.
+ */
+function toThrottledResult(decision: Exclude<ImportBudgetDecision, { kind: 'allowed' }>): ImportResult {
+  if (decision.kind === 'household_ceiling_exceeded') {
+    return { kind: 'import_throttled', scope: 'household', retryAfterSeconds: decision.retryAfterSeconds };
+  }
+  if (decision.kind === 'caller_rate_exceeded') {
+    return { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: decision.retryAfterSeconds };
+  }
+  return { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: UNIDENTIFIED_CALLER_RETRY_SECONDS };
+}
+
+/** The caller burst window, in whole seconds — see `toThrottledResult`. */
+const UNIDENTIFIED_CALLER_RETRY_SECONDS = 10 * 60;
+
+/**
+ * The route to record an attempt under.
+ *
+ * `unsupported_url` has no platform (it is refused before one is
+ * established) and `import_throttled` never reaches here at all — the gate
+ * returns before the pipeline runs. Both fall to `'text'`, which is the
+ * honest floor: a string we declined to open took no route, and the row
+ * exists because a caller hammering this endpoint with junk is exactly the
+ * traffic the counter is for. It costs zero either way.
+ */
+function recordablePlatform(result: ImportResult): ImportPlatform {
+  return result.kind === 'unsupported_url' || result.kind === 'import_throttled' ? 'text' : result.platform;
 }
 
 Deno.serve(async (request) => {
@@ -658,28 +740,79 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: importRequest.message }, 400);
   }
 
-  // IMP-06 / IMP-10 — THE GATE GOES HERE, AND DOES NOT EXIST YET: NOTHING
-  // BELOW IS THROTTLED. This line is the position, and the position is the
-  // argument. It is the single point at which a request becomes an import —
-  // past the boundary checks, before the `{ url }` / `{ text }` fork, and
-  // therefore before every third-party call, before the canonical-cache
-  // lookup and before Gemini. One door in, mirroring
+  // IMP-06 / IMP-10 — THE GATE. It is the single point at which a request
+  // becomes an import: past the boundary checks, before the `{ url }` /
+  // `{ text }` fork, and therefore before every third-party call, before the
+  // canonical-cache lookup and before Gemini. One door in, mirroring
   // `respondWithImportResult` as the one door out, so no branch added later
   // can skip it. NOT inside `resolveImport`: a `{ text }` body never enters
   // that function, and a gate placed there would leave the one route with no
   // cache, nothing to fetch and a guaranteed model call as the only
-  // unthrottled one. What plugs in here, what is still missing, and why an
-  // isolate-local counter is not a rate limit: importBudget.ts, beside this
-  // file. `decideImportBudget` itself is pure and tested in
-  // src/domain/import/importBudgetPolicy.ts.
+  // unthrottled one. importBudget.ts beside this file carries what each piece
+  // became; `decideImportBudget` is pure and tested in
+  // src/domain/import/importBudgetPolicy.ts, and the counter it reads is
+  // supabaseImportBudgetStore.ts.
+  const callerId = readCallerId(request);
+  const spend = createImportSpendRecorder();
+  let budget: CallerBudgetContext;
+  try {
+    budget = await readCallerBudget(callerId, await buildCallerFingerprint(callerId, readClientAddress(request)));
+  } catch (error) {
+    // FAILING CLOSED, and the reasoning is in supabaseImportBudgetStore.ts's
+    // header: a limiter that degrades to "allow" is an absent one, absent in
+    // the direction of the bill. The user is told to wait — which is true,
+    // and is the only advice that helps them — while the real cause is logged
+    // under its own grep token for whoever is on call.
+    if (!(error instanceof ImportBudgetUnavailableError)) {
+      throw error;
+    }
+    return respondWithImportResult({
+      kind: 'import_throttled',
+      scope: 'caller',
+      retryAfterSeconds: BUDGET_UNAVAILABLE_RETRY_SECONDS,
+    });
+  }
+
+  const decision = decideImportBudget({
+    now: Date.now(),
+    callerAttempts: budget.callerAttempts,
+    householdAttempts: budget.householdAttempts,
+  });
+  if (decision.kind !== 'allowed') {
+    // A REFUSAL IS NOT RECORDED AS AN ATTEMPT. It cost nothing — no fetch, no
+    // model — and writing a row for it would let a caller who is already over
+    // the limit keep pushing their own window forward, so a loop would extend
+    // its own ban indefinitely and never recover. The refusal is counted by
+    // IMP-07's telemetry instead, which is where refusals belong.
+    return respondWithImportResult(toThrottledResult(decision));
+  }
 
   try {
     // The two routes, and the only place either is entered. They converge
     // again one line down, which is what keeps both countable by one call.
     const result =
       importRequest.kind === 'url'
-        ? await resolveImport(importRequest.url)
-        : await resolveTextImport(importRequest.text);
+        ? await resolveImport(importRequest.url, spend)
+        : await resolveTextImport(importRequest.text, spend);
+    // Recorded BEFORE the response is built, and deliberately not awaited
+    // into the user's critical path any later than this: the money is spent
+    // by now, and a row written after the response would be a row that a
+    // cancelled request never writes. `classifyImportCost` decides the cost
+    // class — never this file, and never the branch that happens to be here.
+    await recordAttempt({
+      fingerprint: budget.fingerprint,
+      householdId: budget.householdId,
+      platform: recordablePlatform(result),
+      cost: classifyImportCost({
+        // `null` where the result genuinely has no platform, which
+        // `classifyImportCost` answers with `'free'` — a route that was never
+        // entered cannot have called a model. Not `recordablePlatform`'s
+        // `'text'` floor: that is a filing decision for the row, and feeding
+        // it to the cost classifier would claim a billable route was taken.
+        platform: result.kind === 'unsupported_url' || result.kind === 'import_throttled' ? null : result.platform,
+        calledExtractionModel: spend.calledExtractionModel,
+      }),
+    });
     // The one place an `ImportResult` becomes a response, which is therefore
     // the one place an import is counted — successes and modeled failures
     // alike, exactly once each, on both routes.

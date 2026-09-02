@@ -83,7 +83,7 @@
  *  - importAttribution.ts — `ImportAttribution`. A claim about a third
  *    party, which is what makes it neither content nor outcome, and the one
  *    shape in this family with somebody else's interest attached to it.
- *  - importResult.ts — `ImportResult`. The nine-variant answer, and two
+ *  - importResult.ts — `ImportResult`. The ten-variant answer, and two
  *    thirds of the length: the rule that every variant but one carries a
  *    `platform`, the rule that a field a producer knows for free is
  *    required, and the argument about where provenance may and may not

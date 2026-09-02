@@ -125,7 +125,7 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
 const PLATFORMS: ReadonlySet<string> = new Set(Object.keys(PLATFORM_MEMBERS));
 
 /**
- * The one reader for a field EIGHT of the nine variants now carry, written
+ * The one reader for a field EIGHT of the ten variants now carry, written
  * once so that all eight are held to the same standard.
  *
  * ABSENT AND UNRECOGNISED ARE THE SAME ANSWER HERE, and that is the
@@ -518,6 +518,28 @@ export function parseImportResult(raw: unknown): ImportResult | null {
       return platform === null ? null : { kind: 'llm_request_failed', platform };
     case 'parse_failed':
       return platform === null ? null : { kind: 'parse_failed', platform };
+    // The second arm that reads no platform (IMP-06 / IMP-10), for the same
+    // structural reason `unsupported_url` reads none: the budget gate runs
+    // before the `{ url }` / `{ text }` fork, so nothing has established a
+    // route by the time this outcome is produced.
+    //
+    // BOTH FIELDS ARE VALIDATED AND NEITHER IS DEFAULTED. A missing or
+    // unrecognised `scope` fails the whole result rather than falling back
+    // to `'caller'`: the two branches show different copy, and guessing
+    // would tell a household that one person was importing too fast. A
+    // `retryAfterSeconds` that is not a finite non-negative number fails it
+    // too — the copy renders that number into a sentence a person reads, so
+    // `NaN` here becomes "over NaN minuten" on a real screen. Both are the
+    // same fact this module exists to state: the function that answered is
+    // not the function this client was built against.
+    case 'import_throttled':
+      return raw.scope === 'caller' || raw.scope === 'household'
+        ? typeof raw.retryAfterSeconds === 'number' &&
+          Number.isFinite(raw.retryAfterSeconds) &&
+          raw.retryAfterSeconds >= 0
+          ? { kind: 'import_throttled', scope: raw.scope, retryAfterSeconds: raw.retryAfterSeconds }
+          : null
+        : null;
     default:
       return null;
   }

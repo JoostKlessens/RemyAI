@@ -83,13 +83,17 @@ import { readYouTubeVideoId } from '../../../src/domain/import/urlParsing.ts';
 import { findStoredRecipe } from './canonicalRecipeStore.ts';
 import { fetchYouTubeVideoSnippet } from './fetchSourceText.ts';
 import { extractRecipeFromCaption } from './finishImport.ts';
+import type { ImportSpendRecorder } from './importBudget.ts';
 
 /**
  * THE YOUTUBE ROUTE (SRC-02/SRC-03). The Data API's `videos.list` snippet
  * — never YouTube's oEmbed endpoint, see the header — and then the shared
  * caption pipeline every TikTok import already runs.
  */
-export async function resolveYouTubeImport(normalizedUrl: string): Promise<ImportResult> {
+export async function resolveYouTubeImport(
+  normalizedUrl: string,
+  spend: ImportSpendRecorder,
+): Promise<ImportResult> {
   const cached = await findStoredRecipe(normalizedUrl, 'youtube');
   if (cached !== null) {
     return cached;
@@ -123,6 +127,7 @@ export async function resolveYouTubeImport(normalizedUrl: string): Promise<Impor
     platform: 'youtube',
     caption: snippet.value.caption,
     attribution: snippet.value.attribution,
+    spend,
     // A model's reading of prose a creator published beside their own video.
     // Stated here rather than defaulted inside the shared tail, because this
     // route is the only code that knows how these particular words were

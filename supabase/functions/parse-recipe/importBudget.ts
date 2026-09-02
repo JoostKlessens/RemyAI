@@ -1,22 +1,23 @@
 /**
  * ---------------------------------------------------------------------------
- * IMP-06 / IMP-10 — THE IMPURE HALF, AND WHY IT IS STILL A STUB
+ * IMP-06 / IMP-10 — THE IMPURE HALF. NOW ENFORCED.
  * ---------------------------------------------------------------------------
  *
- * NOTHING IN THIS FUNCTION IS RATE LIMITED OR COST CAPPED TODAY. That is the
- * first sentence because a file named `importBudget.ts` sitting beside the
- * handler will otherwise be read as a defence, and reading it that way is
- * worse than not having it: a limiter everyone believes in and nobody
- * enforces is how a bill grows quietly.
+ * IMPORTS ARE RATE LIMITED AND COST CAPPED. This file spent most of its life
+ * saying the opposite, at length, and the argument it made is kept below
+ * rather than deleted — it is the reasoning that produced the table, and a
+ * limiter is exactly the kind of thing somebody removes later without knowing
+ * what it was defending.
  *
- * WHAT IS ACTUALLY WRONG, stated precisely. index.ts's header says this
- * function must never be deployed with `--no-verify-jwt`, because gateway
- * verification is "the only thing stopping an anonymous, unauthenticated
- * caller from running up this project's LLM bill". True, and narrower than
- * it sounds. Verification stops a caller with NO token. It does not stop:
+ * WHAT WAS WRONG, AND WAS CONFIRMED AGAINST THE DEPLOYMENT ON 2 SEPTEMBER
+ * 2026. index.ts's header says this function must never be deployed with
+ * `--no-verify-jwt`, because gateway verification is "the only thing stopping
+ * an anonymous, unauthenticated caller from running up this project's LLM
+ * bill". True, and narrower than it sounds — it stops a caller with NO token,
+ * and nothing else. It did not stop:
  *
- *  - A SIGNED-IN USER IN A LOOP. Nothing counts how many times one account
- *    calls this endpoint. SRC-08 made that materially cheaper to exploit:
+ *  - A SIGNED-IN USER IN A LOOP. Nothing counted how many times one account
+ *    called this endpoint. SRC-08 made that materially cheaper to exploit:
  *    the other four routes need a real post, a real video id or a real page,
  *    and the Fase 1b cache makes a repeat of the same URL free — where
  *    `{ text }` has no URL to normalise, nothing to fetch, no cache key to
@@ -25,12 +26,41 @@
  *    `sub`. It ships inside the app bundle by design
  *    (`EXPO_PUBLIC_SUPABASE_ANON_KEY`) and `supabase.functions.invoke` sends
  *    it as the bearer token whenever there is no session. It passes the
- *    gateway and names nobody. "Verified JWT" and "a user" are not the same
- *    claim, and only the first is currently checked.
+ *    gateway and names nobody. A POST of `{"text":"x"}` carrying nothing but
+ *    that key was answered with HTTP 400 by the live deployment — a 400 from
+ *    `readImportRequest`, which is to say the caller had reached the handler.
+ *    The gap was not theoretical.
+ *
+ * WHAT CLOSED IT, IN THE THREE PIECES THIS FILE ASKED FOR:
+ *
+ *  1. THE DURABLE COUNTER is `public.import_attempts`
+ *     (supabase/migrations/0012_import_rate_limit.sql), read and written by
+ *     supabaseImportBudgetStore.ts beside this file. `ImportBudgetStore`
+ *     below is the interface that was specified for it; the shipped module
+ *     diverges in one place and says why.
+ *  2. THE HOUSEHOLD LOOKUP is in that same module, one round trip from
+ *     `household_members.auth_user_id` to `household_id`, memoised for the
+ *     request because both the ceiling read and the insert need it.
+ *  3. THE TYPED REFUSAL is `import_throttled`
+ *     (src/domain/import/importResult.ts), a tenth member of `ImportResult`
+ *     carrying a scope and a wait. No existing member was borrowed, for the
+ *     reasons listed under piece 3 in the original text below.
+ *
+ * AN UNIDENTIFIED CALLER IS NOW REFUSED OUTRIGHT, which is the half that
+ * actually closes the anon-key hole rather than merely metering it. That is
+ * safe here and would not be everywhere: src/app/_layout.tsx redirects a
+ * signed-out person to `/sign-in` before any tab renders, so every import a
+ * real user of this app can start carries a session token with a `sub`. A
+ * caller with none is not a user having a bad day; it is something holding a
+ * key out of the bundle.
  *
  * ---
  *
- * WHY THE FIX IS NOT IN THIS FILE, WHICH IS THE WHOLE POINT.
+ * THE ORIGINAL ARGUMENT, KEPT VERBATIM. Everything below was written while
+ * none of this existed, and it is why all of it does. The present tense in it
+ * describes the state it was written in, not the state of this directory now.
+ *
+ * WHY THE FIX WAS NOT IN THIS FILE, WHICH WAS THE WHOLE POINT.
  *
  * A rate limit must COUNT ACROSS INVOCATIONS. An edge function isolate is
  * ephemeral and there are many at once, so a module-level `Map` here would
@@ -62,7 +92,8 @@
  *
  * ---
  *
- * WHAT THE OWNER HAS TO DECIDE, IN THREE PIECES.
+ * WHAT THE OWNER HAD TO DECIDE, IN THREE PIECES — ALL THREE NOW TAKEN; SEE
+ * THE TOP OF THIS FILE FOR WHAT EACH ONE BECAME.
  *
  *  1. A DURABLE COUNTER — a small append-only `import_attempts` table keyed
  *     on the caller and on the household, holding a timestamp and a
@@ -108,11 +139,54 @@ import type { ImportAttemptRecord, ImportCostClass } from '../../../src/domain/i
  * and index.ts's `--no-verify-jwt` note for the deployment fact both depend
  * on. Do not reuse this on a path where that gateway check has not run.
  *
- * NOT CALLED YET. Its one intended caller is the marked gate in index.ts,
- * which cannot run until piece 1 above exists.
+ * ITS ONE CALLER IS THE GATE IN index.ts, which is now real — see this
+ * file's header for what changed.
  */
 export function readCallerId(request: Request): string | null {
   return readCallerIdFromAuthorizationHeader(request.headers.get('authorization'));
+}
+
+/**
+ * Whether THIS request reached the extraction model — one mutable fact, held
+ * for the life of one request and nothing longer.
+ *
+ * `classifyImportCost` (src/domain/import/importBudgetPolicy.ts) needs it and
+ * says plainly that "the shell is the only thing that knows": a cache hit, a
+ * failed oEmbed call, a blank caption and a refused page all end a billable
+ * ROUTE without a billable CALL, and the `ImportResult` cannot be read for
+ * the answer — `parseStoredRecipe` returns a `parsed` variant deliberately
+ * indistinguishable from a fresh extraction, which is exactly the
+ * distinction a bill turns on.
+ *
+ * WHY IT IS THREADED THROUGH THE CALL CHAIN RATHER THAN HELD IN A MODULE
+ * VARIABLE. A module-level flag is the obvious shape and is wrong for the
+ * same reason importBudget.ts's header rejects a module-level `Map` as a rate
+ * limiter: an isolate serves many requests, and `Deno.serve` interleaves them
+ * at every `await`. Two imports in flight would share one flag, so a cache
+ * hit landing beside a fresh extraction would bill the wrong one — and it
+ * would do so only under concurrency, which is to say only in production.
+ * Passing the recorder makes the request it belongs to a fact the type system
+ * carries.
+ *
+ * IT ONLY EVER GOES FROM FALSE TO TRUE. There is no `reset`, and no way to
+ * un-spend money that has been spent.
+ */
+export interface ImportSpendRecorder {
+  /** Called immediately before the model request is issued, never after it returns — a call that fails still cost the round trip. */
+  markModelCalled(): void;
+  readonly calledExtractionModel: boolean;
+}
+
+export function createImportSpendRecorder(): ImportSpendRecorder {
+  let called = false;
+  return {
+    markModelCalled(): void {
+      called = true;
+    },
+    get calledExtractionModel(): boolean {
+      return called;
+    },
+  };
 }
 
 /**

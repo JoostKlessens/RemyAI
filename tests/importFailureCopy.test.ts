@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { OembedErrorReason } from '@/lib/oembed';
 import type { ImportPlatform, SourceFetchFailureReason } from '@/domain/import/types';
-import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
+import { buildImportFailureCopy, formatRetryWait, type ImportFailureResult } from '@/components/importFailureCopy';
 
 /**
  * WHY EVERY LITERAL BELOW NOW STATES A PLATFORM, AND WHY THESE BUILDERS
@@ -510,5 +510,202 @@ describe('buildImportFailureCopy — parse_failed was already medium-neutral', (
     const caption = buildImportFailureCopy({ kind: 'parse_failed', platform: CAPTION_PLATFORM });
     expect(pasted).toEqual(caption);
     expect(pasted.body.toLowerCase()).not.toContain('video');
+  });
+});
+
+
+/**
+ * IMP-06 / IMP-10 — the throttle's user-facing half.
+ *
+ * Two things are proven here and they differ in kind. The first is
+ * arithmetic: `formatRetryWait` turns seconds into a Dutch phrase, and its
+ * rounding DIRECTION is a correctness property rather than a style choice —
+ * a caller told "over 4 minuten" who returns after exactly four and is
+ * refused again was lied to by a rounding rule, and reads that second
+ * refusal as a bug.
+ *
+ * The second is a promise about what this copy MAY NOT SAY, and neither half
+ * of it is something a type can catch:
+ *
+ *  - It must leak no count. Telling somebody "20 van 20" hands them the
+ *    ceiling to sit against, which is the response-body half of the argument
+ *    0012 makes with its zero-policy RLS.
+ *  - The household branch must not blame the person holding the phone for
+ *    spending somebody else in the house did.
+ *
+ * Both are asserted against the rendered strings, because both are exactly
+ * what a well-meaning copy edit puts back.
+ */
+function throttled(scope: 'caller' | 'household', retryAfterSeconds: number): ImportFailureResult {
+  return { kind: 'import_throttled', scope, retryAfterSeconds };
+}
+
+describe('formatRetryWait', () => {
+  test('rounds up, so the advised wait is never shorter than the real one', () => {
+    // Arrange
+    const justOverFourMinutes = 4 * 60 + 1;
+
+    // Act
+    const phrase = formatRetryWait(justOverFourMinutes);
+
+    // Assert
+    expect(phrase).toBe('over 5 minuten');
+  });
+
+  test('reads a sub-minute wait as a single minute rather than as seconds', () => {
+    // Arrange
+    const seconds = 12;
+
+    // Act
+    const phrase = formatRetryWait(seconds);
+
+    // Assert
+    expect(phrase).toBe('over een minuut');
+  });
+
+  test('uses the singular for exactly one minute and for exactly one hour', () => {
+    // Arrange
+    const oneMinute = 60;
+    const oneHour = 60 * 60;
+
+    // Act
+    const minutePhrase = formatRetryWait(oneMinute);
+    const hourPhrase = formatRetryWait(oneHour);
+
+    // Assert
+    expect(minutePhrase).toBe('over een minuut');
+    expect(hourPhrase).toBe('over een uur');
+  });
+
+  test('switches to hours once a wait passes an hour, still rounded up', () => {
+    // Arrange
+    const threeAndABitHours = 3 * 60 * 60 + 1;
+
+    // Act
+    const phrase = formatRetryWait(threeAndABitHours);
+
+    // Assert
+    expect(phrase).toBe('over 4 uur');
+  });
+
+  test('renders no NaN to a real person when handed a broken number', () => {
+    // Arrange
+    const broken = [Number.NaN, Number.POSITIVE_INFINITY, -1, 0];
+
+    // Act
+    const phrases = broken.map(formatRetryWait);
+
+    // Assert
+    for (const phrase of phrases) {
+      expect(phrase).toBe('zo meteen');
+    }
+  });
+});
+
+describe('buildImportFailureCopy — import_throttled', () => {
+  test('puts the wait in the body, so the reader knows when to come back', () => {
+    // Arrange
+    const result = throttled('caller', 4 * 60);
+
+    // Act
+    const copy = buildImportFailureCopy(result);
+
+    // Assert
+    expect(copy.body).toContain('over 4 minuten');
+  });
+
+  test('offers manual entry as the primary way forward on both scopes', () => {
+    // Arrange
+    const results = [throttled('caller', 120), throttled('household', 3600)];
+
+    // Act
+    const copies = results.map(buildImportFailureCopy);
+
+    // Assert
+    // Typing a recipe in by hand costs this project nothing, so it is the one
+    // path genuinely open while the metered one is shut. Offering it is the
+    // difference between a limit and a wall.
+    for (const copy of copies) {
+      expect(copy.manualEntryIsPrimary).toBe(true);
+    }
+  });
+
+  test('offers no retry, because a retry inside the window is refused again', () => {
+    // Arrange
+    const results = [throttled('caller', 120), throttled('household', 3600)];
+
+    // Act
+    const copies = results.map(buildImportFailureCopy);
+
+    // Assert
+    for (const copy of copies) {
+      expect(copy.canRetry).toBe(false);
+      expect(copy.quote).toBeNull();
+    }
+  });
+
+  test('leaks no count, ceiling or remaining budget — every digit comes from the wait', () => {
+    // Arrange
+    const results = [throttled('caller', 5 * 60), throttled('household', 2 * 60 * 60)];
+    const digitsFromTheWait = ['5', '2'];
+
+    // Act
+    const rendered = results.map((result) => {
+      const copy = buildImportFailureCopy(result);
+      return `${copy.title} ${copy.body}`.match(/\d+/g) ?? [];
+    });
+
+    // Assert
+    expect(rendered[0]).toEqual([digitsFromTheWait[0]]);
+    expect(rendered[1]).toEqual([digitsFromTheWait[1]]);
+  });
+
+  test('the household sentence names a household and never accuses the reader', () => {
+    // Arrange
+    const result = throttled('household', 3 * 60 * 60);
+
+    // Act
+    const copy = buildImportFailureCopy(result);
+
+    // Assert
+    // Somebody else in the house may have spent the budget, so the sentence
+    // explaining the refusal has to name the household. "Je huishouden" does;
+    // "je hebt" would accuse the wrong person.
+    expect(copy.body).toContain('huishouden');
+    expect(copy.body).not.toContain('je hebt');
+  });
+
+  test('tells the two scopes apart, in the title as well as the body', () => {
+    // Arrange
+    const caller = buildImportFailureCopy(throttled('caller', 300));
+    const household = buildImportFailureCopy(throttled('household', 300));
+
+    // Act
+    const titles = [caller.title, household.title];
+
+    // Assert
+    // A merged sentence would be the shared "something went wrong" bucket
+    // this union exists to refuse: one is a short wait, the other is done for
+    // the day, and they set different expectations.
+    expect(titles[0]).not.toBe(titles[1]);
+    expect(caller.body).not.toBe(household.body);
+  });
+
+  test('sounds like a decision rather than a malfunction', () => {
+    // Arrange
+    const results = [throttled('caller', 120), throttled('household', 3600)];
+
+    // Act
+    const bodies = results.map((result) => buildImportFailureCopy(result).body.toLowerCase());
+
+    // Assert
+    // Nothing broke and the user did nothing wrong, so no sentence here may
+    // apologise for a fault or blame the paste — the same care display_only's
+    // copy takes, for the same reason.
+    for (const body of bodies) {
+      expect(body).not.toContain('fout');
+      expect(body).not.toContain('mislukt');
+      expect(body).not.toContain('storing');
+    }
   });
 });

@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "check:functions": "tsc -p supabase/functions/tsconfig.json",
     "lint": "eslint --config lint/eslint.flat.config.mjs ."
   },
   "dependencies": {

@@ -723,3 +723,99 @@ describe('parseImportResult — no_recipe_in_caption for a pasted-text import', 
     expect(parseImportResult({ kind: 'no_recipe_in_caption', caption: 'wat tekst', platform: 'text' })).toBeNull();
   });
 });
+
+/**
+ * IMP-06 / IMP-10. The throttle crosses the wire like every other outcome,
+ * and this module is the only thing standing between a malformed body and a
+ * screen. Two of its fields are read by a person: `scope` picks which of two
+ * sentences they see, and `retryAfterSeconds` is rendered into that sentence
+ * as a number of minutes. So neither may be defaulted — a guessed scope tells
+ * a household that one of them was importing too fast, and a `NaN` wait
+ * reaches a real phone as "over NaN minuten".
+ */
+describe('parseImportResult — import_throttled', () => {
+  test('accepts a well-formed refusal on both scopes', () => {
+    // Arrange
+    const caller = { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 240 };
+    const household = { kind: 'import_throttled', scope: 'household', retryAfterSeconds: 3600 };
+
+    // Act
+    const parsedCaller = parseImportResult(caller);
+    const parsedHousehold = parseImportResult(household);
+
+    // Assert
+    expect(parsedCaller).toEqual({ kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 240 });
+    expect(parsedHousehold).toEqual({ kind: 'import_throttled', scope: 'household', retryAfterSeconds: 3600 });
+  });
+
+  test('reads no platform, because the gate refuses before a route is entered', () => {
+    // Arrange
+    // A platform on the wire is IGNORED rather than rejected: the gate runs
+    // before the `{ url }` / `{ text }` fork, so a server sending one is
+    // describing something it cannot know.
+    const withPlatform = { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 60, platform: 'tiktok' };
+
+    // Act
+    const parsed = parseImportResult(withPlatform);
+
+    // Assert
+    expect(parsed).toEqual({ kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 60 });
+    expect(parsed).not.toHaveProperty('platform');
+  });
+
+  test('rejects an unknown or missing scope rather than defaulting to caller', () => {
+    // Arrange
+    const bodies = [
+      { kind: 'import_throttled', retryAfterSeconds: 60 },
+      { kind: 'import_throttled', scope: 'global', retryAfterSeconds: 60 },
+      { kind: 'import_throttled', scope: null, retryAfterSeconds: 60 },
+      { kind: 'import_throttled', scope: 1, retryAfterSeconds: 60 },
+    ];
+
+    // Act
+    const parsed = bodies.map(parseImportResult);
+
+    // Assert
+    // Defaulting here would show a household the wrong sentence — blaming the
+    // person holding the phone for spending somebody else did.
+    for (const result of parsed) {
+      expect(result).toBeNull();
+    }
+  });
+
+  test('rejects a wait that is not a finite, non-negative number', () => {
+    // Arrange
+    const bodies = [
+      { kind: 'import_throttled', scope: 'caller' },
+      { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: '60' },
+      { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: Number.NaN },
+      { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: Number.POSITIVE_INFINITY },
+      { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: -1 },
+    ];
+
+    // Act
+    const parsed = bodies.map(parseImportResult);
+
+    // Assert
+    // The copy renders this number into a sentence a person reads; every one
+    // of these would reach a screen as nonsense rather than as a wait.
+    for (const result of parsed) {
+      expect(result).toBeNull();
+    }
+  });
+
+  test('accepts a zero wait, which the copy renders as "zo meteen" rather than refusing', () => {
+    // Arrange
+    const body = { kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 0 };
+
+    // Act
+    const parsed = parseImportResult(body);
+
+    // Assert
+    // The policy clamps its own output to at least a second, so zero should
+    // not arrive — but it is a FINITE, non-negative number, and refusing the
+    // whole result over a boundary the copy already handles would turn a
+    // legible refusal into version skew.
+    expect(parsed).toEqual({ kind: 'import_throttled', scope: 'caller', retryAfterSeconds: 0 });
+  });
+});

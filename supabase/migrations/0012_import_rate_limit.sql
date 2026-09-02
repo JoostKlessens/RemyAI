@@ -1,10 +1,26 @@
--- Remy — the durable counter the import throttle needs to be real.
+-- Remy — the durable counter that makes the import throttle real.
 --
--- PROPOSAL, NOT YET APPLIED. `decideImportBudget`
--- (src/domain/import/importBudgetPolicy.ts) is built and tested and
+-- APPLIED 2 SEPTEMBER 2026. `decideImportBudget`
+-- (src/domain/import/importBudgetPolicy.ts) was built, tested and
 -- deliberately wired to nothing, because a throttle backed by a counter
--- that forgets is a throttle in name only. This table is the counter. It
--- is the whole of what that policy is waiting for.
+-- that forgets is a throttle in name only. This table is that counter, and
+-- supabaseImportBudgetStore.ts beside the edge function is the only code
+-- that reads or writes it.
+--
+-- ---------------------------------------------------------------------
+-- BEFORE DEPLOYING: ONE NEW SECRET IS REQUIRED
+--
+--   supabase secrets set IMPORT_FINGERPRINT_SALT=<32+ random bytes, hex>
+--
+-- The function REFUSES TO BOOT without it, on purpose. It is what turns an
+-- unidentified caller's IP into `caller_fingerprint`, and without it the
+-- only honest options are storing a raw address — personal data under GDPR,
+-- in a table whose whole design argument is that it holds none — or hashing
+-- unsalted, which is the same thing with an extra step, since the IPv4
+-- space is enumerable in seconds. Booting without it would mean quietly
+-- picking one of those two. Rotating it resets every anonymous bucket,
+-- which is harmless: identified callers are keyed on their auth subject and
+-- are unaffected.
 --
 -- ---------------------------------------------------------------------
 -- WHY THIS IS NOT MERELY PRUDENT
@@ -23,11 +39,20 @@
 -- oEmbed round trip, no real video. A loop posting `{"text": "..."}` is a
 -- loop calling a paid model on the project's account.
 --
--- Confirm it against the deployment before deciding how urgent this is:
+-- THIS WAS CONFIRMED AGAINST THE LIVE DEPLOYMENT, NOT ASSUMED:
 --   POST $SUPABASE_URL/functions/v1/parse-recipe
 --   Authorization: Bearer $ANON_KEY
 --   {"text":"x"}
--- A 200 or a 400 both mean the caller reached the function.
+-- answered HTTP 400 — a 400 from `readImportRequest`, which is to say the
+-- caller had already reached the handler. A 200 or a 400 both mean that.
+-- The gap was real, and it is what moved this file from proposal to applied.
+--
+-- IT IS NOW CLOSED AT THE GATE RATHER THAN MERELY METERED. An unidentified
+-- caller — one whose token carries no `sub`, which is exactly what the anon
+-- key is — is refused outright, not given a small budget. That is safe here
+-- because src/app/_layout.tsx sends a signed-out person to `/sign-in`
+-- before any tab renders, so every import a real user can start carries a
+-- session token.
 --
 -- ---------------------------------------------------------------------
 -- WHAT IS COUNTED, AND WHAT IS DELIBERATELY NOT STORED

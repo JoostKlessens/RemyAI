@@ -526,8 +526,14 @@ describe('canStoreCanonicalRecipe — the 0006 CHECK constraint, mirrored', () =
    * web import reports `recipeId: null`, deduplicates against nothing, and
    * can never carry `shared_cooks` / FRIEND_PROOF_BOOST.
    */
-  test('refuses youtube and web, which the column would reject outright', () => {
-    expect(canStoreCanonicalRecipe('youtube')).toBe(false);
+  test('permits youtube since 0011, and still refuses web, which the column would reject outright', () => {
+    // Arrange / Act / Assert
+    // 0011 widened the CHECK to `'youtube'` and deliberately stopped there:
+    // a video description is frozen, a web page is edited under a row we
+    // cached. Asserting BOTH halves is the point — a change that widened
+    // this to `'web'` without answering the staleness question, or that
+    // failed to widen it to `'youtube'` at all, fails here.
+    expect(canStoreCanonicalRecipe('youtube')).toBe(true);
     expect(canStoreCanonicalRecipe('web')).toBe(false);
   });
 
@@ -539,9 +545,9 @@ describe('canStoreCanonicalRecipe — the 0006 CHECK constraint, mirrored', () =
    * a change that widened this by accident would start writing rows the
    * database rejects.
    */
-  test('is a two-member answer across the whole platform vocabulary, not a growing one', () => {
+  test('is a three-member answer across the whole platform vocabulary, not a growing one', () => {
     const storable = (['tiktok', 'instagram', 'youtube', 'web'] as const).filter(canStoreCanonicalRecipe);
-    expect(storable).toEqual(['tiktok', 'instagram']);
+    expect(storable).toEqual(['tiktok', 'instagram', 'youtube']);
   });
 });
 
@@ -550,8 +556,8 @@ describe('canStoreCanonicalRecipe — the 0006 CHECK constraint, mirrored', () =
  * lift: a canonical recipe is keyed on a normalized URL and a pasted-text
  * import has none, so there is nothing to store it under and nothing for a
  * later import to match against. That makes it categorically different
- * from `'youtube'` and `'web'`, which are refused by a CHECK constraint
- * somebody could widen tomorrow.
+ * from `'web'`, which is refused by a CHECK constraint somebody could widen
+ * tomorrow — and from `'youtube'`, which somebody already did (0011).
  */
 describe('canonicalRecipe — the pasted-text route has nothing to deduplicate against', () => {
   test('refuses to store a text import, permanently and not pending a migration', () => {
@@ -563,9 +569,13 @@ describe('canonicalRecipe — the pasted-text route has nothing to deduplicate a
    * NOT track `ImportPlatform` as it gains members, so every new member
    * added to this array should still leave the answer at exactly two.
    */
-  test('is still a two-member answer across the whole widened platform vocabulary', () => {
+  test('stays out of the answer even as the answer grows', () => {
     const storable = (['tiktok', 'instagram', 'youtube', 'web', 'text'] as const).filter(canStoreCanonicalRecipe);
-    expect(storable).toEqual(['tiktok', 'instagram']);
+    // 0011 grew this set by one member and `'text'` was not it, which is the
+    // whole assertion: the set is opt-in, so a widening has to name what it
+    // is admitting rather than sweeping in whatever else was in the union.
+    expect(storable).toEqual(['tiktok', 'instagram', 'youtube']);
+    expect(storable).not.toContain('text');
   });
 
   /**

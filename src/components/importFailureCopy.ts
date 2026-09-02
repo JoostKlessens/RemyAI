@@ -217,7 +217,7 @@ function sourceFetchFailureBody(reason: SourceFetchFailureReason): string {
 
 /**
  * The reasons where "Opnieuw proberen" is a promise we cannot keep. All
- * nine members were re-read against reality when `forbidden` and
+ * ten members were re-read against reality when `forbidden` and
  * `rate_limited` joined the union, and one of them was already on the
  * wrong side.
  *
@@ -472,9 +472,92 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
         canRetry: true,
         manualEntryIsPrimary: true,
       };
+    // IMP-06 / IMP-10. The one outcome in this union that is Remy's
+    // decision rather than a limitation of the source, and the copy has to
+    // own that instead of dressing it as a malfunction. Nothing is broken,
+    // nothing about the recipe is wrong, and the user did nothing incorrect
+    // — so no sentence here apologises for a fault and none blames the
+    // paste.
+    //
+    // IT NAMES A WAIT AND NEVER A NUMBER OF IMPORTS. Telling someone they
+    // have "20 of 20" hands them the ceiling to sit against, which is the
+    // response-body half of the argument 0012 makes with its zero-policy
+    // RLS. A wait is the one fact they can act on.
+    //
+    // `manualEntryIsPrimary` IS TRUE ON BOTH BRANCHES, and that is the
+    // useful part rather than a formality: typing the recipe in by hand
+    // costs this project nothing, so it is the one path that is genuinely
+    // open while the metered one is shut. Offering it is the difference
+    // between a limit and a wall.
+    case 'import_throttled': {
+      const wait = formatRetryWait(result.retryAfterSeconds);
+      // The household branch must not blame the person holding the phone
+      // for spending somebody else in the house did — "je huishouden"
+      // rather than "je", and no second person singular anywhere in it.
+      if (result.scope === 'household') {
+        return {
+          title: 'Genoeg imports voor vandaag',
+          body:
+            `Je huishouden heeft het dagelijkse aantal imports bereikt. Dat wordt ${wait} weer vrijgegeven. ` +
+            'Tot die tijd kun je een recept nog wel zelf overtypen — dat telt niet mee.',
+          quote: null,
+          // A retry inside the window is guaranteed to be refused again, and
+          // a button that promises otherwise is the thing `canRetry` exists
+          // to prevent. The wait is in the sentence instead.
+          canRetry: false,
+          manualEntryIsPrimary: true,
+        };
+      }
+      return {
+        title: 'Even te snel achter elkaar',
+        body:
+          `Remy verwerkt een paar imports tegelijk en je zit nu aan dat maximum. Probeer het ${wait} opnieuw. ` +
+          'Wil je niet wachten, dan kun je het recept zelf overtypen.',
+        quote: null,
+        canRetry: false,
+        manualEntryIsPrimary: true,
+      };
+    }
     default: {
       const exhaustiveCheck: never = result;
       throw new Error(`Unhandled ImportResult kind: ${JSON.stringify(exhaustiveCheck)}`);
     }
   }
 }
+
+
+/**
+ * A wait in seconds as a Dutch phrase that slots into "Probeer het ___
+ * opnieuw".
+ *
+ * ROUNDED UP, ALWAYS. A caller told "over 4 minuten" who returns after
+ * exactly four and is refused again has been lied to by a rounding rule,
+ * and the second refusal is the one that reads as a bug. Rounding up can
+ * only ever make the advice conservative, which is the harmless direction.
+ *
+ * THE BANDS ARE COARSE ON PURPOSE. "Over 7 minuten" implies a precision
+ * this number does not have — the window slides continuously and another
+ * member of the household may spend in the meantime — so the phrasing gets
+ * vaguer as the wait gets longer, which is how people actually talk about
+ * waiting anyway.
+ */
+export function formatRetryWait(retryAfterSeconds: number): string {
+  // A non-finite or negative number can only come from a producer that is
+  // already wrong; answering with the vaguest honest phrase keeps this
+  // total rather than rendering "over NaN minuten" to a real person.
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return 'zo meteen';
+  }
+  if (retryAfterSeconds < SECONDS_PER_MINUTE) {
+    return 'over een minuut';
+  }
+  if (retryAfterSeconds < SECONDS_PER_HOUR) {
+    const minutes = Math.ceil(retryAfterSeconds / SECONDS_PER_MINUTE);
+    return minutes === 1 ? 'over een minuut' : `over ${minutes} minuten`;
+  }
+  const hours = Math.ceil(retryAfterSeconds / SECONDS_PER_HOUR);
+  return hours === 1 ? 'over een uur' : `over ${hours} uur`;
+}
+
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 60 * 60;
