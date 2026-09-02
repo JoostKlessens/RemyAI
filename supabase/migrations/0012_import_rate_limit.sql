@@ -1,6 +1,15 @@
 -- Remy — the durable counter that makes the import throttle real.
 --
--- APPLIED 2 SEPTEMBER 2026. `decideImportBudget`
+-- NOT YET APPLIED — written 2 September 2026, still unrun against any
+-- database. This line previously read "APPLIED 2 SEPTEMBER 2026", which was
+-- false in the one direction that costs something: it told an operator
+-- reading this file that the deploy blocker was discharged, when running
+-- this migration is the FIRST item on the blocking list in
+-- docs/OPEN-BESLISSINGEN.md §1 and the gate in index.ts fails closed without
+-- the table. Whoever runs `supabase db push` should flip this line in the
+-- same commit as the push — a status comment nobody updates is worse than no
+-- status comment at all, because the next reader cannot tell which of the
+-- two they are holding. `decideImportBudget`
 -- (src/domain/import/importBudgetPolicy.ts) was built, tested and
 -- deliberately wired to nothing, because a throttle backed by a counter
 -- that forgets is a throttle in name only. This table is that counter, and
@@ -162,8 +171,12 @@ alter table public.import_attempts enable row level security;
 --   delete from public.import_attempts
 --   where attempted_at < now() - interval '48 hours';
 --
--- Until that is scheduled this table grows without bound. Worth knowing
--- before applying rather than discovering in three months.
+-- SCHEDULED AS OF 0013_import_attempts_retention.sql, which took the third
+-- option: pg_cron in its own migration, because neither home offered above
+-- exists in this repo — the 16:00 job is a design in ARCHITECTURE.md, not a
+-- migration. The statement it runs is the one written directly above, and
+-- the window's reasoning stays here. Apply both or neither: 0012 without
+-- 0013 is the unbounded table this paragraph used to warn about.
 --
 -- ---------------------------------------------------------------------
 -- THE RACE, STATED PLAINLY RATHER THAN LEFT TO BE FOUND
