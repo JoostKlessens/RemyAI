@@ -59,12 +59,16 @@
  * many dinners this week holds. `unresolvedMealIds` keeps it visible and
  * `plannedMealCount` keeps counting it.
  *
- * AN ARCHIVED DISH STAYS, FLAGGED. A household that removed a dish from
- * Mijn recepten (`archiveMeal`) still has its `this_week` save standing —
- * `listPendingSaves` never looks at `meals.archived_at` — so its
- * ingredients are still on the shopping list. Hiding it here would make
- * this screen lie about that list; `isArchived` lets the screen say the
- * true and slightly awkward thing instead.
+ * NOTHING HERE KNOWS ABOUT ARCHIVING ANY MORE, AND THAT IS A FIX RATHER
+ * THAN A GAP. This module used to carry an `isArchived` flag so the screen
+ * could admit the awkward truth that a dish removed from Mijn recepten was
+ * still filling the shopping list — `listPendingSaves` did not look at
+ * `meals.archived_at`. It does now (see local/saves.ts), so an archived
+ * dish never reaches this function at all, and a flag that can only ever be
+ * `false` is worse than no flag: it keeps a screen ready to explain a
+ * situation that cannot arise, and keeps a reader looking for the bug it
+ * was compensating for. A save whose meal row is missing ENTIRELY is a
+ * different fact and is still reported — see `unresolvedMealIds` above.
  *
  * ---
  *
@@ -86,8 +90,6 @@ export interface WeekPlanEntry {
    * on why nothing here becomes a weekday.
    */
   readonly plannedAt: IsoDateTimeString;
-  /** `meal.archivedAt !== null`, normalised once so no screen re-derives it. See the header. */
-  readonly isArchived: boolean;
 }
 
 export interface WeekPlan {
@@ -173,9 +175,12 @@ function compareEntries(left: WeekPlanEntry, right: WeekPlanEntry): number {
  * `saves` must be `RemyRepository.listPendingSaves(householdId,
  * 'this_week')`. `meals` are those saves' meals as
  * `RemyRepository.getMeal` returned them, with the nulls dropped —
- * deliberately NOT `listHouseholdMeals`, which filters out archived meals
- * and would silently shrink a week the shopping list is still shopping
- * for.
+ * deliberately NOT `listHouseholdMeals`. That used to be an argument about
+ * archived dishes and no longer is (the repository drops their saves now);
+ * what still makes a per-id read the right one is `unresolvedMealIds`. A
+ * list read cannot tell a save whose meal row is GONE apart from one whose
+ * meal simply was not in the list, and this function has to report the
+ * first — the shopping list still counts it.
  *
  * Both output arrays are freshly built here, so sorting them is not a
  * mutation of anything the caller can see.
@@ -193,7 +198,7 @@ export function buildWeekPlan(saves: readonly Save[], meals: readonly Meal[]): W
       unresolvedMealIds.push(mealId);
       continue;
     }
-    entries.push({ meal, plannedAt, isArchived: meal.archivedAt !== null });
+    entries.push({ meal, plannedAt });
   }
 
   return {

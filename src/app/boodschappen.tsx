@@ -16,10 +16,20 @@
  *
  * "PLANNED THIS WEEK" MEANS `listPendingSaves(householdId, 'this_week')`,
  * not every meal with an active "deze week" save. That method (see
- * src/lib/repository/local/saves.ts) already drops a save once its meal has
- * been cooked since — once dinner happened, there is nothing left to shop
- * for, and continuing to list its ingredients would make a shopper re-buy
- * what they already have. A meal saved twice with the same intent
+ * src/lib/repository/local/saves.ts) drops a save on either of two facts,
+ * and both of them are reasons this list would otherwise buy food nobody
+ * wanted. It drops a save once its meal has been cooked since — once
+ * dinner happened, there is nothing left to shop for, and continuing to
+ * list its ingredients would make a shopper re-buy what they already have.
+ * And it drops a save whose meal the household has ARCHIVED: "Verwijderen"
+ * in Mijn recepten does not touch saves, so until that filter existed a
+ * dish somebody had deliberately removed kept its ingredients on this list
+ * forever, with no act available to anybody that could take them off. That
+ * check lives at the repository and NOT in this file, which is the whole
+ * point of stating the definition here once: a filter this screen applied
+ * privately would be a second definition of the week, and /deze-week would
+ * still be showing the dish this list had quietly stopped buying for. A
+ * meal saved twice with the same intent
  * contributes its ingredients once: `uniqueMealIds` below dedupes by
  * `mealId` before any ingredient is ever fetched, matching
  * `buildShoppingList`'s own "one bucket per (name, unit)" de-duplication in

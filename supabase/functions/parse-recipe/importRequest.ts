@@ -36,16 +36,20 @@
  *
  * ---
  *
- * THE LENGTH CAP IS A BILL DEFENCE. It is the same defence
- * `MAX_RECIPE_PAGE_BYTES` (src/domain/import/htmlJsonLd.ts) makes one route
- * over, and it is here for the same structural reason: the content this
- * function processes is chosen by whoever is calling it, so an unbounded
- * input is an unbounded cost that somebody else gets to pick. What differs is
- * WHICH cost. A giant page costs memory and wall-clock inside this isolate; a
- * giant paste costs TOKENS — metered, on this project's own Gemini account —
- * so a loop posting five megabytes of text is not a crash, it is an invoice.
- * Nothing further down bounds it either: the model is asked to read whatever
- * arrives.
+ * THE LENGTH CAP IS A BILL DEFENCE, AND IT IS NOT THIS FILE'S DECISION.
+ * `MAX_PASTED_RECIPE_TEXT_CHARS` and the `readPastedText` classification are
+ * imported from src/domain/import/pastedTextLimits.ts, which argues the
+ * number, the unit and the trimming in full — and which the paste screen
+ * calls too, so the two ends of the wire cannot hold different opinions
+ * about what is too long. What this file decides is only what a REQUEST that
+ * fails that check gets back.
+ *
+ * WHAT THE CAP DOES NOT BOUND, said out loud rather than discovered later:
+ * the request body itself. By the time it is consulted, `request.json()` has
+ * already read and parsed whatever was posted — the platform's own
+ * request-size limit stands in front of that, identically for the `{ url }`
+ * route. The cap narrows what we will PAY A MODEL TO READ, which is the cost
+ * that scales with a caller's choices.
  *
  * AN OVER-LONG PASTE IS A 400 RATHER THAN A TYPED `ImportResult`, WHICH CUTS
  * ACROSS THIS FUNCTION'S USUAL GRAIN, so here is the argument.
@@ -87,51 +91,16 @@
  * the paste screen, and none of it is ever assembled server-side.
  *
  * THE `.ts` EXTENSION RULE APPLIES HERE TOO — Deno's resolution rule, see
- * index.ts's header. This file happens to import nothing at all, which is a
- * fact about today rather than an exemption from it.
+ * index.ts's header. The single import below is a relative VALUE import into
+ * src/domain/, so it spells the extension out; dropping it fails at deploy
+ * time and nowhere earlier, because this directory is outside `tsc --noEmit`,
+ * ESLint and vitest alike.
  */
 
-/**
- * The most pasted recipe text this function will accept, counted on the
- * TRIMMED string — which is the exact string that would be sent to the model,
- * so the cap bounds the thing it means to bound rather than a proxy for it.
- *
- * 32,000, and the shape of that number matters more than its digits. At
- * Gemini's rough four-characters-per-token it caps one extraction at roughly
- * 8,000 input tokens: a finite, knowable per-request ceiling on a metered
- * bill. A long recipe — a chatty intro, thirty ingredients, twenty steps, a
- * note about the tin size — runs five to ten thousand characters, and a whole
- * forwarded email with a recipe buried in it somewhat more. So this sits
- * three to six times above the worst legitimate paste we expect to meet,
- * which is the right shape for a limit whose false positives cost a real
- * person a real import: generous enough that nobody legitimate reaches it,
- * finite enough that nobody hostile gets to choose the number.
- *
- * CHARACTERS, NOT BYTES, unlike `MAX_RECIPE_PAGE_BYTES`, and that is not an
- * inconsistency. That cap is enforced against a STREAM, where bytes are the
- * only thing countable before anything has been decoded. This one is enforced
- * against a string that is already decoded and already in memory, standing in
- * for a cost that follows characters rather than bytes. Characters are also
- * the only unit the paste screen can count identically — and both sides
- * counting the same thing is what keeps a legitimate user from ever meeting
- * this limit as a status code.
- *
- * IT IS STATED TWICE, AND THAT IS A DEBT RATHER THAN A DESIGN. The same
- * number lives in src/app/import/paste.tsx, because there is no shared pure
- * module for it yet and a Deno function cannot import a screen's sibling. It
- * belongs in src/domain/import/, beside every other pure import decision, and
- * until it moves the two must change together: raise this one alone and the
- * screen refuses pastes this endpoint would have accepted; raise the screen's
- * alone and a user meets a bare 400 with no copy to explain it.
- *
- * WHAT THIS DOES NOT BOUND, said out loud: the request body itself. By the
- * time this constant is consulted, `request.json()` has already read and
- * parsed whatever was posted — the platform's own request-size limit is what
- * stands in front of that, identically for the `{ url }` route. This cap
- * narrows what we will PAY A MODEL TO READ, which is the cost that scales
- * with a caller's choices.
- */
-export const MAX_PASTED_RECIPE_TEXT_CHARS = 32_000;
+import {
+  MAX_PASTED_RECIPE_TEXT_CHARS,
+  readPastedText,
+} from '../../../src/domain/import/pastedTextLimits.ts';
 
 /**
  * A request that got far enough to be one of the two routes, or a refusal
@@ -175,7 +144,9 @@ function malformed(message: string): ImportRequest {
  * shape of a URL, its surrounding whitespace included, and this function must
  * not start answering half of them behind its back. The pasted text has no
  * such owner downstream — it goes to the model as it stands — so the string
- * that was measured against the cap has to be the string that is sent.
+ * that was measured against the cap has to be the string that is sent, and
+ * `readPastedText` returns exactly that one string rather than leaving this
+ * function to trim a second time and hope the two agree.
  */
 export async function readImportRequest(request: Request): Promise<ImportRequest> {
   let body: unknown;
@@ -207,12 +178,12 @@ export async function readImportRequest(request: Request): Promise<ImportRequest
   if (typeof body.text !== 'string') {
     return malformed(MESSAGE_BAD_TEXT);
   }
-  const text = body.text.trim();
-  if (text.length === 0) {
+  const submission = readPastedText(body.text);
+  if (submission.readiness === 'empty') {
     return malformed(MESSAGE_BAD_TEXT);
   }
-  if (text.length > MAX_PASTED_RECIPE_TEXT_CHARS) {
+  if (submission.readiness === 'too_long') {
     return malformed(MESSAGE_TEXT_TOO_LONG);
   }
-  return { kind: 'text', text };
+  return { kind: 'text', text: submission.text };
 }

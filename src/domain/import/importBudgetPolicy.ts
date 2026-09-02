@@ -21,7 +21,7 @@
  * of that: no URL to normalise, no oEmbed round trip, no page to fetch, and
  * no cache key to hit, so a body of arbitrary characters goes straight to
  * the model, every time, and costs a full extraction on every request.
- * `MAX_PASTED_RECIPE_TEXT_CHARS` (importRequest.ts) bounds what ONE such
+ * `MAX_PASTED_RECIPE_TEXT_CHARS` (pastedTextLimits.ts) bounds what ONE such
  * request may cost. Nothing bounds how many of them there may be. That is
  * the gap this module is the decision half of.
  *

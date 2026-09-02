@@ -240,8 +240,8 @@ export const IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL = 'Wat je plakt: een 
 /**
  * Shown under the text field the moment a paste is longer than the import
  * pipeline will read (`MAX_PASTED_RECIPE_TEXT_CHARS`,
- * src/app/import/pastedTextLimit.ts), with the submit button refused until
- * it is not.
+ * src/domain/import/pastedTextLimits.ts), with the submit button refused
+ * until it is not.
  *
  * IT STATES NO NUMBER, AND THAT IS A DECISION RATHER THAN AN OMISSION. A
  * shortfall ("er kunnen nog 1.240 tekens af") is more precise and worse
@@ -250,7 +250,7 @@ export const IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL = 'Wat je plakt: een 
  * that is not a recipe — a whole page, a whole mail thread, a whole chat.
  * The fix is to paste less of the wrong thing, so that is what the sentence
  * asks for. It also keeps this module free of the limit's value, which
- * lives in exactly one place on this side of the wire.
+ * lives in exactly one place for both sides of the wire.
  *
  * IT NAMES NO CONTAINER, per the file header: not "de pagina", not "de
  * mail". "Alles wat eromheen staat" is true of every one of them.

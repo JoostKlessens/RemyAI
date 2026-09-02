@@ -65,36 +65,50 @@
  *
  * ---
  *
- * THERE IS NO "VAN DE LIJST AF" BUTTON, AND ITS ABSENCE IS A REPORTED GAP
- * RATHER THAN AN OVERSIGHT. `RemyRepository` (src/lib/repository/types.ts)
- * has `createSave` and nothing that withdraws, retracts or re-intends one;
- * `archiveMeal` removes a dish from the library and does not touch its
- * save, which is why an archived dish can still be standing here (see
- * `WeekPlanRow`'s amber note). Building the button anyway would mean
- * inventing a persistence seam inside a screen — the same thing
- * boodschappen.tsx refused to do for check-off state. So the screen is
- * built around what exists: cooking a dish resolves its save, and both this
- * list and the shopping list empty themselves through that one act. The
- * footer says so in the indicative rather than offering a control that
- * cannot work.
+ * "VAN DEZE WEEK AF" EXISTS NOW, AND THE PARAGRAPH THAT USED TO STAND HERE
+ * IS GONE RATHER THAN AMENDED. It argued that this screen had to ship
+ * without the obvious action a plan view needs, because `RemyRepository`
+ * had `createSave` and nothing that withdrew one — and that building the
+ * button anyway would have meant inventing a persistence seam inside a
+ * screen, the same thing boodschappen.tsx refused to do for check-off
+ * state. The seam was the right thing to ask for and it exists:
+ * `removeSaves(householdId, mealId, intent)`. So the row carries the
+ * control, this file calls the repository, and nothing about "deze week" is
+ * decided here.
+ *
+ * THE OTHER EXIT IS STILL THE ONE THAT NEEDS NO BUTTON. Cooking a dish
+ * resolves its save, so this list and the shopping list empty themselves
+ * through that one act; the footer keeps saying so, in the indicative. Two
+ * exits, and only one of them is a thing to do.
+ *
+ * AN ARCHIVED DISH CAN NO LONGER STAND HERE AT ALL. It used to —
+ * `listPendingSaves` did not read `meals.archived_at`, so a dish removed
+ * from Mijn recepten kept its "deze week" save and kept its ingredients on
+ * the shopping list, and this screen carried an amber note admitting it.
+ * The repository filters those saves now (see local/saves.ts), so the note,
+ * its copy and the flag on `WeekPlanEntry` are all gone with the bug.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useReducer, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Meal } from '@/domain/types';
+import type { HouseholdId, Meal, MealId, SaveIntent } from '@/domain/types';
 import { buildWeekPlan, type WeekPlan, type WeekPlanEntry } from '@/domain/weekPlan';
 import { Button } from '@/components/Button';
 import { WeekPlanRow } from '@/components/WeekPlanRow';
 import {
+  INITIAL_WEEK_PLAN_REMOVAL,
   WEEK_PLAN_COOKED_NOTE,
   WEEK_PLAN_EMPTY_BODY,
   WEEK_PLAN_EMPTY_TITLE,
   WEEK_PLAN_END_COPY,
+  WEEK_PLAN_REMOVE_FAILED_ANNOUNCEMENT,
   WEEK_PLAN_SHOPPING_LINE,
   describeWeekPlanMealCount,
+  describeWeekPlanRemovedAnnouncement,
   describeWeekPlanUnresolvedNote,
+  reduceWeekPlanRemoval,
 } from '@/components/weekPlanCopy';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
@@ -103,29 +117,63 @@ type ScreenPhase = 'loading' | 'error' | 'ready';
 
 const EMPTY_PLAN: WeekPlan = { entries: [], unresolvedMealIds: [], plannedMealCount: 0 };
 
+/**
+ * The one intent this screen reads and the one it writes, named once so the
+ * two can never drift apart. Reading `'this_week'` and removing `'someday'`
+ * would be a screen that shows one week and cancels another — and a
+ * household's separate "ooit" commitment to the same dish is deliberately
+ * left standing here (see `removeSaves` on `RemyRepository`).
+ */
+const WEEK_PLAN_INTENT: SaveIntent = 'this_week';
+
 // ---------------------------------------------------------------------------
 // Data loading — repository reads, then one call into the pure domain layer.
 // ---------------------------------------------------------------------------
 
+/** The plan plus the household it belongs to — the removal write needs the second. */
+interface LoadedWeek {
+  readonly householdId: HouseholdId;
+  readonly plan: WeekPlan;
+}
+
 /**
- * `getMeal` per planned dish rather than `listHouseholdMeals`, deliberately:
- * that method filters `archivedAt === null`, so a dish the household removed
- * from Mijn recepten while its "deze week" save still stood would vanish from
- * this screen while its ingredients stayed on the shopping list — two screens,
- * two different weeks. The `Set` here only avoids fetching one meal twice; the
- * authoritative de-duplication is `buildWeekPlan`'s.
+ * `getMeal` per planned dish rather than `listHouseholdMeals`. That used to
+ * be an argument about archived dishes — the repository settles those now,
+ * before a save ever reaches this function. What still makes a per-id read
+ * the right one is `unresolvedMealIds`: the ids come from saves, and a save
+ * whose meal row is GONE has to be reported rather than silently dropped
+ * (the shopping list still counts it), which a list read cannot tell apart
+ * from a meal that simply was not in the list. The `Set` here only avoids
+ * fetching one meal twice; the authoritative de-duplication is
+ * `buildWeekPlan`'s.
  */
-async function loadWeekPlan(): Promise<WeekPlan> {
+async function loadWeekPlan(): Promise<LoadedWeek> {
   await ensureSeeded();
   const repository = getAppRepository();
   const householdId = await repository.getCurrentHouseholdId();
-  const saves = await repository.listPendingSaves(householdId, 'this_week');
+  const saves = await repository.listPendingSaves(householdId, WEEK_PLAN_INTENT);
   const mealIds = [...new Set(saves.map((save) => save.mealId))];
 
   const fetched = await Promise.all(mealIds.map((mealId) => repository.getMeal(mealId)));
   const meals = fetched.filter((meal): meal is Meal => meal !== null);
 
-  return buildWeekPlan(saves, meals);
+  return { householdId, plan: buildWeekPlan(saves, meals) };
+}
+
+/**
+ * The plan with one dish taken out, WITHOUT a re-fetch.
+ *
+ * `plannedMealCount` is recomputed with the identical expression
+ * `buildWeekPlan` uses — entries plus unresolved — rather than decremented,
+ * because that number is the one src/app/boodschappen.tsx quotes for the
+ * same week and a count maintained by subtraction is a count that drifts.
+ * Updating locally rather than calling `refresh()` avoids throwing the whole
+ * list back into its loading state over one removed row, exactly as
+ * (tabs)/recipes.tsx does after an archive; the next focus re-reads anyway.
+ */
+function withoutDish(plan: WeekPlan, mealId: MealId): WeekPlan {
+  const entries = plan.entries.filter((entry) => entry.meal.id !== mealId);
+  return { ...plan, entries, plannedMealCount: entries.length + plan.unresolvedMealIds.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +187,15 @@ export default function WeekPlanScreen(): JSX.Element {
 
   const [phase, setPhase] = useState<ScreenPhase>('loading');
   const [plan, setPlan] = useState<WeekPlan>(EMPTY_PLAN);
+  const [householdId, setHouseholdId] = useState<HouseholdId | null>(null);
+
+  // ONE ARMED ROW AT A TIME, WHICH IS WHY THIS LIVES HERE AND NOT IN
+  // `WeekPlanRow`. A row owning its own confirm state would let somebody arm
+  // three dinners, walk away, and come back to a screen holding three
+  // half-asked questions. `removalMealId` names the single row the state
+  // below belongs to; every other row is handed `INITIAL_WEEK_PLAN_REMOVAL`.
+  const [removalMealId, setRemovalMealId] = useState<MealId | null>(null);
+  const [removal, dispatchRemoval] = useReducer(reduceWeekPlanRemoval, INITIAL_WEEK_PLAN_REMOVAL);
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -148,7 +205,12 @@ export default function WeekPlanScreen(): JSX.Element {
         if (cancelled) {
           return;
         }
-        setPlan(loaded);
+        setPlan(loaded.plan);
+        setHouseholdId(loaded.householdId);
+        // A reload replaces the rows, so any confirm still standing belongs
+        // to a row that may not be here any more.
+        setRemovalMealId(null);
+        dispatchRemoval({ type: 'reset' });
         setPhase('ready');
       })
       .catch(() => {
@@ -160,6 +222,55 @@ export default function WeekPlanScreen(): JSX.Element {
       cancelled = true;
     };
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // "Van deze week af" — the row's second action. See weekPlanCopy.ts's header
+  // for what its sentences promise and this file's for why it exists at all.
+  // ---------------------------------------------------------------------------
+
+  const handleRequestRemoval = useCallback((mealId: MealId): void => {
+    // `reset` first so arming a second row cannot inherit the first row's
+    // phase — `reduceWeekPlanRemoval` ignores `request-removal` from
+    // `pending`, and silently doing nothing is the one outcome a person
+    // cannot interpret.
+    setRemovalMealId(mealId);
+    dispatchRemoval({ type: 'reset' });
+    dispatchRemoval({ type: 'request-removal' });
+  }, []);
+
+  const handleCancelRemoval = useCallback((): void => {
+    dispatchRemoval({ type: 'cancel-removal' });
+  }, []);
+
+  /**
+   * No rollback and no re-read: `removeSaves` is one read and one write, so
+   * it either lands or leaves every save exactly where it was — which is
+   * precisely what `WEEK_PLAN_REMOVE_FAILED_NOTE` tells the household. On
+   * success the row leaves the list; on failure the control itself becomes
+   * the retry, matching (tabs)/recipes.tsx's archive path.
+   */
+  const commitRemoval = useCallback(
+    async (entry: WeekPlanEntry): Promise<void> => {
+      if (householdId === null || removal.phase !== 'confirming') {
+        return;
+      }
+      dispatchRemoval({ type: 'confirm-removal' });
+
+      try {
+        await getAppRepository().removeSaves(householdId, entry.meal.id, WEEK_PLAN_INTENT);
+      } catch {
+        dispatchRemoval({ type: 'removal-failed' });
+        AccessibilityInfo.announceForAccessibility(WEEK_PLAN_REMOVE_FAILED_ANNOUNCEMENT);
+        return;
+      }
+
+      setPlan((current) => withoutDish(current, entry.meal.id));
+      setRemovalMealId(null);
+      dispatchRemoval({ type: 'reset' });
+      AccessibilityInfo.announceForAccessibility(describeWeekPlanRemovedAnnouncement(entry.meal.title));
+    },
+    [householdId, removal.phase],
+  );
 
   // Re-read on focus, like boodschappen.tsx: cooking a dish from this very
   // list resolves its save, so the week is stale the moment Cook Mode hands
@@ -206,8 +317,22 @@ export default function WeekPlanScreen(): JSX.Element {
         <FlatList
           data={plan.entries}
           keyExtractor={(entry: WeekPlanEntry) => entry.meal.id}
+          // FlatList's rows are pure by default, so the armed row would keep
+          // drawing "Van deze week af" without this. A string rather than an
+          // object literal: it changes exactly when the armed row or its
+          // phase does, instead of on every render of the screen.
+          extraData={`${removalMealId ?? ''}:${removal.phase}`}
           renderItem={({ item }: { item: WeekPlanEntry }) => (
-            <WeekPlanRow entry={item} onPress={() => router.push(`/cook/${item.meal.id}`)} />
+            <WeekPlanRow
+              entry={item}
+              onPress={() => router.push(`/cook/${item.meal.id}`)}
+              removal={item.meal.id === removalMealId ? removal : INITIAL_WEEK_PLAN_REMOVAL}
+              onRequestRemoval={() => handleRequestRemoval(item.meal.id)}
+              onCancelRemoval={handleCancelRemoval}
+              onConfirmRemoval={() => {
+                void commitRemoval(item);
+              }}
+            />
           )}
           ListFooterComponent={<PlanFooter onOpenShoppingList={() => router.replace('/boodschappen')} />}
           contentContainerStyle={styles.listContent}

@@ -548,11 +548,96 @@ export interface RemyRepository {
    */
   addMealDishMood(mealId: MealId, mood: string): Promise<Meal>;
 
-  /** Every save for this household, regardless of intent or whether it's still "pending" — what recipeScheduling.ts needs. */
+  /**
+   * Every save for this household, regardless of intent, whether its meal
+   * has been cooked since, or whether that meal has since been archived —
+   * the raw table read, which is what recipeScheduling.ts needs.
+   *
+   * DELIBERATELY UNFILTERED WHERE `listPendingSaves` IS NOT. Its one
+   * caller joins it against `listHouseholdMeals`, which already drops
+   * archived meals, so nothing removed can surface through it; and a
+   * repository needs exactly one method that can still see a row a view
+   * hides, or nothing can ever tell "filtered" apart from "deleted". See
+   * local/saves.ts's header for the argument in full.
+   */
   listSaves(householdId: HouseholdId): Promise<readonly Save[]>;
-  /** Saves of the given intent not yet "resolved" (their meal has no cook_event recorded since the save) — what DecisionRequest.pendingThisWeekSaves/pendingSomedaySaves need. */
+  /**
+   * Saves of the given intent that are still standing — what
+   * DecisionRequest.pendingThisWeekSaves/pendingSomedaySaves need, and the
+   * single definition of "deze week" that src/app/boodschappen.tsx and
+   * src/app/deze-week.tsx both read.
+   *
+   * A save stops being pending on either of two facts: its meal has a
+   * cook_event on or after the save's own date (dinner happened, so there
+   * is nothing left to shop for or to boost), or its meal has been
+   * archived (the household removed the dish from Mijn recepten, and a
+   * removed dish must stop filling a shopping list). Both checks live in
+   * local/saves.ts, never in a caller — see that file's header for why a
+   * screen-local version of either would become a second definition of the
+   * week.
+   */
   listPendingSaves(householdId: HouseholdId, intent: SaveIntent): Promise<readonly Save[]>;
   createSave(input: CreateSaveInput): Promise<Save>;
+  /**
+   * "Van deze week af" — the act a plan view needs and shipped without.
+   * Deletes every save this household holds for ONE meal at ONE intent,
+   * and nothing else.
+   *
+   * A REAL DELETE, WHICH IS THE ONE THING `archiveMeal` IS NOT, AND 0001
+   * ALREADY SETTLED THE DIFFERENCE. `saves.meal_id` is declared `on delete
+   * cascade` with the reason written beside it — "a save is a bookmark,
+   * not a historical record, so it is fine for it to disappear with its
+   * meal" — and `saves` carries both a `saves_update` and a `saves_delete`
+   * policy for household members. Compare `decision_alternatives`, whose
+   * policies stop at select/insert under the line "No update/delete: this
+   * is an append-only offer log", and `cook_events`/`decisions`, whose
+   * `on delete restrict` foreign keys make deletion impossible on purpose.
+   * The schema therefore already says which rows are history and which are
+   * intent; this method needs no migration, only the seam.
+   *
+   * KEYED BY (HOUSEHOLD, MEAL, INTENT) RATHER THAN BY SAVE ID, unlike
+   * `removeMember`/`removeRestriction`. Nothing a person can point at is a
+   * save: the week screen shows DISHES, folded one row per meal, because
+   * two members can both save the same dish for the same week
+   * (src/domain/weekPlan.ts). A save-id verb would hand the screen an
+   * identity nobody chose and turn one tap into N writes over one table
+   * key — racing if issued together, and leaving a dish half-planned if one
+   * of them failed, which is a state no sentence on that screen could
+   * describe. Intent-scoped rather than dish-scoped for the matching
+   * reason: a dish saved BOTH "deze week" and "ooit" has made two separate
+   * commitments, and taking it off this week must not silently cancel the
+   * other one.
+   *
+   * WHY DELETING, NOT DEMOTING TO 'ooit', AND HOW THAT SQUARES WITH
+   * PD-004a. The founder's rule is "als ik iets in mijn lijst zet moet het
+   * altijd een keer voorbij kunnen komen" — saving is scheduling, never
+   * filing. Deleting a save does not file anything: the dish stays in Mijn
+   * recepten and stays in `listHouseholdMeals`, which IS `candidateMeals`,
+   * so the engine can still offer it any evening. Saves are boosts in
+   * scoring.ts (SAVED_THIS_WEEK_BOOST, the SOMEDAY_SAVE_* aging boost),
+   * never gates — so what a delete removes is priority, not the
+   * possibility of ever being suggested, which is the only thing PD-004a
+   * protects. Demoting instead would REWRITE the household's commitment
+   * into one they did not pick and enrol the dish in an escalating boost
+   * that, after four weeks, is guaranteed to win its tie-break — a larger
+   * claim about what somebody meant by "not this week" than this method is
+   * entitled to make. That the two readings differ at all is a product
+   * question; it is reported rather than decided here, and this is the
+   * narrower half.
+   *
+   * IDEMPOTENT, AND SILENT ON A DISH WITH NO SAVES — matching
+   * `removeMember` and `removeRestriction`, and unlike every single-meal
+   * setter above. Those reject an unknown id because "update the row" is
+   * meaningless without one; "make sure this is not planned" is already
+   * true of a dish that was never planned, so there is no failure to
+   * report and a second tap must not become an error.
+   *
+   * LOCAL ONLY, LIKE `createSave`. `saves` is not one of the mirror's five
+   * tables (src/lib/repository/mirror/types.ts) — nothing outside a
+   * household reads a save — so there is no remote row this could delete:
+   * the create path never sent one. See localRepository.ts's header.
+   */
+  removeSaves(householdId: HouseholdId, mealId: MealId, intent: SaveIntent): Promise<void>;
 
   listCookEvents(householdId: HouseholdId): Promise<readonly CookEvent[]>;
   createCookEvent(input: CreateCookEventInput): Promise<CookEvent>;

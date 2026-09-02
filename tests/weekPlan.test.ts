@@ -138,7 +138,17 @@ describe('buildWeekPlan — the query is the definition of "this week"', () => {
     expect(plan.plannedMealCount).toBe(1);
   });
 
-  test('an archived dish stays in the plan, flagged, rather than being quietly dropped', () => {
+  /**
+   * The archived case used to live here, asserting an `isArchived` flag this
+   * module carried so the screen could admit that a removed dish was still
+   * filling the shopping list. `listPendingSaves` drops those saves now
+   * (tests/repository/saves.test.ts holds it to that), so no archived meal
+   * can reach this function through its documented input. What is still
+   * worth pinning is the rule that made the flag possible in the first
+   * place: this function narrows NOTHING it is handed, so it must not start
+   * second-guessing an archived meal on its own either.
+   */
+  test('does not drop a meal on account of its archivedAt — narrowing is the repository job, not this one', () => {
     // Arrange
     const saves: readonly Save[] = [makeSave({ id: 'save-1', mealId: 'meal-1' })];
     const meals: readonly Meal[] = [makeMeal({ id: 'meal-1', archivedAt: '2026-08-19T08:00:00.000Z' })];
@@ -148,19 +158,7 @@ describe('buildWeekPlan — the query is the definition of "this week"', () => {
 
     // Assert
     expect(plan.entries).toHaveLength(1);
-    expect(plan.entries[0]?.isArchived).toBe(true);
     expect(plan.plannedMealCount).toBe(distinctMealCount(saves));
-  });
-
-  test('an unarchived dish is not flagged', () => {
-    // Arrange
-    const saves: readonly Save[] = [makeSave({ id: 'save-1', mealId: 'meal-1' })];
-
-    // Act
-    const plan = buildWeekPlan(saves, [makeMeal({ id: 'meal-1', archivedAt: null })]);
-
-    // Assert
-    expect(plan.entries[0]?.isArchived).toBe(false);
   });
 });
 

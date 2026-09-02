@@ -57,6 +57,20 @@
  * decisions, members and restrictions stay local — nothing outside a
  * household reads them, and `member_restrictions` is GDPR Article 9 health
  * data whose blast radius is not worth widening.
+ *
+ * WHICH SETTLES `removeSaves` WITHOUT A DECISION TO MAKE, and the
+ * reasoning is worth writing down because "a mutation that writes locally
+ * and never syncs" is a bug this repo has hit before. It is NOT that
+ * deletion is somehow less worth mirroring: it is that a delete can only
+ * mirror a row an insert once sent, and `createSave` sends none. Wiring a
+ * `saves` job onto this method alone would emit a remote DELETE against a
+ * table that has never held one of this household's rows — a request for
+ * nothing, forever. Wiring BOTH halves would instead add a sixth target to
+ * a list mirror/types.ts calls "deliberately short" and defends per table
+ * by naming the remote reader that wants it; `saves` has no remote reader,
+ * so there is nothing for that argument to point at. Local on both sides
+ * is the only symmetric answer, and symmetry is the property that matters:
+ * a create and its inverse must reach exactly the same set of stores.
  */
 
 import type { KeyValueStore } from './keyValueStore';
@@ -89,7 +103,7 @@ import {
   setMealCookProofExclusion,
   updateMealRecipe,
 } from './local/meals';
-import { createSave, listPendingSaves, listSaves } from './local/saves';
+import { createSave, listPendingSaves, listSaves, removeSaves } from './local/saves';
 import { createCookEvent, listCookEvents, setCookEventRating, setCookEventRepeat } from './local/cookEvents';
 import {
   createDecision,
@@ -230,6 +244,10 @@ export function createLocalRepository(store: KeyValueStore, mirror: MirrorJobSin
     listSaves: (householdId) => listSaves(tables, householdId),
     listPendingSaves: (householdId, intent) => listPendingSaves(tables, householdId, intent),
     createSave: (input) => createSave(tables, input),
+    // Announces nothing, for the same reason `createSave` above does not:
+    // `saves` is not one of the mirror's tables, so there is no remote row
+    // to delete — the create path never sent one. See the module header.
+    removeSaves: (householdId, mealId, intent) => removeSaves(tables, householdId, mealId, intent),
 
     listCookEvents: (householdId) => listCookEvents(tables, householdId),
     createCookEvent: async (input) => {

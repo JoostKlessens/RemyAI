@@ -106,59 +106,20 @@
  *
  * ---
  *
- * THE WEB ROUTE (SRC-01): THE ONE PATH THAT CANNOT HALLUCINATE.
+ * THE WEB ROUTE (SRC-01) and THE YOUTUBE ROUTE (SRC-02/SRC-03) ARGUE FOR
+ * THEMSELVES ELSEWHERE NOW: resolveWebImport.ts and
+ * resolveYouTubeImport.ts, beside their own code. Both were sections of
+ * this header until each route became a module, and both moved intact —
+ * a route that is a whole pipeline rather than a branch takes its
+ * reasoning with it, or the reasoning rots where the code no longer is.
+ * Nothing about either route changed in the move.
  *
- * A `'web'` URL is any http(s) page that is not one of the three known
- * platforms (urlParsing.ts). It is fetched — hardened, capped, redirect
- * chain followed by us — by `fetchRecipePageHtml` in fetchSourceText.ts,
- * and its schema.org/Recipe JSON-LD is read by `extractRecipeFromHtml` in
- * the pure domain layer. That route skips BOTH of the things every other
- * route does, and each omission is a decision rather than an absence:
- *
- *  - NO OEMBED, because there is no oEmbed endpoint for an arbitrary page.
- *    There is nothing to ask and nobody to ask it of.
- *  - NO MODEL CALL, AND THAT IS THE ENTIRE POINT OF THIS ROUTE. The
- *    JSON-LD block IS the structured answer: named keys a publisher wrote
- *    on purpose, for Google, in a documented vocabulary. Handing it to a
- *    model to be re-read would add a token bill and — much worse — the
- *    ABILITY TO HALLUCINATE to the only path in this function that
- *    currently does not have it. Every field on a web-route recipe can be
- *    traced to a key the publisher typed; a page with no such block fails
- *    as `no_recipe_on_page` rather than being guessed at. That is why this
- *    is the highest-value route in the backlog, and it is only true for as
- *    long as nobody "improves" it by putting a model in the middle.
- *
- * Pinterest arrives here too, and so does any other share-sheet short link
- * (`pin.it` and friends) — not because `resolveEffectiveUrl` expands them,
- * but because the page fetcher follows redirects itself, bounded and
- * validated. See `resolveEffectiveUrl` below and urlParsing.ts's header.
- *
- * ---
- *
- * THE YOUTUBE ROUTE (SRC-02/SRC-03): A DIFFERENT DOOR, THE SAME PIPELINE.
- *
- * A YouTube video's description is read through the YouTube Data API's
- * `videos.list?part=snippet` endpoint (`fetchYouTubeVideoSnippet`,
- * fetchSourceText.ts) — never through YouTube's oEmbed endpoint, which
- * carries the same embedding-only restriction Meta's does and would make
- * reading a description the exact prohibited use PD-011 rules out for
- * Instagram. displayOnlyPolicy.ts's header carries that comparison in
- * full; the short version is that YouTube is not display-only because a
- * DIFFERENT, licensed endpoint answers the question, not because nobody
- * checked.
- *
- * What comes back is a caption and an attribution — precisely what oEmbed
- * hands the TikTok path — so from there it runs the SAME code:
- * `extractRecipeFromCaption` below is the single tail both platforms
- * share, including the "caption is blank, so the model is never called"
- * short-circuit. Forking it would let one platform's anti-hallucination
- * behaviour drift from the other's without anything noticing.
- *
- * `YOUTUBE_API_KEY` is optional at boot and its absence is a typed,
- * user-visible `source_fetch_failed` / `missing_credentials` — never a
- * silent skip, and never a reason for TikTok import to stop working. See
- * env.ts's header for why that credential is read differently from
- * `GEMINI_API_KEY`.
+ * WHAT STAYS HERE IS WHAT IS TRUE OF THE FAN-OUT RATHER THAN OF ONE ROUTE:
+ * the table below that has to name all five sources to be true at all, the
+ * PROVENANCE and DEDUPLICATION arguments that span them, and
+ * `resolveImport` itself, where the ORDER of the early returns is the
+ * load-bearing part — the web and YouTube branches return first, which is
+ * what narrows everything after them to `OembedPlatform`.
  *
  * ---
  *
@@ -236,7 +197,7 @@
  *   publisher_structured_data — the publisher wrote these fields, in named
  *     keys, in a documented vocabulary, and nothing interpreted them. That is
  *     the web/JSON-LD route, and it is why that route is the only one here
- *     which cannot hallucinate (see THE WEB ROUTE above).
+   *     which cannot hallucinate (see resolveWebImport.ts's header).
  *   model_from_caption — a model's reading of prose that was written for
  *     humans. Honest, useful, and categorically less certain. TikTok's oEmbed
  *     title and YouTube's Data API description both land here, because they
@@ -333,9 +294,10 @@
  * without index.ts needing to know or care that the hop exists.
  * `allowImportingTsExtensions` (tsconfig.json) is what keeps that legal
  * under `tsc --noEmit` too, since those two files ARE included in the
- * Node/Metro build. It does NOT extend to this function's own seven sibling
+ * Node/Metro build. It does NOT extend to this function's own nine sibling
  * modules (callExtractionModel.ts, canonicalRecipeStore.ts, env.ts,
- * fetchSourceText.ts, finishImport.ts, importRequest.ts, importResponse.ts):
+ * fetchSourceText.ts, finishImport.ts, importRequest.ts, importResponse.ts,
+ * resolveWebImport.ts, resolveYouTubeImport.ts):
  * those are real runtime imports Deno resolves for itself, so they spell out
  * `.ts` too — and so does every
  * import THEY make, one hop further out. Dropping an extension anywhere in
@@ -353,7 +315,7 @@ declare const Deno: {
   readonly serve: (handler: (request: Request) => Promise<Response> | Response) => void;
 };
 
-import { normalizeRecipeUrl, readYouTubeVideoId } from '../../../src/domain/import/urlParsing.ts';
+import { normalizeRecipeUrl } from '../../../src/domain/import/urlParsing.ts';
 import { validateShortLinkTarget } from '../../../src/domain/import/resolveShortLinkTarget.ts';
 // `NO_CREATOR_TO_CREDIT` out of the same module as `buildAttribution`, and
 // that adjacency is the argument: one builds an attribution from a source
@@ -361,16 +323,13 @@ import { validateShortLinkTarget } from '../../../src/domain/import/resolveShort
 // consulted no source at all.
 import { buildAttribution, NO_CREATOR_TO_CREDIT } from '../../../src/domain/import/buildAttribution.ts';
 import { buildDisplayOnlyResult, isDisplayOnlyPlatform } from '../../../src/domain/import/displayOnlyPolicy.ts';
-// The JSON-LD reader is the whole web route: it is what makes that path
-// modelless, and therefore the one path that cannot invent an ingredient.
-import { extractRecipeFromHtml } from '../../../src/domain/import/htmlJsonLd.ts';
 import { resolveOembed } from '../../../src/lib/oembed.ts';
 import type { OembedPlatform } from '../../../src/lib/oembed.ts';
 // Down to two, because the recipe-shaped types moved with the tail that
 // handles them (finishImport.ts). This file routes and answers; it no longer
 // touches a `ParsedRecipe` on the way past.
 import type { ImportPlatform, ImportResult } from '../../../src/domain/import/types.ts';
-// The seven sibling modules of this function, each owning one thing this file
+// The nine sibling modules of this function, each owning one thing this file
 // therefore no longer does. `importRequest.ts` owns what a client is allowed
 // to send, so the boundary is a place with a header rather than the opening
 // lines of a handler; `canonicalRecipeStore.ts` owns every read and write of
@@ -384,18 +343,26 @@ import type { ImportPlatform, ImportResult } from '../../../src/domain/import/ty
 // same model path" a fact about the call graph rather than a claim in a
 // comment; `importResponse.ts` owns everything this function says to a client
 // or to a log, which is what makes counting an import outcome inseparable
-// from answering one (IMP-07); `env.ts` owns the credential readers the
-// others share. Three of the seven exist so that a secret's blast radius is
+// from answering one (IMP-07); `resolveWebImport.ts` and
+// `resolveYouTubeImport.ts` each own one route's whole pipeline, which is
+// what keeps this file a fan-out rather than a fan-out plus two of the five
+// things it fans out to; `env.ts` owns the credential readers the
+// others share. Three of the nine exist so that a secret's blast radius is
 // one importable file rather than this one, and two are now further away
 // still: the Gemini key is not imported here at all and the canonical WRITE
 // no longer is either — both are reached through `finishImport.ts`, leaving
 // this file only the cache lookup. Their `.ts` extensions are required for
 // the same Deno reason as the imports above.
 import { findStoredRecipe } from './canonicalRecipeStore.ts';
-import { expandShortLink, fetchRecipePageHtml, fetchYouTubeVideoSnippet } from './fetchSourceText.ts';
-import { extractRecipeFromCaption, finishParsedRecipe } from './finishImport.ts';
+import { expandShortLink } from './fetchSourceText.ts';
+import { extractRecipeFromCaption } from './finishImport.ts';
 import { readImportRequest } from './importRequest.ts';
 import { corsPreflightResponse, jsonResponse, respondWithImportResult } from './importResponse.ts';
+// The two routes that are whole pipelines rather than branches, each now
+// arguing for itself beside its own code. This file reaches them from the
+// fan-out in `resolveImport` and knows nothing else about either.
+import { resolveWebImport } from './resolveWebImport.ts';
+import { resolveYouTubeImport } from './resolveYouTubeImport.ts';
 
 // Optional: see src/lib/oembed.ts's `instagramAccessToken` — undefined
 // here means every Instagram resolution fails with the typed
@@ -518,102 +485,6 @@ async function resolveDisplayOnlyImport(normalizedUrl: string, platform: OembedP
     return { kind: 'oembed_failed', reason: oembedResult.reason, platform };
   }
   return buildDisplayOnlyResult({ sourceUrl: normalizedUrl, platform, payload: oembedResult.payload });
-}
-
-/**
- * THE WEB ROUTE (SRC-01). Fetch the page, read its JSON-LD, done — no
- * oEmbed (there is no endpoint to ask) and NO MODEL CALL (the JSON-LD is
- * already the structured answer, so a model could only add cost and the
- * ability to invent). See the header section of the same name; that second
- * omission is the entire value of this route and must survive future edits.
- *
- * Everything hard about this path is elsewhere and on purpose: the hardened
- * fetch is fetchSourceText.ts's (host guard, bounded redirect chain, per-
- * request timeout, streamed byte cap), and every judgement about what the
- * markup MEANS is htmlJsonLd.ts's, where it is pure and unit-tested. This
- * function is only the join between them, which is why almost every line of
- * it is a named failure rather than any work of its own.
- */
-async function resolveWebImport(normalizedUrl: string): Promise<ImportResult> {
-  const cached = await findStoredRecipe(normalizedUrl, 'web');
-  if (cached !== null) {
-    return cached;
-  }
-
-  const page = await fetchRecipePageHtml(normalizedUrl);
-  if (page.kind === 'failed') {
-    // A literal, not a parameter: `resolveImport` only enters this route
-    // for a `'web'` URL, so it is a fact about which function you are in.
-    return { kind: 'source_fetch_failed', reason: page.reason, platform: 'web' };
-  }
-
-  const extraction = extractRecipeFromHtml(page.value);
-  if (extraction === null) {
-    // The page loaded and simply publishes no schema.org/Recipe object.
-    // A real, permanent answer about a real page — distinct from every
-    // `source_fetch_failed` reason, which are all answers about the fetch —
-    // and emphatically not a cue to go and guess at the visible markup.
-    return { kind: 'no_recipe_on_page', platform: 'web' };
-  }
-
-  return finishParsedRecipe({
-    recipe: extraction.recipe,
-    sourceUrl: normalizedUrl,
-    platform: 'web',
-    attribution: extraction.attribution,
-    // The publisher stated these fields themselves, in named JSON-LD keys, and
-    // no model touched them. This is the only route that can say that, and
-    // saying it here — not deriving it from `platform: 'web'` later — is what
-    // keeps the claim true if a `'web'` page ever needs a different reader.
-    provenance: 'publisher_structured_data',
-  });
-}
-
-/**
- * THE YOUTUBE ROUTE (SRC-02/SRC-03). The Data API's `videos.list` snippet
- * — never YouTube's oEmbed endpoint, see the header — and then the shared
- * caption pipeline every TikTok import already runs.
- */
-async function resolveYouTubeImport(normalizedUrl: string): Promise<ImportResult> {
-  const cached = await findStoredRecipe(normalizedUrl, 'youtube');
-  if (cached !== null) {
-    return cached;
-  }
-
-  const videoId = readYouTubeVideoId(normalizedUrl);
-  if (videoId === null) {
-    // Unreachable in theory and loud on purpose: THIS FUNCTION PRODUCED
-    // that URL, via `normalizeRecipeUrl`, which only emits the canonical
-    // `watch?v=<id>` form. A null here means the writer and the reader of
-    // that form have stopped agreeing — a bug in our own code, not a
-    // problem with the user's link — and it would otherwise look to a user
-    // exactly like a dead video.
-    console.error(`parse-recipe: normalized YouTube URL carried no readable video id. url=${normalizedUrl}`);
-    return { kind: 'source_fetch_failed', reason: 'refused', platform: 'youtube' };
-  }
-
-  const snippet = await fetchYouTubeVideoSnippet(videoId);
-  if (snippet.kind === 'failed') {
-    // Includes `missing_credentials` when YOUTUBE_API_KEY is unset — the
-    // same honest, actionable failure Instagram gives without its oEmbed
-    // token, and never a silent skip. Naming `'youtube'` keeps that reason
-    // readable: this variant is shared with the web route, where an unset
-    // key cannot happen, so the one failure with a named fix would
-    // otherwise be counted as ambiguous.
-    return { kind: 'source_fetch_failed', reason: snippet.reason, platform: 'youtube' };
-  }
-
-  return extractRecipeFromCaption({
-    sourceUrl: normalizedUrl,
-    platform: 'youtube',
-    caption: snippet.value.caption,
-    attribution: snippet.value.attribution,
-    // A model's reading of prose a creator published beside their own video.
-    // Stated here rather than defaulted inside the shared tail, because this
-    // route is the only code that knows how these particular words were
-    // obtained — see the PROVENANCE section in the header.
-    provenance: 'model_from_caption',
-  });
 }
 
 /**

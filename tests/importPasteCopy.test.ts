@@ -120,10 +120,11 @@ describe('buildImportSourceModeCopy', () => {
 
 describe('PASTED_TEXT_TOO_LONG_MESSAGE', () => {
   /**
-   * The number is the edge function's, stated once on this side in
-   * src/app/import/pastedTextLimit.ts. A shortfall in the copy would be a
-   * third statement of it, and would invite somebody to shave characters
-   * off a paste whose real problem is that it is not a recipe.
+   * The number is stated exactly once, in
+   * src/domain/import/pastedTextLimits.ts, for the screen and the edge
+   * function alike. A shortfall in the copy would be a second statement of
+   * it, and would invite somebody to shave characters off a paste whose
+   * real problem is that it is not a recipe.
    */
   test('states no character count, so the cap lives in one place and the advice stays actionable', () => {
     expect(PASTED_TEXT_TOO_LONG_MESSAGE).not.toMatch(/\d/u);

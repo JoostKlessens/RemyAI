@@ -41,9 +41,11 @@
  * function uses) still runs first on the link route, synchronously, so a
  * link Remy will not open fails instantly with no spinner at all. The text
  * route has its own pre-flight, for the same reason and with the same
- * posture: `readPastedText` (./pastedTextLimit.ts) refuses a blank paste and
- * one longer than the pipeline will read, both before any request exists. A
- * request the function would only refuse should not cost a round trip, and
+ * posture: `readPastedText` (src/domain/import/pastedTextLimits.ts — the
+ * same pure function the edge function's own boundary check calls, so the
+ * two ends cannot disagree) refuses a blank paste and one longer than the
+ * pipeline will read, both before any request exists. A request the
+ * function would only refuse should not cost a round trip, and
  * an over-long paste must reach the user as a sentence under the field
  * rather than as a 400 that the transport mapping would mistranslate into
  * "probeer het opnieuw" — advice guaranteed to fail forever.
@@ -118,8 +120,8 @@ import * as Clipboard from 'expo-clipboard';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DevScenarioRow, buildDevScenarioDemo, type DevScenarioValue } from './_devScenarios';
-import { readPastedText } from './pastedTextLimit';
 import { encodeImportConfirmParams } from './routeParams';
+import { readPastedText } from '@/domain/import/pastedTextLimits';
 import type { ImportPlatform, ParsedRecipe, RecipeProvenance } from '@/domain/import/types';
 import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
 import { requestImport, requestTextImport, type ImportAttempt } from '@/lib/importRecipe';

@@ -83,10 +83,11 @@ export interface ImportSourceFieldProps {
   readonly onPastedTextChange: (text: string) => void;
   /**
    * Whether the paste is past the cap the import pipeline will read. The
-   * SCREEN decides this (`readPastedText`, src/app/import/pastedTextLimit.ts)
-   * and this component renders the sentence, so the limit lives in exactly
-   * one place and a component-layer file takes no dependency on an app
-   * route's module.
+   * SCREEN asks (`readPastedText`, src/domain/import/pastedTextLimits.ts —
+   * the same pure function the edge function's boundary calls) and this
+   * component renders the sentence, so the limit lives in exactly one place
+   * and a component-layer file takes no dependency on a decision it does
+   * not own.
    */
   readonly isPastedTextTooLong: boolean;
   /**
