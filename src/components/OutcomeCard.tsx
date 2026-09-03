@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   wash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   closeButton: {
     position: 'absolute',

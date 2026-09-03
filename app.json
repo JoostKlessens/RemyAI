@@ -6,7 +6,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-      "assetBundlePatterns": [
+    "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
@@ -25,7 +25,9 @@
           "color": "#ffffff"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-splash-screen",
+      "expo-status-bar"
     ],
     "extra": {
       "router": {

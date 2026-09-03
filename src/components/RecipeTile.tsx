@@ -211,10 +211,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   thumbnail: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   monogramWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

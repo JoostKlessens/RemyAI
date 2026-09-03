@@ -137,7 +137,7 @@ export function SaveIntentSheet(props: SaveIntentSheetProps): JSX.Element {
 
 const styles = StyleSheet.create({
   scrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sheet: {
     position: 'absolute',

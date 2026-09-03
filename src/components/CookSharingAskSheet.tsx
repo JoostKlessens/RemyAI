@@ -140,7 +140,7 @@ export function CookSharingAskSheet(props: CookSharingAskSheetProps): JSX.Elemen
 
 const styles = StyleSheet.create({
   scrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sheet: {
     position: 'absolute',

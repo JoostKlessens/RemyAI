@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   thumbnail: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   monogram: {
     textAlign: 'center',
