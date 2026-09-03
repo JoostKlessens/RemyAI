@@ -41,8 +41,24 @@
 // Color
 // ---------------------------------------------------------------------------
 
-/** Mirrors React Native's `useColorScheme()` return shape. */
+/** The two schemes this app actually has tokens for. */
 export type ColorScheme = 'light' | 'dark';
+
+/**
+ * What `useColorScheme()` can hand back, spelled out here rather than
+ * imported, so this module stays free of React Native and can be read and
+ * tested as pure data.
+ *
+ * `'unspecified'` IS NEW IN REACT NATIVE 0.83 (SDK 55) AND REPLACED `null`.
+ * The hook used to return `'light' | 'dark' | null | undefined`; it now
+ * returns a third string instead of the null. That is a rename of the
+ * unknown case, not a new case — which is why `getColors` treats it exactly
+ * as it treated `null`, and why widening this type changed no behaviour.
+ * `null` and `undefined` stay accepted: the hook is not the only caller,
+ * and a component holding a scheme it has not resolved yet still says so
+ * with a null.
+ */
+export type ColorSchemeInput = ColorScheme | 'unspecified' | null | undefined;
 
 /**
  * Semantic color roles. Never name a token after its hue (no `blue500`) —
@@ -251,11 +267,17 @@ const darkColors = {
 export const colors = { light: lightColors, dark: darkColors } as const;
 
 /**
- * Resolve tokens for a color scheme. Accepts `useColorScheme()`'s
- * `null | undefined` directly and falls back to light, since light is
- * Remy's default/expected daytime state.
+ * Resolve tokens for a color scheme. Accepts everything `useColorScheme()`
+ * can return — including RN 0.83's `'unspecified'` — and falls back to
+ * light, since light is Remy's default/expected daytime state.
+ *
+ * THE FALLBACK IS A SINGLE `=== 'dark'` CHECK ON PURPOSE. Every value that
+ * is not literally dark resolves to light, so a fourth member arriving in
+ * some future React Native cannot produce an unstyled screen; it produces a
+ * light one. That is why SDK 55's rename of the unknown case cost nothing
+ * here but a type.
  */
-export function getColors(scheme: ColorScheme | null | undefined): ColorTokens {
+export function getColors(scheme: ColorSchemeInput): ColorTokens {
   return scheme === 'dark' ? darkColors : lightColors;
 }
 
