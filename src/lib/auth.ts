@@ -39,6 +39,7 @@
 
 import * as Linking from 'expo-linking';
 import { readAuthRedirect } from '@/domain/social/authRedirect';
+import { readSignInCode } from '@/domain/social/signInCode';
 import { classifyProfileCreationFailure, type ProfileCreationFailure } from '@/domain/social/session';
 import { supabase } from './supabase';
 
@@ -58,6 +59,23 @@ export type SignInFromUrlResult =
   | { readonly kind: 'link_rejected'; readonly code: string | null }
   | { readonly kind: 'failed' }
   | { readonly kind: 'not_an_auth_link' };
+
+/**
+ * Verifying a typed code. Four outcomes, and the split between the first two
+ * failures is the one that matters: "that code is wrong" sends somebody back
+ * to the mail to re-read six digits, while "that code has expired" sends
+ * them to request a new one. Collapsing them would leave half of those
+ * people retyping a code that can never work.
+ */
+export type SignInCodeResult =
+  | { readonly kind: 'signed_in' }
+  /** Six digits that Supabase does not recognise for this address. */
+  | { readonly kind: 'invalid_code' }
+  /** The code was right but is past its window, or has already been used. */
+  | { readonly kind: 'expired' }
+  /** Not six digits. Caught here so a malformed code never spends a request. */
+  | { readonly kind: 'malformed' }
+  | { readonly kind: 'failed' };
 
 export type ProfileCreationResult =
   | { readonly kind: 'created' }
@@ -114,6 +132,52 @@ export async function requestMagicLink(rawEmail: string): Promise<MagicLinkResul
       return { kind: 'sent' };
     }
     return isRateLimited(error) ? { kind: 'rate_limited' } : { kind: 'failed' };
+  } catch {
+    return { kind: 'failed' };
+  }
+}
+
+/**
+ * Supabase reports both a wrong code and an expired one as a 4xx with prose,
+ * not as distinct codes, so the message is the only signal available — the
+ * same situation `isRateLimited` above is in, and handled the same way.
+ *
+ * Anchored on `expire` rather than a full sentence because the wording has
+ * changed at least once ("Token has expired or is invalid" versus "Email
+ * link is invalid or has expired") and a match on the whole phrase is a
+ * match that breaks silently on the next edit.
+ */
+function isExpiredCode(error: { readonly message?: string }): boolean {
+  return typeof error.message === 'string' && /expire/i.test(error.message);
+}
+
+/**
+ * Exchange six typed digits for a session.
+ *
+ * `type: 'email'` IS THE RIGHT DISCRIMINATOR AND `'magiclink'` IS NOT, which
+ * is worth stating because both exist and one of them silently does not work
+ * here. `verifyOtp` uses the type to decide which token family to check
+ * against; `'magiclink'` expects the hash out of a clicked URL, while
+ * `'email'` is the six-digit OTP that `{{ .Token }}` puts in the mail. Pass
+ * the wrong one and every correct code comes back invalid.
+ *
+ * The code is validated before the call, so a half-typed code costs nothing.
+ */
+export async function verifySignInCode(rawEmail: string, rawCode: string): Promise<SignInCodeResult> {
+  const submission = readSignInCode(rawCode);
+  if (submission.readiness !== 'ready') {
+    return { kind: 'malformed' };
+  }
+  try {
+    const { error } = await supabase.auth.verifyOtp({
+      email: normalizeEmail(rawEmail),
+      token: submission.code,
+      type: 'email',
+    });
+    if (error === null) {
+      return { kind: 'signed_in' };
+    }
+    return isExpiredCode(error) ? { kind: 'expired' } : { kind: 'invalid_code' };
   } catch {
     return { kind: 'failed' };
   }
