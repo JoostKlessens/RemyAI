@@ -10,24 +10,14 @@ boodschappenmand bij Albert Heijn of Jumbo. De overlap met Remy is uitsluitend
 de import; hun tweede helft (boodschappen, prijzen, supermarktkoppeling) is
 grotendeels bewust niet overgenomen.
 
-**Stand:** 2 september 2026 (avond), `feat/live-import-and-plan-phases`,
-lokaal t/m `ecb98b8`, vijf commits vóór op `origin`. Daarbovenop staat
-**ongecommit werk in de working tree**, in vijf brokken: RCP-01's schaal-UI
-(`PortionScalingSheet.tsx`, `portionScalingCopy.ts`, `cook/[mealId].tsx`),
-GAP-07 inclusief de twee comments die de eerste ronde miste
-(`urlParsing.ts`, `resolveShortLinkTarget.ts`, `importResult.ts`,
-`parse-recipe/index.ts`), OPS-08's migratie `0013` plus de statusregel in
-`0012`, OPS-09's ESLint-regel in `lint/eslint.flat.config.mjs`, en ENT-05's
-lege eerste ervaring (`emptyLibraryCopy.ts`, `recipes.tsx`,
-`NoCandidateState.tsx`, `librarySearchCopy.ts`,
-`LibrarySearchEmptyState.tsx`, plus een verouderde locatieverwijzing in
-`shoppingListCopy.ts`' header).
+**Stand:** 3 september 2026, `feat/live-import-and-plan-phases`, t/m
+`e222a58`, **gepusht en in sync met `origin`**. Werkboom schoon.
 
-Vier checks groen, nagemeten op de eindstand: typecheck 0,
-`check:functions` 0, lint 0, **2534 tests over 99 bestanden** (was 2476 over
-97). De +58 zit volledig in twee nieuwe testbestanden:
-`tests/portionScalingCopy.test.ts` (43) en `tests/emptyLibraryCopy.test.ts`
-(15). Er is geen bestaande test gewijzigd of verwijderd.
+De database is bij: `0001` t/m `0013` draaien, nagemeten tegen de live
+database in plaats van aangenomen. De drie secrets staan er. De edge functie
+is gedeployed, dus de throttlepoort en de dichting van het anon-key-gat zijn
+werkelijk actief. Vier checks groen: typecheck 0, `check:functions` 0, lint 0,
+**2548 tests over 100 bestanden**.
 
 | Status | Betekenis |
 |---|---|
@@ -162,7 +152,7 @@ doorgegeven:
 | # | Status | Wat |
 |---|---|---|
 | OPS-01 | ⬜ | Expo SDK 51 / RN 0.74 zijn van medio 2024; de laatste is SDK 57 / RN 0.86. Blokkeert ENT-01. **Het plan staat uitgeschreven in `OPEN-BESLISSINGEN.md`** — zes stappen, één SDK per keer, want dat is Expo's eigen advies. Begin met `npx expo-doctor` op de huidige stand |
-| OPS-02 | 🔒 | Geen development build-pijplijn. Share extension kan niet in Expo Go |
+| OPS-02 | 🔒 | **Geen development build-pijplijn — en dat blokkeert nu ook gewoon testen.** Lang genoteerd als "share extension kan niet in Expo Go". Op 3 september bleek de bredere versie: Expo Go ondersteunt alleen nog de nieuwste SDK, deze app staat op 51, en op **iOS** is er geen weg omheen — de App Store heeft één Expo Go en die draait SDK 51 niet. Op **Android** wel: Expo publiceert per oude SDK nog een Expo Go-build (`expo.dev/go?sdkVersion=51&platform=android`). Een ontwikkelbuild vergt `eas.json`, `expo-dev-client` en een EAS-account; voor iOS bovendien een betaald Apple Developer-account. Geen van drieën bestaat in deze repo |
 | OPS-03 | 🔒 | Engelse vertaling. Geen i18n-laag; copy zit hardcoded in tientallen `*Copy.ts`-modules. Open vraag H |
 | OPS-04 | ⬜ | Fixtures naast de echte paden |
 | OPS-05 | ✅ | End-to-end test over plakken → parsen → bevestigen → opslaan |
@@ -223,39 +213,58 @@ Dat document stelt de vraag; dit document draagt de code. De vertaling:
 
 ---
 
-## Wat er open ligt zonder blokkade
+## Wat er nog open ligt
 
-Voor een verse sessie: dit is wat je kunt oppakken zonder eerst een
-beslissing te hoeven ontlokken. Op volgorde van hefboom.
+Bijgewerkt na de sessies van 2 en 3 september. Geland sinds de vorige versie:
+RCP-01, ENT-05, IMP-09, GAP-07, GAP-10, OPS-08 (gedraaid) en de ESLint-helft
+van OPS-09. Geschrapt: ENT-03. Beslist: GAP-08 blijft optioneel.
 
-Bijgewerkt na de sessie van 2 september (avond). RCP-01, GAP-07 en de
-ESLint-helft van OPS-09 zijn geland; OPS-08 is geschreven maar niet gedraaid.
+**Er staat geen enkele beslissing van de eigenaar meer in de weg.** Dat was
+sinds augustus niet zo.
 
-**Eerst een beslissing van de eigenaar, want deze liggen klaar en wachten
-alleen op een ja:**
+### De grootste, en hij is groter geworden
 
-1. **`supabase db push`** — `0011`, `0012` én nu `0013`. Zonder de tabellen
-   faalt élke import, want de poort faalt bewust dicht. Dit is geen
-   backlogitem maar de eerste domino.
-2. ~~GAP-08~~ — **beslist op 2 september: het veld blijft optioneel.** De
-   reden staat bij GAP-08 hierboven; hier staat niets meer open.
-3. **ENT-03** — botst met `paste.tsx`'s "nooit de invoer inspecteren".
-   Kiezen: de zwakke-maar-verenigbare variant, of schrappen.
+**OPS-01 en OPS-02.** De backlog noemde ze lang de blokkade van ENT-01, de
+share extension. Ze blokkeren meer dan dat, en dat bleek pas toen de vraag
+gesteld werd hoe je deze app op een telefoon zet:
 
-**Daarna, zonder blokkade, op volgorde van hefboom:**
+> Expo Go ondersteunt alleen nog de nieuwste SDK. Deze app staat op SDK 51,
+> uit mei 2024, zes majors terug. Op **Android** valt dat te omzeilen — Expo
+> publiceert nog een Expo Go-build per oude SDK. Op **iOS** niet: de App
+> Store heeft er één, en die draait SDK 51 niet.
 
-4. ~~ENT-05~~ — **geland.** Zie de ENT-05-regel hierboven. Het defect zat
-   niet alleen in de zichtbare copy maar ook in een `accessibilityLabel`,
-   waar geen ziende lezer het ooit had gevonden.
-5. **GAP-10 en GAP-11** — verouderde comments in de importlaag. Losse
-   comment-edits, geen code, maar dit zijn dragende documenten in een
-   codebase die zijn eigen argumenten serieus neemt.
-6. **IMP-09** — handmatig aanvullen na mislukte extractie. Nog steeds de
-   zwakste plek, en `no_recipe_in_caption` is volgens IMP-07 geen randgeval.
-7. **OPS-09, de tweede helft** — `supabase/functions/**` uit ESLint's
-   `ignores` halen, of Deno installeren. Pas urgent zodra er een echte
-   `npm:`/`jsr:`-specifier in de functie komt.
-8. **PRF-03, RCP-04, LIB-05, ENT-04, ENT-06** — kleiner, allemaal vrij.
+Zonder ontwikkelbuild is deze app dus niet op een iPhone te krijgen. Dat is
+geen toekomstig probleem voor een toekomstige feature; dat is vandaag, en het
+raakt elke vorm van handmatig testen. Het plan staat uitgeschreven in
+`OPEN-BESLISSINGEN.md`: zes stappen, één SDK per keer, want dat is Expo's
+eigen advies.
+
+### Daarna, op volgorde van hefboom
+
+1. **Eén echte import door de flow**, plus de throttle-test (21 binnen tien
+   minuten, de 21e hoort `import_throttled` te krijgen). Geen backlogitem
+   maar de enige manier om te weten dat de deploy van gisteren doet wat we
+   denken.
+2. **IMP-05** — één secret, geen code. `GEMINI_MODEL` op een gedateerde
+   snapshot pinnen. Extra reden sinds 2 september: een verschoven alias
+   faalt als `llm_request_failed`, dezelfde emmer als de facturatiestoring,
+   en die is in niets wat je kunt tellen te onderscheiden.
+3. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
+   hebben? Het duurst betaalde openstaande punt: een populair blogrecept is
+   één URL die veel huishoudens delen, en juist die route is uitgesloten van
+   de cache én van kookbewijs.
+4. **PRF-03, RCP-04, LIB-05, ENT-04, ENT-06, SRC-07** — kleiner, allemaal
+   vrij, geen van alle geblokkeerd.
+5. **GAP-11's rest en OPS-09's tweede helft** — comment-onderhoud en
+   `supabase/functions/**` uit ESLint's `ignores`. Pas urgent zodra er een
+   echte `npm:`/`jsr:`-specifier in de functie komt.
+
+### Wacht op iets buiten de code
+
+**SRC-09** meet begin oktober (en dat venster heeft een gat, zie DEC-02).
+**BSK-04/05/06**, **RCP-02**, **LIB-02**, **OPS-03**, **BIZ-01/03** wachten
+op de open vragen D t/m H. **SRC-06** en **SRC-04** wachten op Meta, wat
+neerkomt op: niet.
 
 ---
 
