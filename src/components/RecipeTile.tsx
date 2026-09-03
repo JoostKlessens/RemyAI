@@ -62,6 +62,7 @@
  * past two rows and long-press stops being a rare, deliberate act.
  */
 
+import type { JSX } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Meal } from '@/domain/types';

@@ -39,6 +39,7 @@
  * a tally was meant for you.
  */
 
+import type { JSX } from 'react';
 import { Image, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
 import { buildKringRowAccessibilityLabel, type KringRowModel } from './kringPresentation';

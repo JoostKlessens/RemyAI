@@ -7,7 +7,7 @@
  * docs/DESIGN.md.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import { Animated, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { DeclineReason } from '@/domain/types';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';

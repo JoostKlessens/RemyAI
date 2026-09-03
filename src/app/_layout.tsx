@@ -36,7 +36,7 @@
  * actually appears on screen.
  */
 
-import { useEffect } from 'react';
+import { useEffect, type JSX } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';

@@ -22,7 +22,7 @@
  * in two places because the second one is the only one that is enforceable.
  */
 
-import { useState } from 'react';
+import { useState, type JSX } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';

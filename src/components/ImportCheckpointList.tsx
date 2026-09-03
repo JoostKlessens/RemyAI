@@ -26,6 +26,7 @@
  * not render however hard it is asked.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 

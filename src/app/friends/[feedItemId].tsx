@@ -49,7 +49,7 @@
  * FIXTURES ONLY (./_fixtures.ts) — no fetch, no repository, no Supabase.
  */
 
-import { useMemo } from 'react';
+import { useMemo, type JSX } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';

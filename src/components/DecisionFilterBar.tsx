@@ -57,6 +57,7 @@
  * in tests/contrast.test.ts.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
 import { DISH_TAGS } from '@/domain/dishTags';

@@ -53,6 +53,7 @@
  * taste).
  */
 
+import type { JSX } from 'react';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';

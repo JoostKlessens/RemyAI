@@ -55,7 +55,7 @@
  * being repeated exactly as written.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ScaledIngredient, ScaleRecipeResult } from '@/domain/scaleRecipe';

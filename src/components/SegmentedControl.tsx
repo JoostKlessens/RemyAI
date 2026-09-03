@@ -4,6 +4,7 @@
  * tied to that one call site.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 

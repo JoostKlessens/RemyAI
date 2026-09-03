@@ -24,7 +24,7 @@
  * panel becomes a fixed window onto the first few lines.
  */
 
-import { useState } from 'react';
+import { useState, type JSX } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 
 import { describeSourceText } from '@/components/sourceTextCopy';

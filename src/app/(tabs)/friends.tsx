@@ -90,6 +90,7 @@
  * read-receipt system (§3.2), and `seen_at` is never shown to the sender.
  */
 
+import type { JSX } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';

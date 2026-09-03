@@ -8,6 +8,7 @@
  * cancel action.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { spacing } from '@/theme/tokens';
 import { Button } from './Button';

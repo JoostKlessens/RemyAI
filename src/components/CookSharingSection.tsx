@@ -36,6 +36,7 @@
  * settings.tsx's `onChangeCookSharing`.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';

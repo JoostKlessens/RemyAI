@@ -129,7 +129,7 @@
  * `LibraryTileActionSheet` §3.1 already uses, never a second modal.
  */
 
-import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useMemo, useReducer, useRef, useState, type JSX } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AccessibilityInfo, FlatList, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -92,7 +92,7 @@
  * its copy and the flag on `WeekPlanEntry` are all gone with the bug.
  */
 
-import { useCallback, useReducer, useState } from 'react';
+import { useCallback, useReducer, useState, type JSX } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { AccessibilityInfo, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

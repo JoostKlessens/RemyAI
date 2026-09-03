@@ -21,6 +21,7 @@
  * them off retrying into the same wall.
  */
 
+import type { JSX } from 'react';
 import { useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

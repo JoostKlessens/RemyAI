@@ -16,7 +16,7 @@
  *   a chip-select over the vocabulary instead of a text field.
  */
 
-import { useState } from 'react';
+import { useState, type JSX } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import type { AllergenVocabularyEntry } from '@/domain/allergens';
 import { normalizeTag } from '@/domain/normalizeTag';

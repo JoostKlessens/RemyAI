@@ -54,6 +54,7 @@
  * and then reverts.
  */
 
+import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import {

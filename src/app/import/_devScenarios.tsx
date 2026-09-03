@@ -25,6 +25,7 @@
  * `Record`s below are built on.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { buildFixtureImportAttempt, type FixtureImportAttempt, type FixtureImportScenario } from './_fixtures';
 import type { ImportPlatform } from '@/domain/import/types';

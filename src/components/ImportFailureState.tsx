@@ -14,6 +14,7 @@
  * the more likely fix).
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { buildImportFailureCopy, type ImportFailureResult } from './importFailureCopy';
 import { buildImportStartOverCopy, type ImportSourceMode } from './importPasteCopy';

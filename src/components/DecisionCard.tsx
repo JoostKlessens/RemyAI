@@ -17,6 +17,7 @@
  * screen navigates to Kookmodus.
  */
 
+import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, motion, resolveDuration, spacing, typeScale } from '@/theme/tokens';

@@ -82,7 +82,7 @@
  * empty. One switch moves both scopes — see `_trendingSource.ts`.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type JSX } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BOARD_SCENARIOS, type BoardScenario } from '@/app/ranglijst/_fixtures';

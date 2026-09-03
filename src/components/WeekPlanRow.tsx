@@ -63,6 +63,7 @@
  * with the note itself; an archived dish can no longer reach this screen.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { WeekPlanEntry } from '@/domain/weekPlan';
 import {

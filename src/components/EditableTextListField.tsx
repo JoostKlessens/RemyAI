@@ -13,6 +13,7 @@
  * a row grow over capping it."
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 

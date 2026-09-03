@@ -99,7 +99,7 @@
  * from a revocation in any later audit. Both answers mark.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'expo-router';
 import {
   AccessibilityInfo,

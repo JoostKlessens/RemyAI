@@ -38,6 +38,7 @@
  *     request are tappable.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type ColorTokens, spacing, typeScale } from '@/theme/tokens';
 import {

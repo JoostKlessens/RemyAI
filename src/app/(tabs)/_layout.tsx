@@ -70,6 +70,7 @@
  * behaves as it always did.
  */
 
+import type { JSX } from 'react';
 import { Tabs } from 'expo-router';
 import { useColorScheme } from 'react-native';
 import { buildVriendenTabAccessibilityLabel, buildVriendenTabLabel } from '@/components/gekooktPresentation';

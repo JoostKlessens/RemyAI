@@ -34,6 +34,7 @@
  * that merely labels a field.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { RecipeProvenance } from '@/domain/import/types';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';

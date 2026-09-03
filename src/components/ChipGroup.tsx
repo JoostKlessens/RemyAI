@@ -4,7 +4,7 @@
  * grid — purely a layout primitive.
  */
 
-import type { ReactNode } from 'react';
+import type { ReactNode, JSX } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { spacing } from '@/theme/tokens';
 

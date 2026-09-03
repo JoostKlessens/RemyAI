@@ -51,6 +51,7 @@
  * wrote (PD-016) — proof is the tier you earn by cooking; a send is not.
  */
 
+import type { JSX } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';

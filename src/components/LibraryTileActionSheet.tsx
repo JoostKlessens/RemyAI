@@ -78,6 +78,7 @@
  * screen wearing a sheet's clothes.
  */
 
+import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

@@ -18,6 +18,7 @@
  * explicit act.
  */
 
+import type { JSX } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { EU_ALLERGENS } from '@/domain/allergens';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';

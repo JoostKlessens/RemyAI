@@ -28,6 +28,7 @@
  * "veilig voor" (PD-006's liability boundary, not a copy taste).
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { EU_ALLERGENS } from '@/domain/allergens';
 import type { Member, MemberId, Restriction } from '@/domain/types';

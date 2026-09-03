@@ -24,6 +24,7 @@
  * phone sees the truth on that frame rather than up to a second later.
  */
 
+import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {

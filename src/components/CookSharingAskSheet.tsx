@@ -48,6 +48,7 @@
  * and the consequence hardest to read.
  */
 
+import type { JSX } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '@/hooks/useReduceMotion';

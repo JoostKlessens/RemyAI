@@ -31,6 +31,7 @@
  * on a small glyph while holding groceries.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { ShoppingListItem } from '@/domain/shopping/types';
 import {

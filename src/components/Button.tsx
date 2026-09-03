@@ -10,7 +10,7 @@
  * 0.98), honouring reduce-motion via `resolveDuration`.
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import {
   ActivityIndicator,
   Animated,

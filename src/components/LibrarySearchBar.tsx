@@ -48,6 +48,7 @@
  * purpose, and never resets this row.
  */
 
+import type { JSX } from 'react';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';

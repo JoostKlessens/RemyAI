@@ -32,6 +32,7 @@
  * a single accessible node, with no chevron.
  */
 
+import type { JSX } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { ImportPlatform } from '@/domain/import/types';

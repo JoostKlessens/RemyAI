@@ -21,6 +21,7 @@
  *    zelf`), with no dish to show because none remain.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { NoCandidateReason } from '@/domain/types';
 import { getColors, spacing, typeScale } from '@/theme/tokens';

@@ -17,6 +17,7 @@
  * still owns none of its own words.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { LibrarySearchEmptyCopy } from './librarySearchCopy';
 import { Button } from './Button';

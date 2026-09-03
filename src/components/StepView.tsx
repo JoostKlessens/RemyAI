@@ -10,7 +10,7 @@
  * attention is on the stove. Reduced motion collapses it to an instant cut.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import { Animated, Easing, ScrollView, StyleSheet, useColorScheme } from 'react-native';
 import { getColors, motion, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 

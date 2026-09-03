@@ -38,6 +38,7 @@
  * gesture nobody asked for.
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';

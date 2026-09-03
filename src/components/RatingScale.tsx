@@ -36,7 +36,7 @@
  * it needs lives in ratingScaleCopy.ts where vitest can reach it.
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { RATING_MAX, RATING_MIN } from '@/domain/rating';

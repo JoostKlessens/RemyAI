@@ -84,7 +84,7 @@
  * declares it — see that file's own `AuthGate` comment.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

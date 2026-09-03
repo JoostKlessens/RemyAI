@@ -4,6 +4,7 @@
  * with `accent`.
  */
 
+import type { JSX } from 'react';
 import { StyleSheet, View, useColorScheme } from 'react-native';
 import { getColors } from '@/theme/tokens';
 

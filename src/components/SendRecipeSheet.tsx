@@ -58,7 +58,7 @@
  * its own header says why.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import {
   Animated,
   Easing,

@@ -94,7 +94,7 @@
  * happens — a correction is a private act on a household's own row.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   AccessibilityInfo,

@@ -3,6 +3,7 @@
  * name, hairline-separated (no boxed card per field, per docs/DESIGN.md).
  */
 
+import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 

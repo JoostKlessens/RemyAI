@@ -86,7 +86,7 @@
  * trade this card's own rules already refuse.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
 import { elevation, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';

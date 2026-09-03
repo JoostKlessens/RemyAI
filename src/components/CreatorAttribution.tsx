@@ -14,6 +14,7 @@
  * its avatar-initial chip.
  */
 
+import type { JSX } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Creator } from '@/domain/feed/types';

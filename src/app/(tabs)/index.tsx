@@ -68,6 +68,7 @@
  * reasonText) is still correct, only the swap COUNT resets.
  */
 
+import type { JSX } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';

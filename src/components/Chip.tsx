@@ -7,7 +7,7 @@
  * from arm's length").
  */
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, useColorScheme } from 'react-native';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
