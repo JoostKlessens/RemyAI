@@ -96,7 +96,7 @@ doorgegeven:
 
 | # | Status | Wat |
 |---|---|---|
-| ENT-01 | 🔒 | **Share extension.** Nog steeds het item met de meeste hefboom. Geblokkeerd door OPS-01/02 |
+| ENT-01 | 🔒 | **Share extension.** Nog steeds het item met de meeste hefboom, en sinds 3 september half ontgrendeld: OPS-01 is rond, dus de SDK staat niet meer in de weg. Alleen OPS-02 blijft over — een share extension is native code en draait niet in Expo Go, dus dit vraagt een ontwikkelbuild |
 | ENT-02 | 🔒 | Achtergrond-import met notificatie. Volgt op ENT-01 |
 | ENT-03 | ⛔ | **Geschrapt door de eigenaar op 2 september 2026.** Klembord-*detectie* vereist precies wat `paste.tsx:8-23` in hoofdletters verbiedt — het scherm inspecteert de geplakte string nooit om de modus te kiezen — en het kost een gemeterde modelaanroep om een link als `{text}` te versturen. De enige variant die daar niet mee botst (aanbieden wat op het klembord staat, bínnen de al gekozen modus) voegt vrijwel niets toe aan de plak-knop die al op `paste.tsx:530` staat. Twee wegen: een die een vastgelegde beslissing omkeert, en een die werk is zonder winst. Geen van beide is de moeite, dus dit item is dicht in plaats van eeuwig open |
 | ENT-04 | ⬜ | Meerdere links tegelijk |
@@ -151,8 +151,8 @@ doorgegeven:
 
 | # | Status | Wat |
 |---|---|---|
-| OPS-01 | ⬜ | Expo SDK 51 / RN 0.74 zijn van medio 2024; de laatste is SDK 57 / RN 0.86. Blokkeert ENT-01. **Het plan staat uitgeschreven in `OPEN-BESLISSINGEN.md`** — zes stappen, één SDK per keer, want dat is Expo's eigen advies. Begin met `npx expo-doctor` op de huidige stand |
-| OPS-02 | 🔒 | **Geen development build-pijplijn — en dat blokkeert nu ook gewoon testen.** Lang genoteerd als "share extension kan niet in Expo Go". Op 3 september bleek de bredere versie: Expo Go ondersteunt alleen nog de nieuwste SDK, deze app staat op 51, en op **iOS** is er geen weg omheen — de App Store heeft één Expo Go en die draait SDK 51 niet. Op **Android** wel: Expo publiceert per oude SDK nog een Expo Go-build (`expo.dev/go?sdkVersion=51&platform=android`). Een ontwikkelbuild vergt `eas.json`, `expo-dev-client` en een EAS-account; voor iOS bovendien een betaald Apple Developer-account. Geen van drieën bestaat in deze repo |
+| OPS-01 | ✅ | **Zes majors in zes stappen, 3 september.** SDK 51 → 57, RN 0.74.5 → 0.86.3, React 18.2 → 19.2.3, TypeScript 5.3 → 6.0.3, expo-router 3.5 → 57.0.18. Elke stap een eigen commit met dezelfde vier checks: `expo-doctor` 21/21, typecheck 0, `check:functions` 0, lint 0, 2548 tests over 100 bestanden. Wat de stapsgewijze aanpak opleverde, en in één sprong onvindbaar was geweest: 52 brak `Array.from(searchParams.keys())`, 53 liet de globale `JSX`-namespace vallen over 61 bestanden, 55 hernoemde het onbekende kleurschema van `null` naar `'unspecified'`, 56 keurde `baseUrl` af — en dat laatste maskeerde elf fouten, want een configfout laat `tsc` afbreken vóór het typechecken |
+| OPS-02 | 🔒 | **Geen development build-pijplijn — maar niet langer de blokkade voor testen.** Sinds OPS-01 draait de app op SDK 57, de versie die Expo Go ondersteunt, dus hij is nu zonder build en zonder betaald Apple-account op een iPhone te zetten. Wat een ontwikkelbuild nog steeds nodig heeft is ENT-01: een share extension is een native module en die draait per definitie niet in Expo Go. Daarvoor is `eas.json`, `expo-dev-client`, een EAS-account en voor iOS een betaald Apple Developer-account nodig; geen daarvan bestaat in deze repo |
 | OPS-03 | 🔒 | Engelse vertaling. Geen i18n-laag; copy zit hardcoded in tientallen `*Copy.ts`-modules. Open vraag H |
 | OPS-04 | ⬜ | Fixtures naast de echte paden |
 | OPS-05 | ✅ | End-to-end test over plakken → parsen → bevestigen → opslaan |
@@ -222,29 +222,33 @@ van OPS-09. Geschrapt: ENT-03. Beslist: GAP-08 blijft optioneel.
 **Er staat geen enkele beslissing van de eigenaar meer in de weg.** Dat was
 sinds augustus niet zo.
 
-### De grootste, en hij is groter geworden
+### ~~De grootste~~ — gedaan op 3 september
 
-**OPS-01 en OPS-02.** De backlog noemde ze lang de blokkade van ENT-01, de
-share extension. Ze blokkeren meer dan dat, en dat bleek pas toen de vraag
-gesteld werd hoe je deze app op een telefoon zet:
+**OPS-01 is rond.** SDK 51 → 57 in zes stappen, elk met een eigen commit en
+dezelfde vier checks erachteraan. De aanleiding was de vraag hoe je deze app
+op een iPhone zet; het antwoord was dat Expo Go alleen de nieuwste SDK
+ondersteunt en deze app zes majors achterliep. Dat is weg.
 
-> Expo Go ondersteunt alleen nog de nieuwste SDK. Deze app staat op SDK 51,
-> uit mei 2024, zes majors terug. Op **Android** valt dat te omzeilen — Expo
-> publiceert nog een Expo Go-build per oude SDK. Op **iOS** niet: de App
-> Store heeft er één, en die draait SDK 51 niet.
+**Wat er nu wél kan:** de app op een iPhone draaien via Expo Go uit de App
+Store, zonder ontwikkelbuild en zonder betaald Apple-account.
 
-Zonder ontwikkelbuild is deze app dus niet op een iPhone te krijgen. Dat is
-geen toekomstig probleem voor een toekomstige feature; dat is vandaag, en het
-raakt elke vorm van handmatig testen. Het plan staat uitgeschreven in
-`OPEN-BESLISSINGEN.md`: zes stappen, één SDK per keer, want dat is Expo's
-eigen advies.
+**Wat OPS-02 nog steeds blokkeert:** ENT-01. Een share extension is native
+code en draait per definitie niet in Expo Go, hoe actueel de SDK ook is.
+
+**Wat geen enkele check kon zeggen.** De nieuwe architectuur draait sinds
+stap vier — niet als keuze, maar omdat SDK 55 `newArchEnabled` uit het schema
+haalde. De typelaag en 2548 tests merken daar niets van, en dat is precies de
+helft die het niet kan merken: `Animated` in `TimerDisplay` en
+`DecisionCard`, `expo-haptics` en safe-area zitten nu op een ander
+renderpad. Dat blijkt op een toestel of nergens.
 
 ### Daarna, op volgorde van hefboom
 
-1. **Eén echte import door de flow**, plus de throttle-test (21 binnen tien
-   minuten, de 21e hoort `import_throttled` te krijgen). Geen backlogitem
-   maar de enige manier om te weten dat de deploy van gisteren doet wat we
-   denken.
+1. **De app op een toestel zetten en er doorheen lopen.** `npx expo start`,
+   Expo Go, en dan één echte import door de flow plus de throttle-test (21
+   binnen tien minuten, de 21e hoort `import_throttled` te krijgen). Dubbel
+   zo waardevol als gisteren: het test de deploy én het renderpad van de
+   nieuwe architectuur, en dat laatste heeft geen enkele andere dekking.
 2. **IMP-05** — één secret, geen code. `GEMINI_MODEL` op een gedateerde
    snapshot pinnen. Extra reden sinds 2 september: een verschoven alias
    faalt als `llm_request_failed`, dezelfde emmer als de facturatiestoring,
