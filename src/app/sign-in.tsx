@@ -35,6 +35,7 @@ import { useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
+import { DevPasswordSignIn } from '@/components/DevPasswordSignIn';
 import { readSignInCode, SIGN_IN_CODE_LENGTH } from '@/domain/social/signInCode';
 import { isPlausibleEmail, normalizeEmail, requestMagicLink, verifySignInCode } from '@/lib/auth';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
@@ -128,6 +129,12 @@ export default function SignInScreen(): JSX.Element {
         <Text style={[typeScale.caption, styles.footnote, { color: colors.textMuted }]}>
           Geen wachtwoord. Je krijgt zes cijfers die je één keer gebruikt.
         </Text>
+
+        {/* Never in a real build — see DevPasswordSignIn's header, and the
+            second guard inside `signInWithDevPassword`. Mirrors how
+            (tabs)/index.tsx, friends.tsx and ranglijst.tsx mount their own
+            `__DEV__` surfaces. */}
+        {__DEV__ ? <DevPasswordSignIn /> : null}
       </View>
     </SafeAreaView>
   );

@@ -77,6 +77,42 @@ export type SignInCodeResult =
   | { readonly kind: 'malformed' }
   | { readonly kind: 'failed' };
 
+/**
+ * Signing in with a password, which this product does not do.
+ *
+ * WHY IT EXISTS ANYWAY. Testing on a real device needs a real session, and
+ * every route to one that goes through email is gated on something outside
+ * this repo: Supabase's built-in sender caps at a couple of messages an hour
+ * and refuses addresses outside the project team, and the six-digit code
+ * needs a template that only becomes editable once custom SMTP is
+ * configured. None of that is a reason to be unable to open the app.
+ *
+ * A SESSION IS A SESSION, and that is the point. `signInWithPassword`
+ * produces the same thing a magic link produces — a real `sub` claim, real
+ * RLS scoping, a real `onAuthStateChange` — so what gets exercised on the
+ * device is the app, not a mock of it. That is why this is preferred over
+ * `signInAnonymously`, which would also work and would also leave every
+ * code path that assumes an email address untested.
+ *
+ * IT REFUSES OUTSIDE `__DEV__`, IN THIS FUNCTION AND NOT ONLY IN THE UI.
+ * The caller already hides behind `__DEV__` the way every other dev surface
+ * in this app does, and that would be enough right up until somebody
+ * imports this from somewhere that does not. PD-012 makes an account
+ * mandatory and the product's whole sign-in story is passwordless; a
+ * password path that could ship is a second front door nobody designed.
+ * Two guards for one rule is cheap, and only one of them survives a
+ * refactor of the other.
+ */
+export type DevPasswordSignInResult =
+  | { readonly kind: 'signed_in' }
+  /** Wrong address or wrong password — Supabase does not distinguish, and neither should we. */
+  | { readonly kind: 'invalid_credentials' }
+  /** The user exists but was never confirmed. Fix it with "Auto Confirm User" in the dashboard. */
+  | { readonly kind: 'unconfirmed' }
+  | { readonly kind: 'failed' }
+  /** Called from a production build. Never expected; returned rather than thrown, like everything else here. */
+  | { readonly kind: 'refused_outside_dev' };
+
 export type ProfileCreationResult =
   | { readonly kind: 'created' }
   | { readonly kind: 'failed'; readonly reason: ProfileCreationFailure };
@@ -178,6 +214,42 @@ export async function verifySignInCode(rawEmail: string, rawCode: string): Promi
       return { kind: 'signed_in' };
     }
     return isExpiredCode(error) ? { kind: 'expired' } : { kind: 'invalid_code' };
+  } catch {
+    return { kind: 'failed' };
+  }
+}
+
+/**
+ * See `DevPasswordSignInResult` for why a password path exists in a
+ * passwordless product, and why the guard below is duplicated in the UI.
+ *
+ * Create the user in Supabase → Authentication → Users → Add user, with
+ * "Auto Confirm User" ticked. Without that tick the account exists but
+ * cannot sign in, which surfaces here as `unconfirmed` rather than as
+ * `invalid_credentials`, because "your password is wrong" would send
+ * somebody to change a password that is already right.
+ */
+export async function signInWithDevPassword(
+  rawEmail: string,
+  password: string,
+): Promise<DevPasswordSignInResult> {
+  if (!__DEV__) {
+    return { kind: 'refused_outside_dev' };
+  }
+  try {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizeEmail(rawEmail),
+      password,
+    });
+    if (error === null) {
+      return { kind: 'signed_in' };
+    }
+    // Supabase reports this in prose rather than with a dedicated code, the
+    // same situation `isRateLimited` and `isExpiredCode` are in.
+    if (typeof error.message === 'string' && /confirm/i.test(error.message)) {
+      return { kind: 'unconfirmed' };
+    }
+    return { kind: 'invalid_credentials' };
   } catch {
     return { kind: 'failed' };
   }
