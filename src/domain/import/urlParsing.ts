@@ -330,6 +330,34 @@ function normalizeYouTubeUrl(parsed: URL, hostname: string): NormalizedUrlResult
  * "you did not give me the canonical form", never "that video does not
  * exist".
  */
+/**
+ * How many query parameters a URL carries.
+ *
+ * `forEach` RATHER THAN `Array.from(params.keys()).length`, WHICH IS WHAT
+ * THIS WAS UNTIL THE SDK 52 UPGRADE. That bump brought newer ambient types
+ * in which `URLSearchParams.keys()` returns a `URLSearchParamsIterator`,
+ * declared with the iterator-helper machinery TypeScript 5.3 cannot model —
+ * so the old spelling stopped compiling against a runtime that had not
+ * changed at all. Worth stating plainly, because "the types moved" and "the
+ * behaviour moved" look identical in a diff and call for opposite reviews.
+ *
+ * `forEach` exists on `URLSearchParams` everywhere this app runs, needs no
+ * iterator typing, and counts exactly the same things.
+ *
+ * `params.size` would be shorter and is the obvious modern answer. It is
+ * not used because it is a 2023 addition and React Native's `URL` is a
+ * polyfill rather than the platform's own, which makes it the one option
+ * here whose availability would have to be confirmed on a device rather
+ * than read off a type.
+ */
+function countSearchParams(params: URLSearchParams): number {
+  let count = 0;
+  params.forEach(() => {
+    count += 1;
+  });
+  return count;
+}
+
 export function readYouTubeVideoId(normalizedUrl: string): string | null {
   const parsed = parseUrl(normalizedUrl.trim());
   if (parsed === null || parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== CANONICAL_YOUTUBE_HOST) {
@@ -342,7 +370,7 @@ export function readYouTubeVideoId(normalizedUrl: string): string | null {
   // other code path assembled, which is precisely what this function
   // refuses to guess about.
   const id = parsed.searchParams.get('v');
-  if (id === null || Array.from(parsed.searchParams.keys()).length !== 1) {
+  if (id === null || countSearchParams(parsed.searchParams) !== 1) {
     return null;
   }
   return isValidYouTubeVideoId(id) ? id : null;
