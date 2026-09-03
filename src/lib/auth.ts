@@ -12,6 +12,19 @@
  * native. It is not available to us. The code only appears in the email if
  * `{{ .Token }}` is in the template, and Supabase gates template editing
  * behind custom SMTP. So the link it is, until there is a real mail sender.
+ * Rechecked on 3 September 2026 and it has got stricter, not looser: since
+ * 3 June 2026 a free-tier project on the default provider cannot edit those
+ * templates at all. Custom SMTP is the prerequisite for a typed code, and
+ * it is needed anyway before real users — the built-in sender caps at a
+ * couple of messages an hour and refuses any address that is not on the
+ * project team.
+ *
+ * THE LINK'S OTHER HALF NOW EXISTS, AND UNTIL TODAY IT DID NOT. Sending was
+ * always here; receiving was not. On native the link arrives as a deep link
+ * and has to be exchanged explicitly (supabase.ts:52-59 says so), and
+ * nothing did — so on a phone the mail opened the app and the app ignored
+ * it. `completeSignInFromUrl` below is that exchange, and it is called from
+ * the root layout so it works no matter which screen was showing.
  *
  * RELATED LIMIT, WORTH KNOWING BEFORE REAL USERS. Supabase's built-in
  * sender is explicitly a testing facility: a handful of messages an hour,
@@ -25,6 +38,7 @@
  */
 
 import * as Linking from 'expo-linking';
+import { readAuthRedirect } from '@/domain/social/authRedirect';
 import { classifyProfileCreationFailure, type ProfileCreationFailure } from '@/domain/social/session';
 import { supabase } from './supabase';
 
@@ -32,6 +46,18 @@ export type MagicLinkResult =
   | { readonly kind: 'sent' }
   | { readonly kind: 'rate_limited' }
   | { readonly kind: 'failed' };
+
+/**
+ * What arrived on a deep link. `not_an_auth_link` is the overwhelmingly
+ * common answer and is not a failure: every deep link into this app reaches
+ * the same handler, and most of them are not sign-ins.
+ */
+export type SignInFromUrlResult =
+  | { readonly kind: 'signed_in' }
+  /** The link was real but Supabase refused it: expired, already used, or cancelled. `code` is Supabase's own, for the UI to distinguish "expired" from the rest. */
+  | { readonly kind: 'link_rejected'; readonly code: string | null }
+  | { readonly kind: 'failed' }
+  | { readonly kind: 'not_an_auth_link' };
 
 export type ProfileCreationResult =
   | { readonly kind: 'created' }
@@ -88,6 +114,48 @@ export async function requestMagicLink(rawEmail: string): Promise<MagicLinkResul
       return { kind: 'sent' };
     }
     return isRateLimited(error) ? { kind: 'rate_limited' } : { kind: 'failed' };
+  } catch {
+    return { kind: 'failed' };
+  }
+}
+
+/**
+ * Turn a deep link into a session, or say precisely why not.
+ *
+ * SAFE TO CALL WITH EVERY URL THE APP RECEIVES, which is what makes the
+ * caller simple: it does not have to know which links are sign-ins. A URL
+ * carrying no auth fragment returns `not_an_auth_link` and touches nothing.
+ *
+ * `setSession` rather than `refreshSession` or a manual write: it validates
+ * the pair, stores it through the AsyncStorage adapter configured in
+ * supabase.ts, and — the part that matters here — fires `onAuthStateChange`,
+ * which is what `useSession` is already subscribed to. So a successful call
+ * needs no navigation of its own; the gate that was showing the sign-in
+ * screen re-resolves and moves on by itself.
+ *
+ * Nothing throws, matching every other function in this file: a mail client
+ * that mangles a URL is an ordinary event, not an exceptional one.
+ */
+export async function completeSignInFromUrl(url: string): Promise<SignInFromUrlResult> {
+  const redirect = readAuthRedirect(url);
+  if (redirect.kind === 'none') {
+    return { kind: 'not_an_auth_link' };
+  }
+  if (redirect.kind === 'error') {
+    return { kind: 'link_rejected', code: redirect.error.code };
+  }
+  // A PKCE `?code=` against an implicit-flow client. Reported as a failure
+  // rather than ignored, because the alternative is a link that does
+  // nothing for a reason no one can see — see authRedirect.ts's header.
+  if (redirect.kind === 'unsupported_flow') {
+    return { kind: 'failed' };
+  }
+  try {
+    const { error } = await supabase.auth.setSession({
+      access_token: redirect.accessToken,
+      refresh_token: redirect.refreshToken,
+    });
+    return error === null ? { kind: 'signed_in' } : { kind: 'failed' };
   } catch {
     return { kind: 'failed' };
   }

@@ -42,8 +42,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { Archivo_400Regular, Archivo_600SemiBold, Archivo_700Bold } from '@expo-google-fonts/archivo';
 import { IBMPlexMono_500Medium, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
+import * as Linking from 'expo-linking';
 import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { completeSignInFromUrl } from '@/lib/auth';
 import { useSession } from '@/hooks/useSession';
 import { startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
 import { getAppHouseholdSyncEnvironment } from '@/lib/repository/createRepository';
@@ -73,6 +75,40 @@ export default function RootLayout(): JSX.Element | null {
       void SplashScreen.hideAsync();
     }
   }, [readyToRender]);
+
+  /**
+   * The sign-in link's landing point.
+   *
+   * `Linking.useURL()` COVERS BOTH ARRIVALS, and that is why it is used
+   * rather than an `addEventListener('url')`: tapping the mail can either
+   * wake a running app or cold-start it, and those are two different APIs
+   * (`addEventListener` and `getInitialURL`). A handler wired to only the
+   * first works in every test and fails for every real person, because a
+   * phone that has not opened Remy yet is the normal case for a first
+   * sign-in.
+   *
+   * IT LIVES AT THE ROOT ON PURPOSE. The link can land while any screen is
+   * showing — or none — so hanging this off the sign-in screen would mean a
+   * link only worked if you had left that screen open, which is exactly the
+   * mail-client round trip nobody does.
+   *
+   * NO NAVIGATION HERE. A successful exchange fires `onAuthStateChange`,
+   * `useSession` is subscribed, and `AuthGate` below moves on by itself.
+   * Pushing a route from here would race that gate for the same decision.
+   *
+   * The outcome is deliberately dropped rather than surfaced: this handler
+   * sees every deep link the app receives, most of which are not sign-ins,
+   * and a root-level effect has no business rendering an error over
+   * whatever screen happens to be up. Reporting a rejected link where the
+   * person can act on it belongs to the sign-in screen and is its own item.
+   */
+  const incomingUrl = Linking.useURL();
+  useEffect(() => {
+    if (incomingUrl === null) {
+      return;
+    }
+    void completeSignInFromUrl(incomingUrl);
+  }, [incomingUrl]);
 
   if (!readyToRender) {
     return null;
