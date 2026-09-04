@@ -4,8 +4,10 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 4 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`9fafefc`, gepusht en in sync met `origin`. Werkboom schoon op één untracked
-`verify-gate.ps1` na, die niet van deze sessies is.
+`6158bc3` gepusht. **De werkboom is niet meer schoon:** de eerste drie punten
+van het stylingplan zijn gebouwd en getest maar nog niet gecommit — zie
+"Wat er in de middag van 4 september bij kwam" hieronder. Daarnaast staat er
+nog steeds een untracked `verify-gate.ps1` die niet van deze sessies is.
 
 | Lees dit | Waarvoor |
 |---|---|
@@ -42,7 +44,7 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 2572 tests / 102 bestanden
+npm test                 2598 tests / 104 bestanden
 ```
 
 Draai ze alle vier na elke wijziging. `npm test` duurt ongeveer twintig
@@ -117,6 +119,67 @@ specificeert bestaan geen van alle.
 
 ---
 
+## Wat er in de middag van 4 september bij kwam
+
+**De eerste drie punten van het stylingplan zijn uitgevoerd, plus twee die
+meelagen.** Nog niet gecommit; vier checks groen. Vijf van de zes gaan over
+dingen die het onderzoek al had besloten en die nooit gebouwd waren.
+
+**GAP-20 — de haptics, met een loket.** WS5 §3.2 heeft een tabel van vijftien
+gebeurtenissen; er waren er drie gebouwd. Nu alle, plus vijf die de audit
+niet noemde. Wat de moeite van het onthouden waard is, is de vorm: alles
+loopt door `src/lib/haptics.ts`, met namen die het GEWICHT VAN HET GEVOLG
+noemen (`hapticRealCommit`) in plaats van de API (`impactAsync(Medium)`).
+Reden: een aanroepplek moet dan beantwoorden of dit een echte toezegging is,
+niet of Medium lekker voelt — en dat is precies hoe een woordenschat van vier
+er een van acht wordt die niemand meer uit elkaar hoort. `Heavy`, `Soft`,
+`Rigid` en `Warning` zijn expres niet blootgesteld.
+
+De `.catch` bij elke aanroep is niet defensief maar dragend: de
+webimplementatie van `expo-haptics` is een lége default export, dus élke
+aanroep is daar een afgewezen promise, en deze app exporteert naar web. Die
+regel stond in drie kopieën en staat nu één keer.
+
+**GAP-21 — het einde van kookmodus.** De succes-haptic op `Gemaakt!`, de
+`positive` haarlijn eronder, en de haptic bij het cijfer. De haarlijn heeft
+bewust dezelfde hoogte en marge als `FriendProofCard`'s closed-loop streep:
+het is het vierde lid van een familie die er al was — blauw als je kiest,
+blauw als je iemand kiest, groen als wat je stuurde gekookt werd, en nu groen
+als je het zelf kookte.
+
+**GAP-22 — de timerbalk, en de bug die niemand had opgeschreven.** De balk
+zelf was voorspeld. Wat de audit niet had gezien: de succes-haptic en
+`Timer klaar` zaten ín `TimerDisplay`, dat niet gemonteerd is voor een stap
+waar je vandaan gebladerd bent. **Een timer die afliep terwijl je vooruitlas
+zei tegen niemand iets** — niet alleen onzichtbaar, ook stil, ook voor een
+schermlezer. De balk zegt het nu, mét het stapnummer. Welke timer hij toont
+is puur en getest (`src/domain/cookTimerBar.ts`, 13 tests).
+
+**GAP-23 — de flikkerbug.** Een derde fase `pending` waarin het verzoek weg
+is maar er niets verandert op het scherm; de narratie verschijnt pas na
+`motion.durationNormal`. **Uitgestelde start, geen minimale toondrempel** —
+een drempel zou dit scherm een wachttijd laten verzinnen, en dat is dezelfde
+leugen als een spinner die in niets oplost, alleen andersom verteld.
+
+**GAP-24 en GAP-18.** De voortgangslijn vult zich in plaats van te springen
+(`scaleX` op de native driver, niet `width` — dat is een layout-eigenschap en
+had elk frame door de JS-thread geduwd, op het ene scherm waar die thread ook
+een aftelling hertekent). En `typeScale.button` is van monospace af, het
+enige token dat het onderzoek bij naam vroeg, van twee kanten onafhankelijk.
+
+**Twee dingen om te onthouden voor de volgende uitvoerder:**
+
+- **Een haptic hoort nooit binnen een `setState`-updater.** React mag die
+  meer dan één keer draaien — in StrictMode doet hij dat expres — en dan
+  trilt één tik twee keer. Op de boodschappenlijst wordt daarom de
+  module-cache gelezen vóór de `setState`, niet de `current` erbinnen.
+- **De laadfase van import heeft er een toestand bij.** Wie de
+  checkpoint-animaties uit WS5 §5.3 bouwt (punt 10 van het stylingplan),
+  hangt ze aan `loading` en niet aan "een verzoek is weg" — anders is de
+  flikkering terug.
+
+---
+
 ## De les die deze twee dagen opleverde
 
 **Vertrouw geen document zonder het tegen de bron te houden.** De teller
@@ -155,6 +218,23 @@ blokken breken op "unexpected EOF"; schrijf het script dan naar de
 scratchpad en voer het uit. Let ook op CRLF: `^…$` met `re.M` matcht niet
 door de `\r` heen, gebruik `\r?$`.
 
+**Bewerk bestaande bestanden BINAIR, niet als tekst.** De regeleindes in
+deze repo zijn niet uniform, en Python's tekstmodus normaliseert ze
+stilletjes: lezen met `encoding='utf-8'` maakt van een CRLF een kale
+newline en schrijft die zo terug, waarmee een wijziging van twee regels als
+een herschrijving van het hele bestand in de diff belandt. Dat is op 4
+september precies een keer gebeurd, in `(tabs)/friends.tsx` en
+`(tabs)/index.tsx`, en het kostte meer tijd om terug te draaien dan om te
+voorkomen. Lees en schrijf met `'rb'` / `'wb'` zodra je een bestaand
+bestand aanpast.
+
+En de reden dat juist die twee gevoelig zijn: ze dragen sinds de
+`DEV_SCENARIO_ROWS_VISIBLE`-wijziging **kapotte regeleindes** — een dubbele
+CR op de `tokens'`-import en een kale newline op de `devFlags`-import erna.
+Dat is onschadelijk (elke parser leest er overheen) maar het maakt elke
+normalisatie zichtbaar als een herschrijving van 693 regels. Wie ze ooit
+opruimt, doe het in een eigen commit die verder niets aanraakt.
+
 ---
 
 ## Wat er nu open ligt
@@ -166,20 +246,24 @@ Geen enkele beslissing van de eigenaar blokkeert nog werk. Op volgorde:
    te krijgen). Dubbel waardevol: het test de deploy én het renderpad van de
    nieuwe architectuur, die sinds SDK 55 verplicht aanstaat en die geen
    enkele test raakt.
-2. **De goedkope haptics** (GAP-20). Twaalf regels code tegen een dependency
-   die er al staat; WS5 noemt er één "the highest-value single change in
-   this report per line of code".
-3. **De twee echte defecten uit de styling-audit:** het importlaadblok
-   flikkert bij een cachetreffer (GAP-23), en de vaste timerbalk in
-   kookmodus is nooit gebouwd (GAP-22) — de state-helft van die reparatie is
-   wél geland, de zichtbare helft niet.
-4. **Het icoonfont** (GAP-19). Ongeveer een dag, geen nieuwe dependency, en
-   het deblokkeert twintig voorstellen tegelijk.
-5. **Eigen SMTP**, waarna de zes-cijfer-route werkt en er testgebruikers
+   **Dit is nu punt één met stip**, want de vijf wijzigingen van de middag
+   zijn precies het soort dat geen enkele test kan zien: een trilling, een
+   groene haarlijn, een balk die verschijnt, een blok dat niet meer
+   flikkert. Vier checks groen betekent hier alleen dat niets kapot is.
+   Wat er te *voelen* valt, valt alleen op een toestel te controleren.
+2. ~~**De goedkope haptics** (GAP-20)~~, ~~**de twee echte defecten**
+   (GAP-22, GAP-23)~~ — gedaan, zie hierboven. Nog niet gecommit.
+3. **Het icoonfont** (GAP-19). Ongeveer een dag, geen nieuwe dependency, en
+   het deblokkeert twintig voorstellen tegelijk. **Dit is nu het grootste
+   openstaande stuk van het stylingplan**: alles wat er nog in staat en om
+   een glyph vraagt — het vinkje in de import-checkpoints, de `cooking-pot`
+   op de lege bibliotheek, de 21 markeringen, `×`/`+`/`▶`/`❚❚` — wacht
+   hierop en op niets anders.
+4. **Eigen SMTP**, waarna de zes-cijfer-route werkt en er testgebruikers
    kunnen bestaan.
-6. **IMP-05** — één secret, geen code: `GEMINI_MODEL` op een gedateerde
+5. **IMP-05** — één secret, geen code: `GEMINI_MODEL` op een gedateerde
    snapshot pinnen.
-7. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
+6. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
    hebben? Het duurst betaalde openstaande punt.
 
 **Beslist en niet heropenen zonder aanleiding:** GAP-08 (`dishTags` blijft

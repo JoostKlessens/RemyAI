@@ -12,6 +12,32 @@ WS2 t/m WS6 nog nooit tegen de code waren gehouden. Dit is die controle.
 
 ---
 
+## ⚠ Lees dit eerst: een deel is inmiddels gebouwd
+
+**Dit document is een momentopname van de audit, en de code is er sinds de
+middag van 4 september op vooruitgelopen.** De bevindingen per sectie
+hieronder staan er onveranderd bij, want ze zijn het bewijs waarop de
+volgorde rust — maar zes ervan zijn niet meer waar. Wie hierop gaat bouwen,
+houde eerst deze tabel ernaast, en daarna alsnog de code: dat is dezelfde
+les die dit document zelf opleverde.
+
+| Bevinding | Nu | Waar |
+|---|---|---|
+| ~12 vastgelegde haptics ongebouwd | **Alle gebouwd**, plus vijf die de lijst niet noemde | GAP-20, `src/lib/haptics.ts` |
+| Het einde van kookmodus is stil | **Alle drie de dingen staan er** | GAP-21, `OutcomeCard.tsx` |
+| De vaste timerbalk ontbreekt | **Gebouwd**, inclusief de stille helft | GAP-22, `CookTimerBar.tsx` |
+| Het importlaadblok flikkert | **Gerepareerd** met een uitgestelde start | GAP-23, `paste.tsx` |
+| De voortgangslijn springt | **Vult zich**, `scaleX` op de native driver | GAP-24, `ProgressRule.tsx` |
+| `typeScale.button` is monospace | **Van monospace af** | GAP-18, `tokens.ts` |
+
+**Wat níét veranderd is, en de rest van dit document dus onverkort blokkeert:
+er is nog steeds geen icoonfont.** Elke bevinding hieronder die om een glyph
+vraagt — het vinkje in de checkpoints, de `cooking-pot`, de 21 markeringen,
+de vervanging van `×`, `+`, `▶`, `❚❚` — wacht nog altijd op punt 4 van de
+volgorde. Dat is nu het eerstvolgende werk.
+
+---
+
 ## De hoofdbevinding
 
 **Het meeste van wat "meer iconen, beeld en animatie" zou opleveren is al
@@ -22,7 +48,7 @@ maatvoering, tokens en argumentatie erbij.
 |---|---|
 | Empty-state markeringen (WS4 §5.3-5.5) | **0 van 21** geleverd |
 | `@expo/vector-icons` | 4 aanroepplekken in de hele app, allemaal `Feather`, in 5 van de 7 secties nul |
-| `expo-haptics` | geïnstalleerd, gebruikt in 3 bestanden; ~12 vastgelegde haptics ongebouwd |
+| ~~`expo-haptics`~~ | ~~geïnstalleerd, gebruikt in 3 bestanden; ~12 vastgelegde haptics ongebouwd~~ — **gedaan**, zie de tabel hierboven |
 | Gedeelde componenten | `Icon`, `EmptyState`, `Thumbnail`, `Monogram`, `ListRow`, `Section`, `Sheet` — **geen enkele bestaat** |
 | Letterlijke tekens die iconen vervangen | `×`, `+`, `▶`, `❚❚` op zeven plekken |
 
@@ -37,6 +63,10 @@ waar ze die drie kruisten.
 ---
 
 ## Vier blokkades, en de eerste ontgrendelt de rest
+
+*Twee van de vier zijn inmiddels weg — nummer 2 en nummer 4. Ze staan er nog
+omdat het argument eronder ergens moet blijven staan; de stand is de tabel
+hierboven.*
 
 **1. Er is geen icoonfont.** WS4 §1 koos een gegenereerde Phosphor-subset
 via `createIconSet` — MIT, ~8-14 KB, **geen nieuwe dependency**, "no native
@@ -135,7 +165,8 @@ Hier ligt de meeste winst per regel code, en één echte bug.
   benoemd als "neither Feather nor emoji, and outside the icon rule entirely".
 - **(b)** Geen haptic bij het wisselen van stap, geen bij het starten van de
   timer.
-- **(b)** De voortgangslijn springt in plaats van te vullen.
+- **(b)** ~~De voortgangslijn springt in plaats van te vullen.~~ Gedaan
+  (GAP-24): `scaleX` op de native driver, geen `width`.
 - **(c)** **Geen foto's in kookmodus**, en dat is een aanbeveling om het zo te
   houden: `MealStep` heeft geen beeldveld, de enige thumbnail is die van het
   gerecht (niet van de stap), hij is meestal al verlopen tegen de tijd dat er
@@ -284,24 +315,40 @@ Even belangrijk als de lijst met werk. Deze zijn nagekeken en goed:
 
 ## Volgorde
 
-**Nu meteen — één regel per stuk, dependency staat er al**
+**Nu meteen — één regel per stuk, dependency staat er al** ✅ **gedaan op 4
+september**
 
-1. De ontbrekende haptics, op volgorde van opbrengst: het cijfer in
-   `OutcomeCard`, `Ja` op Kiezen, stap vooruit in kookmodus, afvinken op de
-   boodschappenlijst, chipselectie, `SegmentedControl`, allergenen bevestigen,
-   import gelukt/mislukt.
-2. Het einde van kookmodus compleet maken: haptic, `positive` haarlijn, haptic
-   bij het cijfer. WS5 schat drie regels voor het emotionele hoogtepunt van
-   het product.
-3. De flikkerbeveiliging op het importlaadblok — dit is een bug, geen polish.
+1. ~~De ontbrekende haptics~~ — alle geleverd, plus vijf die deze lijst niet
+   noemde (bewaarintentie, timer starten, ingrediëntenblad, de timerbalk
+   terugtikken, mislukte weekverwijdering). GAP-20.
+2. ~~Het einde van kookmodus~~ — haptic, `positive` haarlijn en het cijfer,
+   alle drie. GAP-21.
+3. ~~De flikkerbeveiliging op het importlaadblok~~ — GAP-23.
+
+Twee dingen zijn onderweg geleerd en staan hier omdat ze de volgende
+uitvoerder aangaan:
+
+- **De woordenschat kreeg een loket.** `src/lib/haptics.ts` draagt alle vier
+  de stijlen, benoemd naar het gewicht van het gevolg in plaats van naar de
+  API. De `.catch`-ritus die elke aanroep nodig heeft — de webimplementatie
+  van `expo-haptics` is een lége default export, dus daar is élke aanroep een
+  afgewezen promise — staat nu één keer in plaats van vijftien keer.
+- **Twee regels bleken breder dan hun tabelrij.** "Alleen bij selecteren,
+  nooit bij deselecteren" geldt voor `Chip`, `SegmentedControl` én de
+  boodschappenlijst; en een haptic hoort nooit binnen een `setState`-updater,
+  want React mag die meer dan één keer draaien — in StrictMode doet hij dat
+  expres, en dan trilt één tik twee keer.
 
 **Daarna — het fundament**
 
 4. Het Phosphor-subsetfont via `createIconSet`. Ongeveer een dag, geen nieuwe
-   dependency, en het deblokkeert twintig icoonvoorstellen tegelijk.
+   dependency, en het deblokkeert twintig icoonvoorstellen tegelijk. **Dit is
+   nu het eerstvolgende punt.**
 5. `EmptyState`, `Thumbnail`, `Monogram`. Daarna zijn de 21 lege toestanden
    invulwerk in plaats van eenentwintig handgemaakte kopieën.
-6. `typeScale.button` van monospace af.
+6. ~~`typeScale.button` van monospace af~~ — gedaan, naar `sansMedium` met
+   `letterSpacing` op 0. Geen nieuw font nodig: `Archivo_600SemiBold` werd al
+   geladen. GAP-18.
 
 **Daarna — de zichtbare winst**
 
@@ -309,9 +356,15 @@ Even belangrijk als de lijst met werk. Deze zijn nagekeken en goed:
    installatie.
 8. Het vinkje in de import-checkpoints.
 9. De letterlijke tekens vervangen: `×`, `+`, `▶`, `❚❚`.
-10. De checkpoint-animaties uit WS5 §5.3.
-11. De vaste timerbalk in kookmodus — de helft van een reparatie die nooit af
-    is gemaakt.
+10. De checkpoint-animaties uit WS5 §5.3. **Let op:** de laadfase heeft er
+    sinds GAP-23 een derde toestand bij (`pending`, vóór de onthulling). Wie
+    deze animaties bouwt, hangt ze aan `loading` en niet aan "een verzoek is
+    weg", anders is de flikkering terug.
+11. ~~De vaste timerbalk in kookmodus~~ — gedaan (GAP-22), en het bleek meer
+    dan een zichtbaarheidskwestie: de succes-haptic en `Timer klaar` zaten in
+    `TimerDisplay`, dat niet gemonteerd is voor een stap waar je vandaan
+    gebladerd bent. Een timer die afliep terwijl je vooruitlas zei tegen
+    niemand iets. Dat was de echte bug; onzichtbaar was maar de helft.
 
 **Pas als de rest staat**
 
