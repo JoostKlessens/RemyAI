@@ -107,7 +107,8 @@ import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repo
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import { supabase } from '@/lib/supabase';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
-import { getColors, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { getColors, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
 type VanavondView = 'decision' | 'declined';
@@ -513,7 +514,7 @@ export default function VanavondScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-      {__DEV__ ? <DevScenarioRow active={devScenario} onSelect={setDevScenario} /> : null}
+      {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={devScenario} onSelect={setDevScenario} /> : null}
 
       {/* PD-009. Above the hero rather than inside it, so "Iets anders"
           still cross-fades only the name/reason/meta block and the action

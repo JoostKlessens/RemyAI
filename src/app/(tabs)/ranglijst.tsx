@@ -108,6 +108,7 @@ import {
 import { SegmentedControl, type SegmentedControlOption } from '@/components/SegmentedControl';
 import { useSession } from '@/hooks/useSession';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
+import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 /** The two scopes of one question. Never persisted — see this file's header. */
 type TrendingScope = 'iedereen' | 'vrienden';
@@ -206,7 +207,7 @@ export default function TrendingScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-      {__DEV__ ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
+      {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
 
       <View style={styles.header}>
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Trending recipes</Text>

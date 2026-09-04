@@ -136,6 +136,7 @@ import {
   type ImportSourceMode,
 } from '@/components/importPasteCopy';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
+import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 type PastePhase = 'idle' | 'loading';
 /** How many leading checkpoint rows are filled — the last row of whichever list is showing is never driven by this, see the file header. */
@@ -624,7 +625,7 @@ export default function ImportPasteScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-      {__DEV__ ? <DevScenarioRow onSelect={applyDevScenario} /> : null}
+      {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow onSelect={applyDevScenario} /> : null}
 
       <View style={styles.header}>
         <Pressable

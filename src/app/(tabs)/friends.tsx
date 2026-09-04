@@ -120,7 +120,8 @@ import {
 } from '@/components/gekooktPresentation';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useSession } from '@/hooks/useSession';
-import { getColors, spacing, typeScale } from '@/theme/tokens';
+import { getColors, spacing, typeScale } from '@/theme/tokens';
+import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 /** §4.2 pins this. See the header on why the line is unchanged by the kring's departure. */
 const SUBTITLE_COPY = 'Wat vrienden echt gekookt hebben.';
@@ -263,7 +264,7 @@ export default function FriendsScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-      {__DEV__ ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
+      {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
 
       <View style={styles.header}>
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Vrienden</Text>

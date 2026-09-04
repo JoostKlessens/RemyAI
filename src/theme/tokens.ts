@@ -159,109 +159,101 @@ export interface ColorTokens {
   readonly focusRing: string;
 }
 
+/**
+ * THE PALETTE THE UI RESEARCH CHOSE, APPLIED 4 SEPTEMBER 2026.
+ *
+ * Source: docs/ui-research/WS1-direction-and-palette.md 4.1 and 4.2, pasted
+ * as written. The research shipped on 2 September with the makeover; these
+ * values did not, and for two days every screen ran on the palette the
+ * research had replaced. All 26 tokens per scheme differed.
+ *
+ * WHY THIS DOES NOT CONTRADICT THE EARLIER RULING. The previous block
+ * defended itself as "deliberately NOT the cream + serif + terracotta
+ * AI-cliche palette". WS1 read that ruling and drew the distinction it
+ * turns on -- ASSEMBLY.md:214: the owner "ruled that he rejected the
+ * cliche, not warmth". A warm ground with a single blue accent and no serif
+ * is not that cliche; it is the thing the cliche is a bad version of.
+ *
+ * WHY IT IS ALSO A MEASURED IMPROVEMENT, not only a direction. The old
+ * ground stepped background -> surface at 1.10:1 (WS1 178), which is a
+ * hierarchy the eye cannot see; this one steps at 1.24:1. WS1 711 carries
+ * the full verification: rows 1-30 assert 4.5:1 for text, rows 31-36 assert
+ * 3.0:1 for boundaries.
+ *
+ * THE PER-TOKEN RATIO COMMENTS THAT USED TO SIT HERE ARE GONE ON PURPOSE.
+ * They asserted figures measured against the old values -- "verified
+ * >=3.95:1 against all four neutral surfaces" and similar -- and would have
+ * become confident falsehoods the moment the values under them changed. The
+ * verification now lives where the numbers were computed.
+ */
 const lightColors = {
-  // Cool graphite/paper neutrals — a light table's plexi glow, not a warm
-  // cream. Deliberately NOT the "cream + serif + terracotta" AI-cliché
-  // palette: no yellow-beige cast anywhere in this scale.
-  background: '#E9EBEC',
-  surface: '#F4F5F6',
-  surfaceRaised: '#FFFFFF',
-  surfaceSunken: '#DADDDF',
-  border: '#CBCFD1',
-  // Verified >=3.95:1 against all four neutral surfaces (worst case:
-  // surfaceSunken, 3.95:1; best case: surfaceRaised, 5.39:1) — clears
-  // WCAG 1.4.11's 3:1 floor for interactive component boundaries with
-  // margin to spare.
-  borderStrong: '#666B6F',
+  background: '#DDD9D0',
+  surface: '#EEEBE4',
+  surfaceRaised: '#FFFDF9',
+  surfaceSunken: '#CFC9BE',
+  border: '#B8B2A5',
+  borderStrong: '#6D6960',
 
-  textPrimary: '#14171A',
-  textSecondary: '#484D51',
-  // Verified >=5.11:1 against all four neutral surfaces (worst case:
-  // surfaceSunken; best case: surfaceRaised, 6.98:1) — clears the 4.5:1
-  // body-text floor everywhere it's used, with real margin.
-  textMuted: '#555A5E',
+  textPrimary: '#1D1913',
+  textSecondary: '#524D45',
+  textMuted: '#575249',
 
-  // Grease-pencil marking blue.
-  accent: '#1F4FA6',
-  onAccent: '#F5F7FA',
-  accentMuted: '#DCE6F5',
-  // accentOnMuted is a darker step of the same hue, verified at 8.69:1
-  // against accentMuted (the plain `accent` fill itself reads fine as a
-  // border/fill against accentMuted, but this token is specifically for
-  // TEXT on that fill, so it gets its own darker, higher-contrast step).
-  accentOnMuted: '#163A7A',
+  accent: '#1D4094',
+  onAccent: '#FBF8F2',
+  accentMuted: '#CCE0FC',
+  accentOnMuted: '#153177',
 
-  positive: '#256B4A',
-  onPositive: '#F1F7F3',
-  positiveMuted: '#DCEBE2',
+  positive: '#23643A',
+  onPositive: '#F1F9F3',
+  positiveMuted: '#CDE8D3',
 
-  warning: '#8A5A0A',
-  onWarning: '#FBF3E4',
-  warningMuted: '#F1E3C4',
+  warning: '#7F4E07',
+  onWarning: '#FDF6EA',
+  warningMuted: '#F2DDB8',
 
-  danger: '#B3261E',
-  onDanger: '#FBEDEC',
-  dangerMuted: '#F5D9D6',
+  danger: '#9F1718',
+  onDanger: '#FFF2F0',
+  dangerMuted: '#FDD0CA',
 
-  overlay: 'rgba(10, 12, 14, 0.5)',
-  videoScrim: 'rgba(8, 10, 12, 0.68)',
-  // Same near-white value as darkColors.onVideoScrim, deliberately —
-  // videoScrim is dark in both schemes, so the text on it stays light in
-  // both too. >=15:1 against the scrim's own flattened tone, so it clears
-  // 4.5:1 regardless of what photo sits underneath at ~68% opacity.
-  onVideoScrim: '#F5F7FA',
-  focusRing: '#1F4FA6',
+  overlay: 'rgba(28, 22, 14, 0.5)',
+  videoScrim: 'rgba(16, 13, 9, 0.68)',
+  onVideoScrim: '#F9F6F1',
+  focusRing: '#1D4094',
 } as const satisfies ColorTokens;
 
 const darkColors = {
-  // Cool graphite, not warm charcoal and not OLED black — the edit bay
-  // with the safelight off, not a "hacker terminal". Never paired with a
-  // neon/acid accent; the only saturated colors below are the same
-  // marking-blue, forest-green, amber and coral used sparingly in light
-  // mode, just re-tuned for a dark ground rather than naively inverted.
-  background: '#121417',
-  surface: '#191C1F',
-  surfaceRaised: '#23272B',
-  surfaceSunken: '#0A0C0E',
-  border: '#33383D',
-  // Verified >=4.15:1 against all four neutral surfaces (worst case:
-  // surfaceRaised, the lightest of the four dark surfaces; best case:
-  // surfaceSunken, 5.41:1).
-  borderStrong: '#82878C',
+  background: '#1A1814',
+  surface: '#292622',
+  surfaceRaised: '#3A3630',
+  surfaceSunken: '#040302',
+  border: '#544F48',
+  borderStrong: '#908B83',
 
-  textPrimary: '#F1F2F0',
-  textSecondary: '#C7CBCE',
-  // Verified >=5.77:1 against all four neutral surfaces (worst case:
-  // surfaceRaised; best case: surfaceSunken, 7.52:1).
-  textMuted: '#9CA1A5',
+  textPrimary: '#F2F0EC',
+  textSecondary: '#CAC7C1',
+  textMuted: '#A9A59E',
 
-  // Lightened/re-tuned for a dark ground, not a naive inversion of the
-  // light-mode value.
-  accent: '#6C9BEF',
-  onAccent: '#0B1626',
-  accentMuted: '#1B2A44',
-  // Unlike light mode, a lighter step reads better than `accent` itself
-  // for text on this dark, desaturated fill — verified at 6.85:1 against
-  // accentMuted.
-  accentOnMuted: '#8FB4F5',
+  accent: '#83ADF9',
+  onAccent: '#070F21',
+  accentMuted: '#1F3050',
+  accentOnMuted: '#9AC0FF',
 
-  positive: '#6FBE93',
-  onPositive: '#08150F',
-  positiveMuted: '#16281F',
+  positive: '#79C18D',
+  onPositive: '#021106',
+  positiveMuted: '#193521',
 
-  warning: '#D9A544',
-  onWarning: '#241804',
-  warningMuted: '#332510',
+  warning: '#E5AC53',
+  onWarning: '#1A0D00',
+  warningMuted: '#402C0D',
 
-  danger: '#E5766D',
-  onDanger: '#2B0906',
-  dangerMuted: '#3A1512',
+  danger: '#F0857D',
+  onDanger: '#1D0504',
+  dangerMuted: '#4B1D1B',
 
   overlay: 'rgba(0, 0, 0, 0.62)',
   videoScrim: 'rgba(0, 0, 0, 0.72)',
-  // Same value as lightColors.onVideoScrim — see that field's comment.
-  onVideoScrim: '#F5F7FA',
-  focusRing: '#6C9BEF',
+  onVideoScrim: '#F9F6F1',
+  focusRing: '#83ADF9',
 } as const satisfies ColorTokens;
 
 export const colors = { light: lightColors, dark: darkColors } as const;
