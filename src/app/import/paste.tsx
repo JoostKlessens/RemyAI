@@ -70,6 +70,16 @@
  * the real call runs long, the second-to-last row simply stays lit — calm
  * waiting, not a spinner resolving into nothing.
  *
+ * AND IT DOES NOT APPEAR AT ALL IF THE ANSWER IS INSTANT. An import that
+ * hits the function's cache returns in roughly 150 ms, and the block used
+ * to be shown synchronously — so the whole narration appeared and vanished
+ * inside a fifth of a second, which reads as the screen twitching rather
+ * than as speed. The fix is a delayed start (`LOADING_REVEAL_DELAY_MS`)
+ * and deliberately NOT a minimum display time: holding a loading state
+ * open to look considered would have this screen invent a wait that never
+ * happened, which is the same lie as a spinner resolving into nothing,
+ * told in the other direction.
+ *
  * WHICH rows those are is `buildImportCheckpointLabels`'s answer, not this
  * file's: four pipeline shapes, four honest narrations, all of them in
  * importPasteCopy.ts. The pasted-text list is the newest and the shortest,
@@ -128,6 +138,7 @@ import { requestImport, requestTextImport, type ImportAttempt } from '@/lib/impo
 import { Button } from '@/components/Button';
 import { ImportFailureState } from '@/components/ImportFailureState';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
+import { describeImportFeedback } from '@/components/importFeedbackPolicy';
 import { ImportCheckpointList } from '@/components/ImportCheckpointList';
 import { ImportSourceField } from '@/components/ImportSourceField';
 import {
@@ -135,15 +146,60 @@ import {
   buildImportSourceModeCopy,
   type ImportSourceMode,
 } from '@/components/importPasteCopy';
-import { getColors, spacing, typeScale } from '@/theme/tokens';
+import { hapticCompleted, hapticFailed } from '@/lib/haptics';
+import { getColors, motion, spacing, typeScale } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
-type PastePhase = 'idle' | 'loading';
+/**
+ * THREE PHASES, NOT TWO, AND THE MIDDLE ONE IS A BUG FIX.
+ *
+ * `pending` is "a request is in flight and the screen is still showing the
+ * form". It exists because `loading` used to be set the instant a request
+ * left, and an import that hits the function's cache comes back in roughly
+ * 150 ms — so the whole narration block appeared and vanished inside a
+ * fifth of a second. A flash that short is not information; it is the
+ * screen twitching, and it reads as a fault in the app rather than as
+ * speed.
+ *
+ * THE FIX IS A DELAYED START AND EXPLICITLY NOT A MINIMUM DISPLAY TIME.
+ * The obvious alternative — show the block for at least 600 ms once shown —
+ * would have this screen invent a wait that did not happen, on the one
+ * screen whose entire copy discipline is refusing to narrate things that
+ * are not true (see the file header on "a spinner that resolves into
+ * nothing"). Holding a fake loading state to look considered is the same
+ * lie in the other direction. If the answer is genuinely instant, the
+ * honest presentation is that nothing was ever waited for.
+ *
+ * WHAT `pending` DOES AND DOES NOT AFFECT. It blocks a second submit — a
+ * request really is out — and it changes nothing visible. The button does
+ * not dim and the field does not lock, because a control that dims for
+ * 250 ms and un-dims is the same twitch this fix exists to remove, one
+ * element smaller.
+ */
+type PastePhase = 'idle' | 'pending' | 'loading';
 /** How many leading checkpoint rows are filled — the last row of whichever list is showing is never driven by this, see the file header. */
 type LoadingCheckpoint = 0 | 1 | 2;
 
 const CHECKPOINT_ONE_DELAY_MS = 500;
 const CHECKPOINT_TWO_DELAY_MS = 1400;
+
+/**
+ * How long a request must still be in flight before the narration is shown
+ * at all. WS5 §5's loading rule, applied to this list for the first time:
+ * "below `durationNormal`, show nothing at all."
+ *
+ * `motion.durationNormal` RATHER THAN A NUMBER OF ITS OWN, because this
+ * threshold and the app's normal transition length are the same
+ * quantity — the point below which the eye reads a change as a glitch
+ * instead of an event — and two constants would let them drift apart.
+ *
+ * NOT PASSED THROUGH `resolveDuration`. That helper collapses durations to
+ * zero under reduce-motion, which here would restore the exact flicker
+ * being fixed, and restore it hardest for the users least able to tolerate
+ * it: this is a debounce against something appearing at all, not the
+ * length of an animation.
+ */
+const LOADING_REVEAL_DELAY_MS = motion.durationNormal;
 
 /**
  * EXACTLY WHAT AN ATTEMPT WOULD RE-SEND, and never more than one of them.
@@ -284,16 +340,24 @@ export default function ImportPasteScreen(): JSX.Element {
   const [loadingCheckpoint, setLoadingCheckpoint] = useState<LoadingCheckpoint>(0);
   /** The platform of the import currently in flight — decides which narration is honest, nothing else. */
   const [loadingPlatform, setLoadingPlatform] = useState<ImportPlatform | null>(null);
-  const checkpointTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /**
+   * Every timer the loading state owns: the reveal timer that decides
+   * whether the narration is shown at all, and the two that advance its
+   * leading rows. One array rather than a ref each, because they are
+   * cancelled together at exactly the same three moments — a new attempt,
+   * a settled attempt, and unmount — and a second collection is a second
+   * thing to forget.
+   */
+  const loadingTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const clearCheckpointTimers = (): void => {
-    checkpointTimers.current.forEach(clearTimeout);
-    checkpointTimers.current = [];
+  const clearLoadingTimers = (): void => {
+    loadingTimers.current.forEach(clearTimeout);
+    loadingTimers.current = [];
   };
 
   // Never leave a timer running past this screen's lifetime — e.g. the
   // user navigates back mid-import.
-  useEffect(() => clearCheckpointTimers, []);
+  useEffect(() => clearLoadingTimers, []);
 
   const navigateToConfirm = (mode: 'parsed' | 'manual', context: ConfirmNavigationContext): void => {
     router.push({
@@ -319,23 +383,40 @@ export default function ImportPasteScreen(): JSX.Element {
   };
 
   /**
-   * Enter the loading state and start the narration timers. Split out of
-   * `runImport` when the text route arrived so that both routes light the
-   * same checkpoints in the same order — a second copy of this would be a
-   * second place for the "last row is never timed" rule to be broken.
+   * Put a request in flight and arm every timer the loading state owns:
+   * the one that decides whether the narration is ever shown, and the two
+   * that advance its leading rows. Split out of `runImport` when the text
+   * route arrived so that both routes light the same checkpoints in the
+   * same order — a second copy of this would be a second place for the
+   * "last row is never timed" rule to be broken, and now a second place
+   * for the reveal delay to be forgotten.
    *
    * `platform` is what decides which narration is honest, and nothing else.
    */
   const beginLoading = (platform: ImportPlatform): void => {
     setFailedAttempt(null);
-    setPhase('loading');
+    // `pending`, not `loading`. The request is out and a second submit is
+    // now refused, but nothing on screen has changed yet — see
+    // `PastePhase` for why an import that answers instantly must show no
+    // loading state at all rather than a very brief one.
+    setPhase('pending');
     setLoadingCheckpoint(0);
     setLoadingPlatform(platform);
-    clearCheckpointTimers();
-    // The leading checkpoints narrate progress on a short fixed timer —
-    // never the last one, which only ever reflects the real promise
-    // settling (see the file header).
-    checkpointTimers.current = [
+    clearLoadingTimers();
+    loadingTimers.current = [
+      // The narration appears here or never. If the promise settles first,
+      // `settleAttempt` clears this timer and the screen goes straight from
+      // the form to the confirmation.
+      setTimeout(() => setPhase('loading'), LOADING_REVEAL_DELAY_MS),
+      // The leading checkpoints narrate progress on a short fixed timer —
+      // never the last one, which only ever reflects the real promise
+      // settling (see the file header).
+      //
+      // Timed from the REQUEST, not from the reveal, so the rows still
+      // describe how long the pipeline has actually been working. Shifting
+      // them to start when the block appears would make every checkpoint
+      // claim a quarter-second more work than was done — a small lie, on
+      // the screen whose whole argument is that it does not tell them.
       setTimeout(() => setLoadingCheckpoint(1), CHECKPOINT_ONE_DELAY_MS),
       setTimeout(() => setLoadingCheckpoint(2), CHECKPOINT_TWO_DELAY_MS),
     ];
@@ -353,8 +434,24 @@ export default function ImportPasteScreen(): JSX.Element {
    * exactly that rather than a reconstruction of it.
    */
   const settleAttempt = (attempt: ImportAttempt, retrySource: ImportRetrySource): void => {
-    clearCheckpointTimers();
+    // Cancels the reveal timer as well as the checkpoints, which is what
+    // makes a cache hit show nothing rather than flash. Ordering matters:
+    // this runs before the `setPhase` below, so a promise that settles
+    // inside LOADING_REVEAL_DELAY_MS can never have the reveal land after
+    // the screen has already moved on.
+    clearLoadingTimers();
     setPhase('idle');
+    // WS5 §3.2's import haptics, both of them, from one policy rather than
+    // from `kind === 'parsed'` at this call site: the tempting ternary
+    // buzzes an error at a `display_only` result, which resolved perfectly
+    // (PD-011). importFeedbackPolicy.ts holds that rule where a test can
+    // reach it.
+    const feedback = describeImportFeedback(attempt.result);
+    if (feedback === 'completed') {
+      hapticCompleted();
+    } else if (feedback === 'failed') {
+      hapticFailed();
+    }
     if (attempt.result.kind === 'parsed') {
       AccessibilityInfo.announceForAccessibility('Recept gevonden.');
       navigateToConfirm('parsed', {
@@ -434,6 +531,13 @@ export default function ImportPasteScreen(): JSX.Element {
         retrySource: null,
         thumbnailUrl: null,
       });
+      // The same buzz `settleAttempt` gives an `unsupported_url` that comes
+      // back off the wire, because the user meets the same failure panel
+      // either way. Feeling different depending on whether the refusal was
+      // caught here or by the function would make the client's own speed
+      // legible as a change in the product's tone — and this refusal is
+      // the more definite of the two: nothing was even attempted.
+      hapticFailed();
       AccessibilityInfo.announceForAccessibility('Onbekende link.');
       return;
     }
@@ -457,7 +561,12 @@ export default function ImportPasteScreen(): JSX.Element {
   };
 
   const handleSubmit = (): void => {
-    if (phase === 'loading') {
+    // `!== 'idle'`, so a tap during the pre-reveal window cannot start a
+    // second import while the first is still out. This guard is the whole
+    // reason `pending` is allowed to look identical to `idle`: the
+    // protection is here, in the handler, and not in a disabled state the
+    // user would see flicker.
+    if (phase !== 'idle') {
       return;
     }
     if (mode === 'text') {
@@ -570,6 +679,13 @@ export default function ImportPasteScreen(): JSX.Element {
   };
 
   const applyDevScenario = (scenario: DevScenarioValue): void => {
+    // Clears the loading timers, and it is not belt-and-braces. The
+    // scenario row is hidden once the narration is up, but `pending` looks
+    // exactly like `idle` by design — so for LOADING_REVEAL_DELAY_MS the
+    // row is reachable with a request still out, and a surviving reveal
+    // timer would flip a dev-scenario screen into a loading state that
+    // nothing will ever settle.
+    clearLoadingTimers();
     if (scenario === 'normal') {
       setFailedAttempt(null);
       setPhase('idle');
