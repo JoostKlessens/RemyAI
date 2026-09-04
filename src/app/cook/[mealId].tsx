@@ -52,7 +52,7 @@
  */
 
 import type { JSX } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { AccessibilityInfo, StyleSheet, Text, View, useColorScheme } from 'react-native';
@@ -67,11 +67,14 @@ import {
 import { ProgressRule } from '@/components/ProgressRule';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { StepView } from '@/components/StepView';
+import { CookTimerBar } from '@/components/CookTimerBar';
 import { TimerDisplay } from '@/components/TimerDisplay';
 import { createCookTimer, type CookTimerState } from '@/domain/cookTimer';
+import { selectCookTimerBar } from '@/domain/cookTimerBar';
 import { scaleRecipe } from '@/domain/scaleRecipe';
 import type { CookEventId, DecisionId, HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { hapticSmallCommit, hapticValueMoved } from '@/lib/haptics';
 import { ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
@@ -188,6 +191,19 @@ export default function CookModeScreen(): JSX.Element {
    * would cover the instruction they came back for.
    */
   const [portionSheetVisible, setPortionSheetVisible] = useState(false);
+  /**
+   * GAP-22's clock. Held on the screen rather than inside `CookTimerBar`
+   * so that "what time is it" has exactly one answer here, the same way
+   * `timers` gave "which timers exist" exactly one — and so the bar's
+   * selection can be recomputed from a value this component owns rather
+   * than from one buried a level down.
+   *
+   * A TIMESTAMP AND NEVER A COUNTDOWN, for cookTimer.ts's stated reason:
+   * an interval measures how many times a callback fired, which is not how
+   * much time passed. Every reader derives remaining time from this and
+   * from a stored deadline, so a hundred missed ticks change no answer.
+   */
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const currentStep = steps[stepIndex];
 
   useEffect(() => {
@@ -278,6 +294,50 @@ export default function CookModeScreen(): JSX.Element {
     [ingredients, meal?.servings, householdSize],
   );
 
+  /**
+   * GAP-22. Which timer, if any, is running on a step the cook is NOT
+   * looking at — the case `TimerDisplay` structurally cannot cover, since
+   * it is only ever mounted for the current step.
+   *
+   * Called above every early return below, per the Rules of Hooks, for the
+   * same reason `scaleResult`, `useOutcomeSend` and the step announcement
+   * are. `selectCookTimerBar` returns null for the loading, error and
+   * no-steps branches on its own — an empty step list has no off-step
+   * timer by definition — so no branch needs a guard of its own.
+   */
+  const timerBar = useMemo(
+    () => selectCookTimerBar({ steps, timers, currentStepIndex: stepIndex, nowMs }),
+    [steps, timers, stepIndex, nowMs],
+  );
+
+  /**
+   * Handed to `CookTimerBar` as its tick, and stable across renders so the
+   * interval it drives is not torn down and rebuilt once a second — which
+   * is exactly what an inline arrow in the JSX would do, and would make
+   * the countdown drift by however long each rebuild took.
+   */
+  const handleTick = useCallback((): void => {
+    setNowMs(Date.now());
+  }, []);
+
+  /**
+   * Re-reads the clock whenever a bar could newly appear, and this closes a
+   * real hole rather than being tidiness. `nowMs` is only advanced by the
+   * bar's own interval, so it stands still for as long as there is no bar —
+   * and a cook who spends five minutes on a step with no timer, then starts
+   * one and pages away, would meet a bar computing its remaining time
+   * against a clock five minutes behind. It would read five minutes too
+   * high, and correct itself a second later, which is the worst of both:
+   * wrong, and briefly enough that nobody could tell you what they saw.
+   *
+   * `timers` and `stepIndex` are exactly the two inputs that can turn a
+   * null bar into a real one, so refreshing on them covers every entry.
+   * It cannot loop: neither dependency changes as a result of this.
+   */
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, [timers, stepIndex]);
+
   const handleCooked = (cooked: boolean): void => {
     if (!cooked || householdId === null || meal === null) {
       return;
@@ -367,15 +427,37 @@ export default function CookModeScreen(): JSX.Element {
   const isLastStep = stepIndex === steps.length - 1;
   const dishTitle = meal?.title ?? 'dit gerecht';
 
+  /**
+   * WS5 §3.2: "a cook step advances or goes back" — `selectionAsync`, and
+   * the same tick either way. A step is a value moved and it is reversible
+   * (Vorige is right there), which is precisely the definition that style
+   * carries; making forward heavier than back would rank the two
+   * directions, and reading ahead is a thing this screen wants to be safe.
+   *
+   * NOT fired on the last step, where the tap is `Klaar` rather than
+   * `Volgende`. That press is the end of the cook, and its haptic is
+   * `OutcomeCard`'s `notificationAsync(Success)` on the Gemaakt state
+   * landing — WS5 §3.1 rule 3 budgets one haptic per user action, and the
+   * completion is unambiguously the one worth spending it on.
+   */
   const handleNext = (): void => {
     if (isLastStep) {
       setPhase('outcome');
       return;
     }
+    hapticValueMoved();
     setStepIndex((current) => Math.min(current + 1, steps.length - 1));
   };
 
   const handlePrevious = (): void => {
+    // Guarded, because the button is `disabled` at step 0 on iOS but a
+    // hardware keyboard or Switch Control can still reach a disabled-looking
+    // control on some platforms — and a tick for a step that did not change
+    // is the "buzz means nothing" lesson SegmentedControl avoids the same way.
+    if (stepIndex === 0) {
+      return;
+    }
+    hapticValueMoved();
     setStepIndex((current) => Math.max(current - 1, 0));
   };
 
@@ -499,13 +581,46 @@ export default function CookModeScreen(): JSX.Element {
           <Button
             label={describePortionTriggerLabel(scaleResult)}
             variant="secondary"
-            onPress={() => setPortionSheetVisible(true)}
+            // WS5 §3.2: "the ingredient sheet is opened" is a small
+            // commitment landed — the surface is now over the step and the
+            // thumb did that. Its dismissal gets nothing, per the same
+            // table: leaving is not an achievement.
+            onPress={() => {
+              hapticSmallCommit();
+              setPortionSheetVisible(true);
+            }}
             minHeight={spacing.touchTargetMin}
             accessibilityLabel={describePortionTriggerAccessibilityLabel(scaleResult)}
             accessibilityHint="Opent de ingrediënten van dit gerecht."
           />
         </View>
       </View>
+
+      {/* GAP-22 / WS5 §4.3.2: between the deck and the nav row, at a fixed
+          height, so it never eats the instruction area — the one region
+          docs/DESIGN.md §6 lets grow and scroll at 200% Dynamic Type.
+          Outside `stepBlock` rather than at its foot for exactly that
+          reason: inside, it would be competing with the text it exists to
+          make safe to read past.
+
+          MOUNTED CONDITIONALLY, unlike the two sheets below. Those stay
+          mounted because they own an exit animation that a conditional
+          mount would cut off; this one deliberately has none (see its file
+          header), and unmounting is what lets the row collapse to zero
+          height so a cook with no off-step timer pays nothing for it. The
+          condition is stable, too: `timerBar` becomes a fresh object every
+          second as the clock advances, but whether it is null changes only
+          when a timer starts, finishes, or is paged back to. */}
+      {timerBar !== null ? (
+        <View style={styles.timerBarRow}>
+          <CookTimerBar
+            model={timerBar}
+            onReturnToStep={setStepIndex}
+            reduceMotionEnabled={reduceMotionEnabled}
+            onTick={handleTick}
+          />
+        </View>
+      ) : null}
 
       <View style={styles.navRow}>
         <View style={styles.navButton}>
@@ -588,6 +703,13 @@ const styles = StyleSheet.create({
     // to grow and scroll at 200% Dynamic Type — docs/DESIGN.md §6) and the
     // nav row, and keeps its own fixed height like the nav row does, so
     // the growing region stays exactly one.
+    paddingTop: spacing.space3,
+  },
+  timerBarRow: {
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    // Only rendered when there is a timer to report, so this padding costs
+    // nothing on the screens without one — see the conditional above. The
+    // bar sets its own height; this row only positions it.
     paddingTop: spacing.space3,
   },
   navRow: {
