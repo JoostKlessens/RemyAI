@@ -382,7 +382,29 @@ export const typeScale: Record<TypeScaleKey, TypeStyle> = {
   // monospace face is already evenly spaced, so heavy extra tracking
   // reads as gappy rather than considered.
   label: { fontFamily: fontFamily.monoSemiBold, fontSize: 12, lineHeight: 15, fontWeight: '600', letterSpacing: 0.8 },
-  button: { fontFamily: fontFamily.monoSemiBold, fontSize: 16, lineHeight: 21, fontWeight: '600', letterSpacing: 0.2 },
+  /**
+   * SANS, NOT MONO, AND THIS IS THE ONE TOKEN THE RESEARCH ASKED FOR BY
+   * NAME. WS1 §"The button and the name": rendered side by side at 393pt,
+   * `Ja · Iets anders · Niet koken` in mono SemiBold reads as a shell
+   * prompt and the same string in the sans reads as an answer — "the
+   * single-token change with the highest ratio of effect to risk in the
+   * repo". WS6 arrived at it independently from the other end: `Stuur`,
+   * the warmest tap in the product, rendered as a terminal command.
+   *
+   * IT IS A DELIBERATE EXCEPTION TO THIS FILE'S OWN RULE, not an oversight
+   * being corrected. The paragraph above `fontFamily` says mono carries
+   * "everything SYSTEMIC — eyebrow labels, buttons, captions, meta rows,
+   * timers", and buttons are now out of that list: a label, a caption and
+   * a timer are the app stating a measured fact, while a button label is
+   * the word the user is about to say. Those are different voices, and
+   * they were only ever grouped because both are short.
+   *
+   * `letterSpacing` drops to 0 with the family change. The 0.2 was there
+   * because a monospace face at 16pt sets tight in a filled button; the
+   * sans does not need it, and tracking a sans out by a fifth of a point
+   * is how a button label starts reading as an eyebrow.
+   */
+  button: { fontFamily: fontFamily.sansMedium, fontSize: 16, lineHeight: 21, fontWeight: '600', letterSpacing: 0 },
   // Cook mode countdown. Monospace + tabular-nums so digits don't jitter
   // the layout as they change.
   timerDisplay: {
