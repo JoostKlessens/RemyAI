@@ -98,6 +98,7 @@ import {
   describeShoppingListMealCount,
   describeShoppingListNothingPlanned,
 } from '@/components/shoppingListCopy';
+import { hapticValueMoved } from '@/lib/haptics';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
@@ -190,7 +191,32 @@ export default function ShoppingListScreen(): JSX.Element {
 
   useFocusEffect(refresh);
 
+  /**
+   * The research never looked at this screen (STYLING-PLAN.md: neither WS4
+   * nor WS5 has a single mention of `boodschappen`), so the haptic is read
+   * off WS5 §3.2's vocabulary rather than lifted from a row of its table.
+   * Checking an item off is "a value moved, and it is reversible" — the
+   * definition of `selectionAsync`, and the same style a cook step gets.
+   *
+   * ON CHECK ONLY, matching `Chip` and `SegmentedControl`. Unchecking
+   * corrects a mistake; it does not do the shopping. It also matters more
+   * here than anywhere else that the buzz means one thing: this is the only
+   * screen in the product used standing up, one-handed, in a supermarket,
+   * where the phone is being looked at in glances and the hand is doing
+   * most of the reading.
+   */
   const handleToggle = useCallback((name: string): void => {
+    // Read from the module-level mirror rather than from inside the
+    // updater below, and this is not a style preference: React may call a
+    // state updater more than once for a single dispatch (StrictMode does
+    // it deliberately), so a haptic fired in there buzzes twice for one
+    // tap in development and is a latent double-buzz in production. The
+    // updater stays pure; the side effect happens exactly once, here.
+    // `sessionCheckedItemNames` is kept in step with the state on every
+    // toggle, so it is the same set `current` is about to be.
+    if (!sessionCheckedItemNames.has(name)) {
+      hapticValueMoved();
+    }
     setCheckedNames((current) => {
       const next = toggleCheckedItemName(current, name);
       // Kept in step with the module-level cache so leaving and returning

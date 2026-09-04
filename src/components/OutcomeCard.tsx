@@ -89,6 +89,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
+import { hapticCompleted } from '@/lib/haptics';
 import { elevation, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';
 import { Chip } from './Chip';
@@ -179,6 +180,13 @@ type Phase = 'prompt' | 'followUp';
  */
 const MOOD_QUESTION = 'Wat voor gerecht was dit?';
 
+/**
+ * WS5 §4.5's hairline, matched to `FriendProofCard`'s closed-loop stroke
+ * rather than picked: this is deliberately the SAME mark, and a second
+ * height would make it a different one.
+ */
+const GEMAAKT_STROKE_HEIGHT = 2;
+
 export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
   const { dishTitle, onCooked, onRate, onChooseMood, onSendRecipe, onDismiss, errorMessage, reduceMotionEnabled } =
     props;
@@ -197,6 +205,23 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
 
   const entrance = useRef(new Animated.Value(0)).current;
   const wash = useRef(new Animated.Value(0)).current;
+  /**
+   * WS5 §4.5's green hairline under "Gemaakt!", and the argument for it is
+   * that it completes a family the product already has rather than
+   * inventing a fourth mark: blue when you choose (Kiezen's
+   * `DecisionCard`), blue when you choose a person (`SendRecipeSheet`'s
+   * commit), green when what you sent got cooked (`FriendProofCard`'s
+   * closed loop) — and now green when you cooked it yourself. PD-020.2
+   * reserves `positive` for a real completion, and a finished cook is the
+   * definitive one.
+   *
+   * This is the whole of the celebration, and that is on purpose. Confetti,
+   * a trophy, a streak, an emoji and a success screen were each refused
+   * somewhere in this codebase already; what is left that costs no pixels
+   * and adds no clutter is a buzz and a green line, at the exact moment
+   * somebody fed their household.
+   */
+  const gemaaktStroke = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(entrance, {
@@ -213,11 +238,31 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
       onDismiss();
       return;
     }
-    Animated.timing(wash, {
-      toValue: 1,
-      duration: resolveDuration(motion.durationFast, reduceMotionEnabled),
-      useNativeDriver: true,
-    }).start();
+    Animated.sequence([
+      Animated.timing(wash, {
+        toValue: 1,
+        duration: resolveDuration(motion.durationFast, reduceMotionEnabled),
+        useNativeDriver: true,
+      }),
+      // AFTER the wash, not with it: the wash says the card changed state
+      // and the stroke says which state, and drawing both at once makes
+      // one indistinct event out of two legible ones. Under reduced
+      // motion both legs collapse to 0, so the finished state appears
+      // instantly rather than merely faster — and the haptic below still
+      // fires, because a haptic is feedback, not motion.
+      Animated.timing(gemaaktStroke, {
+        toValue: 1,
+        duration: resolveDuration(motion.durationFast, reduceMotionEnabled),
+        easing: Easing.bezier(...motion.easingDecelerate),
+        useNativeDriver: true,
+      }),
+    ]).start();
+    // WS5 §4.5: the moment the entire product exists to reach, and until
+    // now the largest file in the repository had no haptic in it at all.
+    // Fired here rather than from the animation's completion callback for
+    // the same reason `onRate` is persisted immediately: an app
+    // backgrounded mid-beat never runs that callback.
+    hapticCompleted();
     setPhase('followUp');
     // A1: the card morphs in place (no new screen, no focus change a
     // screen reader would naturally pick up), so the follow-up phase
@@ -346,7 +391,33 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
         </View>
       ) : (
         <View style={styles.content}>
-          <Text style={[typeScale.title1, styles.title, { color: colors.textPrimary }]}>Gemaakt!</Text>
+          {/* The stroke is absolutely positioned inside a wrapper that
+              hugs the word, so it never perturbs the card's height whether
+              drawn or not — `scaleX` alone would not collapse its box.
+              `transformOrigin: 'left'` rather than a compensating
+              translateX, matching FriendProofCard: the fallback needs an
+              onLayout measurement of the title before it can scale from
+              the left edge, and a stroke that waits for a layout pass
+              draws visibly late. */}
+          <View style={styles.gemaaktWrap}>
+            {/* `styles.title`'s bottom margin moves to the wrapper (see
+                `gemaaktWrap`) so the stroke can be positioned against the
+                word rather than against the gap under it. The shared style
+                keeps its margin for the prompt phase, which has no stroke
+                and needs it where it is. */}
+            <Text style={[typeScale.title1, styles.title, styles.gemaaktTitle, { color: colors.textPrimary }]}>
+              Gemaakt!
+            </Text>
+            <Animated.View
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={[
+                styles.gemaaktStroke,
+                { backgroundColor: colors.positive, transform: [{ scaleX: gemaaktStroke }] },
+              ]}
+            />
+          </View>
           {/* The mood row sits ABOVE the scale, and it has to. A grade is
               TERMINAL on this card — tapping one records and starts the
               exit beat — so anything rendered below `RatingScale` is
@@ -459,6 +530,30 @@ const styles = StyleSheet.create({
   },
   wash: {
     ...StyleSheet.absoluteFill,
+  },
+  // `center`, not `flex-start`: the parent's `alignItems: 'center'` would
+  // give a bare View the same result, but stating it keeps a later edit to
+  // the parent from silently un-centring the card's loudest word. The
+  // wrapper shrink-wraps the text either way, which is the point — the
+  // stroke has to stop where "Gemaakt!" stops, because a line running the
+  // full width of the card is a divider rule, a different mark entirely.
+  gemaaktWrap: {
+    alignSelf: 'center',
+    marginBottom: spacing.space2,
+  },
+  gemaaktTitle: {
+    marginBottom: 0,
+  },
+  gemaaktStroke: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    // The same gap FriendProofCard's closed-loop stroke leaves under its
+    // dish title, so the two green marks read as one family rather than as
+    // two components that happen to both draw a line.
+    bottom: -spacing.space1,
+    height: GEMAAKT_STROKE_HEIGHT,
+    transformOrigin: 'left',
   },
   closeButton: {
     position: 'absolute',

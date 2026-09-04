@@ -21,6 +21,7 @@
 import type { JSX } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { EU_ALLERGENS } from '@/domain/allergens';
+import { hapticRealCommit } from '@/lib/haptics';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 import {
   ALLERGEN_TAGGING_HEADING,
@@ -59,6 +60,12 @@ export function AllergenTaggingSection(props: AllergenTaggingSectionProps): JSX.
 
   const handleConfirm = (): void => {
     onConfirm();
+    // WS5 §3.2: "PD-006's verified stamp is earned here. A safety
+    // confirmation should be felt." One of only three `Medium` events in
+    // the app — the weight is the consequence, not the button: confirming
+    // is what promotes this meal into the gate `exclusions.ts` checks
+    // before it ever suggests the dish to a household with an allergy.
+    hapticRealCommit();
     // A1: this section morphs in place (no navigation, no new screen a
     // screen-reader user would naturally notice) — matches the
     // announceForAccessibility pattern established by

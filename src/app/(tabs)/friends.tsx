@@ -92,7 +92,7 @@
 
 import type { JSX } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import * as Haptics from 'expo-haptics';
+import { hapticCompleted } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -197,9 +197,7 @@ export default function FriendsScreen(): JSX.Element {
       return;
     }
     hasBuzzedForClosedLoop.current = true;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
-      // Haptics unsupported here — the positive stroke still lands.
-    });
+    hapticCompleted();
   }, [state.status, state.cards]);
 
   const load = useCallback(

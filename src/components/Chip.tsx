@@ -10,6 +10,7 @@
 import { useRef, useState, type JSX } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, useColorScheme } from 'react-native';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { hapticValueMoved } from '@/lib/haptics';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 export interface ChipProps {
@@ -41,6 +42,23 @@ export function Chip(props: ChipProps): JSX.Element {
   // Control focus, matching the same pattern added to Button.
   const [isFocused, setIsFocused] = useState(false);
 
+  /**
+   * WS5 §3.2: a chip selection is "a value moved, and it is reversible" —
+   * `selectionAsync`, ON SELECT ONLY. Deselecting undoes a choice, it does
+   * not make one, and buzzing for both halves of a toggle is how a chip
+   * grid ends up vibrating twice for one change of mind.
+   *
+   * Read from `selected` rather than from what `onPress` is about to do:
+   * this component does not own the value, so the state it is rendering is
+   * the only thing it can honestly test against.
+   */
+  const handlePress = (): void => {
+    if (!selected) {
+      hapticValueMoved();
+    }
+    onPress();
+  };
+
   const animateTo = (toValue: number): void => {
     Animated.timing(scale, {
       toValue,
@@ -53,7 +71,7 @@ export function Chip(props: ChipProps): JSX.Element {
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
-        onPress={onPress}
+        onPress={handlePress}
         onPressIn={() => animateTo(PRESS_SCALE)}
         onPressOut={() => animateTo(1)}
         onFocus={() => setIsFocused(true)}

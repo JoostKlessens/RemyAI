@@ -38,6 +38,7 @@
 
 import { useRef, useState, type JSX } from 'react';
 import { Animated, Easing, PanResponder, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { hapticRealCommit, hapticValueMoved } from '@/lib/haptics';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { RATING_MAX, RATING_MIN } from '@/domain/rating';
 import {
@@ -86,6 +87,19 @@ export function RatingScale(props: RatingScaleProps): JSX.Element {
   disabledRef.current = disabled;
   const draftRef = useRef<number | null>(null);
   draftRef.current = draft;
+  /**
+   * WS5 §3.4's detent. The whole grade under the finger the last time a
+   * tick fired, so a drag can tell "crossed into the sevens" from "moved
+   * a tenth".
+   *
+   * BOUND TO THE WHOLE GRADE AND NEVER TO `RATING_STEP`, and the numbers
+   * are why: dragging 1,0 to 10,0 crosses 9 whole grades and 90 steps. At
+   * one tick per step this control would buzz ninety times in a single
+   * gesture, which is not feedback, it is a fault. One tick per report-card
+   * number is also how Dutch people say a grade out loud — "een zeven" —
+   * so the detent the hand feels is the unit the mouth already uses.
+   */
+  const lastWholeRef = useRef<number | null>(null);
 
   const value = draft ?? selected;
   const fraction = value === null ? RATING_UNSET_TRACK_FRACTION : ratingToTrackFraction(value);
@@ -111,7 +125,14 @@ export function RatingScale(props: RatingScaleProps): JSX.Element {
         // to find a 28pt thumb first.
         const start = event.nativeEvent.locationX / trackWidthRef.current;
         startFractionRef.current = Math.min(1, Math.max(0, start));
-        setDraft(trackFractionToRating(startFractionRef.current));
+        const grantValue = trackFractionToRating(startFractionRef.current);
+        setDraft(grantValue);
+        // Seeded SILENTLY. The touch landing is not its own haptic event:
+        // a tap on the track is one user action, and WS5 §3.1 rule 3
+        // budgets one haptic for it — which is the `Medium` on release,
+        // the moment the grade actually commits. Firing here as well would
+        // make the cheapest possible tap buzz twice.
+        lastWholeRef.current = Math.floor(grantValue);
         animateThumb(THUMB_ACTIVE_SCALE);
       },
       onPanResponderMove: (_event, gesture) => {
@@ -122,12 +143,25 @@ export function RatingScale(props: RatingScaleProps): JSX.Element {
         // position: `locationX` during a move is reported against whichever
         // view captured the responder and is not consistent across
         // platforms, while `dx` is the same everywhere.
-        setDraft(trackFractionToRating(startFractionRef.current + gesture.dx / trackWidthRef.current));
+        const next = trackFractionToRating(startFractionRef.current + gesture.dx / trackWidthRef.current);
+        setDraft(next);
+        const whole = Math.floor(next);
+        if (whole !== lastWholeRef.current) {
+          lastWholeRef.current = whole;
+          hapticValueMoved();
+        }
       },
       onPanResponderRelease: () => {
         animateThumb(1);
         const committed = draftRef.current;
         if (!disabledRef.current && committed !== null) {
+          // The heavier partner to the drag's ticks, fired BEFORE
+          // `onSelect` for the same reason the ticks are not awaited: the
+          // grade has already been chosen by the finger lifting, and this
+          // reports that rather than gating it. `onSelect` starts the
+          // card's exit beat, so anything queued behind it is a buzz
+          // arriving after the surface it belongs to has gone.
+          hapticRealCommit();
           onSelect(committed);
         }
       },
@@ -151,6 +185,12 @@ export function RatingScale(props: RatingScaleProps): JSX.Element {
     const from = value ?? trackFractionToRating(RATING_UNSET_TRACK_FRACTION);
     const next = nudgeRating(from, action === 'increment' ? 1 : -1);
     setDraft(next);
+    // The commit haptic fires here too, and it can never chatter: this
+    // path's increment is already half a grade (RATING_ACCESSIBILITY_STEP),
+    // so a swipe is a discrete deliberate act rather than a continuous
+    // drag. The tick half has no meaning here — there is no gesture to
+    // feel your way along — so this path gets the commit and nothing else.
+    hapticRealCommit();
     onSelect(next);
   };
 

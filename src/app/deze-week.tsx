@@ -113,6 +113,7 @@ import {
   describeWeekPlanUnresolvedNote,
   reduceWeekPlanRemoval,
 } from '@/components/weekPlanCopy';
+import { hapticFailed } from '@/lib/haptics';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
@@ -263,6 +264,17 @@ export default function WeekPlanScreen(): JSX.Element {
         await getAppRepository().removeSaves(householdId, entry.meal.id, WEEK_PLAN_INTENT);
       } catch {
         dispatchRemoval({ type: 'removal-failed' });
+        // WS5 §3.2's `notificationAsync(Error)`: "the app could not do the
+        // thing." It pairs with a note that was already written for this
+        // exact moment (`WEEK_PLAN_REMOVE_FAILED_NOTE`) and an
+        // announcement that was already made — rule 5 says a haptic is
+        // never the only feedback, and here it is the third of three.
+        //
+        // The SUCCESS path stays silent, deliberately. Removing a dish
+        // from the week is not a completion anybody was waiting for, and
+        // §3.3 keeps every close and undo control quiet so that taking
+        // something back never costs more feeling than doing it.
+        hapticFailed();
         AccessibilityInfo.announceForAccessibility(WEEK_PLAN_REMOVE_FAILED_ANNOUNCEMENT);
         return;
       }

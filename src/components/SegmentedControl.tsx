@@ -6,6 +6,7 @@
 
 import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { hapticValueMoved } from '@/lib/haptics';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 export interface SegmentedControlOption<T extends string> {
@@ -39,7 +40,17 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
         return (
           <Pressable
             key={option.value}
-            onPress={() => onChange(option.value)}
+            // WS5 §3.2: "a segmented control changes scope" is a value
+            // moved — `selectionAsync`. Guarded on `selected` because
+            // tapping the segment you are already on changes nothing, and
+            // a control that buzzes for a no-op teaches the hand that the
+            // buzz means nothing.
+            onPress={() => {
+              if (!selected) {
+                hapticValueMoved();
+              }
+              onChange(option.value);
+            }}
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
             accessibilityLabel={option.label}

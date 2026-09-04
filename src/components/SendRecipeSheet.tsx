@@ -71,7 +71,7 @@ import {
   View,
   useColorScheme,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { hapticValueMoved } from '@/lib/haptics';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ProfileId } from '@/domain/social/types';
@@ -368,9 +368,7 @@ function SendFriendRow(props: SendFriendRowProps): JSX.Element {
     // §3.1: "One light selection haptic on commit... Reduced motion:
     // stroke appears complete instantly, label swaps without animation,
     // haptic stays — a haptic is feedback, not motion."
-    Haptics.selectionAsync().catch(() => {
-      // Unsupported on this device or simulator; the stroke still draws.
-    });
+    hapticValueMoved();
   }, [row.committed, strokeScale, reduceMotionEnabled]);
 
   return (

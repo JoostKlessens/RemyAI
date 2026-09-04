@@ -26,7 +26,7 @@
 
 import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import * as Haptics from 'expo-haptics';
+import { hapticCompleted, hapticSmallCommit } from '@/lib/haptics';
 import {
   AccessibilityInfo,
   Animated,
@@ -115,9 +115,7 @@ export function TimerDisplay(props: TimerDisplayProps): JSX.Element {
       Animated.timing(pulse, { toValue: 1, duration, useNativeDriver: true }),
     ]).start();
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {
-      // Haptics unsupported on this device/simulator — the visual pulse still lands.
-    });
+    hapticCompleted();
     // A4: haptics can be (and often are) disabled system-wide, and the
     // opacity pulse is silent to a screen reader — without this, a blind
     // user has no signal the timer finished at all.
@@ -127,6 +125,16 @@ export function TimerDisplay(props: TimerDisplayProps): JSX.Element {
   const toggleRunning = (): void => {
     if (isComplete) {
       return;
+    }
+    if (!isRunning) {
+      // WS5 §3.2 lists "a cook timer is started" and does NOT list pausing
+      // it, and the asymmetry is the point rather than an omission: a
+      // started timer is a small commitment that will come back and
+      // interrupt you, while pausing is taking something back. The same
+      // reasoning keeps `Niet koken` and every close control silent
+      // (§3.3) — undoing must never feel like a penalty for having
+      // started.
+      hapticSmallCommit();
     }
     const now = Date.now();
     setNowMs(now);

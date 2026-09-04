@@ -23,6 +23,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { AccessibilityInfo, Animated, Easing, Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SaveIntent } from '@/domain/types';
+import { hapticSmallCommit } from '@/lib/haptics';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 export interface SaveIntentSheetProps {
@@ -80,6 +81,11 @@ export function SaveIntentSheet(props: SaveIntentSheetProps): JSX.Element {
     const duration = resolveDuration(motion.durationFast, reduceMotionEnabled);
     setFlashingValue(option.value);
     flash.setValue(1);
+    // WS5 §3.2: "a save intent is chosen" — `impactAsync(Light)`, riding
+    // the `positiveMuted` flash that already exists. Light rather than
+    // Medium because nothing is decided here: the dish joins a list, and
+    // both options are as undoable as the week screen makes them.
+    hapticSmallCommit();
     // A1: the sheet auto-dismisses the instant a row is picked (the
     // choice *is* the confirm) — a screen-reader user needs to hear what
     // was committed before that dismissal, since there's no separate

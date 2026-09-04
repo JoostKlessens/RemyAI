@@ -103,6 +103,7 @@ import type {
 } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { loadFriendProof } from '@/lib/friendProof';
+import { hapticRealCommit } from '@/lib/haptics';
 import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import { supabase } from '@/lib/supabase';
@@ -379,6 +380,19 @@ export default function VanavondScreen(): JSX.Element {
       return;
     }
     setIsAccepting(true);
+    // WS5 §3.2 calls this "the decision of the day", and it is one of the
+    // three `Medium` events in the app. Fired here, with the stroke and
+    // BEFORE the ACCEPT_STROKE_HOLD_MS wait, because the buzz reports the
+    // tap that already happened — deferring it to the navigation would
+    // land it on Kookmodus, describing a screen the user has left.
+    //
+    // Deliberately not mirrored on `Niet koken` or `Iets anders`.
+    // docs/DESIGN.md §10 spends three paragraphs making a decline cost
+    // exactly what an accept costs, and a haptic on one of them and not
+    // the other undoes that in a single line of code — so the haptic is
+    // spent on the branch that starts something, and the other two answers
+    // stay exactly as legitimate and exactly as quiet.
+    hapticRealCommit();
     if (devScenario === 'normal' && session?.decisionRow) {
       // Fire-and-forget: cooking must never be blocked by a local
       // bookkeeping write. A failure here is extremely unlikely (this is
