@@ -47,7 +47,9 @@ import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { completeSignInFromUrl } from '@/lib/auth';
 import { useSession } from '@/hooks/useSession';
-import { startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
+import { chooseBootstrapMember, startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
+import { registerForDecisionPush } from '@/lib/pushRegistration';
+import { getAppRepository } from '@/lib/repository';
 import { getAppHouseholdSyncEnvironment } from '@/lib/repository/createRepository';
 
 // Must run once, at module scope, before the first render — calling this
@@ -255,6 +257,53 @@ function AuthGate(): null {
  * `capability` object, which `describeSessionCapability` rebuilds on every
  * render — so the listener is not churned on unrelated repaints.
  */
+/**
+ * Puts this device's push token in `push_tokens`, which is the half of the
+ * 16:00 push that never existed (GAP-30).
+ *
+ * IT RIDES THE SAME EFFECT AS THE HOUSEHOLD SYNC, AND THE ORDER MATTERS.
+ * `push_tokens`' foreign key is composite — `(member_id, household_id)`
+ * references `household_members` — so a token cannot be stored until
+ * `ensureRemoteHousehold` has written that membership row. `startHouseholdSync`
+ * is fire-and-forget by design and there is nothing here to await it with,
+ * so on a first run this call can genuinely lose the race and come back
+ * `store_failed`.
+ *
+ * That is accepted rather than engineered around, because the retry is
+ * already free: the foreground subscription re-runs both on every return
+ * to the app, and by then the membership row exists. Serialising them
+ * would mean giving `startHouseholdSync` a promise it deliberately does
+ * not return, to save one failed insert on one run.
+ *
+ * NOTHING IS SHOWN AND NOTHING IS THROWN. `registerForDecisionPush` reports
+ * every outcome as a value; this reads it only to keep the failure out of
+ * an unhandled rejection. See that module's header for the two reasons it
+ * cannot succeed until OPS-02 lands — chiefly that `app.json` carries no
+ * `extra.eas.projectId`, without which Expo refuses to issue a token at
+ * all.
+ */
+async function registerPush(canUseApp: boolean, userId: string | null): Promise<void> {
+  if (!canUseApp || userId === null) {
+    return;
+  }
+  try {
+    const repository = getAppRepository();
+    const householdId = await repository.getCurrentHouseholdId();
+    const members = await repository.listMembers(householdId);
+    // The same answer householdSync uses for "which member is this
+    // account", imported rather than re-derived — two ways of resolving
+    // one identity is how a token ends up attached to the wrong person.
+    const member = chooseBootstrapMember(members, userId);
+    if (member === null) {
+      return;
+    }
+    await registerForDecisionPush({ memberId: member.id, householdId });
+  } catch {
+    // Local storage or the network. Same contract as the sync beside it:
+    // no push today is never no app today.
+  }
+}
+
 function HouseholdBootstrapGate(): null {
   const { isResolving, capability, userId } = useSession();
   const canUseApp = capability.canUseApp;
@@ -265,7 +314,11 @@ function HouseholdBootstrapGate(): null {
     // Not awaited, and there is nothing here to await it with: `start`
     // returns void by design.
     startHouseholdSync(environment, session);
-    return subscribeToForeground(AppState, () => startHouseholdSync(environment, session));
+    void registerPush(canUseApp, userId);
+    return subscribeToForeground(AppState, () => {
+      startHouseholdSync(environment, session);
+      void registerPush(canUseApp, userId);
+    });
   }, [isResolving, canUseApp, userId]);
 
   return null;
