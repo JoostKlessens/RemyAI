@@ -387,11 +387,16 @@ export default function VanavondScreen(): JSX.Element {
     // land it on Kookmodus, describing a screen the user has left.
     //
     // Deliberately not mirrored on `Niet koken` or `Iets anders`.
-    // docs/DESIGN.md §10 spends three paragraphs making a decline cost
-    // exactly what an accept costs, and a haptic on one of them and not
-    // the other undoes that in a single line of code — so the haptic is
-    // spent on the branch that starts something, and the other two answers
-    // stay exactly as legitimate and exactly as quiet.
+    // docs/DESIGN.md §1 is where that parity lives — "'Niet koken' is
+    // always legitimate, lowest visual weight, never a cancel action" —
+    // and PD-008 leans on PD-002's optional decline reason as its own
+    // precedent. A haptic on one answer and not the other undoes that in
+    // a single line of code, so the buzz is spent on the branch that
+    // STARTS something and the other two stay as legitimate and as quiet.
+    //
+    // (This cited §10 until it was checked. §10 is the rating slider; it
+    // argues that SKIPPING a grade must cost what giving one costs, which
+    // is a different parity about a different control.)
     hapticRealCommit();
     if (devScenario === 'normal' && session?.decisionRow) {
       // Fire-and-forget: cooking must never be blocked by a local
