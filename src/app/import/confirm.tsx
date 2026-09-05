@@ -68,6 +68,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { decodeImportConfirmParams, type ImportConfirmParams } from './routeParams';
+import { findDuplicateImport } from '@/domain/import/duplicateImport';
 import { formatIngredientLine, resolveEditedIngredients } from '@/domain/import/editedIngredients';
 import { toMealDraft, type MealDraftInsert } from '@/domain/import/toMealDraft';
 import type { ParsedIngredient, ParsedRecipe } from '@/domain/import/types';
@@ -310,6 +311,16 @@ function buildMealInput(
  * household's chosen SaveIntent (PD-004a: 'this_week' or 'someday', never
  * 'none' — see SaveIntentSheet's own file header).
  */
+/**
+ * What a save attempt did. A duplicate is NOT an error and must not be
+ * reported as one: nothing failed, the household simply already owns this
+ * dish, and the outcome they wanted is already true. Modelling it as a
+ * third result rather than a thrown error is what keeps it out of the red
+ * `danger` line — the same distinction PD-011's `display_only` earns on
+ * the screen before this one.
+ */
+type ImportSaveResult = { readonly kind: 'saved' } | { readonly kind: 'duplicate'; readonly title: string };
+
 async function persistImportedMeal(
   repository: RemyRepository,
   intent: SaveIntent,
@@ -317,8 +328,22 @@ async function persistImportedMeal(
   confirmParams: ImportConfirmParams,
   allergenTags: readonly string[],
   allergenStatus: AllergenTagStatus,
-): Promise<void> {
+): Promise<ImportSaveResult> {
   const householdId = await repository.getCurrentHouseholdId();
+  // The check this file's own header has claimed for months. `sourceUrl`
+  // really is the deduplication key now, rather than a sentence describing
+  // one that was never built — see duplicateImport.ts, which also explains
+  // why a null address can never collide with another null.
+  //
+  // Read here rather than at paste time, deliberately. Catching it earlier
+  // would spare a round trip, but it would also mean the paste screen
+  // deciding what the library contains, and the whole reason that screen
+  // never inspects its own input is that guessing belongs in one layer.
+  // This is the layer that already holds a household id.
+  const existing = findDuplicateImport(await repository.listHouseholdMeals(householdId), confirmParams.sourceUrl);
+  if (existing !== null) {
+    return { kind: 'duplicate', title: existing.title };
+  }
   const mealInput = buildMealInput(editedRecipe, confirmParams, householdId, allergenTags, allergenStatus);
   const meal = await repository.createMeal(mealInput);
   await repository.createSave({
@@ -328,6 +353,7 @@ async function persistImportedMeal(
     intent,
     sourceUrl: confirmParams.sourceUrl,
   });
+  return { kind: 'saved' };
 }
 
 /**
@@ -448,6 +474,19 @@ function useFriendProofLine(recipeId: string | null): string | null {
   return line;
 }
 
+/**
+ * Names the dish rather than saying "dit recept", because the household may
+ * well have forgotten importing it and the title is the thing that jogs the
+ * memory. Sits beside `buildSaveErrorMessage` and shares its one weakness:
+ * both are local to a route module, so neither is reachable from the test
+ * suite. That is a pre-existing exception in this file rather than a new
+ * one — the rule these two break is why every other Dutch string in the
+ * flow lives in a `*Copy.ts`.
+ */
+function buildDuplicateNotice(title: string): string {
+  return `"${title}" staat al in je recepten. Er is niets toegevoegd.`;
+}
+
 function buildSaveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return `Opslaan is mislukt: ${error.message}`;
@@ -506,6 +545,12 @@ export default function ImportConfirmScreen(): JSX.Element {
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /**
+   * The title of the recipe this import turned out to be a second copy of,
+   * or null. Held separately from `saveError` because a duplicate is not a
+   * failure — see the branch in `handleSelectIntent` and `ImportSaveResult`.
+   */
+  const [duplicateTitle, setDuplicateTitle] = useState<string | null>(null);
 
   // PD-007.2: credit the creator, on every platform we import from. This
   // used to build a social-layer `Creator`, which silently produced
@@ -562,7 +607,16 @@ export default function ImportConfirmScreen(): JSX.Element {
       carriedDishTags,
     );
     persistImportedMeal(getAppRepository(), intent, editedRecipe, confirmParams, allergenTags, allergenStatus)
-      .then(() => {
+      .then((result) => {
+        if (result.kind === 'duplicate') {
+          // Deliberately not `setSaveError`: that line is `danger` red, and
+          // nothing went wrong here. The household already owns this dish,
+          // which is the outcome they were trying to reach — so this is a
+          // neutral fact with a way onward, not an apology.
+          setIsSaving(false);
+          setDuplicateTitle(result.title);
+          return;
+        }
         router.replace('/recipes');
       })
       .catch((error: unknown) => {
@@ -728,6 +782,20 @@ export default function ImportConfirmScreen(): JSX.Element {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        {duplicateTitle !== null ? (
+          <View style={styles.duplicateNotice}>
+            <Text style={[typeScale.bodySmall, styles.saveErrorText, { color: colors.textSecondary }]}>
+              {buildDuplicateNotice(duplicateTitle)}
+            </Text>
+            <Button
+              label="Naar mijn recepten"
+              variant="secondary"
+              onPress={() => router.replace('/recipes')}
+              accessibilityLabel="Naar mijn recepten, waar dit recept al staat"
+            />
+          </View>
+        ) : null}
+
         {saveError !== null ? (
           <Text style={[typeScale.bodySmall, styles.saveErrorText, { color: colors.danger }]}>{saveError}</Text>
         ) : null}
@@ -812,6 +880,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenPaddingHorizontal,
     paddingTop: spacing.space4,
     paddingBottom: spacing.space6,
+  },
+  duplicateNotice: {
+    gap: spacing.space3,
+    marginTop: spacing.space4,
   },
   saveErrorText: {
     marginBottom: spacing.space3,
