@@ -43,10 +43,26 @@
  * button: see `LibraryHeader` in (tabs)/recipes.tsx for why every tab
  * header is now a name plus exactly one control of its own.
  *
- * No tab icons: the product's visual direction (docs/DESIGN.md, "the
- * contact sheet, not the magazine") is explicitly icon-averse, so
- * text-only tab labels — set in `typeScale.caption`, now monospace — stay
- * consistent with that.
+ * NO TAB ICONS — AND UNTIL 5 SEPTEMBER 2026 THIS PARAGRAPH WAS FALSE AT
+ * RUNTIME. It claimed "text-only tab labels" on the strength of this file
+ * not setting `tabBarIcon`. Not setting it is not the same as there being
+ * none: expo-router 57 vendors react-navigation's bottom-tabs, and
+ * `BottomTabBar.js` passes
+ *
+ *     icon: options.tabBarIcon ?? (({color, size}) => <MissingIcon …/>)
+ *
+ * — the `??` guarantees the prop is never undefined, and `MissingIcon`
+ * renders the literal character "⏷" (⏷) at 25pt. So four
+ * down-pointing triangles were being drawn above the four labels, in every
+ * build, for as long as this comment has existed. `tabBarIconStyle:
+ * { display: 'none' }` is what makes the sentence true.
+ *
+ * AND IT REMOVES THE STANDING OBJECTION TO EVER ADDING REAL ICONS. WS4
+ * argued an icon would cost VERTICAL space. It does not: the bar is a
+ * fixed `TABBAR_HEIGHT_UIKIT` (49) plus the safe-area inset whether an
+ * icon exists or not, and the 31×28 icon slot is rendered unconditionally.
+ * That space is already being spent — on a placeholder glyph. A real icon
+ * costs nothing extra; it replaces ⏷.
  *
  * THE ONE LABEL THAT IS NOT A CONSTANT: `Vrienden` (PD-020.1). While
  * directed sends are waiting it reads `Vrienden · 2`, and that count is
@@ -97,6 +113,11 @@ export default function TabsLayout(): JSX.Element {
           borderTopColor: colors.border,
         },
         tabBarLabelStyle: typeScale.caption,
+        // Hides the placeholder ⏷ described in the file header. NOT a
+        // statement that this bar will never have icons — when a real
+        // glyph set exists (GAP-19) this line goes and four `tabBarIcon`
+        // render props take its place, at no cost in either axis.
+        tabBarIconStyle: { display: 'none' },
       }}
     >
       <Tabs.Screen
@@ -109,7 +130,23 @@ export default function TabsLayout(): JSX.Element {
       <Tabs.Screen
         name="recipes"
         options={{
-          title: 'Mijn recepten',
+          // "Recepten", not "Mijn recepten", and this is a defect fix
+          // rather than a rename. The label is `numberOfLines: 1` in
+          // react-navigation's `Label.js`, so it truncates rather than
+          // wrapping or shrinking — and the arithmetic says it always did:
+          // `typeScale.caption` is IBM Plex Mono at 12pt, every glyph
+          // advance is 600/1000 em, so 13 characters is 13 × 0.6 × 12 =
+          // 93.6pt against a slot of `width / 4 - 2 × 5` = 88.25pt at
+          // 393pt and 83.75pt at 375pt. It has been showing an ellipsis on
+          // every supported phone since it was written.
+          //
+          // The same precedent is already in this file, four lines down:
+          // Trending's tab label is shorter than its screen header for
+          // exactly this reason. The SCREEN keeps "Mijn recepten"
+          // (LibraryHeader), and so does the spoken label below — a screen
+          // reader has no width budget, so the full name survives where it
+          // costs nothing.
+          title: 'Recepten',
           tabBarAccessibilityLabel: 'Mijn recepten, jouw opgeslagen en geïmporteerde recepten',
         }}
       />
