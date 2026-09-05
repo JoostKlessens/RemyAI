@@ -24,8 +24,8 @@ describe('describeLibrarySearchEmpty', () => {
     expect(copy.body).not.toContain('“”');
   });
 
-  test('describes a quickOnly-only search the same way as any other chip filter', () => {
-    const copy = describeLibrarySearchEmpty(search({ quickOnly: true }));
+  test('describes a time-cap-only search the same way as any other chip filter', () => {
+    const copy = describeLibrarySearchEmpty(search({ maxMinutes: 20 }));
     expect(copy.body).toBe('Geen recepten voldoen aan deze filters.');
   });
 

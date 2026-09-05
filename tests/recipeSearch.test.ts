@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  LIBRARY_QUICK_MAX_MINUTES,
+  LIBRARY_TIME_CAP_OPTIONS,
   NO_LIBRARY_SEARCH,
   collectAvailableDishTags,
   filterLibraryMeals,
@@ -72,29 +72,48 @@ describe('filterLibraryMeals — dishTags (AND) and dishMoods (OR), reused from 
   });
 });
 
-describe('filterLibraryMeals — quickOnly ("Snel")', () => {
-  test('keeps only meals at or under the quick threshold when quickOnly is set', () => {
-    const meals = [
-      makeMeal({ id: 'm-quick', estimatedMinutes: LIBRARY_QUICK_MAX_MINUTES }),
-      makeMeal({ id: 'm-slow', estimatedMinutes: LIBRARY_QUICK_MAX_MINUTES + 1 }),
-    ];
-    const result = filterLibraryMeals(meals, search({ quickOnly: true }));
+/** The caps a household can actually choose — `null` is the absence of a cap, not one of them. */
+const EXPLICIT_CAPS = LIBRARY_TIME_CAP_OPTIONS.filter((option): option is number => option !== null);
+
+describe('LIBRARY_TIME_CAP_OPTIONS', () => {
+  test('offers "no cap" first, then DecisionFilterBar\'s own 20/30/45 steps', () => {
+    expect(LIBRARY_TIME_CAP_OPTIONS).toEqual([null, 20, 30, 45]);
+  });
+
+  test('every cap is strictly narrower than the one before it, so no two chips can mean the same thing', () => {
+    expect(EXPLICIT_CAPS).toEqual([...EXPLICIT_CAPS].sort((a, b) => a - b));
+    expect(new Set(EXPLICIT_CAPS).size).toBe(EXPLICIT_CAPS.length);
+  });
+});
+
+describe('filterLibraryMeals — maxMinutes (the time cap)', () => {
+  test('keeps only meals at or under an explicit cap', () => {
+    const meals = [makeMeal({ id: 'm-quick', estimatedMinutes: 20 }), makeMeal({ id: 'm-slow', estimatedMinutes: 21 })];
+    const result = filterLibraryMeals(meals, search({ maxMinutes: 20 }));
     expect(result.map((meal) => meal.id)).toEqual(['m-quick']);
   });
 
-  test('a meal with no recorded duration is excluded once quickOnly is explicitly requested', () => {
-    const meals = [makeMeal({ id: 'm-unknown', estimatedMinutes: null })];
-    expect(filterLibraryMeals(meals, search({ quickOnly: true }))).toEqual([]);
+  test('a wider cap keeps what a narrower one dropped — the whole reason the "Snel" boolean was replaced', () => {
+    const meals = [makeMeal({ id: 'm-30', estimatedMinutes: 30 })];
+    expect(filterLibraryMeals(meals, search({ maxMinutes: 20 }))).toEqual([]);
+    expect(filterLibraryMeals(meals, search({ maxMinutes: 30 })).map((meal) => meal.id)).toEqual(['m-30']);
   });
 
-  test('an unknown duration is NOT excluded when quickOnly is off', () => {
+  test('a meal with no recorded duration is excluded under EVERY explicit cap, not just the narrowest', () => {
+    const meals = [makeMeal({ id: 'm-unknown', estimatedMinutes: null })];
+    for (const cap of EXPLICIT_CAPS) {
+      expect(filterLibraryMeals(meals, search({ maxMinutes: cap }))).toEqual([]);
+    }
+  });
+
+  test('an unknown duration is NOT excluded when no cap is set', () => {
     const meals = [makeMeal({ id: 'm-unknown', estimatedMinutes: null })];
     expect(filterLibraryMeals(meals, NO_LIBRARY_SEARCH).map((meal) => meal.id)).toEqual(['m-unknown']);
   });
 });
 
 describe('filterLibraryMeals — composition', () => {
-  test('title, dishTags, dishMoods and quickOnly all narrow together', () => {
+  test('title, dishTags, dishMoods and the time cap all narrow together', () => {
     const meals = [
       makeMeal({
         id: 'm-match',
@@ -120,7 +139,7 @@ describe('filterLibraryMeals — composition', () => {
     ];
     const result = filterLibraryMeals(
       meals,
-      search({ query: 'pasta', requiredDishTags: ['pasta', 'vegetarisch'], anyDishMoods: ['zomers'], quickOnly: true }),
+      search({ query: 'pasta', requiredDishTags: ['pasta', 'vegetarisch'], anyDishMoods: ['zomers'], maxMinutes: 20 }),
     );
     expect(result.map((meal) => meal.id)).toEqual(['m-match']);
   });
@@ -147,8 +166,12 @@ describe('isLibrarySearchActive', () => {
     expect(isLibrarySearchActive(search({ anyDishMoods: ['zomers'] }))).toBe(true);
   });
 
-  test('is true when only quickOnly is set', () => {
-    expect(isLibrarySearchActive(search({ quickOnly: true }))).toBe(true);
+  test('is true when only a time cap is set', () => {
+    expect(isLibrarySearchActive(search({ maxMinutes: 20 }))).toBe(true);
+  });
+
+  test('is false for a null time cap — the absence of a cap is not a filter', () => {
+    expect(isLibrarySearchActive(search({ maxMinutes: null }))).toBe(false);
   });
 });
 

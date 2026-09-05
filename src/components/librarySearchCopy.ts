@@ -28,7 +28,7 @@
  * search back ("Geen recepten gevonden voor "paella"") is the same courtesy
  * a browser's own not-found page gives, and it is proof the app actually
  * read what was typed rather than silently dropping it. A chip-only search
- * (no typed text, just dishTags/dishMoods/"snel") gets its own sentence
+ * (no typed text, just dishTags/dishMoods/a time cap) gets its own sentence
  * rather than an empty pair of quotation marks, because "voor """ reads as
  * a bug, not as an honest description of nothing.
  *
@@ -52,7 +52,7 @@ const LIBRARY_SEARCH_EMPTY_TITLE = 'Niets gevonden';
 const LIBRARY_SEARCH_EMPTY_ACTION_LABEL = 'Wis zoekopdracht';
 
 function hasChipFilters(search: LibrarySearchState): boolean {
-  return search.requiredDishTags.length > 0 || search.anyDishMoods.length > 0 || search.quickOnly;
+  return search.requiredDishTags.length > 0 || search.anyDishMoods.length > 0 || search.maxMinutes !== null;
 }
 
 /**

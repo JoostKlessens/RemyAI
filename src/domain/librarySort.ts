@@ -1,4 +1,30 @@
 /**
+ * NO CALLER SINCE 2026-09-05, AND KEPT ANYWAY. The sort ROW was taken out
+ * of `LibrarySearchBar` on that date at the owner's request ("sorteren kan
+ * voor nu weg"), and with it went the `sort` state, the `sortLibraryRows`
+ * memo, and the `cookEvents` state that existed on the screen only to feed
+ * this module (src/app/(tabs)/recipes.tsx). Nothing in the app calls
+ * anything below today.
+ *
+ * It stays for the same reason `SaveIntent`'s `'none'` variant stays in its
+ * union while being unreachable from the UI (src/domain/types.ts, PD-004a):
+ * the code is correct, independently tested (tests/librarySort.test.ts),
+ * and the expensive part was never the sixty lines below — it was deciding
+ * what "nog nooit gekookt" should MEAN, and why "deze week eerst" may not
+ * survive an explicit sort. Deleting the file deletes that argument with
+ * it, and the next person asked for library sorting would have to rederive
+ * it from nothing, most likely differently. What the owner removed is a row
+ * of chips on a screen he wants shorter; he did not overturn a decision
+ * about ordering, and nothing here should pretend he did.
+ *
+ * Read the rest of this header as a design that is waiting, not as a
+ * description of what the app currently does. Reinstating the row needs a
+ * caller for `sortLibraryRows`, the `cookEvents` fetch back in the screen's
+ * state, and — the part worth settling before writing any of it — a fresh
+ * answer to whether a browse screen should offer ordering at all.
+ */
+
+/**
  * Pure sort resolver for "Mijn recepten" (src/app/(tabs)/recipes.tsx) —
  * LIB-04. Search and filter (LIB-01/LIB-03, recipeSearch.ts) answer "which
  * of these do I want to see"; this module answers a different question,

@@ -60,18 +60,32 @@ import { normalizeTag } from './normalizeTag';
 import type { Meal } from './types';
 
 /**
- * Tonight's-filters shape (`DecisionFilters`) reused would have forced this
- * screen to state a `maxMinutes` number it doesn't have — the library asks
- * one coarse yes/no ("snel or not"), not "how many minutes exactly", so
- * `quickOnly` is the state this screen actually holds and `filterLibraryMeals`
- * is where it becomes the `maxMinutes` number `filterByDecisionFilters`
- * expects.
+ * Tonight's-filters shape (`DecisionFilters`) is not reused wholesale — the
+ * library has a free-text `query` the decision surface has no use for, and
+ * that surface has no use for a title search — but `maxMinutes` is
+ * deliberately the SAME field, with the same type and the same meaning, so
+ * `filterLibraryMeals` hands it straight to `filterByDecisionFilters`
+ * without translating anything on the way.
+ *
+ * IT USED TO BE A BOOLEAN CALLED `quickOnly`, AND THE ARGUMENT FOR THAT WAS
+ * WRONG IN A WAY WORTH RECORDING. It said the library "asks one coarse
+ * yes/no ('snel or not'), not 'how many minutes exactly'", so a boolean was
+ * the state the screen actually held, and `filterLibraryMeals` was where it
+ * became a number. Both halves were true and the conclusion still did not
+ * follow: what the boolean DID was pick twenty minutes on the household's
+ * behalf and then refuse to discuss it. Someone with half an hour could not
+ * say so — their only move was to switch the filter off entirely and scroll
+ * — and nothing on screen ever admitted that "Snel" was a specific number
+ * rather than a judgement. The owner asked for the cap itself ("hoe lang
+ * het recept maximaal mag duren"), which is the value this field was always
+ * one translation away from holding directly.
  */
 export interface LibrarySearchState {
   readonly query: string;
   readonly requiredDishTags: readonly string[];
   readonly anyDishMoods: readonly string[];
-  readonly quickOnly: boolean;
+  /** `null` is "no cap stated", not "a cap of zero" — see `LIBRARY_TIME_CAP_OPTIONS` and `isWithinMaxMinutes` in exclusions.ts. */
+  readonly maxMinutes: number | null;
 }
 
 /** The no-search identity — `filterLibraryMeals(meals, NO_LIBRARY_SEARCH)` returns every meal, in its input order. */
@@ -79,21 +93,35 @@ export const NO_LIBRARY_SEARCH: LibrarySearchState = {
   query: '',
   requiredDishTags: [],
   anyDishMoods: [],
-  quickOnly: false,
+  maxMinutes: null,
 };
 
 /**
- * The library's one time-budget filter, "Snel". 20 minutes rather than a
- * segmented choice of several caps (the way the Kiezen decision surface
- * offers 20/30/45, see DecisionFilterBar.tsx): a library search narrows a
- * browse list, it does not commit to one dish the way the nightly decision
- * does, so one coarse cutoff is enough and costs less chip-row height than
- * a control built for a different screen's precision. 20 is the same
- * number DecisionFilterBar's own comment names as "the request this whole
- * feature exists for" — reused here as the same product vocabulary for
- * "snel", not re-derived from scratch.
+ * The caps the library offers, in the order a filter row should read them:
+ * widest first, narrowest last. `null` leads because it is not a fourth cap
+ * but the ABSENCE of one — `NO_LIBRARY_SEARCH.maxMinutes`, the state the row
+ * starts in — and putting it anywhere else would suggest "no maximum" is a
+ * choice on the same ladder as "20 minutes".
+ *
+ * 20/30/45 ARE `DecisionFilterBar`'s STEPS, REUSED RATHER THAN RE-DERIVED.
+ * That file's own comment already did the work: they are not Household
+ * setup's 15/30/45+ because "45+" is an open-ended *budget* ("long cooking
+ * is fine"), which is meaningless as a hard upper bound, and 20 earns its
+ * slot because "ik heb twintig minuten" is the request the whole filtering
+ * feature exists for. This module's previous single threshold already cited
+ * that comment as its source for the number 20; taking all three is the same
+ * borrowing, finished. Inventing a different ladder here (15/25/40, say)
+ * would mean two screens teaching one household two vocabularies for one
+ * question, and the household would be right to read the difference as
+ * meaningful.
+ *
+ * WHY A LIST AND NOT A `min`/`max`/`step` RULE. The library's job is to
+ * offer the few caps people actually say out loud, not every cap
+ * expressible in minutes; a slider or a stepper would let someone ask for
+ * 37 minutes, which nobody has ever wanted, at the cost of a control that
+ * is harder to hit than a chip and impossible to read at a glance.
  */
-export const LIBRARY_QUICK_MAX_MINUTES = 20;
+export const LIBRARY_TIME_CAP_OPTIONS: readonly (number | null)[] = [null, 20, 30, 45];
 
 /**
  * Whether `search` would narrow anything at all. Used both to decide
@@ -108,7 +136,7 @@ export function isLibrarySearchActive(search: LibrarySearchState): boolean {
     search.query.trim().length > 0 ||
     search.requiredDishTags.length > 0 ||
     search.anyDishMoods.length > 0 ||
-    search.quickOnly
+    search.maxMinutes !== null
   );
 }
 
@@ -137,7 +165,7 @@ export function matchesTitleQuery(title: string, query: string): boolean {
 export function filterLibraryMeals(meals: readonly Meal[], search: LibrarySearchState): readonly Meal[] {
   const titleMatched = meals.filter((meal) => matchesTitleQuery(meal.title, search.query));
   return filterByDecisionFilters(titleMatched, {
-    maxMinutes: search.quickOnly ? LIBRARY_QUICK_MAX_MINUTES : null,
+    maxMinutes: search.maxMinutes,
     requiredDishTags: search.requiredDishTags,
     anyDishMoods: search.anyDishMoods,
   });

@@ -105,14 +105,13 @@
  * with copy from librarySearchCopy.ts, gated on `rows.length > 0` — the
  * branch below it, never the one above.
  *
- * SORT (LIB-04) COMPOSES AFTER FILTER, AND ADDS NO REPOSITORY CALLS OF ITS
- * OWN EITHER. `filteredRows` narrows `rows`; `visibleRows` then reorders
- * whatever survived, via `sortLibraryRows` (src/domain/librarySort.ts) —
- * the one place on this screen allowed to change row order, and only while
- * `sort` is not `'default'`. `cookEvents`, which `nog_nooit_gekookt` needs,
- * is kept in state alongside `rows` purely because `loadRows` already
- * fetches it for `sortMealsByScheduling`; nothing new is read from the
- * repository to support it.
+ * THE SORT ROW (LIB-04) WAS REMOVED ON 2026-09-05 at the owner's request
+ * ("sorteren kan voor nu weg"), taking with it the `sort` state, the
+ * `sortLibraryRows` memo, and the `cookEvents` state that existed only to
+ * feed it. src/domain/librarySort.ts and its tests deliberately survive
+ * uncalled — that file's own header says why. `visibleRows` below is now
+ * the filter's output directly, so "deze week eerst" holds unconditionally
+ * again, with nothing on this screen allowed to reorder anything.
  *
  * REMOVE (LIB-04) ARCHIVES, NEVER HARD-DELETES. "Verwijderen" on the
  * long-press sheet calls `RemyRepository.archiveMeal` — see that method's
@@ -134,14 +133,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { AccessibilityInfo, FlatList, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collectAvailableDishMoods } from '@/domain/dishMoods';
-import { DEFAULT_LIBRARY_SORT, sortLibraryRows, type LibrarySortOption } from '@/domain/librarySort';
 import {
   NO_LIBRARY_SEARCH,
   collectAvailableDishTags,
   filterLibraryRows,
   type LibrarySearchState,
 } from '@/domain/recipeSearch';
-import type { CookEvent, HouseholdId, Meal, MealId } from '@/domain/types';
+import type { HouseholdId, Meal, MealId } from '@/domain/types';
 import { Button } from '@/components/Button';
 import { describeEmptyLibrary } from '@/components/emptyLibraryCopy';
 import { LibraryHeader } from '@/components/LibraryHeader';
@@ -200,20 +198,7 @@ const LOADING_TILE_COUNT = 6;
  */
 const LIBRARY_EMPTY_COPY = describeEmptyLibrary('library');
 
-interface LoadedLibraryRows {
-  readonly rows: readonly ScheduledMealRow[];
-  /**
-   * Kept alongside `rows` rather than discarded once scheduling is
-   * resolved — LIB-04's `nog_nooit_gekookt` sort needs the raw events, not
-   * `ScheduledMealRow.scheduling.state`, per librarySort.ts's own header
-   * (that module stays domain-pure and never imports the components-layer
-   * `RecipeSchedulingInfo` type this screen already has on hand). No extra
-   * repository call: `loadRows` already fetched this for scheduling.
-   */
-  readonly cookEvents: readonly CookEvent[];
-}
-
-async function loadRows(householdId: HouseholdId): Promise<LoadedLibraryRows> {
+async function loadRows(householdId: HouseholdId): Promise<readonly ScheduledMealRow[]> {
   const repository = getAppRepository();
   const [meals, saves, cookEvents] = await Promise.all([
     repository.listHouseholdMeals(householdId),
@@ -224,7 +209,7 @@ async function loadRows(householdId: HouseholdId): Promise<LoadedLibraryRows> {
   // are excluded here even though listHouseholdMeals returns both,
   // matching this screen's own file header.
   const ownMeals = meals.filter((meal) => meal.householdId === householdId);
-  return { rows: sortMealsByScheduling(ownMeals, saves, cookEvents), cookEvents };
+  return sortMealsByScheduling(ownMeals, saves, cookEvents);
 }
 
 export default function RecipesScreen(): JSX.Element {
@@ -238,8 +223,6 @@ export default function RecipesScreen(): JSX.Element {
 
   const [phase, setPhase] = useState<ScreenPhase>('loading');
   const [rows, setRows] = useState<readonly ScheduledMealRow[]>([]);
-  // See `LoadedLibraryRows`'s own comment above — kept only for LIB-04's sort.
-  const [cookEvents, setCookEvents] = useState<readonly CookEvent[]>([]);
 
   // LIB-01/LIB-03. `rows` above stays the full, repository-fetched set —
   // see this file's header for why filtering never touches it and instead
@@ -248,23 +231,12 @@ export default function RecipesScreen(): JSX.Element {
   // already selected never disappears out from under them just because
   // their current query also narrowed the pool to nothing that carries it.
   const [search, setSearch] = useState<LibrarySearchState>(NO_LIBRARY_SEARCH);
-  // LIB-04. A standing choice independent of `search` — see
-  // LibrarySearchBar.tsx's header on why it is not a `LibrarySearchState`
-  // field, and librarySort.ts's header on why "deze week first" (the order
-  // `rows` already arrives in) only survives while this stays `default`.
-  const [sort, setSort] = useState<LibrarySortOption>(DEFAULT_LIBRARY_SORT);
   const availableDishTags = useMemo(() => collectAvailableDishTags(rows.map((row) => row.meal)), [rows]);
   const availableDishMoods = useMemo(() => collectAvailableDishMoods(rows.map((row) => row.meal)), [rows]);
-  // Filter first, then sort — narrowing the pool never depends on its
-  // eventual order, and this composition is what keeps "filtering never
-  // reorders survivors" (this file's header) true of the FILTER step
-  // specifically, while the sort step is exactly the one place that is
-  // allowed to reorder, and only when the household asked for it.
-  const filteredRows = useMemo(() => filterLibraryRows(rows, search), [rows, search]);
-  const visibleRows = useMemo(
-    () => sortLibraryRows(filteredRows, sort, cookEvents),
-    [filteredRows, sort, cookEvents],
-  );
+  // The only transform between `rows` and what the grid draws. Filtering
+  // never reorders what survives it (this file's header), so "deze week
+  // eerst" reaches the screen intact without this line having to assert it.
+  const visibleRows = useMemo(() => filterLibraryRows(rows, search), [rows, search]);
 
   const [actionSheetMeal, setActionSheetMeal] = useState<Meal | null>(null);
   const [exclusion, dispatchExclusion] = useReducer(reduceCookProofExclusion, INITIAL_COOK_PROOF_EXCLUSION);
@@ -314,8 +286,7 @@ export default function RecipesScreen(): JSX.Element {
         if (cancelled) {
           return;
         }
-        setRows(loaded.rows);
-        setCookEvents(loaded.cookEvents);
+        setRows(loaded);
         setPhase('ready');
       })
       .catch(() => {
@@ -662,8 +633,6 @@ export default function RecipesScreen(): JSX.Element {
           availableDishTags={availableDishTags}
           availableDishMoods={availableDishMoods}
           onChange={setSearch}
-          sort={sort}
-          onChangeSort={setSort}
         />
       ) : null}
 
