@@ -80,16 +80,21 @@ import type { ImportPlatform } from '@/domain/import/types';
  * screen's control had to offer four link segments, or that picking a
  * segment asserted a platform nobody has determined yet.
  */
-export type ImportSourceMode = 'link' | 'text';
+export type ImportSourceMode = 'link' | 'text' | 'photo';
 
 /**
- * Listed rather than derived, so the screen's control and this module's
- * test both iterate the same two members and a third mode cannot be added
- * to one without the other noticing. Order is the order they are rendered
- * in: link first, because it is the route almost every import takes and
- * the one the screen was built around.
+ * Listed rather than derived, so the screen's control and this module's test
+ * both iterate the same members and a new mode cannot be added to one without
+ * the other noticing. Order is the order they are rendered in: link first,
+ * because it is the route almost every import takes and the one the screen was
+ * built around.
+ *
+ * `'photo'` IS LAST AND NOT SECOND (SRC-07). A segmented control's order reads
+ * as an order of expectation, and this is the newest route. Inserting it in
+ * the middle would also move "Tekst" out from under the finger of everyone who
+ * has learned where it is — a real cost, paid for nothing.
  */
-export const IMPORT_SOURCE_MODES: readonly ImportSourceMode[] = ['link', 'text'];
+export const IMPORT_SOURCE_MODES: readonly ImportSourceMode[] = ['link', 'text', 'photo'];
 
 export interface ImportSourceModeCopy {
   /** One word on the mode switch. Names what the user is holding, never a format — see the file header. */
@@ -183,6 +188,46 @@ const MODE_COPY: Readonly<Record<ImportSourceMode, ImportSourceModeCopy>> = {
     manualEntryLabel: 'Ik typ het recept liever zelf',
     manualEntryAccessibilityLabel: 'Recept handmatig invoeren',
   },
+  /**
+   * SRC-07, the photographed-recipe route, and the one mode whose "field" is
+   * not a field at all — it is two buttons. Three members of this shape are
+   * therefore never rendered for it, and that is stated here rather than left
+   * to be discovered: `placeholder` and `inputAccessibilityLabel` describe a
+   * `TextInput` this mode does not have, and `clipboardAccessibilityLabel`
+   * describes a paste row `ImportSourceField` deliberately hides here, because
+   * a clipboard holding text has nothing to offer a photograph.
+   *
+   * THEY ARE STILL GIVEN HONEST VALUES RATHER THAN EMPTY STRINGS. An empty
+   * string is a value a future render can show, and the day somebody wires an
+   * input into this mode a blank accessibility label is the failure nobody
+   * notices — a screen-reader user meeting an unnamed control. Making the
+   * members optional to suit one mode would be worse still: it would let the
+   * other two forget them.
+   *
+   * WHERE THE REST OF THIS ROUTE'S COPY LIVES, AND WHY IT IS NOT HERE:
+   * src/domain/import/photoImportCopy.ts. The capture buttons, the permission
+   * refusals and the two size/format sentences sit beside the limits that
+   * decide them (photoImportLimits.ts), which is the adjacency that matters
+   * for those. What branches on the MODE lives here with its two siblings, so
+   * that a contradiction between them has to be written twice in one file to
+   * survive review — the argument this module's header makes.
+   */
+  photo: {
+    segmentLabel: 'Foto',
+    subtitle:
+      'Maak een foto van het recept — uit een kookboek, van een kaartje, of een schermafbeelding. Remy leest hem één keer en bewaart hem niet.',
+    // Never rendered — see this entry's note. Written as what a photo field
+    // would ask for, if one ever existed.
+    placeholder: 'Kies of maak een foto van het recept',
+    inputAccessibilityLabel: 'Het recept als foto',
+    clipboardAccessibilityLabel: 'Plak uit klembord',
+    // "Liever" rather than "geen", on the text route's precedent: nothing is
+    // missing and nothing has gone wrong. Somebody with the book open in front
+    // of them may simply prefer to type it, and phrasing that as a lack would
+    // turn a preference into a failure.
+    manualEntryLabel: 'Ik typ het recept liever zelf',
+    manualEntryAccessibilityLabel: 'Recept handmatig invoeren',
+  },
 };
 
 /** The single entry point for everything the screen says about the mode the user picked. */
@@ -215,6 +260,12 @@ export interface ImportStartOverCopy {
  */
 const START_OVER_COPY: Readonly<Record<ImportSourceMode, ImportStartOverCopy>> = {
   link: { label: 'Andere link proberen', accessibilityLabel: 'Een andere link proberen' },
+  // SRC-07. Not "Opnieuw plakken" and not "Andere link proberen", both of
+  // which name a gesture this user never made — the same defect the text route
+  // was fixed for, one route further on. "Andere foto" is also the accurate
+  // instruction rather than merely the polite one: the failure panel above it
+  // has just suggested a better photograph, and the two must not disagree.
+  photo: { label: 'Andere foto proberen', accessibilityLabel: 'Een andere foto van een recept proberen' },
   // Not "Andere tekst proberen": the user is not looking for a different
   // recipe, they are replacing a paste that did not work. "Opnieuw plakken"
   // names the gesture they actually have to repeat.
@@ -235,7 +286,8 @@ export function buildImportStartOverCopy(mode: ImportSourceMode): ImportStartOve
  * options, which is exactly the inference this screen refuses to make
  * anywhere else.
  */
-export const IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL = 'Wat je plakt: een link of het recept als tekst';
+export const IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL =
+  'Wat je meegeeft: een link, het recept als tekst, of een foto';
 
 /**
  * Shown under the text field the moment a paste is longer than the import
@@ -332,6 +384,30 @@ const CHECKPOINT_LABELS_WEB: readonly string[] = ['Pagina opgehaald', 'Recept va
 const CHECKPOINT_LABELS_TEXT: readonly string[] = ['Je tekst gelezen', 'Recept eruit gehaald…'];
 
 /**
+ * THE PHOTO LIST (SRC-07), and it is the pasted-text list's argument again
+ * rather than a new one: this route fetches nothing. No post, no page, no
+ * video, no maker — an image the user already handed over, and one model call
+ * over it. Two steps is the whole pipeline, not a trimmed-down narration.
+ *
+ * "JE FOTO GELEZEN" IS TRUE WHEN IT LIGHTS, exactly as "Je tekst gelezen" is:
+ * the photograph was in hand before the screen began animating. The row exists
+ * so the second has something to be second to — a lone in-flight row reads as
+ * a spinner, which docs/DESIGN.md §3 replaced with checkpoints in the first
+ * place.
+ *
+ * "RECEPT VAN DE FOTO GEHAALD…" echoes the words `model_from_photo` uses on
+ * the very next screen ("Van je foto gelezen", recipeProvenanceCopy.ts), for
+ * the reason the text list echoes its own provenance note: two statements of
+ * one fact, a few seconds apart, must not use different words for it.
+ *
+ * DELIBERATELY NOT "FOTO GESCAND" OR ANYTHING LIKE IT. Remy does not scan: no
+ * edge detection, no de-skewing, no multi-page capture. A verb promising a
+ * document scanner earns a complaint about a missing feature — the same reason
+ * the segment says "Foto" and not "Scannen".
+ */
+const CHECKPOINT_LABELS_PHOTO: readonly string[] = ['Je foto gelezen', 'Recept van de foto gehaald…'];
+
+/**
  * Which narration is honest for a given platform. A function rather than a
  * `Record<ImportPlatform, …>` because the question is not really
  * per-platform: display-only is a POLICY (`isDisplayOnlyPlatform`, PD-011)
@@ -352,6 +428,9 @@ export function buildImportCheckpointLabels(platform: ImportPlatform | null): re
   }
   if (platform === 'web') {
     return CHECKPOINT_LABELS_WEB;
+  }
+  if (platform === 'photo') {
+    return CHECKPOINT_LABELS_PHOTO;
   }
   return platform === 'text' ? CHECKPOINT_LABELS_TEXT : CHECKPOINT_LABELS_EXTRACTION;
 }

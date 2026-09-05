@@ -213,6 +213,43 @@ const NOTES: Readonly<Record<RecipeProvenance, Omit<RecipeProvenanceNoteCopy, 'a
       'Remy heeft je tekst gelezen zoals je hem gaf, en er de ingrediënten en de stappen uit gehaald. ' +
       'Dat gaat meestal goed, maar een hoeveelheid of een stap kan ontbreken of anders gelezen zijn — loop het hieronder even na.',
   },
+  /**
+   * SRC-07, the photo route, and the one note in this file whose ask is
+   * genuinely different from the other three.
+   *
+   * IT COULD NOT REUSE THE PASTED-TEXT NOTE, WHICH IS MOST OF WHY THE
+   * PROVENANCE EARNED A FOURTH MEMBER. That note's load-bearing phrase is
+   * "zoals je hem gaf" — Remy read your text unchanged, a promise the reader
+   * can check against what they pasted. Here it is false in the direction that
+   * matters: what Remy read is not what the user handed over, it is a
+   * TRANSCRIPTION of it, and the transcribing is exactly where this route goes
+   * wrong when it does.
+   *
+   * SO THE ASK NAMES NUMBERS SPECIFICALLY. The other three notes say "loop het
+   * na"; this one says to check the amounts, because that is the error this
+   * route actually makes — a creased 5 read as a 6, a fraction lost to a fold
+   * — and it is checkable in seconds by somebody still holding the book.
+   * Generic proofreading advice would waste the one moment the user is best
+   * placed to catch it.
+   *
+   * "JE HEBT DE FOTO ZELF NOG" DOES TWO THINGS AT ONCE, both deliberate. It
+   * says where to check — the caption note points at "het origineel", and here
+   * the original is in their hand or their camera roll. And it states, without
+   * making an announcement of it, that REMY does not have it:
+   * photoImportLimits.ts's retention decision, said once, in passing, on the
+   * screen where a user might actually wonder.
+   *
+   * NOT AN APOLOGY, on the same terms as the two notes above. Photographing a
+   * recipe is a first-class way to get one into Remy, not what you fall back
+   * to when a link fails, and nothing here should suggest the recipe is worth
+   * less for having arrived that way.
+   */
+  model_from_photo: {
+    title: 'Van je foto gelezen',
+    body:
+      'Remy heeft de foto gelezen en er de ingrediënten en de stappen uit overgenomen. ' +
+      'Kijk de hoeveelheden even na — bij een foto kan een cijfer net verkeerd gelezen zijn. Je hebt de foto zelf nog; Remy bewaart hem niet.',
+  },
 };
 
 /**
@@ -259,6 +296,17 @@ export interface ImportConfirmGuidanceCopy {
 const HELPER_TEXTS: Readonly<
   Record<RecipeProvenance, Pick<ImportConfirmGuidanceCopy, 'ingredientsHelperText' | 'stepsHelperText'>>
 > = {
+  /**
+   * SRC-07. The photo route's helpers, and the one pair in this Record that
+   * asks for a CHECK rather than an edit — for the reason its note above
+   * gives: a transcription can be wrong about a number in a way a reading of
+   * prose cannot be, and the person on this screen is the only one who can
+   * see both.
+   */
+  model_from_photo: {
+    ingredientsHelperText: 'Van de foto overgenomen. Loop de hoeveelheden even na en pas aan wat niet klopt.',
+    stepsHelperText: 'Van de foto overgenomen. Vul aan wat er niet op stond.',
+  },
   /**
    * No "controleer" and no "mogelijk niet compleet": this is the
    * publisher's own list, and asking someone to verify it against itself

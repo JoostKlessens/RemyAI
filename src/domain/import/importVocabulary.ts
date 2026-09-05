@@ -72,17 +72,59 @@
  *    that has always credited nobody. `NO_CREATOR_TO_CREDIT`
  *    (buildAttribution.ts) is where that is written down as a fact rather
  *    than left to be inferred from a missing field.
+ *  - `'photo'` (SRC-07) is `'text'`'s sibling and not a duplicate of it.
+ *    It shares everything the paragraph above says about having no host,
+ *    no endpoint, no fetch, no URL and no creator — the user photographed
+ *    their own cookbook page, their grandmother's index card, a
+ *    screenshot on their own phone — and it differs in the one place that
+ *    decides whether a member is earned: WHAT THE MODEL IS GIVEN. Every
+ *    other member hands Gemini characters. This one hands it pixels, and
+ *    a model reading pixels can be wrong in ways no reader of text can
+ *    be: it can misread a 5 as a 6 because the page was creased, drop a
+ *    line that fell into the gutter of a book, or read the facing page's
+ *    recipe instead. That is a different failure mode, it is one the USER
+ *    can fix by taking a better photograph, and telling those two apart
+ *    is the whole reason the pipeline has to record which it did.
+ *
+ *    IT IS ALSO THE ONE ROUTE WHERE THE SOURCE IS DESTROYED ON PURPOSE.
+ *    A caption stays on TikTok, a page stays on the web, a paste stays in
+ *    the user's clipboard and in the failure panel — but the photo Remy
+ *    read is discarded the moment the answer comes back
+ *    (photoImportLimits.ts states that retention policy in full). Nothing
+ *    downstream can go back and look at it, which is why
+ *    `no_recipe_in_photo` exists as its own outcome rather than reusing
+ *    the one that carries the text it read (importResult.ts).
+ *
+ *    AND IT IS THE CLEANEST SOURCE THIS FEATURE HAS, legally, which is
+ *    why SRC-07 is in docs/LONGLIST.md at all: it is the user's own book
+ *    on the user's own table. No platform terms of service, no creator
+ *    whose oEmbed licence has to be read, no endpoint saying no. Contrast
+ *    SRC-09 — reading a video's audio or on-screen text — which is out of
+ *    scope precisely because it processes somebody else's copyrighted
+ *    work. Photographing a page you own is not that, and this member must
+ *    never be quietly widened into it: this route cannot tell one
+ *    photograph from another, so the line it does not cross is that Remy
+ *    never GOES AND GETS an image. The user hands one over, every time.
  *
  * THIS UNION IS NOW MISNAMED, AND THE NAME IS DELIBERATELY LEFT ALONE.
  * "Platform" stopped being accurate when `'web'` joined — an ordinary
  * recipe blog is not a platform — and `'text'` finishes the job, because
  * a clipboard is not a platform in any sense at all. What the union
- * actually enumerates is WHICH ROUTE THE PIPELINE TOOK TO OBTAIN THE TEXT
- * IT READ, and therefore what may be done with what came back: oEmbed on
- * two platforms under two different licences, a documented Data API, an
- * ordinary GET for JSON-LD, and no fetch whatsoever. Read every
- * `platform` field in this file as "route" and the code is exact; read it
- * as "social network" and three of the five members are false.
+ * actually enumerates is WHICH ROUTE THE PIPELINE TOOK TO OBTAIN THE
+ * SOURCE IT READ, and therefore what may be done with what came back:
+ * oEmbed on two platforms under two different licences, a documented Data
+ * API, an ordinary GET for JSON-LD, and — twice over now — no fetch
+ * whatsoever. Read every `platform` field in this file as "route" and the
+ * code is exact; read it as "social network" and four of the six members
+ * are false.
+ *
+ * `'photo'` ALSO BREAKS THE WORD "TEXT" IN THAT SENTENCE, which used to
+ * read "the text it read". Five of the six routes end in characters; this
+ * one ends in an image, so the sentence had to widen to "source". Noted
+ * because it is the second time a member has made a claim in this header
+ * stale, and the fix both times was to describe the shape rather than
+ * enumerate the members — the same discipline importFailureCopy.ts
+ * learned the hard way about listing platforms in user-facing copy.
  *
  * `ImportRoute` would be the honest name, and renaming it is NOT this
  * change's business. Five modules keep their own deliberate copy of this
@@ -99,7 +141,34 @@
  * client, and `source_fetch_failed` (importResult.ts) is the typed
  * outcome both of them produce when the fetch itself does not happen.
  */
-export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube' | 'web' | 'text';
+export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube' | 'web' | 'text' | 'photo';
+
+/**
+ * THE ROUTES THAT START FROM A URL — everything above except the two the
+ * user hands over directly.
+ *
+ * WHY THIS IS NOW A NAMED TYPE INSTEAD OF THE `Exclude<ImportPlatform,
+ * 'text'>` IT WAS SPELLED AS IN EIGHT PLACES. That expression was correct
+ * when `'text'` was the only URL-less member, and it silently became wrong in
+ * all eight the moment `'photo'` joined: not wrong enough to fail — several
+ * of those sites would have compiled perfectly while admitting a platform
+ * that has no URL — just wrong. Some of them DID fail, which is the only
+ * reason the rest were found.
+ *
+ * A hand-spelled `Exclude` is the same class of hazard as a hand-written
+ * `Set` of platform literals, and this directory has a standing answer for
+ * that: canonicalRecipe.ts's `PLATFORM_MEMBERS` note records what a
+ * hand-maintained copy of a union cost last time. So the exclusion is stated
+ * ONCE, with the reason attached, and the next URL-less route edits one line
+ * rather than being found by whichever call sites happen to break.
+ *
+ * READ IT AS THE QUESTION IT ANSWERS: "does this route begin with an address
+ * the pipeline has to normalize, resolve and fetch?" `normalizeRecipeUrl`
+ * returns one of these and cannot return anything else; `resolveEffectiveUrl`
+ * takes and returns one; the demo fixtures are keyed on one, because a
+ * link-paste demo has no link to demo for a route with no link.
+ */
+export type UrlImportPlatform = Exclude<ImportPlatform, 'text' | 'photo'>;
 
 /**
  * RCP-06. HOW THIS IMPORT GOT ITS RECIPE — the one fact a user needs to
@@ -136,6 +205,40 @@ export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube' | 'web' | 'text'
  *    about video, and a pasted screenshot's OCR mistakes folded into that
  *    number would corrupt exactly the measurement importTelemetry.ts
  *    exists to keep honest.
+ *  - `model_from_photo` — a language model read AN IMAGE the user
+ *    supplied and produced a structured recipe from it (SRC-07). Same
+ *    model, same schema, same refusal to invent a quantity; a different
+ *    KIND of reading, and this is the member that shows the rule below is
+ *    about kinds rather than degrees, because it is not "pasted text but
+ *    less certain".
+ *
+ *    THE DIFFERENCE THAT EARNS IT IS WHAT CAN GO WRONG AND WHO CAN FIX
+ *    IT. Every other member reads characters that already exist as
+ *    characters: whatever was there, the model saw exactly. A photograph
+ *    has no characters until the model makes some up out of shapes, so
+ *    this route has a failure mode none of the others has — the reading
+ *    itself can be wrong before any interpreting starts. A 5 creased into
+ *    a 6, a line lost in a book's gutter, the facing page's ingredients
+ *    read into this page's recipe, handwriting that says "tl" and means
+ *    "el". None of these is the model interpreting prose badly; it is the
+ *    model seeing something that was never written.
+ *
+ *    AND THAT IS EXACTLY WHY THE CONFIRM SCREEN NEEDS A FOURTH SENTENCE
+ *    RATHER THAN A REUSED ONE. `model_from_pasted_text`'s note says
+ *    "zoals je hem gaf" — Remy read your text unchanged — which is a
+ *    promise the user can check against what they pasted, and which is
+ *    FALSE here in the one direction that matters: what Remy read is not
+ *    what the user handed over, it is a transcription of it. The honest
+ *    note for a photo has to point at the photograph as the thing to
+ *    check against, and it has to ask for the one check that is worth
+ *    something on this route and nothing on the others — do the numbers
+ *    match the page? See src/components/recipeProvenanceCopy.ts.
+ *
+ *    IT ALSO ANSWERS A QUESTION THE OTHERS DO NOT RAISE: where is the
+ *    photo now? It is gone (photoImportLimits.ts). The user still has it;
+ *    Remy does not. A note that quietly implied Remy kept the picture
+ *    would be the one place this vocabulary could mislead about privacy
+ *    rather than about accuracy.
  *
  * THIS IS A PROVENANCE FACT, NOT A SCORE, AND IT MUST NEVER BECOME ONE.
  * Do not add a confidence number, a percentage, a star rating, or an enum
@@ -153,19 +256,34 @@ export type ImportPlatform = 'tiktok' | 'instagram' | 'youtube' | 'web' | 'text'
  * and be guessed, and it would let a genuinely wrong extraction wear a
  * high number.
  *
- * THE THIRD MEMBER IS WHAT THE RULE LOOKS LIKE WHEN IT IS OBEYED. The
- * note that stood here said there was no third member and that a new
- * extraction route would have to EARN one, argued the way the first two
- * were — never a fallback to whichever existing member is closest. SRC-08
- * added such a route and paid that price rather than reusing
- * `model_from_caption`, which would have compiled perfectly and told
- * every pasted-text importer that Remy had read a caption they never
- * pasted. Two things are still true and still bind the next member: a
- * route earns one only when the screen genuinely has something different
- * to say to the user, and these remain KINDS and never DEGREES. There is
- * no ordering among the three, and none may be introduced.
+ * THE THIRD AND FOURTH MEMBERS ARE WHAT THE RULE LOOKS LIKE WHEN IT IS
+ * OBEYED, TWICE. The note that stood here said there was no third member
+ * and that a new extraction route would have to EARN one, argued the way
+ * the first two were — never a fallback to whichever existing member is
+ * closest. SRC-08 added such a route and paid that price rather than
+ * reusing `model_from_caption`, which would have compiled perfectly and
+ * told every pasted-text importer that Remy had read a caption they never
+ * pasted. SRC-07 paid it again rather than reusing
+ * `model_from_pasted_text`, which would have compiled just as well and
+ * told every photo importer that Remy read their text "zoals je hem gaf"
+ * — a sentence about fidelity, made about the one route where fidelity is
+ * exactly what is in question.
+ *
+ * Two things are still true and still bind the next member: a route earns
+ * one only when the screen genuinely has something different to say to
+ * the user, and these remain KINDS and never DEGREES. It would be very
+ * easy to read the four as a ladder — publisher, caption, paste, photo,
+ * each shakier than the last — and that reading must be refused. A
+ * photograph of a printed cookbook is more reliable than a TikTok
+ * caption, and a photograph of somebody's handwriting is less reliable
+ * than either; the member says what Remy DID, not how well it went.
+ * There is no ordering among the four, and none may be introduced.
  */
-export type RecipeProvenance = 'publisher_structured_data' | 'model_from_caption' | 'model_from_pasted_text';
+export type RecipeProvenance =
+  | 'publisher_structured_data'
+  | 'model_from_caption'
+  | 'model_from_pasted_text'
+  | 'model_from_photo';
 
 /**
  * Why the text we wanted to read never arrived. Every member names a

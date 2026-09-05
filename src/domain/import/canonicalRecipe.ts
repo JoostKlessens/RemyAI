@@ -77,10 +77,14 @@
  * is the uncomfortable one, because unlike `id` and `attribution` it is
  * not stored anywhere. `ImportResult.parsed` requires a `RecipeProvenance`
  * — the publisher's own structured data, or a model's reading of prose —
- * and the `recipes` table has no column for it. So the cache path DEDUCES
- * it from what `canStoreCanonicalRecipe` permits, which is sound today and
- * stops being sound the moment that guard widens. That whole argument, and
- * the warning attached to it, lives on `STORED_ROW_PROVENANCE` below.
+ * and the `recipes` table has no column for it. So the cache path DEDUCES it,
+ * PER PLATFORM, in `STORED_ROW_PROVENANCE` below.
+ *
+ * THAT DEDUCTION USED TO BE ONE CONSTANT RESTING ON A PARAGRAPH, and SRC-07
+ * turned it into a table over the whole union: the same file answering the
+ * same question in a form the compiler can hold it to, rather than one a
+ * reader has to re-verify. The argument for the change, and each platform's
+ * answer, is on that constant.
  *
  * TWO OF THE FIVE PLATFORMS GET NONE OF THIS, FOR TWO DIFFERENT REASONS,
  * AND THE DIFFERENCE MATTERS MORE THAN THE COUNT. `recipes.platform`
@@ -192,21 +196,35 @@ export interface CanonicalRecipeContext {
  * 0011 deliberately stopped one member short of that. A video description
  * is frozen; a web page is edited under us, so a row cached in March and
  * served in November hands a household a recipe the publisher has since
- * corrected, with no signal that it is stale. Adding `'web'` means first
- * answering that — never re-fetch, re-fetch after N days, or re-fetch and
- * mark superseded — AND changing `STORED_ROW_PROVENANCE` below, which would
- * otherwise report a publisher's own structured data as a model's reading
- * of prose on the same day.
+ * corrected, with no signal that it is stale. Adding `'web'` still means
+ * answering that first — never re-fetch, re-fetch after N days, or re-fetch
+ * and mark superseded.
  *
- * ⚠ `'text'` IS ABSENT FROM THAT LIST ON PURPOSE AND MUST STAY ABSENT.
- * Whoever eventually writes this migration will be reading a five-member
- * `ImportPlatform` and the obvious move is to paste all five in. It would
- * not be a widening, it would be a broken table: `normalized_url` is
- * `not null unique` and a pasted-text import has no URL to put there, so
- * every such row would either fail the insert or — far worse — be given a
- * synthesised key, at which point the second person to paste any recipe
- * would silently receive the first person's. The exclusion of `'text'`
- * from this table is structural, not a policy waiting to be revisited.
+ * THE SECOND HALF OF THAT SENTENCE IS DISCHARGED AS OF SRC-07. It used to
+ * read "AND changing `STORED_ROW_PROVENANCE` below, which would otherwise
+ * report a publisher's own structured data as a model's reading of prose on
+ * the same day". That constant is now a table over every platform and already
+ * answers `'publisher_structured_data'` for `'web'`, so the migration above
+ * no longer drags a second, easily-forgotten edit along behind it. What
+ * remains is a genuine product question about staleness — which is the part
+ * that always deserved the owner's attention rather than a reader's memory.
+ *
+ * ⚠ `'text'` AND `'photo'` ARE ABSENT FROM THAT LIST ON PURPOSE AND MUST
+ * STAY ABSENT. Whoever eventually writes this migration will be reading a
+ * six-member `ImportPlatform` and the obvious move is to paste all six in. It
+ * would not be a widening, it would be a broken table: `normalized_url` is
+ * `not null unique`, and neither a pasted-text import nor a photographed one
+ * has a URL to put there, so every such row would either fail the insert or —
+ * far worse — be given a synthesised key, at which point the second person to
+ * paste or photograph any recipe would silently receive the first person's.
+ * The exclusion of both is structural, not a policy waiting to be revisited.
+ *
+ * `'photo'` (SRC-07) IS THE SAME CASE AS `'text'`, NOT MERELY A SIMILAR ONE,
+ * and that is worth saying because the temptation with a photograph is to
+ * reach for a content hash as the missing key. That is a different
+ * deduplication scheme with different questions hanging off it — two
+ * photographs of one page are not the same bytes — and it is the owner's to
+ * take deliberately, exactly as the same suggestion for pasted text is.
  *
  * ⚠ AND THAT MIGRATION CANNOT SHIP ALONE. `STORED_ROW_PROVENANCE` further
  * down this file reports every stored row as `'model_from_caption'`, and
@@ -260,14 +278,20 @@ const STORABLE_CANONICAL_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<Import
 ]);
 
 /**
- * DELIBERATELY UNCHANGED BY SRC-08, WHICH IS WORTH ONE LINE BECAUSE THE
- * SILENCE COULD BE READ AS AN OVERSIGHT. `'text'` is refused by this set
- * for free — a `Set` excludes by default, so a new union member needs no
- * edit here to be rejected — and that default happens to be the right
- * answer for exactly the reason given above: there is no normalized URL to
- * key a canonical row on. The set is opt-in and stays opt-in; the day
- * somebody widens it, `'text'` must not be the member they wave through
- * because it was easier than reading why the other four are listed.
+ * DELIBERATELY UNCHANGED BY SRC-08 AND AGAIN BY SRC-07, WHICH IS WORTH A LINE
+ * BECAUSE THE SILENCE COULD TWICE HAVE BEEN READ AS AN OVERSIGHT. `'text'`
+ * and `'photo'` are both refused by this set for free — a `Set` excludes by
+ * default, so a new union member needs no edit here to be rejected — and that
+ * default happens to be the right answer for exactly the reason given above:
+ * neither route has a normalized URL to key a canonical row on.
+ *
+ * THE SET IS OPT-IN AND STAYS OPT-IN. The day somebody widens it, neither of
+ * those two may be the member they wave through because it was easier than
+ * reading why the others are listed. Note also that this free default is the
+ * WEAKER of the two protections each route has: `STORED_ROW_PROVENANCE` below
+ * now refuses both explicitly, by name, in a table that does not compile
+ * without them. Deliberate belt and braces, on the one mistake in this file
+ * that would hand one household another household's recipe.
  */
 
 export function canStoreCanonicalRecipe(platform: ImportPlatform): boolean {
@@ -440,6 +464,12 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
   // second, hidden storability rule pretending to be a spelling check —
   // exactly the collapse the note above warns against.
   text: true,
+  // SRC-07, and present for exactly `'text'`'s reason, which is worth
+  // saying because the two are the same case rather than two similar ones:
+  // a photographed recipe has no URL either, so no row can be keyed under
+  // it and none can ever be read back. Listed anyway, because this is a
+  // spelling check over the vocabulary and `'photo'` is in the vocabulary.
+  photo: true,
 };
 
 function isImportPlatform(value: unknown): value is ImportPlatform {
@@ -447,57 +477,104 @@ function isImportPlatform(value: unknown): value is ImportPlatform {
 }
 
 /**
- * RCP-06 on the cache path. `parseStoredRecipe` returns a `parsed`
- * result, and `provenance` is required on that shape — so a cache hit has
- * to answer "was this the publisher's own structured data, or a model
- * reading prose?" for a row that does not record the answer.
+ * RCP-06 on the cache path. `parseStoredRecipe` returns a `parsed` result,
+ * and `provenance` is required on that shape — so a cache hit has to answer
+ * "was this the publisher's own structured data, or a model reading prose?"
+ * for a row that does not record the answer.
  *
- * THE CHAIN THAT MAKES `'model_from_caption'` A DEDUCTION AND NOT A
- * GUESS. It is three links, all of them already in this file:
+ * ---
  *
- *  1. `canStoreCanonicalRecipe` above permits exactly `'tiktok'`,
- *     `'instagram'` and `'youtube'`, mirroring 0011's CHECK constraint. A
- *     `'web'` row cannot be inserted; the write is never attempted. Nor can
- *     a `'text'` one, and that member strengthens rather than threatens
- *     this chain: it is refused by the table's shape (no URL, no key)
- *     rather than by a constraint someone might widen, so it cannot arrive
- *     here even in the future this warning is about.
- *  2. Instagram is display-only (PD-011, displayOnlyPolicy.ts). An
- *     Instagram import returns `display_only` and never reaches a
- *     `ParsedRecipe`, so it never reaches a canonical write either.
- *  3. That leaves TikTok and YouTube, AND BOTH ARE CAPTION ROUTES. TikTok
- *     sends an oEmbed caption to the model; YouTube sends a Data API
- *     description to the very same shared tail, stating `provenance:
- *     'model_from_caption'` as it goes (resolveYouTubeImport.ts). Link 3
- *     is the one 0011 could have broken and did not — which is exactly
- *     why 0011 stopped short of `'web'`, whose route produces
- *     `'publisher_structured_data'` instead.
+ * THIS WAS A SINGLE CONSTANT — `const STORED_ROW_PROVENANCE: RecipeProvenance
+ * = 'model_from_caption'` — AND SRC-07 IS WHERE IT STOPPED BEING TENABLE. Its
+ * own comment carried a ⚠ warning saying it was "an inference from a guard,
+ * not a stored fact", true only for as long as `canStoreCanonicalRecipe`
+ * permitted nothing but caption routes, and that it "must change in the same
+ * commit as that migration, into a per-platform mapping, or into a real
+ * column". This is that per-platform mapping, taken early.
  *
- * Every row that can exist in `recipes` today therefore came from the
- * caption pipeline. This constant reports that, and reports nothing the
- * row did not earn.
+ * IT WAS NOT ACTUALLY WRONG YET, AND THAT IS THE INTERESTING PART. Every row
+ * that can exist in `recipes` today really did come from the caption
+ * pipeline: 0011's CHECK permits only TikTok, Instagram and YouTube;
+ * Instagram is display-only, so it never produces a `ParsedRecipe` to store;
+ * and TikTok and YouTube both run the shared caption tail. The pasted-text
+ * route did not break it either, for the reason `canStoreCanonicalRecipe`'s
+ * own note gives — `recipes` is keyed on `normalized_url`, a paste has no
+ * URL, so no such row can be written — and `parseStoredRecipe` refused one
+ * outright if somehow one were.
  *
- * ⚠ AND IT IS AN INFERENCE FROM A GUARD, NOT A STORED FACT. That is the
- * fragile part and it should be read as fragile. Nothing in the database
- * says how a row was extracted; this line says it on the database's
- * behalf, and it is true only for exactly as long as link 1 holds. WIDEN
- * `canStoreCanonicalRecipe` — which is precisely what the pending
- * `recipes.platform` migration written out in that function's own doc
- * comment would do — AND THIS LINE BECOMES A LIE ON THE SAME DAY: a
- * stored `'web'` row came from a page's JSON-LD and is
- * `'publisher_structured_data'`, and reporting it as a model's reading
- * would tell a user their publisher-written recipe was interpreted by
- * software. It must change in the same commit as that migration, into a
- * per-platform mapping, or into a real column.
+ * SO WHY CHANGE IT NOW. Because the argument keeping it true was A PARAGRAPH,
+ * verified by whoever last read the paragraph, and SRC-07 is the second route
+ * in a row to arrive whose only protection was that same paragraph being
+ * re-read in time. `'photo'` is one more URL-less route, refused by one more
+ * hand-written `=== 'text'` comparison three hundred lines away from the
+ * constant that depends on it. Two facts held apart by prose is exactly the
+ * arrangement pastedTextLimits.ts's header calls out as describing a problem
+ * accurately and solving none of it: "an obligation written in prose is
+ * discharged by whoever happens to read the prose."
  *
- * `parseStoredRecipe` deliberately still READS rows for any platform in
- * the vocabulary (`isImportPlatform` above says why), which sharpens rather
- * than softens the warning: the day a widened constraint lets such a row
- * be written, this file will happily read it back and mislabel it.
- * Nothing here fails loudly. Only this comment stands between that and a
- * shipped falsehood.
+ * A `Record` OVER THE WHOLE UNION DISCHARGES IT MECHANICALLY. The next
+ * platform added to `ImportPlatform` fails to compile here until somebody
+ * states what a stored row of it would mean — which is precisely the decision
+ * the old ⚠ asked a future reader to remember to make. It also lets the
+ * `'web'` answer be written AHEAD of the migration that would permit such
+ * rows, so widening 0011's CHECK becomes a one-line SQL change that cannot
+ * silently relabel a publisher's own structured recipe as a model's reading
+ * of prose. The two changes no longer have to ship together, because the
+ * second one is already here.
+ *
+ * `null` MEANS "A STORED ROW OF THIS PLATFORM CANNOT BE READ BACK", which is
+ * a stronger statement than the absence it looks like — not "unknown
+ * provenance". `parseStoredRecipe` treats it as a corrupt row and therefore
+ * as a cache MISS: re-extract, nobody harmed, the answer this module already
+ * has for every other unreadable row. The two members carrying it are the two
+ * with no URL, and they are refused HERE, by one table and one rule, rather
+ * than by a separate guard somebody has to remember to widen.
  */
-const STORED_ROW_PROVENANCE: RecipeProvenance = 'model_from_caption';
+const STORED_ROW_PROVENANCE: Readonly<Record<ImportPlatform, RecipeProvenance | null>> = {
+  // The original caption route: an oEmbed caption, read by the model.
+  tiktok: 'model_from_caption',
+  // Rows written BEFORE PD-011 made Instagram display-only. No new one can be
+  // created — an Instagram import now returns `display_only` and never
+  // reaches a `ParsedRecipe` — but an old row is still readable, and it
+  // genuinely was caption-derived when it was written. Reporting that is
+  // reporting history accurately.
+  //
+  // Whether such a row may be SERVED at all is a different question, answered
+  // somewhere else on purpose: index.ts takes the display-only branch BEFORE
+  // the cache lookup, precisely so that no caption-derived Instagram row can
+  // be handed back (PD-011). This table says what a row means; that ordering
+  // says whether anyone is allowed to see it.
+  instagram: 'model_from_caption',
+  // Added with 0011. The Data API description goes to the very same shared
+  // tail TikTok's caption goes to, stating `model_from_caption` as it goes
+  // (resolveYouTubeImport.ts) — so this is that route's own answer repeated,
+  // not an inference about it.
+  youtube: 'model_from_caption',
+  // NO ROW CAN CARRY THIS TODAY — 0011's CHECK refuses `'web'`, so the write
+  // is never attempted (`canStoreCanonicalRecipe`). Stated anyway, and that is
+  // the whole point of converting a constant into a table: a web recipe comes
+  // from a page's own JSON-LD with no model in the loop at all, so a stored
+  // one is `publisher_structured_data`. Saying so before such a row can exist
+  // costs nothing and removes the trap the old ⚠ was standing guard over.
+  web: 'publisher_structured_data',
+  // Unreadable, permanently, and not because of a constraint anyone could
+  // lift. Every row in `recipes` has a `not null unique normalized_url` — the
+  // only thing a lookup can be keyed on — and a pasted-text import has no URL
+  // at all. Such a row could only exist by having been given a URL it does
+  // not have, and serving it would hand back a `parsed` result whose platform
+  // says "no source" while its `sourceUrl` names one; `parseImportResult`
+  // rejects exactly that pairing on the wire (see `readSourceUrl`), so
+  // accepting it here would put the two boundaries into disagreement about
+  // what a valid result even is.
+  text: null,
+  // SRC-07, and the identical case rather than a similar one: a photographed
+  // recipe has no URL either. It arrives at this table by the same road as the
+  // line above and is refused by the same rule — which is the argument for the
+  // table in miniature. `'photo'` needed no new guard, no new branch and no
+  // new paragraph to be excluded correctly, only a key it could not compile
+  // without.
+  photo: null,
+};
 
 /**
  * Turns one stored `recipes` row (with `recipe_ingredients` and
@@ -545,23 +622,33 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
     return null;
   }
 
-  // A row naming the pasted-text route is refused, and this is the one
-  // platform refused HERE rather than only at the write gate. The contrast
-  // with `'web'` two paragraphs up is the whole reason: a stored `'web'`
-  // row is merely impossible TODAY, so reading one back is how the first
-  // day after that migration works instead of silently missing the cache.
-  // A stored `'text'` row is INCOHERENT in any future. Every row in this
-  // table has a `normalized_url` — it is `not null unique` and it is the
-  // only thing a lookup can be keyed on — and a pasted-text import has no
-  // URL at all. Such a row could only have been written by giving one a
-  // URL it does not have, and serving it would hand the reader a
-  // `parsed` result whose platform says "no source" while its `sourceUrl`
-  // names one; `parseImportResult` rejects exactly that pairing on the
-  // wire (see `readSourceUrl`), so accepting it here would put the two
-  // boundaries into disagreement about what a valid result is. Treated as
-  // a corrupt row, which this module already has one answer for: a cache
-  // MISS, re-extract, no user harmed.
-  if (raw.platform === 'text') {
+  // WHAT A STORED ROW OF THIS PLATFORM WOULD MEAN, ASKED ONCE, HERE.
+  //
+  // This used to read `if (raw.platform === 'text') return null;` — a
+  // hand-written refusal of the one route that could not coherently have a
+  // row, sitting three hundred lines away from the constant whose
+  // correctness depended on it. `STORED_ROW_PROVENANCE` is now a table over
+  // the whole union, so the same question is answered in one place for every
+  // platform and a new one cannot be forgotten in either half.
+  //
+  // `null` HERE IS A CACHE MISS AND NOT AN ERROR, on this function's standing
+  // rule: everything it can reject is a corrupt row or one written by another
+  // schema, and failing a user's import over our storage problem is worse
+  // than re-extracting. The two members answering `null` today are the two
+  // with no URL — `'text'` and, since SRC-07, `'photo'`. Such a row could
+  // only have been written by giving it a `normalized_url` it does not have,
+  // and serving it would hand back a `parsed` result whose platform says "no
+  // source" while its `sourceUrl` names one; `parseImportResult` rejects
+  // exactly that pairing on the wire (see `readSourceUrl`), so accepting it
+  // here would put the two boundaries into disagreement about what a valid
+  // result is.
+  //
+  // NOTE THE DELIBERATE CONTRAST WITH `'web'`, which does NOT answer `null`:
+  // a stored `'web'` row is merely impossible TODAY (0011's CHECK), so
+  // reading one back is how the first day after that migration works, instead
+  // of silently missing the cache on every hit.
+  const provenance = STORED_ROW_PROVENANCE[raw.platform];
+  if (provenance === null) {
     return null;
   }
 
@@ -615,10 +702,12 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
     // visible difference between the two paths for no reason.
     attribution,
     // NOT READ OFF THE ROW — there is no such column, and adding one is a
-    // migration this change does not write. Deduced instead, from what
-    // the storability guard already permits. See
-    // `STORED_ROW_PROVENANCE` above for the three-link chain and for the
-    // warning about the one change that breaks it.
-    provenance: STORED_ROW_PROVENANCE,
+    // migration this change does not write. Deduced instead, PER PLATFORM,
+    // from what that route can have produced. See `STORED_ROW_PROVENANCE`
+    // above for each answer and for why it is a table rather than the single
+    // constant it used to be. Already narrowed to non-null by the guard at
+    // the top of this function, which is the same lookup: one table decides
+    // both whether a row is readable and what it means.
+    provenance,
   };
 }

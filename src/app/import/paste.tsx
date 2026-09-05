@@ -1,18 +1,19 @@
 /**
- * Recipe import, step 1: PASTE SOMETHING. Either a link — a TikTok or
- * Instagram post, a YouTube video, an ordinary recipe page — or, since
- * SRC-08, the recipe text itself, out of a message, a mail, or typed off a
- * photo. Whichever the user picks, exactly one of the two is sent, and the
- * screen goes on to the confirmation step or to an honest failure state.
+ * Recipe import, step 1: HAND SOMETHING OVER. A link — a TikTok or Instagram
+ * post, a YouTube video, an ordinary recipe page — or, since SRC-08, the
+ * recipe text itself out of a message or a mail — or, since SRC-07, a
+ * PHOTOGRAPH of it: a cookbook page, a handwritten card, a screenshot.
+ * Whichever the user picks, exactly one of the three is sent, and the screen
+ * goes on to the confirmation step or to an honest failure state.
  *
- * THE TWO SOURCES ARE AN EXPLICIT CHOICE, MADE WITH A SEGMENTED CONTROL,
- * AND THE SCREEN NEVER INSPECTS THE PASTED STRING TO DECIDE. That is the
+ * THE THREE SOURCES ARE AN EXPLICIT CHOICE, MADE WITH A SEGMENTED CONTROL,
+ * AND THE SCREEN NEVER INSPECTS WHAT WAS HANDED OVER TO DECIDE. That is the
  * load-bearing decision here, so here is the whole argument.
  *
  * `readImportRequest` (supabase/functions/parse-recipe/importRequest.ts)
- * refuses a body carrying BOTH `url` and `text`, and refuses one carrying
- * neither, precisely so that nothing downstream ever has to guess which the
- * caller meant — its header says so at length, and names this screen as the
+ * refuses a body carrying MORE THAN ONE of `url`, `text` and `photo`, and
+ * refuses one carrying none, precisely so that nothing downstream ever has to
+ * guess which the caller meant — its header says so at length, and names this screen as the
  * reason "both" is unrepresentable rather than merely unlikely. Sniffing
  * the input here ("does it start with http…") would hand that guess back to
  * the one layer that must not make it, and being wrong is silent in both
@@ -49,6 +50,34 @@
  * an over-long paste must reach the user as a sentence under the field
  * rather than as a 400 that the transport mapping would mistranslate into
  * "probeer het opnieuw" — advice guaranteed to fail forever.
+ *
+ * SRC-07 ADDS A THIRD MODE AND CHANGES NONE OF THE ABOVE, WHICH IS THE TEST
+ * A GOOD ARGUMENT SHOULD PASS. A photograph could never have been sniffed for
+ * in the first place — there is no string to inspect — so the segmented
+ * control does something slightly different for it: not preventing a guess,
+ * but making the route DISCOVERABLE. Nobody goes looking for a way to
+ * photograph a recipe, exactly as nobody went looking for a way to paste one,
+ * and that is the whole reason both are segments rather than secondary
+ * actions hidden behind a line nobody reads.
+ *
+ * ITS PRE-FLIGHT IS THE SAME SHAPE AS THE OTHER TWO. `readImportPhoto`
+ * (src/domain/import/photoImportLimits.ts — again the same pure function the
+ * edge function's own boundary calls, so the two ends cannot disagree about
+ * one image) refuses an unreadable content type and an over-cap photograph
+ * before any request exists, and each refusal reaches the user as a Dutch
+ * sentence under the buttons rather than as a 400 the transport mapping would
+ * mistranslate into "probeer het opnieuw". The one asymmetry: these refusals
+ * are met AFTER the picker returns rather than while typing, because there is
+ * nothing to check until there is an image.
+ *
+ * THE PHOTOGRAPH IS HELD IN COMPONENT STATE AND NOWHERE ELSE. It is kept only
+ * so "Opnieuw proberen" can re-send the same image, it never reaches a
+ * navigation param, and it dies with the screen. That is this screen's half of
+ * the retention decision argued in full in photoImportLimits.ts: Remy reads
+ * the photo once and stores nothing. Anyone tempted to render a thumbnail of
+ * it, carry it to the confirmation screen, or use it as the meal's tile should
+ * read that file first — each of those is the decision being unpicked one
+ * screen at a time.
  *
  * SINCE `'web'` JOINED THE UNION, THE CLIENT-SIDE CHECK REJECTS FAR LESS.
  * Almost any http(s) address is now a real import attempt, so this screen's
@@ -106,10 +135,10 @@
  * A `__DEV__`-only scenario row (mirroring the one on Kiezen) lets every
  * `ImportResult` kind be exercised on device without a backend; it never
  * renders in production builds. It stays LINK-SHAPED: every fixture in
- * ./_fixtures.ts is keyed on a link platform (`FixtureLinkPlatform`
- * excludes `'text'` deliberately), so demoing the text route would mean
- * inventing a fixture that does not exist rather than exercising one that
- * does.
+ * ./_fixtures.ts is keyed on a link platform (`FixtureLinkPlatform` is now
+ * `UrlImportPlatform`, which excludes `'text'` and `'photo'` deliberately),
+ * so demoing either hand-over route would mean inventing a fixture that does
+ * not exist rather than exercising one that does.
  *
  * THE FAILURE PANEL'S ESCAPE HATCH IS MODE-AWARE, and was not always. It
  * read "Andere link proberen", hard-coded, which after a failed TEXT import
@@ -127,14 +156,33 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+// SRC-07. The camera and the photo library, and the only I/O this screen does
+// that is not a request. `expo-image-picker` raises the OS permission prompts
+// itself; what this screen owns is what to say when the answer is no.
+import * as ImagePicker from 'expo-image-picker';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DevScenarioRow, buildDevScenarioDemo, type DevScenarioValue } from './_devScenarios';
 import { encodeImportConfirmParams } from './routeParams';
 import { readPastedText } from '@/domain/import/pastedTextLimits';
+import { IMPORT_PHOTO_CAPTURE_QUALITY, readImportPhoto } from '@/domain/import/photoImportLimits';
+import {
+  PHOTO_CAMERA_ACCESSIBILITY_LABEL,
+  PHOTO_CAMERA_LABEL,
+  PHOTO_CAMERA_PERMISSION_DENIED_MESSAGE,
+  PHOTO_LIBRARY_ACCESSIBILITY_LABEL,
+  PHOTO_LIBRARY_LABEL,
+  PHOTO_LIBRARY_PERMISSION_DENIED_MESSAGE,
+  PHOTO_REPLACE_CAMERA_LABEL,
+  PHOTO_REPLACE_LIBRARY_LABEL,
+  PHOTO_SELECTED_MESSAGE,
+  PHOTO_TOO_LARGE_MESSAGE,
+  PHOTO_UNREADABLE_MESSAGE,
+  PHOTO_UNSUPPORTED_TYPE_MESSAGE,
+} from '@/domain/import/photoImportCopy';
 import type { ImportPlatform, ParsedRecipe, RecipeProvenance } from '@/domain/import/types';
 import { normalizeRecipeUrl } from '@/domain/import/urlParsing';
-import { requestImport, requestTextImport, type ImportAttempt } from '@/lib/importRecipe';
+import { requestImport, requestPhotoImport, requestTextImport, type ImportAttempt } from '@/lib/importRecipe';
 import { Button } from '@/components/Button';
 import { ImportFailureState } from '@/components/ImportFailureState';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
@@ -220,7 +268,21 @@ const LOADING_REVEAL_DELAY_MS = motion.durationNormal;
  */
 type ImportRetrySource =
   | { readonly kind: 'link'; readonly normalizedUrl: string; readonly platform: ImportPlatform }
-  | { readonly kind: 'text'; readonly text: string };
+  | { readonly kind: 'text'; readonly text: string }
+  /**
+   * SRC-07. The photograph itself, because there is nothing smaller that would
+   * re-send it: a URI would need re-reading through a permission the OS may no
+   * longer grant, and a file id is not a thing this screen has.
+   *
+   * THIS IS THE ONE PLACE THE IMAGE OUTLIVES A REQUEST, and it is bounded on
+   * purpose. It lives in component state for as long as the screen does, exists
+   * so "Opnieuw proberen" re-sends the SAME photograph rather than asking the
+   * user to take it again, and goes no further: never a navigation param, never
+   * written anywhere, dropped by `handleStartOver` and by unmount. See
+   * photoImportLimits.ts's retention decision, of which this is the client
+   * half.
+   */
+  | { readonly kind: 'photo'; readonly mimeType: string; readonly base64: string };
 
 /**
  * Everything the screen still knows after an attempt that produced no
@@ -267,6 +329,15 @@ function manualEntrySource(source: ImportRetrySource | null): {
   }
   if (source.kind === 'text') {
     return { normalizedUrl: null, platform: 'text' };
+  }
+  // SRC-07, on the identical reasoning one line up: `platform === null` means
+  // "no route at all, the from-scratch add", and after a photo import that is
+  // simply untrue — something WAS read, it just had no address. Reporting
+  // `'photo'` keeps the confirm screen's branch honest, and the row it writes
+  // is identical either way, since `toMealDraft` maps `'photo'` to no
+  // `source_platform` at all.
+  if (source.kind === 'photo') {
+    return { normalizedUrl: null, platform: 'photo' };
   }
   return { normalizedUrl: source.normalizedUrl, platform: source.platform };
 }
@@ -335,6 +406,37 @@ export default function ImportPasteScreen(): JSX.Element {
    * body is built from `mode` in `handleSubmit`, one key, never both.
    */
   const [pastedText, setPastedText] = useState('');
+  /**
+   * SRC-07. The photograph waiting to be sent, or null when none is chosen.
+   * Kept beside `url` and `pastedText` for the reason they are kept apart from
+   * each other: switching modes must not turn one source into another, and
+   * nothing here can leak into a different route's request because the body is
+   * built from `mode`.
+   *
+   * IT HOLDS THE BASE64 AND NOT A URI. A URI would be smaller to hold and is
+   * the obvious choice — and it would mean re-reading the file at submit time,
+   * through a permission the OS may since have withdrawn, to produce exactly
+   * the bytes we already had. Holding what will be SENT is also what lets
+   * `readImportPhoto` measure the string that is actually sent rather than a
+   * proxy for it, which is that function's whole point.
+   *
+   * IT IS THE ONLY COPY REMY EVER HAS, and it dies with this screen. See the
+   * file header and photoImportLimits.ts.
+   */
+  const [photo, setPhoto] = useState<{ readonly mimeType: string; readonly base64: string } | null>(null);
+  /**
+   * The one Dutch sentence under the photo buttons, or null for the resting
+   * state. It carries a refused permission, an unreadable file, and both of
+   * `readImportPhoto`'s content refusals — four situations differing in what
+   * the user should DO, which is why the copy for them is four sentences
+   * (photoImportCopy.ts) rather than one.
+   *
+   * ONE SLOT RATHER THAN A DERIVED `readiness`, because unlike the pasted-text
+   * cap this is not a property of a value the screen holds: three of the four
+   * are facts about an interaction that has already finished, and there is
+   * nothing left to recompute them from on the next render.
+   */
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
   const [phase, setPhase] = useState<PastePhase>('idle');
   const [failedAttempt, setFailedAttempt] = useState<FailedAttemptContext | null>(null);
   const [loadingCheckpoint, setLoadingCheckpoint] = useState<LoadingCheckpoint>(0);
@@ -516,6 +618,156 @@ export default function ImportPasteScreen(): JSX.Element {
     });
   };
 
+  /**
+   * SRC-07's route. Like `runTextImport` it invents no platform: `'photo'` is a
+   * fact about which body is posted, stated by `requestPhotoImport` itself and
+   * named here only for the narration.
+   *
+   * The image has already been through `readImportPhoto` — at the moment it was
+   * chosen, before it ever reached state — so the pair handed over here is the
+   * exact pair the boundary will measure again and reach the same verdict on.
+   */
+  const runPhotoImport = (mimeType: string, base64: string): void => {
+    beginLoading('photo');
+    requestPhotoImport(mimeType, base64).then((attempt) => {
+      settleAttempt(attempt, { kind: 'photo', mimeType, base64 });
+    });
+  };
+
+  /**
+   * What both capture buttons share: everything except which picker opened and
+   * which permission was refused.
+   *
+   * EVERY OUTCOME IS HANDLED AND NONE OF THEM THROWS PAST HERE. A cancel is
+   * silence — the user changed their mind, which needs no sentence. An asset
+   * without the two facts we need is `PHOTO_UNREADABLE_MESSAGE`. And a refusal
+   * from `readImportPhoto` gets its own sentence, because "wrong kind of file"
+   * and "too big" have different fixes.
+   */
+  const applyPickedPhoto = (result: ImagePicker.ImagePickerResult): void => {
+    if (result.canceled) {
+      // Deliberately silent, and deliberately NOT clearing an existing photo:
+      // opening the picker and backing out is how somebody checks what else
+      // they have, and losing the image they had already chosen would punish
+      // them for looking.
+      return;
+    }
+    const asset = result.assets[0];
+    const base64 = asset?.base64 ?? null;
+    const mimeType = asset?.mimeType ?? null;
+    if (base64 === null || mimeType === null) {
+      setPhoto(null);
+      setPhotoNotice(PHOTO_UNREADABLE_MESSAGE);
+      return;
+    }
+    // The same pure function the edge function's boundary calls, on the exact
+    // string that would be sent — see photoImportLimits.ts. A `switch` rather
+    // than `!== 'ready'`, so a fifth readiness state fails to compile here
+    // instead of falling silently into "ready".
+    const submission = readImportPhoto({ mimeType, base64 });
+    switch (submission.readiness) {
+      case 'ready':
+        setPhoto({ mimeType, base64 });
+        setPhotoNotice(null);
+        return;
+      case 'unsupported_type':
+        setPhoto(null);
+        setPhotoNotice(PHOTO_UNSUPPORTED_TYPE_MESSAGE);
+        return;
+      case 'too_large':
+        setPhoto(null);
+        setPhotoNotice(PHOTO_TOO_LARGE_MESSAGE);
+        return;
+      case 'empty':
+        setPhoto(null);
+        setPhotoNotice(PHOTO_UNREADABLE_MESSAGE);
+        return;
+    }
+  };
+
+  /**
+   * `base64: true` IS THE LOAD-BEARING OPTION, and the reason this screen never
+   * touches a filesystem: the picker hands back the bytes directly, so there is
+   * no file to read, no path to keep and nothing to clean up afterwards.
+   * `quality` comes from the domain layer, where the trade between legible
+   * fractions and megabytes is argued (`IMPORT_PHOTO_CAPTURE_QUALITY`).
+   *
+   * `allowsEditing: false`, WHICH IS A DECISION RATHER THAN A DEFAULT. The
+   * platform crop UI is square by default; a recipe is a tall page whose bottom
+   * third is usually the method, so inviting a crop is inviting somebody to cut
+   * the steps off and then wonder why Remy found only ingredients. Whatever is
+   * in frame is what gets read.
+   */
+  const pickerOptions: ImagePicker.ImagePickerOptions = {
+    mediaTypes: ['images'],
+    base64: true,
+    quality: IMPORT_PHOTO_CAPTURE_QUALITY,
+    allowsEditing: false,
+    allowsMultipleSelection: false,
+  };
+
+  /**
+   * THE PERMISSION IS REQUESTED ON THE TAP AND NOT AT MOUNT. Asking for a
+   * camera the moment an import screen opens is the pattern that trains people
+   * to refuse: the prompt arrives before the user has expressed any interest in
+   * a photograph, and the OS only ever asks once. Requesting it here puts the
+   * system dialog on top of an action they have just chosen, which is the only
+   * moment it reads as an answer to something they asked for.
+   *
+   * A REFUSAL IS NOT AN ERROR AND IS NOT RETRIED.
+   * `requestCameraPermissionsAsync` resolves with `granted: false` rather than
+   * throwing, and this screen says so once, in a sentence naming the other way
+   * in (photoImportCopy.ts). Asking again in the same session is the nagging
+   * pattern, and on both platforms the second request shows no dialog anyway.
+   */
+  const handleTakePhoto = (): void => {
+    ImagePicker.requestCameraPermissionsAsync()
+      .then((permission) => {
+        if (!permission.granted) {
+          setPhotoNotice(PHOTO_CAMERA_PERMISSION_DENIED_MESSAGE);
+          return undefined;
+        }
+        setPhotoNotice(null);
+        return ImagePicker.launchCameraAsync(pickerOptions).then(applyPickedPhoto);
+      })
+      .catch(() => {
+        // The picker can fail for reasons no user can act on — a camera another
+        // app holds, an activity the OS tore down. One sentence, the same one
+        // an unreadable file gets, because the fix is identical: try again, or
+        // use one of the other two routes.
+        setPhotoNotice(PHOTO_UNREADABLE_MESSAGE);
+      });
+  };
+
+  const handleChoosePhoto = (): void => {
+    ImagePicker.requestMediaLibraryPermissionsAsync()
+      .then((permission) => {
+        if (!permission.granted) {
+          setPhotoNotice(PHOTO_LIBRARY_PERMISSION_DENIED_MESSAGE);
+          return undefined;
+        }
+        setPhotoNotice(null);
+        return ImagePicker.launchImageLibraryAsync(pickerOptions).then(applyPickedPhoto);
+      })
+      .catch(() => {
+        setPhotoNotice(PHOTO_UNREADABLE_MESSAGE);
+      });
+  };
+
+  /**
+   * The photo route's pre-flight, which refuses rather than sends. It announces
+   * nothing: with no photo chosen the button is disabled and the screen is at
+   * rest, and any image that failed `readImportPhoto` already put its sentence
+   * under the buttons the moment it was chosen. Nothing reaching this line can
+   * be over the cap, because nothing over the cap was ever put in state.
+   */
+  const handleSubmitPhoto = (): void => {
+    if (photo === null) {
+      return;
+    }
+    runPhotoImport(photo.mimeType, photo.base64);
+  };
+
   const handleSubmitLink = (): void => {
     const trimmed = url.trim();
     if (trimmed.length === 0) {
@@ -569,6 +821,10 @@ export default function ImportPasteScreen(): JSX.Element {
     if (phase !== 'idle') {
       return;
     }
+    if (mode === 'photo') {
+      handleSubmitPhoto();
+      return;
+    }
     if (mode === 'text') {
       handleSubmitText();
       return;
@@ -583,6 +839,17 @@ export default function ImportPasteScreen(): JSX.Element {
     }
     if (source.kind === 'text') {
       runTextImport(source.text);
+      return;
+    }
+    if (source.kind === 'photo') {
+      // The SAME photograph, which is the whole reason the retry source carries
+      // it. `no_recipe_in_photo` is the one failure in this pipeline whose copy
+      // offers a retry, and it does so because a BETTER photo may work — a user
+      // taking that advice replaces the image first and reaches
+      // `handleSubmitPhoto`, while this path re-sends the original for the
+      // outcomes a plain retry can genuinely help (`llm_request_failed`,
+      // `import_throttled`).
+      runPhotoImport(source.mimeType, source.base64);
       return;
     }
     runImport(source.normalizedUrl, source.platform);
@@ -602,6 +869,12 @@ export default function ImportPasteScreen(): JSX.Element {
     }
     setMode(nextMode);
     setFailedAttempt(null);
+    // The photo notice goes with the panel it belongs under. A "deze foto is te
+    // groot" sitting on the Tekst tab describes an attempt that has nothing to
+    // do with what the user is now doing — the same reason the failure panel is
+    // cleared. The chosen PHOTO is deliberately kept, exactly as a half-typed
+    // link is: switching away and back must not lose it.
+    setPhotoNotice(null);
   };
 
   const handleManualEntry = (): void => {
@@ -656,6 +929,13 @@ export default function ImportPasteScreen(): JSX.Element {
     setFailedAttempt(null);
     setUrl('');
     setPastedText('');
+    // AND THE PHOTOGRAPH — the one field here whose clearing is about more than
+    // a stale value. This is the only user-facing control that drops Remy's
+    // single copy of the image before the screen is left. The other two lines
+    // are tidiness; this one is the retention decision (photoImportLimits.ts)
+    // honoured at the one moment the user has actually asked for it.
+    setPhoto(null);
+    setPhotoNotice(null);
   };
 
   /** Fills whichever field the user is actually looking at — the mode decides, exactly as it does for the request body. */
@@ -735,7 +1015,20 @@ export default function ImportPasteScreen(): JSX.Element {
    * decides a moment later. Meaningless in link mode and never read there.
    */
   const pastedTextSubmission = readPastedText(pastedText);
-  const canSubmit = mode === 'text' ? pastedTextSubmission.readiness === 'ready' : url.trim().length > 0;
+  /**
+   * WHAT MAKES THE IMPORT BUTTON LIVE, PER MODE, and each answer is the
+   * cheapest true test for its own route. A link needs a non-blank field; a
+   * paste needs to be inside the cap; a photo needs only to EXIST — because an
+   * image only ever reaches `photo` after `readImportPhoto` accepted it, so
+   * holding one is the same statement that `readiness === 'ready'` makes for
+   * the other two.
+   */
+  const canSubmit =
+    mode === 'photo'
+      ? photo !== null
+      : mode === 'text'
+        ? pastedTextSubmission.readiness === 'ready'
+        : url.trim().length > 0;
   const canRetry = failedAttempt !== null && failedAttempt.retrySource !== null;
   const checkpointLabels = buildImportCheckpointLabels(loadingPlatform);
 
@@ -768,6 +1061,27 @@ export default function ImportPasteScreen(): JSX.Element {
           onSubmitLink={handleSubmit}
           onPasteFromClipboard={handlePasteFromClipboard}
         />
+
+        {/*
+          SRC-07's "field": two buttons, rendered by the SCREEN rather than by
+          `ImportSourceField`, because opening a camera is I/O and that
+          component is deliberately stateless and I/O-free. It renders the
+          switch and the subtitle for this mode and stops; this is the rest of
+          the answer, directly beneath it, so the two read as one block.
+
+          HIDDEN WHILE BUSY, matching the field it stands in for and the mode
+          switch above it: with an answer on its way the question is settled,
+          and a control that would silently refuse the tap is worse than one
+          that is not there.
+        */}
+        {mode === 'photo' && phase !== 'loading' ? (
+          <ImportPhotoPicker
+            hasPhoto={photo !== null}
+            notice={photoNotice}
+            onTakePhoto={handleTakePhoto}
+            onChoosePhoto={handleChoosePhoto}
+          />
+        ) : null}
 
         {phase === 'loading' ? (
           <ImportCheckpointList labels={checkpointLabels} filledCount={loadingCheckpoint} />
@@ -811,6 +1125,75 @@ export default function ImportPasteScreen(): JSX.Element {
   );
 }
 
+/**
+ * SRC-07. The photo route's answer to "here it is": two buttons and at most one
+ * sentence.
+ *
+ * IT RENDERS NO IMAGE, WHICH IS THE DECISION MOST WORTH READING HERE. Showing a
+ * thumbnail of the chosen photograph is the obvious design and it is refused:
+ * it makes the image a thing the app DISPLAYS, and the next reasonable steps
+ * from there — keep it, carry it to the confirmation screen, use it as the
+ * meal's tile — are the retention decision (photoImportLimits.ts) being
+ * unpicked one screen at a time. The user knows what they just photographed;
+ * `PHOTO_SELECTED_MESSAGE` confirms Remy has it and is about to read it once.
+ *
+ * THE LABELS CHANGE ONCE A PHOTO IS HELD, from "Foto maken" to "Opnieuw
+ * fotograferen". The same two actions — but a button offering to do a thing the
+ * user has already done reads as a control that did not work, and after a
+ * `no_recipe_in_photo` the whole advice is to take a BETTER photograph, which
+ * needs these buttons to say plainly that they replace rather than add.
+ *
+ * `accessibilityLiveRegion="polite"` ON THE SENTENCE, matching the pasted-text
+ * cap's treatment: each of these appears in response to something the user just
+ * did, and none is an emergency. Assertive would interrupt whatever a screen
+ * reader was mid-way through announcing about the picker closing.
+ */
+interface ImportPhotoPickerProps {
+  readonly hasPhoto: boolean;
+  readonly notice: string | null;
+  readonly onTakePhoto: () => void;
+  readonly onChoosePhoto: () => void;
+}
+
+function ImportPhotoPicker(props: ImportPhotoPickerProps): JSX.Element {
+  const { hasPhoto, notice, onTakePhoto, onChoosePhoto } = props;
+  const scheme = useColorScheme();
+  const colors = getColors(scheme);
+
+  return (
+    <View style={styles.photoBlock}>
+      <Button
+        label={hasPhoto ? PHOTO_REPLACE_CAMERA_LABEL : PHOTO_CAMERA_LABEL}
+        variant="secondary"
+        onPress={onTakePhoto}
+        accessibilityLabel={PHOTO_CAMERA_ACCESSIBILITY_LABEL}
+      />
+      <Button
+        label={hasPhoto ? PHOTO_REPLACE_LIBRARY_LABEL : PHOTO_LIBRARY_LABEL}
+        variant="tertiary"
+        onPress={onChoosePhoto}
+        accessibilityLabel={PHOTO_LIBRARY_ACCESSIBILITY_LABEL}
+      />
+
+      {/*
+        AT MOST ONE SENTENCE SHOWS, and the render cannot claim otherwise
+        because the state cannot: `applyPickedPhoto` clears the photo whenever
+        it sets a notice, so "klaar om te lezen" and "deze foto is te groot" are
+        never both true.
+      */}
+      {notice !== null ? (
+        <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
+          {notice}
+        </Text>
+      ) : hasPhoto ? (
+        <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]} accessibilityLiveRegion="polite">
+          {PHOTO_SELECTED_MESSAGE}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -832,6 +1215,15 @@ const styles = StyleSheet.create({
   },
   failureBlock: {
     marginTop: spacing.space5,
+  },
+  /**
+   * The photo route's two buttons and its sentence, as one block with the same
+   * rhythm the footer's stacked actions use. No top margin: on this route
+   * `ImportSourceField` ends with its subtitle, which already owns the gap an
+   * input would otherwise have provided.
+   */
+  photoBlock: {
+    gap: spacing.space3,
   },
   footer: {
     borderTopWidth: 1,

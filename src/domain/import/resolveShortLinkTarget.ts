@@ -64,7 +64,7 @@
  * defend against today.
  */
 
-import type { ImportPlatform } from './types';
+import type { UrlImportPlatform } from './types';
 import { normalizeRecipeUrl } from './urlParsing.ts';
 
 /**
@@ -172,7 +172,14 @@ export function isBlockedRedirectHost(hostname: string): boolean {
  * admitted here by failing to match an exclusion — the same reasoning
  * `displayOnlyPolicy.ts` gives for writing its own check the way it does.
  */
-const SHORT_LINK_TARGET_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>([
+// `UrlImportPlatform` rather than the full `ImportPlatform` this named until
+// SRC-07, and the narrowing is the type finally saying what the paragraph
+// above already meant: a short link RESOLVES TO A URL, so the two routes the
+// user hands over directly could not appear in this set even in principle.
+// The wider union permitted exactly one mistake — listing `'text'` or
+// `'photo'` here would have compiled — and the narrower one makes that
+// unwritable while leaving the allowlist's opt-in shape untouched.
+const SHORT_LINK_TARGET_PLATFORMS: ReadonlySet<UrlImportPlatform> = new Set<UrlImportPlatform>([
   'tiktok',
   'instagram',
   'youtube',
@@ -200,7 +207,7 @@ const SHORT_LINK_TARGET_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportP
  */
 export function validateShortLinkTarget(
   resolvedUrl: string,
-): { readonly normalizedUrl: string; readonly platform: Exclude<ImportPlatform, 'text'> } | null {
+): { readonly normalizedUrl: string; readonly platform: UrlImportPlatform } | null {
   const result = normalizeRecipeUrl(resolvedUrl);
   if (result.kind !== 'ok' || result.isShortLink) {
     return null;

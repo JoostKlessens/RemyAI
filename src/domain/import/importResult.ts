@@ -7,13 +7,13 @@
  * earns the length. The vocabularies (importVocabulary.ts) enumerate words;
  * the content shapes (parsedRecipe.ts) describe a dish; attribution
  * (importAttribution.ts) names a creator. `ImportResult` is where all three
- * meet a decision a user can see: ten variants, each owed different copy
+ * meet a decision a user can see: eleven variants, each owed different copy
  * and a different way forward, because the failure this whole feature was
  * built around — a caption that simply contains no recipe — must never be
  * indistinguishable from a network blip in a grey toast.
  *
  * THE RULES THIS UNION ENFORCES ARE STATED ONCE AND INHERITED BY WHATEVER
- * COMES NEXT, which is the only reason ten variants stay reviewable. Every
+ * COMES NEXT, which is the only reason eleven variants stay reviewable. Every
  * variant carries a `platform` except the two that are refused BEFORE one is
  * established — `unsupported_url` and `import_throttled` — whose absence is a
  * fact rather than a gap. Every field a producer knows for free is REQUIRED
@@ -28,8 +28,9 @@
  * WHY IT IS NOT SPLIT FURTHER — per variant, or into success and failure
  * families. The union is only exhaustive if a reader can see all of it at
  * once. "Everything refused after a route is known carries a platform" is
- * one sentence a reviewer can check against ten adjacent members, and becomes
- * a claim nobody can verify the moment those members live in five files; the
+ * one sentence a reviewer can check against eleven adjacent members, and
+ * becomes a claim nobody can verify the moment those members live in five
+ * files; the
  * same goes for "no member may be a degree of another". The size of this
  * file is the price of keeping those checks cheap, and it is worth paying up
  * to the point where the file stops fitting under the ceiling — which is
@@ -103,6 +104,9 @@ import type { ParsedRecipe } from './parsedRecipe.ts';
  * user picked the paste-text route before typing a character, so there is
  * no parse to succeed and nothing to establish. A text import therefore
  * carries its platform for free at every producer, exactly like the rest.
+ * `'photo'` (SRC-07) is the same argument a second time and needs no
+ * separate one: the route is fixed by which field the request body carries,
+ * before a single byte is looked at.
  *
  * THE FACT THAT MAKES IT NECESSARY: an outcome that cannot say which
  * platform it came from is an outcome nobody can act on. `no_recipe_in_caption`
@@ -136,7 +140,7 @@ import type { ParsedRecipe } from './parsedRecipe.ts';
  * seen anything. A refused caller has established no route, exactly as a
  * refused string has not. The two differ in why we declined to look, not in
  * what we know afterwards, and giving either a nullable field would put a
- * null back into the eight that no longer carry one.
+ * null back into the nine that no longer carry one.
  *
  * SO THE RULE IS A RULE AND NOT A COLLECTION OF CASES. "Everything refused
  * after a route is known" is one sentence a reader can hold and a reviewer
@@ -154,12 +158,22 @@ export type ImportResult =
        * The resolved, normalized URL actually used — carried forward so a
        * caller can pass it straight into `toMealDraft`.
        *
-       * NULLABLE AS OF SRC-08, FOR EXACTLY ONE ROUTE. A `'text'` import
-       * has no URL: the user pasted the recipe, not a link to it, so
-       * there is no address to carry and never was one. Every other
-       * platform still always states one — `parseImportResult` enforces
-       * that pairing rather than merely typing it, so this nullability
-       * cannot become a hole the other four slip through.
+       * NULLABLE AS OF SRC-08, AND NOW FOR EXACTLY TWO ROUTES. A `'text'`
+       * import has no URL: the user pasted the recipe, not a link to it,
+       * so there is no address to carry and never was one. A `'photo'`
+       * import (SRC-07) has none for the same reason and one step further
+       * out — the recipe was on a page in the user's own kitchen, which
+       * has no address of any kind. Every other platform still always
+       * states one — `parseImportResult` enforces that pairing rather than
+       * merely typing it, so this nullability cannot become a hole the
+       * other four slip through.
+       *
+       * THE PAIRING IS ENFORCED IN BOTH DIRECTIONS FOR BOTH ROUTES, which
+       * is the part worth checking when a third URL-less route arrives: a
+       * `'text'` or `'photo'` result that NAMES a URL is rejected outright
+       * rather than quietly stripped, because a function attaching one is
+       * telling this client something it has no way to render honestly.
+       * See `readSourceUrl` in parseImportResult.ts.
        *
        * WHY NULL AND NOT A SENTINEL. An empty string, a `'pasted:'`
        * scheme or an `about:blank` would keep the field a `string` and
@@ -436,6 +450,94 @@ export type ImportResult =
       readonly platform: ImportPlatform;
     }
   /**
+   * SRC-07. THE PHOTO ROUTE'S HONEST SIBLING OF `no_recipe_in_caption`. The
+   * model was given the photograph and reported, explicitly, that there was
+   * no recipe it could read in it — a picture of a finished plate, a page of
+   * a novel, a menu, a shopping list, or a recipe page too blurred, too
+   * angled or too dark to read. Nothing broke and nothing is missing: the
+   * image arrived, the model looked at it, and the answer was no.
+   *
+   * ---
+   *
+   * WHY IT IS A VARIANT AT ALL, WHEN `'text'` DELIBERATELY WAS NOT. This
+   * union already argues, at `no_recipe_in_caption`, that the pasted-text
+   * route should NOT have earned an eleventh member: the copy differs, the
+   * copy branches on `platform` where it is written, and a new variant costs
+   * every exhaustive switch in the codebase an arm. That argument was right
+   * and it is not being reversed here. It simply does not reach this route,
+   * because what decides a variant is SHAPE rather than sentiment — and
+   * `no_recipe_in_caption`'s shape is wrong for a photograph in both of its
+   * payload fields at once:
+   *
+   *  - `caption: string | null` exists so a user can be shown what Remy read
+   *    and judge "no recipe" for themselves instead of taking it on faith
+   *    (IMP-09). For a paste it carries the user's own text and does real
+   *    work. For a photograph it could only ever be `null`, permanently, and
+   *    FOR A REASON RATHER THAN A SHRUG: what the model read was pixels, and
+   *    the image is discarded the instant the answer comes back (see
+   *    photoImportLimits.ts's retention decision). Reusing the variant would
+   *    advertise a field this route is structurally incapable of filling, on
+   *    a promise a privacy decision has already made unkeepable.
+   *  - `attribution: ImportAttribution` is REQUIRED there because index.ts
+   *    only ever constructs that variant after oEmbed has already resolved a
+   *    creator. Nothing is fetched from anybody here, so there is no creator
+   *    and never was one — the same `NO_CREATOR_TO_CREDIT` fact the paste
+   *    route states, but with no payload behind it at all.
+   *
+   * THAT IS EXACTLY THE TEST `no_recipe_on_page` ALREADY PASSED, one variant
+   * up. It was split out for precisely this pair of reasons — "IT CARRIES NO
+   * CAPTION AND NO ATTRIBUTION, AND THAT IS NOT AN OVERSIGHT" — and what
+   * separates the two answers is not how strongly anybody felt about the
+   * copy. It is whether the existing variant's payload still means something
+   * on the new route. For `'text'` it did; here it does not.
+   *
+   * THE COPY DIFFERENCE IS REAL TOO, AND IT SAYS THE ONE THING NO OTHER
+   * FAILURE IN THIS UNION CAN: TAKE THE PHOTOGRAPH AGAIN. Every other "we
+   * found nothing" outcome is deterministic — the same caption, the same page
+   * and the same pasted text yield the same nothing forever, which is why all
+   * of them set `canRetry: false` and send the user to manual entry. A
+   * photograph is the one input a person can genuinely IMPROVE between
+   * attempts: straighten the book, turn a light on, get the whole method in
+   * frame. This is therefore the only member of that family for which
+   * retrying is honest advice rather than a button that spends a wait to
+   * repeat itself.
+   *
+   * ---
+   *
+   * IT STATES ITS `platform`, WHICH THE UNION'S RULE OBLIGES THIS COMMENT TO
+   * ARGUE RATHER THAN ASSUME. It is `'photo'`, always, and it is free at the
+   * only site that constructs it: the photo route is entered by the SHAPE OF
+   * THE REQUEST BODY, decided before anything else happens, so the value is
+   * in scope before the model is called and can never be looked up,
+   * re-derived or guessed. It is known even earlier than `'text'` is, which
+   * the union's header already calls the strongest case for carrying the
+   * field rather than the weakest.
+   *
+   * THAT ONLY ONE VALUE IS CURRENTLY POSSIBLE IS NOT A REASON TO OMIT IT.
+   * `no_recipe_on_page` makes the identical argument for `'web'`: a count
+   * keyed on "which route found nothing" must not rest on a coincidence that
+   * holds right up until a second route learns to do the same thing. And the
+   * two absences this union does permit are absences of KNOWLEDGE —
+   * `unsupported_url` and `import_throttled` are refused before a route
+   * exists — where this is a route that is known before anything else is.
+   *
+   * NO FIELD CARRIES ANY PART OF THE IMAGE, and that is the retention
+   * decision made unrepresentable rather than merely unpractised. Not the
+   * base64, not a URI, not a downscaled preview, and NOT A TRANSCRIPT of
+   * what the model saw — a transcript would be the photograph's contents
+   * wearing a different type, which is the same substitution PD-011 refuses
+   * one variant up when it declines to hand a caption to the client to be
+   * typed up. Whoever is tempted to add a `readText` here so the failure
+   * panel has something to show should read photoImportLimits.ts first: the
+   * panel has nothing to show BY DESIGN, and that is the cost this feature
+   * accepted in exchange for storing nothing.
+   */
+  | {
+      readonly kind: 'no_recipe_in_photo';
+      /** `'photo'`, always. See this variant's doc comment for why it is stated rather than assumed. */
+      readonly platform: ImportPlatform;
+    }
+  /**
    * We never got the source text at all — see `SourceFetchFailureReason`
    * (importVocabulary.ts) for what each reason means and which of them a
    * retry can help.
@@ -508,7 +610,7 @@ export type ImportResult =
    *
    * DO NOT GIVE IT A NULLABLE FIELD TO "COMPLETE THE SET". A
    * `platform: ImportPlatform | null` here would put a null back into the
-   * eight variants that no longer need one, so every reader would be back
+   * nine variants that no longer need one, so every reader would be back
    * to handling an absence that only one outcome can produce — and IMP-07's
    * telemetry already renders a missing platform as `-` at the log line,
    * which is the one place the absence needs a spelling. And do not default
@@ -557,12 +659,20 @@ export type ImportResult =
   | {
       readonly kind: 'parse_failed';
       /**
-       * `'tiktok'`, `'youtube'` or — since SRC-08 — `'text'`: the three
-       * routes that call a model, so the three that can be answered badly
-       * by one. Worth counting apart for the same reason
+       * `'tiktok'`, `'youtube'`, `'text'` (SRC-08) or `'photo'` (SRC-07):
+       * the four routes that call a model, so the four that can be
+       * answered badly by one. Worth counting apart for the same reason
        * `no_recipe_in_caption` is — a model that mangles one platform's
        * prose and not another's is a prompt problem, and a single merged
        * number cannot show that.
+       *
+       * `'photo'` MATTERS MOST OF THE FOUR HERE, because it is the only
+       * one whose request carries a different KIND of content part
+       * (`inlineData` rather than text — buildExtractionRequest.ts). A
+       * malformed answer on that route can mean the tool schema and the
+       * image parts disagree, which is a bug in this repo, where the same
+       * outcome on a caption route usually means the model wandered. Two
+       * problems, two fixes, and only the platform tells them apart.
        *
        * THIS SAID "`'tiktok'` or `'youtube'`" UNTIL GAP-07, AND HAD BEEN
        * WRONG SINCE THE DAY SRC-08 SHIPPED. The pasted-text route runs the

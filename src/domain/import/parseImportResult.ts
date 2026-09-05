@@ -124,12 +124,16 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
   // instead of quietly rejecting every pasted-text import as an unknown
   // platform.
   text: true,
+  // SRC-07, and the same argument paid off a second time in the same way.
+  // Worth one line because the second occurrence is the evidence: the
+  // mechanism does not depend on anybody having read the paragraph above.
+  photo: true,
 };
 const PLATFORMS: ReadonlySet<string> = new Set(Object.keys(PLATFORM_MEMBERS));
 
 /**
- * The one reader for a field EIGHT of the ten variants now carry, written
- * once so that all eight are held to the same standard.
+ * The one reader for a field NINE of the eleven variants now carry, written
+ * once so that all nine are held to the same standard.
  *
  * ABSENT AND UNRECOGNISED ARE THE SAME ANSWER HERE, and that is the
  * module's standing posture rather than a new one. The file header states
@@ -216,6 +220,11 @@ const PROVENANCE_MEMBERS: Readonly<Record<RecipeProvenance, true>> = {
   publisher_structured_data: true,
   model_from_caption: true,
   model_from_pasted_text: true,
+  // SRC-07. A model reading an image rather than characters — see
+  // `RecipeProvenance` (importVocabulary.ts) for why that is a fourth KIND
+  // and not a fourth degree, and for why the confirm screen owes it a
+  // sentence of its own rather than the pasted-text one.
+  model_from_photo: true,
 };
 const PROVENANCES: ReadonlySet<string> = new Set(Object.keys(PROVENANCE_MEMBERS));
 
@@ -287,21 +296,31 @@ type SourceUrlResult = { readonly ok: true; readonly value: string | null } | { 
  * dropped attribution. Nullability on the TYPE must not become permission
  * on the WIRE.
  *
- * `'text'` REQUIRES THE OPPOSITE, AND THAT SYMMETRY IS THE POINT. A
- * pasted-text import has no URL, so absent, `null` and blank all decode to
- * `null` — three spellings of the same true sentence, and a blank string
- * is what a hand-built payload most plausibly sends. But a text result
- * that NAMES a URL is rejected rather than quietly stripped. This client
- * models pasted text as having no origin at all; a function that attaches
- * one is telling us something we have no way to render honestly — we
- * could not say whether it is where the text came from, where the user
- * found it, or a leftover from another branch — and dropping it silently
- * would be this module deciding what a server meant. Same posture the
- * rest of the file takes towards a value it does not recognise: fail the
- * whole result and let the user retry.
+ * `'text'` AND `'photo'` REQUIRE THE OPPOSITE, AND THAT SYMMETRY IS THE
+ * POINT. Neither import has a URL, so absent, `null` and blank all decode to
+ * `null` — three spellings of the same true sentence, and a blank string is
+ * what a hand-built payload most plausibly sends. But a result on either
+ * route that NAMES a URL is rejected rather than quietly stripped. This
+ * client models both as having no origin at all; a function that attaches one
+ * is telling us something we have no way to render honestly — we could not
+ * say whether it is where the recipe came from, where the user found it, or a
+ * leftover from another branch — and dropping it silently would be this
+ * module deciding what a server meant. Same posture the rest of the file
+ * takes towards a value it does not recognise: fail the whole result and let
+ * the user retry.
+ *
+ * THE TWO ARE TESTED WITH A `Set` RATHER THAN TWO `===` COMPARISONS, on the
+ * lesson `PLATFORM_MEMBERS` above records at length: a chain of comparisons
+ * compiles perfectly while missing a member, and SRC-07 is the second
+ * URL-less route to arrive in a row. `UrlImportPlatform`
+ * (importVocabulary.ts) is the type-level statement of the same fact and is
+ * what the pipeline's own signatures use; this is its runtime twin, at the
+ * boundary where the input is `unknown` and a type cannot help.
  */
+const URL_LESS_PLATFORMS: ReadonlySet<ImportPlatform> = new Set<ImportPlatform>(['text', 'photo']);
+
 function readSourceUrl(value: unknown, platform: ImportPlatform): SourceUrlResult {
-  if (platform === 'text') {
+  if (URL_LESS_PLATFORMS.has(platform)) {
     const pasted = readNullableString(value);
     return pasted.ok && pasted.value === null ? { ok: true, value: null } : { ok: false };
   }
@@ -506,6 +525,14 @@ export function parseImportResult(raw: unknown): ImportResult | null {
     // something read off the page, so it is the one thing there is to say.
     case 'no_recipe_on_page':
       return platform === null ? null : { kind: 'no_recipe_on_page', platform };
+    // SRC-07, decoded exactly like its sibling above and carrying exactly as
+    // little, for the reason argued on the variant itself (types.ts): the
+    // photograph is discarded the moment the model answers, so there is
+    // nothing to quote back, and nothing was fetched from anybody, so there
+    // is no creator to credit. Which route found nothing is the one thing
+    // there is to say.
+    case 'no_recipe_in_photo':
+      return platform === null ? null : { kind: 'no_recipe_in_photo', platform };
     case 'source_fetch_failed':
       return platform !== null && typeof raw.reason === 'string' && SOURCE_FETCH_FAILURE_REASONS.has(raw.reason)
         ? { kind: 'source_fetch_failed', reason: raw.reason as SourceFetchFailureReason, platform }

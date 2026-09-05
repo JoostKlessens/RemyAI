@@ -18,11 +18,18 @@
  * user is no longer looking at.
  *
  * EXACTLY ONE INPUT IS RENDERED — never two with one disabled, never one
- * that quietly changes meaning. The wire contract is "exactly one of url or
- * text", and a screen showing one box is the visible form of that; two
- * boxes would invite somebody to fill both and then need a rule for which
- * one wins, which is the rule the edge function deliberately refuses to
- * have.
+ * that quietly changes meaning. The wire contract is "exactly one of url,
+ * text or photo", and a screen showing one box is the visible form of that;
+ * two boxes would invite somebody to fill both and then need a rule for which
+ * one wins, which is the rule the edge function deliberately refuses to have.
+ *
+ * SINCE SRC-07, "EXACTLY ONE" INCLUDES RENDERING NONE. The photo route's input
+ * is two buttons that open the camera and the photo library — which is I/O,
+ * and therefore the screen's job rather than this component's. So this file
+ * renders the switch and the subtitle for that mode and stops. Zero inputs
+ * here plus one panel there is still exactly one input on the screen, and the
+ * alternative — moving the picker in here — would give a deliberately
+ * stateless question-and-answer component permissions to ask for.
  *
  * NOT ONE `TextInput` WITH BRANCHING PROPS, EITHER. The two differ in six
  * places — keyboard, capitalisation, autocorrect, return key, height, and
@@ -125,7 +132,14 @@ export function ImportSourceField(props: ImportSourceFieldProps): JSX.Element {
 
       <Text style={[typeScale.bodySmall, styles.subtitle, { color: colors.textMuted }]}>{copy.subtitle}</Text>
 
-      {mode === 'text' ? (
+      {/*
+        THE PHOTO ROUTE RENDERS NO INPUT HERE, and the null is the design
+        rather than a gap — see the file header. The QUESTION (the switch) and
+        the promise (the subtitle) stay here with the other two modes, where
+        one test can hold all three to the same standard; the capture panel is
+        rendered by the screen directly below this component.
+      */}
+      {mode === 'photo' ? null : mode === 'text' ? (
         <PastedTextInput
           value={props.pastedText}
           onChangeText={props.onPastedTextChange}
@@ -160,15 +174,24 @@ export function ImportSourceField(props: ImportSourceFieldProps): JSX.Element {
         </Text>
       ) : null}
 
-      <Pressable
-        onPress={onPasteFromClipboard}
-        accessibilityRole="button"
-        accessibilityLabel={copy.clipboardAccessibilityLabel}
-        style={styles.pasteRow}
-      >
-        <Feather name="clipboard" size={CLIPBOARD_ICON_SIZE} color={colors.textSecondary} />
-        <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]}>Plak uit klembord</Text>
-      </Pressable>
+      {/*
+        HIDDEN ON THE PHOTO ROUTE, because a clipboard holding text has nothing
+        to offer a photograph and `Clipboard.getStringAsync` could not return
+        one. A row that is present and does nothing is worse than an absent
+        one: it is a control the user has to try in order to learn it was never
+        for them. Same reasoning as the mode switch disappearing while busy.
+      */}
+      {mode === 'photo' ? null : (
+        <Pressable
+          onPress={onPasteFromClipboard}
+          accessibilityRole="button"
+          accessibilityLabel={copy.clipboardAccessibilityLabel}
+          style={styles.pasteRow}
+        >
+          <Feather name="clipboard" size={CLIPBOARD_ICON_SIZE} color={colors.textSecondary} />
+          <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]}>Plak uit klembord</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

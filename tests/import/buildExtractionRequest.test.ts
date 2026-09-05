@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { buildExtractionEndpoint, buildExtractionRequest } from '@/domain/import/buildExtractionRequest';
+import {
+  buildExtractionEndpoint,
+  buildExtractionRequest,
+  buildPhotoExtractionRequest,
+} from '@/domain/import/buildExtractionRequest';
 import { DISH_TAGS } from '@/domain/dishTags';
 import { EU_ALLERGEN_TAGS } from '@/domain/allergens';
 
@@ -7,6 +11,27 @@ const CAPTION = 'Kip traybake recept';
 
 function functionDeclarations(caption = CAPTION) {
   return buildExtractionRequest({ caption, authorName: null }).tools[0].functionDeclarations;
+}
+
+/**
+ * The text of a content part, or null when the part is not a text one.
+ *
+ * NEEDED SINCE SRC-07 MADE `GeminiPart` A UNION. Before the photo route a part
+ * was always `{ text }`, so these assertions read it straight off. Now a part
+ * is text OR inline image data, and reaching for `.text` on the union does not
+ * compile — which is the type doing its job rather than an inconvenience: the
+ * whole reason `GeminiPart` is a union and not one object with two optional
+ * fields is that a part carrying both, or neither, is a request Gemini
+ * rejects.
+ *
+ * It returns null rather than throwing, so a failure shows up as the
+ * assertion that failed — naming what was expected — instead of as a helper
+ * blowing up two frames away from the test that cares.
+ */
+function textOfPart(part: unknown): string | null {
+  return typeof part === 'object' && part !== null && 'text' in part && typeof part.text === 'string'
+    ? part.text
+    : null;
 }
 
 describe('buildExtractionRequest — anti-hallucination mechanism', () => {
@@ -48,22 +73,104 @@ describe('buildExtractionRequest — request construction', () => {
     const request = buildExtractionRequest({ caption: 'Kip met citroen, 25 minuten oven', authorName: null });
     expect(request.contents).toHaveLength(1);
     expect(request.contents[0]?.role).toBe('user');
-    expect(request.contents[0]?.parts[0]?.text).toContain('Kip met citroen, 25 minuten oven');
+    expect(textOfPart(request.contents[0]?.parts[0])).toContain('Kip met citroen, 25 minuten oven');
   });
 
   test('includes the author name in the user content when present', () => {
     const request = buildExtractionRequest({ caption: 'Kip recept', authorName: 'Chef Remy' });
-    expect(request.contents[0]?.parts[0]?.text).toContain('Chef Remy');
+    expect(textOfPart(request.contents[0]?.parts[0])).toContain('Chef Remy');
   });
 
   test('omits any author line when authorName is null', () => {
     const request = buildExtractionRequest({ caption: 'Kip recept', authorName: null });
-    expect(request.contents[0]?.parts[0]?.text).not.toContain('Creator:');
+    expect(textOfPart(request.contents[0]?.parts[0])).not.toContain('Creator:');
   });
 
   test('omits any author line when authorName is blank', () => {
     const request = buildExtractionRequest({ caption: 'Kip recept', authorName: '   ' });
-    expect(request.contents[0]?.parts[0]?.text).not.toContain('Creator:');
+    expect(textOfPart(request.contents[0]?.parts[0])).not.toContain('Creator:');
+  });
+
+  /**
+   * SRC-07. The photo route's request, held to the things that make it the
+   * SAME extraction rather than a second, looser one — and to the two things
+   * that must differ.
+   *
+   * The shared half is the anti-hallucination design: two mutually exclusive
+   * functions, `mode: 'ANY'` forcing one of them, and the same output ceiling.
+   * A photo route quietly missing any of those would fail in the way nothing
+   * catches — a structurally valid answer nobody constrained.
+   */
+  describe('buildPhotoExtractionRequest — SRC-07', () => {
+    const PHOTO = { mimeType: 'image/jpeg', base64: 'QUJD' };
+
+    test('sends the image as a single inlineData part and no text part', () => {
+      const request = buildPhotoExtractionRequest(PHOTO);
+      expect(request.contents).toHaveLength(1);
+      expect(request.contents[0]?.role).toBe('user');
+      expect(request.contents[0]?.parts).toEqual([{ inlineData: { mimeType: 'image/jpeg', data: 'QUJD' } }]);
+    });
+
+    test('passes the base64 through verbatim rather than re-encoding it', () => {
+      const request = buildPhotoExtractionRequest({ mimeType: 'image/png', base64: 'iVBORw0KGgo=' });
+      expect(request.contents[0]?.parts[0]).toEqual({
+        inlineData: { mimeType: 'image/png', data: 'iVBORw0KGgo=' },
+      });
+    });
+
+    test('forces one of the same two functions the caption route forces', () => {
+      const request = buildPhotoExtractionRequest(PHOTO);
+      expect(request.toolConfig.functionCallingConfig.mode).toBe('ANY');
+      expect(request.toolConfig.functionCallingConfig.allowedFunctionNames).toEqual([
+        'report_recipe',
+        'report_no_recipe',
+      ]);
+    });
+
+    /**
+     * The tool SHAPE is shared and only the noun differs — which is the whole
+     * argument for parameterising the declarations rather than writing a
+     * second copy of the schema. A duplicated declaration that drifted would
+     * let one route's model be offered a shape the other route's validator
+     * does not accept, invisibly.
+     */
+    test('offers the same required fields as the caption route, described for an image', () => {
+      const photoReportRecipe = buildPhotoExtractionRequest(PHOTO).tools[0].functionDeclarations.find(
+        (declaration) => declaration.name === 'report_recipe',
+      );
+      const captionReportRecipe = functionDeclarations().find(
+        (declaration) => declaration.name === 'report_recipe',
+      );
+      expect(photoReportRecipe?.parameters.required).toEqual(captionReportRecipe?.parameters.required);
+      expect(photoReportRecipe?.description).toContain('image');
+      expect(photoReportRecipe?.description).not.toContain('caption');
+    });
+
+    /**
+     * The photo prompt has to say the things only a photograph needs said:
+     * transcribe rather than complete, one recipe per photo, and "I could not
+     * read it" is a correct answer. The last is what makes
+     * `no_recipe_in_photo`'s retry offer honest — a model that guessed instead
+     * of refusing would send users to re-shoot a photo that was fine.
+     */
+    test('instructs the model to transcribe rather than complete, and to refuse an unreadable photo', () => {
+      const prompt = buildPhotoExtractionRequest(PHOTO).systemInstruction.parts[0]?.text ?? '';
+      expect(prompt).toContain('Transcribe, do not complete');
+      expect(prompt).toContain('report_no_recipe');
+      expect(prompt.toLowerCase()).toContain('blurred');
+      expect(prompt.toLowerCase()).toContain('two pages');
+    });
+
+    test('never claims the model has not seen anything, which the caption prompt does say', () => {
+      const photoPrompt = buildPhotoExtractionRequest(PHOTO).systemInstruction.parts[0]?.text ?? '';
+      expect(photoPrompt).not.toContain('You have NOT watched the video');
+      expect(photoPrompt).toContain('ONLY source of information is the image');
+    });
+
+    test('keeps the caption route byte-identical — the photo route added no arguments to it', () => {
+      const request = buildExtractionRequest({ caption: CAPTION, authorName: null });
+      expect(textOfPart(request.contents[0]?.parts[0])).toBe(`Caption:\n${CAPTION}`);
+    });
   });
 
   test('the report_recipe function requires title, ingredients and steps', () => {

@@ -202,8 +202,50 @@ const ROUTE_CAN_CALL_EXTRACTION_MODEL: Readonly<Record<ImportPlatform, boolean>>
   // Data API description -> Gemini, through the same shared tail.
   youtube: true,
   // The user's own words -> Gemini, with nothing fetched in between. The
-  // cheapest route to run and the only one with no cache in front of it.
+  // cheapest route to run and, until SRC-07, the only one with no cache in
+  // front of it.
   text: true,
+  // SRC-07. The user's own photograph -> Gemini, multimodally, with nothing
+  // fetched in between and no cache in front of it either. Billable ALWAYS:
+  // this route has no oEmbed step to fail, no page to refuse and no stored
+  // row to serve, so every request that reaches it reaches the model. Of the
+  // six routes it is the one most certain to cost money.
+  //
+  // ⚠ AND IT DOES NOT COST THE SAME AS THE OTHERS, WHICH THIS TYPE CANNOT
+  // SAY. `ImportCostClass` is two-valued — a metered call happened, or it did
+  // not — and a multimodal call is materially more expensive than a text one:
+  // an image is charged by its tiled resolution, so one photograph is worth
+  // upwards of a thousand input tokens before a single word of the prompt,
+  // where a 500-character caption is worth about 125. Several times a text
+  // extraction, varying with the photo.
+  //
+  // THE BINARY IS LEFT ALONE ANYWAY, AND DELIBERATELY. Three reasons, in
+  // order of weight:
+  //
+  //  1. WHERE A CEILING SITS IS A PRODUCT DECISION AND THIS IS NOT THE FILE
+  //     THAT TAKES IT. Every limit below states that it is a proposal and
+  //     that "the owner is expected to move the digits". Quietly redefining
+  //     what one UNIT MEANS would move all of them at once, invisibly, for a
+  //     route nobody has yet watched in production.
+  //  2. THE HOUSEHOLD CEILING IS ALREADY CONSERVATIVE FOR THIS ROUTE.
+  //     `MAX_MODEL_IMPORTS_PER_HOUSEHOLD_PER_WINDOW` was sized against text
+  //     extractions, so counting a photo as one spends the day's allowance
+  //     faster in MONEY than in COUNT — the limit binds sooner in real terms
+  //     than its digits suggest. That is the safe direction to be wrong in
+  //     while nobody has real numbers.
+  //  3. THE SHAPE THAT WOULD FIX IT PROPERLY IS BIGGER THAN A THIRD MEMBER.
+  //     `cost_units` in `import_attempts` (0012) is already an integer, so
+  //     the STORAGE is ready — but `ImportAttemptRecord.cost` is an
+  //     `ImportCostClass`, `isModelAttempt` below is `cost === 'model'`, and
+  //     the household window COUNTS RECORDS rather than summing units.
+  //     Weighting means changing all three plus the store, and doing it
+  //     half-way — a `'photo'` cost class that nothing sums — would add a
+  //     word that changes no behaviour, which is worse than an honest binary.
+  //
+  // RECORDED FOR THE OWNER RATHER THAN SOLVED HERE: if photo imports become
+  // common, the right change is to sum `cost_units` over the household window
+  // and give this route a weight — not to lower the ceiling for everybody.
+  photo: true,
   // PD-011: Instagram resolves oEmbed and stops. Meta licenses that endpoint
   // for embedding, and deriving a recipe from the caption is the use it
   // prohibits — so this route structurally never reaches a model. If PD-011

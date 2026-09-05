@@ -25,6 +25,14 @@
           "color": "#ffffff"
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Remy gebruikt de camera zodat je een foto kunt maken van een recept — uit een kookboek, van een kaartje. Remy leest die foto één keer uit en bewaart hem niet.",
+          "photosPermission": "Remy opent alleen de foto die je zelf uitkiest, en leest daar het recept uit. Remy kijkt niet in je andere fotoʼs en bewaart de foto niet.",
+          "microphonePermission": false
+        }
+      ],
       "expo-font",
       "expo-splash-screen",
       "expo-status-bar"

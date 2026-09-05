@@ -59,12 +59,19 @@ export function describeImportFeedback(result: ImportResult): ImportFeedback {
       return 'silent';
     case 'no_recipe_in_caption':
     case 'no_recipe_on_page':
+    case 'no_recipe_in_photo':
     case 'source_fetch_failed':
     case 'unsupported_url':
     case 'oembed_failed':
     case 'llm_request_failed':
     case 'parse_failed':
     case 'import_throttled':
+      // SRC-07's `no_recipe_in_photo` sits in this group, and it belongs here
+      // as far as the HAND is concerned: the user waited for a recipe and did
+      // not get one, so it buzzes like the rest. That its copy uniquely offers
+      // a retry (importFailureCopy.ts) is a difference about what to do NEXT,
+      // not about what just happened — and this policy answers only the second
+      // question.
       return 'failed';
     default: {
       const exhaustive: never = result;

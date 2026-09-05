@@ -63,10 +63,10 @@
 
 import type {
   ImportAttribution,
-  ImportPlatform,
   ImportResult,
   ParsedRecipe,
   RecipeProvenance,
+  UrlImportPlatform,
 } from '@/domain/import/types';
 
 export interface FixtureImportAttempt {
@@ -191,7 +191,13 @@ const SAMPLE_RECIPE_WEB: ParsedRecipe = {
  * one member that, by construction, cannot have them: pasting text is not
  * pasting a link, and the paste-a-link demo has nothing to say about it.
  */
-type FixtureLinkPlatform = Exclude<ImportPlatform, 'text'>;
+// `UrlImportPlatform` (src/domain/import/importVocabulary.ts) is exactly this
+// set and is now the union's own name for it, so the alias is spelled through
+// it rather than re-derived. It stopped being `Exclude<ImportPlatform,
+// 'text'>` when SRC-07 added a second route the user hands over directly: a
+// photographed recipe has no link to demo, exactly as a pasted one has none,
+// and the hand-written exclusion would have quietly admitted it.
+type FixtureLinkPlatform = UrlImportPlatform;
 
 const SAMPLE_RECIPE_BY_PLATFORM: Readonly<Record<FixtureLinkPlatform, ParsedRecipe>> = {
   tiktok: SAMPLE_RECIPE_TIKTOK,

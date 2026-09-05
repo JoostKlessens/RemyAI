@@ -108,6 +108,15 @@ const PLATFORM_LABELS: Readonly<Record<ImportPlatform, string>> = {
   // missing attribution — the exact bug this file's header describes
   // YouTube causing.
   text: 'de geplakte tekst',
+  // SRC-07, unreachable for exactly `'text'`'s reason and by the same
+  // construction: a photographed recipe's attribution is
+  // `NO_CREATOR_TO_CREDIT` — all three fields null, deliberately, because the
+  // user photographed their own book and there is no creator — and
+  // `buildImportCreatorCredit` returns null before it reads any label
+  // whenever there is no author name. It is here to keep this Record
+  // exhaustive, which is what made the next route a compile error rather than
+  // silent missing attribution.
+  photo: 'de foto',
 };
 
 /**
@@ -126,6 +135,10 @@ const PROFILE_NOUNS: Readonly<Record<ImportPlatform, string>> = {
   // creator, so there is no profile link and nothing to name. 'pagina' is
   // the least wrong of the available nouns if it ever did render.
   text: 'pagina',
+  // Unreachable on the same terms (SRC-07), and 'pagina' is the least wrong
+  // noun twice over here: behind a photograph there is no profile, no
+  // channel, and nothing that leads anywhere at all.
+  photo: 'pagina',
 };
 
 /**

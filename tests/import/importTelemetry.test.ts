@@ -119,6 +119,11 @@ const ONE_OF_EACH: Readonly<Record<ImportOutcome, ImportResult>> = {
     platform: 'tiktok',
   },
   no_recipe_on_page: { kind: 'no_recipe_on_page', platform: 'web' },
+  // SRC-07. `'photo'` is the only platform this outcome can ever carry, and
+  // stating it rather than reusing `'tiktok'` is the discipline the note above
+  // describes: a fixture naming the wrong route would pass every assertion in
+  // this file while describing an import that cannot happen.
+  no_recipe_in_photo: { kind: 'no_recipe_in_photo', platform: 'photo' },
   source_fetch_failed: { kind: 'source_fetch_failed', reason: 'rate_limited', platform: 'web' },
   // The two outcomes with no platform, and the only two: one is rejected
   // before the URL is identified, the other refused before a route is
@@ -145,7 +150,11 @@ function captionFailureFor(platform: ImportPlatform): ImportResult {
 /** The four keys, in the order the line renders them. Written out by hand so a rename is a test failure. */
 const EVENT_KEYS: readonly string[] = ['outcome', 'platform', 'provenance', 'failureDetail'];
 
-const OUTCOME_COUNT = 10;
+// Eleven since SRC-07 added `no_recipe_in_photo`. Written as a digit rather
+// than derived from `ONE_OF_EACH` on purpose: this constant's whole job is to
+// be an independent second opinion about how many outcomes there are, and a
+// count derived from the thing it checks would agree with it always.
+const OUTCOME_COUNT = 11;
 
 describe('buildImportTelemetryEvent — every outcome is counted', () => {
   test('a parsed TikTok import records its platform and its provenance and nothing else', () => {
@@ -248,6 +257,29 @@ describe('buildImportTelemetryEvent — every outcome is counted', () => {
     expect(youtubeEvent.platform).toBe('youtube');
     expect(tiktokEvent.outcome).toBe(youtubeEvent.outcome);
     expect(tiktokEvent).not.toEqual(youtubeEvent);
+  });
+
+  /**
+   * SRC-07. The third "we found nothing" outcome, and worth a test of its own
+   * rather than trusting the shared switch arm: the SRC-09 question is
+   * answered off exactly these counts, and a photograph's failures are not
+   * evidence about captions. A blurry photo is a failure the USER can fix; a
+   * caption with no recipe in it is not. Folded together they would move the
+   * one number that decides whether reading a video's on-screen text is ever
+   * worth reopening.
+   *
+   * It also pins the two absences that follow from the retention decision: no
+   * provenance, because no recipe was produced, and no failureDetail, because
+   * this outcome has no reason vocabulary and the photograph itself is gone.
+   */
+  test('no_recipe_in_photo is counted apart from both the caption and page failures', () => {
+    const event = buildImportTelemetryEvent(ONE_OF_EACH.no_recipe_in_photo);
+    expect(event).toEqual({
+      outcome: 'no_recipe_in_photo',
+      platform: 'photo',
+      provenance: null,
+      failureDetail: null,
+    });
   });
 
   test('no_recipe_on_page is counted separately from no_recipe_in_caption — two routes, two failures', () => {

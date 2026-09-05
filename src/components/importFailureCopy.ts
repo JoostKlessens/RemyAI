@@ -112,6 +112,13 @@ const PLATFORM_LABELS: Readonly<Record<ImportPlatform, string>> = {
   // geplakte tekst mag Remy de post en de maker laten zien" is nonsense —
   // not this label.
   text: 'de geplakte tekst',
+  // SRC-07, unreachable on precisely `'text'`'s terms rather than `'web'`'s.
+  // Display-only is a licensing outcome about somebody else's post (PD-011);
+  // a photograph the user took of their own cookbook has no post, no platform
+  // and no creator. Present so this `Record` stays exhaustive, which is what
+  // makes the next route a compile error in this file rather than a missing
+  // word on a screen.
+  photo: 'de foto',
 };
 
 function oembedFailureBody(reason: OembedErrorReason): string {
@@ -366,6 +373,47 @@ export function buildImportFailureCopy(result: ImportFailureResult): ImportFailu
      * nothing structured was found and anything we showed instead would be
      * scraped prose we invented a source for.
      */
+    /**
+     * SRC-07. The photo route's counterpart, and THE ONE MEMBER OF THIS
+     * FAMILY THAT OFFERS A RETRY — which is most of why it is its own variant
+     * rather than `no_recipe_in_caption` wearing a different platform.
+     *
+     * `canRetry: true` IS THE DECISION HERE. Every sibling sets it false and
+     * is right to: the same caption, the same page and the same pasted text
+     * yield the same nothing forever, so a retry would spend a wait to be told
+     * the same thing. A photograph is the one input a person can genuinely
+     * IMPROVE between attempts — straighten the book, turn a light on, get the
+     * whole method in frame — so here "Opnieuw proberen" is honest advice
+     * rather than a button repeating itself.
+     *
+     * WHICH IS WHY THE BODY TELLS THEM HOW. A retry offered without saying
+     * what to change invites the identical photo a second time, and then the
+     * button really would be the dishonest thing every sibling refuses to be.
+     * The three fixes named are the three that actually account for this
+     * failing: too dark, at an angle, or half the recipe out of frame.
+     *
+     * `manualEntryIsPrimary: false`, unlike its siblings, follows from the
+     * same fact. Typing it out is still there and still one tap away; it is
+     * simply no longer the ONLY way forward, so it does not take the primary
+     * position from an action that may well work.
+     *
+     * `quote` is null because there is nothing to quote and, uniquely on this
+     * route, nothing that COULD be: the photograph is discarded the moment the
+     * model answers (src/domain/import/photoImportLimits.ts), so Remy
+     * genuinely cannot show what it read. The user is still holding the
+     * original, which is the one consolation this variant has that
+     * `no_recipe_on_page` does not.
+     */
+    case 'no_recipe_in_photo':
+      return {
+        title: 'Geen recept op deze foto',
+        body:
+          'Remy heeft de foto bekeken, maar er geen ingrediënten en stappen op gevonden. Vaak helpt een nieuwe foto: recht van boven, met wat meer licht, en met de hele lijst en de bereiding erop. ' +
+          'Lukt het niet? Typ het recept zelf over, dan staat het net zo goed in je lijst.',
+        quote: null,
+        canRetry: true,
+        manualEntryIsPrimary: false,
+      };
     case 'no_recipe_on_page':
       return {
         title: 'Geen recept op deze pagina',

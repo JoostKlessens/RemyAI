@@ -143,6 +143,12 @@ const PLATFORM_MEMBERS: Readonly<Record<ImportPlatform, true>> = {
   // pasted recipe — which is why `sourceUrl` travels beside it as null on
   // this route and the pair must be read together rather than either alone.
   text: true,
+  // SRC-07, the second member that is not a host, and it deleted this file
+  // from the build in exactly the same way — the note above proved twice
+  // rather than merely restated. Same pairing rule as `'text'`: a
+  // photographed recipe has no address, so `sourceUrl` travels beside it as
+  // null.
+  photo: true,
 };
 
 function isNullableImportPlatform(value: unknown): value is ImportPlatform | null {
@@ -163,6 +169,11 @@ const PROVENANCE_MEMBERS: Readonly<Record<RecipeProvenance, true>> = {
   publisher_structured_data: true,
   model_from_caption: true,
   model_from_pasted_text: true,
+  // SRC-07. The fourth member is that same mechanism having worked a second
+  // time — see `RecipeProvenance` (importVocabulary.ts) for why a model
+  // reading pixels is a different KIND of reading rather than a shakier
+  // degree of the one above it.
+  model_from_photo: true,
 };
 
 /**

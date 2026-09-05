@@ -249,6 +249,13 @@ function toMealSourcePlatform(platform: ImportPlatform): 'tiktok' | 'reels' | nu
     // above it, but "there is no platform": the recipe came out of the
     // user's own clipboard. Listed as its own arm rather than folded in
     // with them so the switch keeps saying which fact each null reports.
+    // SRC-07, landing on the same `null` as `'text'` by the same reasoning
+    // rather than by falling through to a default — there is no default here,
+    // which is the point. A photographed recipe has no platform for
+    // `source_platform` to name: not a platform the legacy vocabulary ran out
+    // of words for, but the absence of one. The user pointed a camera at
+    // their own kitchen table.
+    case 'photo':
     case 'text':
       return null;
   }

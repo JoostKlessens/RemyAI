@@ -126,7 +126,12 @@
  * ever stopped being.
  */
 
-export type { ImportPlatform, RecipeProvenance, SourceFetchFailureReason } from './importVocabulary.ts';
+export type {
+  ImportPlatform,
+  RecipeProvenance,
+  SourceFetchFailureReason,
+  UrlImportPlatform,
+} from './importVocabulary.ts';
 export type { ParsedIngredient, ParsedRecipe } from './parsedRecipe.ts';
 export type { ImportAttribution } from './importAttribution.ts';
 export type { ImportResult } from './importResult.ts';

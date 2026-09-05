@@ -333,6 +333,7 @@ export function buildImportTelemetryEvent(result: ImportResult): ImportTelemetry
       return { outcome: result.kind, platform: result.platform, provenance: null, failureDetail: result.reason };
     case 'no_recipe_in_caption':
     case 'no_recipe_on_page':
+    case 'no_recipe_in_photo':
     case 'llm_request_failed':
     case 'parse_failed':
       // Counted by name and by platform, and by nothing else.
@@ -342,9 +343,19 @@ export function buildImportTelemetryEvent(result: ImportResult): ImportTelemetry
       // this module may report and what it may not.
       //
       // THIS ARM IS WHY IMP-07 GOT A SECOND PASS. `no_recipe_in_caption`
-      // split by platform is the SRC-09 evidence; the other three are here
-      // because a rule with one exception is easier to keep true than a rule
-      // with four.
+      // split by platform is the SRC-09 evidence; the others are here because
+      // a rule with one exception is easier to keep true than a rule with
+      // several.
+      //
+      // SRC-07's `no_recipe_in_photo` JOINS THIS ARM RATHER THAN EARNING ONE,
+      // and the distinction is worth keeping straight: it is a SEPARATE
+      // OUTCOME — `outcome` carries its own name, so "a photo yielded no
+      // recipe" is countable apart from "a caption did", which is most of why
+      // it is a separate variant at all. It simply has nothing FURTHER to
+      // report. The photograph is gone by then (photoImportLimits.ts) and
+      // there was never an attribution, so the platform is the only additional
+      // fact — and a platform is a COUNT rather than CONTENT, which is the
+      // line this module exists to hold.
       return { outcome: result.kind, platform: result.platform, provenance: null, failureDetail: null };
     case 'unsupported_url':
       // The only outcome with no platform to report, and the null is an

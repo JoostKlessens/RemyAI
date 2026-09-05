@@ -3,7 +3,9 @@
  * Instagram post, a YouTube video, or an ordinary recipe page — or from
  * recipe text the user pasted with no URL behind it at all.
  *
- * POST { url: string } OR { text: string }, exactly one of the two -> 200
+ * POST { url: string }, { text: string } OR
+ * { photo: { mimeType: string, base64: string } }, exactly one of the
+ * three -> 200
  * application/json, body is an `ImportResult` (src/domain/import/types.ts)
  * for every REACHABLE outcome, including failures — see that file's header
  * for why every failure is a distinct, typed `kind` rather than a shared
@@ -171,7 +173,45 @@
  * null, and the provenance is `model_from_pasted_text` rather than a reuse
  * of `model_from_caption` — a caption was published beside a video by the
  * person who made it, and a paste has no publisher this function can see.
- * The confirmation screen tells the user which of the three they hold.
+ * The confirmation screen tells the user which of the four they hold.
+ *
+ * ---
+ *
+ * THE PHOTO ROUTE (SRC-07): THE SAME SOURCE, ONE STEP EARLIER.
+ *
+ * A `{ photo }` body is a recipe the user already had and no longer has to
+ * type out: a cookbook page, a handwritten card, a screenshot. Everything the
+ * pasted-text section above says about having nothing to fetch, nobody to ask
+ * and no address to normalise is true here too and is not repeated. What
+ * differs is one thing, and it is the only interesting thing: THE MODEL IS
+ * GIVEN PIXELS RATHER THAN CHARACTERS.
+ *
+ * THAT MAKES IT A DIFFERENT ROUTE RATHER THAN THE TEXT ROUTE WITH A
+ * TRANSCRIBER BOLTED IN FRONT. Every other source in the table above hands
+ * the model text that already existed as text — whatever was there, the model
+ * saw exactly. Here there are no characters at all until the model makes some
+ * out of shapes, which is a failure mode none of the other five has: a 5
+ * creased into a 6, a line lost in a book's gutter, the facing page read into
+ * this one. It is also the only failure a USER can fix by acting, which is
+ * why `no_recipe_in_photo` is its own outcome and the only member of that
+ * family whose copy offers a retry (importResult.ts).
+ *
+ * IT DOES NOT WIDEN THE SCOPE RULE BELOW BY AN INCH, WHICH IS THE PARAGRAPH
+ * TO READ BEFORE TOUCHING THIS ROUTE. That rule says no video, audio or image
+ * binary is ever DOWNLOADED anywhere in this function, and it stands: nothing
+ * here fetches an image. The user hands one over, of a page they own — and
+ * SRC-07 is in docs/LONGLIST.md precisely because that is the cleanest source
+ * this feature has: no platform terms of service, no creator to credit, no
+ * oEmbed endpoint saying no. SRC-09 stays out of scope for the reason it
+ * always was, unchanged by this route: transcribing somebody else's video is
+ * processing their copyrighted work, and photographing your own cookbook is
+ * not. The line is not "images are allowed now", it is "Remy never goes and
+ * gets one".
+ *
+ * NOTHING OF THE IMAGE IS KEPT. It is read, sent once, and dropped.
+ * src/domain/import/photoImportLimits.ts carries that decision and its
+ * reasoning in full, and it is the first thing to read before adding a
+ * thumbnail, a preview, or a "what Remy saw" panel to this route.
  *
  * ---
  *
@@ -182,6 +222,7 @@
  *   youtube    -> Data API snippet  -> Gemini    -> no row (CHECK, above)
  *   web        -> page GET + JSON-LD -> (no model) -> no row (CHECK, above)
  *   text       -> (nothing fetched) -> Gemini    -> no row (NO KEY, above)
+ *   photo      -> (nothing fetched) -> Gemini    -> no row (NO KEY, above)
  *
  * `resolveOembedFor` is consequently reachable by TikTok and Instagram
  * ONLY, and `resolveImport` is arranged so that this is structural rather
@@ -262,13 +303,15 @@
  *
  * ---
  *
- * SCOPE: every source of text this function has is either metadata a
- * publisher already offers for reading — an oEmbed caption/title and author
- * name, a Data API `snippet`, or a page's own JSON-LD — or text the user
- * handed us themselves (SRC-08), fetched from nobody. NO VIDEO, AUDIO OR
- * IMAGE BINARY IS EVER DOWNLOADED, ANYWHERE IN THIS FUNCTION. The text route
- * does not widen that an inch: a paste is characters a person typed or
- * copied. Transcribing a
+ * SCOPE: every source this function has is either metadata a publisher
+ * already offers for reading — an oEmbed caption/title and author name, a
+ * Data API `snippet`, or a page's own JSON-LD — or something the user handed
+ * us themselves, fetched from nobody: text (SRC-08), or a photograph they
+ * took (SRC-07). NO VIDEO, AUDIO OR IMAGE BINARY IS EVER DOWNLOADED,
+ * ANYWHERE IN THIS FUNCTION. Neither user-supplied route widens that an inch
+ * — a paste is characters a person typed or copied, and a photo is a picture
+ * a person took and chose to send. Both ARRIVE; neither is FETCHED.
+ * Transcribing a
  * video's audio or OCR'ing its on-screen text would surface real
  * ingredients and steps far more often, and is deliberately a different and
  * much larger legal exposure (redistributing and processing a third party's
@@ -336,7 +379,7 @@ import type { OembedPlatform } from '../../../src/lib/oembed.ts';
 // Down to two, because the recipe-shaped types moved with the tail that
 // handles them (finishImport.ts). This file routes and answers; it no longer
 // touches a `ParsedRecipe` on the way past.
-import type { ImportPlatform, ImportResult } from '../../../src/domain/import/types.ts';
+import type { ImportPlatform, ImportResult, UrlImportPlatform } from '../../../src/domain/import/types.ts';
 // The ELEVEN sibling modules of this function, each owning one thing this file
 // therefore no longer does. `importRequest.ts` owns what a client is allowed
 // to send, so the boundary is a place with a header rather than the opening
@@ -373,7 +416,7 @@ import type { ImportPlatform, ImportResult } from '../../../src/domain/import/ty
 // the same Deno reason as the imports above.
 import { findStoredRecipe } from './canonicalRecipeStore.ts';
 import { expandShortLink } from './fetchSourceText.ts';
-import { extractRecipeFromCaption } from './finishImport.ts';
+import { extractRecipeFromCaption, extractRecipeFromPhoto } from './finishImport.ts';
 import {
   createImportSpendRecorder,
   readCallerId,
@@ -443,9 +486,9 @@ const INSTAGRAM_OEMBED_ACCESS_TOKEN = Deno.env.get('INSTAGRAM_OEMBED_ACCESS_TOKE
  */
 async function resolveEffectiveUrl(
   normalizedUrl: string,
-  platform: Exclude<ImportPlatform, 'text'>,
+  platform: UrlImportPlatform,
   isShortLink: boolean,
-): Promise<{ readonly normalizedUrl: string; readonly platform: Exclude<ImportPlatform, 'text'> }> {
+): Promise<{ readonly normalizedUrl: string; readonly platform: UrlImportPlatform }> {
   if (!isShortLink) {
     return { normalizedUrl, platform };
   }
@@ -557,6 +600,35 @@ function resolveTextImport(text: string, spend: ImportSpendRecorder): Promise<Im
 }
 
 /**
+ * THE PHOTO ROUTE (SRC-07). One line, and — exactly as with
+ * `resolveTextImport` above — the interesting thing about it is what this
+ * route does NOT do. There is no URL to normalise, no host to fetch, no
+ * oEmbed endpoint to ask, and no canonical row to look up or write. What
+ * remains is the model call.
+ *
+ * IT IS THINNER STILL THAN THE TEXT ROUTE, FOR ONE REASON WORTH NAMING: it
+ * states no `sourceUrl`, no `attribution` and no `provenance`, because
+ * `extractRecipeFromPhoto` owns all three. Only one route reaches that
+ * function, so a parameter would not be a caller supplying a fact it alone
+ * knows — it would be the single caller handed a chance to supply the wrong
+ * one. See `PhotoExtraction` in finishImport.ts for that argument in full; it
+ * is the one deliberate exception to this file's rule that a route states its
+ * own provenance rather than inheriting it.
+ *
+ * THE PAYLOAD PASSES THROUGH AND IS NOT HELD. Nothing here keeps a reference
+ * to the image once this returns, nothing here logs it, and `ImportResult`
+ * has no field it would fit in — which is the retention decision
+ * (photoImportLimits.ts) expressed as three separate places it could have
+ * leaked out of and does not.
+ */
+function resolvePhotoImport(
+  photo: { readonly mimeType: string; readonly base64: string },
+  spend: ImportSpendRecorder,
+): Promise<ImportResult> {
+  return extractRecipeFromPhoto({ mimeType: photo.mimeType, base64: photo.base64, spend });
+}
+
+/**
  * The full pipeline for one pasted URL: validate -> resolve the short link
  * -> FAN OUT BY PLATFORM -> a typed `ImportResult`. Every `return` below is
  * a deliberate, named outcome; there is no unhandled path that falls
@@ -623,7 +695,7 @@ async function resolveImport(rawUrl: string, spend: ImportSpendRecorder): Promis
   // "the three returns above", meaning the three that narrow
   // `effective.platform` — web, youtube, and a `'text'` guard that used to
   // sit just below this comment. Narrowing `NormalizedUrlResult.platform`
-  // to `Exclude<ImportPlatform, 'text'>` deleted that guard and left two,
+  // to what is now `UrlImportPlatform` deleted that guard and left two,
   // and the sentence survived saying three. Worse, it then read as
   // accidentally true: three `return` statements do still appear above,
   // they are simply not the three it meant. A count is a claim about the
@@ -810,10 +882,28 @@ Deno.serve(async (request) => {
   try {
     // The two routes, and the only place either is entered. They converge
     // again one line down, which is what keeps both countable by one call.
-    const result =
-      importRequest.kind === 'url'
-        ? await resolveImport(importRequest.url, spend)
-        : await resolveTextImport(importRequest.text, spend);
+    // THE THREE ROUTES, AND THE ONLY PLACE ANY OF THEM IS ENTERED. They
+    // converge again one line down, which is what keeps all three countable
+    // by one call and refused by one gate.
+    //
+    // A `switch` RATHER THAN THE NESTED TERNARY A THIRD ROUTE WOULD HAVE MADE
+    // OF THE OLD PAIR. `a ? x : b ? y : z` is where a fourth source goes
+    // wrong silently, and `ImportRequest` is a discriminated union whose
+    // `malformed` arm has already returned above — so a switch with no
+    // default earns the exhaustiveness from the compiler instead of from
+    // whoever reads it next.
+    let result: ImportResult;
+    switch (importRequest.kind) {
+      case 'url':
+        result = await resolveImport(importRequest.url, spend);
+        break;
+      case 'text':
+        result = await resolveTextImport(importRequest.text, spend);
+        break;
+      case 'photo':
+        result = await resolvePhotoImport(importRequest, spend);
+        break;
+    }
     // Recorded BEFORE the response is built, and deliberately not awaited
     // into the user's critical path any later than this: the money is spent
     // by now, and a row written after the response would be a row that a

@@ -67,6 +67,32 @@ export interface ExtractionInput {
   readonly authorName: string | null;
 }
 
+/**
+ * SRC-07. What the photo route hands the model instead of a caption: the
+ * image itself, as base64, plus the content type that tells Gemini how to
+ * decode it.
+ *
+ * NO `authorName`, AND THE ABSENCE IS A FACT RATHER THAN A FIELD SOMEBODY
+ * FORGOT. A caption has a creator whose name is real context for reading it
+ * ("Creator: …" above the text says whose recipe this is). A photograph of
+ * the user's own cookbook page has nobody to name — `NO_CREATOR_TO_CREDIT`
+ * (buildAttribution.ts) is this pipeline's word for exactly that — so a
+ * creator line here would be a blank where the model expects a person.
+ *
+ * NEITHER FIELD IS RE-VALIDATED HERE. `readImportPhoto`
+ * (photoImportLimits.ts) has already refused an empty payload, an unaccepted
+ * content type and an over-cap image at BOTH ends of the wire before this
+ * function is reachable, so a check here would be a second opinion on a
+ * settled question — and a pure builder has nothing useful to do with a
+ * disagreement anyway.
+ */
+export interface PhotoExtractionInput {
+  /** One of `ACCEPTED_IMPORT_PHOTO_MIME_TYPES`, already checked at the boundary and never re-derived here. */
+  readonly mimeType: string;
+  /** Standard base64, no `data:` prefix. Passed through verbatim — this module neither decodes nor re-encodes it. */
+  readonly base64: string;
+}
+
 interface GeminiFunctionDeclaration {
   readonly name: string;
   readonly description: string;
@@ -77,9 +103,41 @@ interface GeminiTextPart {
   readonly text: string;
 }
 
+/**
+ * SRC-07. An image sent in the request body itself rather than referenced by
+ * a URI.
+ *
+ * `inlineData` AND NOT `fileData`, WHICH IS THE OTHER THING GEMINI ACCEPTS.
+ * `fileData` points at a URI the model fetches for itself — the Files API, or
+ * a bucket — and using it would mean the image had to EXIST somewhere
+ * addressable for the length of the call. That is a store, with a lifetime
+ * and a deletion story, and photoImportLimits.ts's retention decision is that
+ * there is no store. Inline data travels in the one request and is gone with
+ * it, which is the shape that makes "we keep nothing" true rather than
+ * aspirational.
+ *
+ * The field names are Gemini's own (`inline_data` in the REST docs, camelCase
+ * in the JSON dialect this file already speaks — see the schema-dialect note
+ * in the header).
+ */
+interface GeminiInlineDataPart {
+  readonly inlineData: {
+    readonly mimeType: string;
+    readonly data: string;
+  };
+}
+
+/**
+ * A part is text or an image. Written as a union rather than as two optional
+ * fields on one object, for the reason `ImportResult` is a union rather than
+ * a bag of nullables: a part carrying both, or neither, is a request Gemini
+ * rejects, and the type should not be able to express it.
+ */
+type GeminiPart = GeminiTextPart | GeminiInlineDataPart;
+
 interface GeminiContent {
   readonly role: 'user';
-  readonly parts: readonly GeminiTextPart[];
+  readonly parts: readonly GeminiPart[];
 }
 
 export interface GeminiRequestBody {
@@ -138,10 +196,96 @@ Preserve the caption's own language in the output (do not translate). Only set e
 
 When you call report_recipe, also fill in dishTags: pick every category from the fixed list in that field's schema that plainly applies to the dish, and leave it empty when none clearly does. You may only use values from that list — never invent a category, never reword or translate one, and never add one the caption gives you no basis for. dishTags describes what kind of dish this is; it is not a claim about what is safe for anyone to eat.`;
 
-const REPORT_RECIPE_FUNCTION: GeminiFunctionDeclaration = {
+/**
+ * SRC-07. THE PHOTO ROUTE'S OWN SYSTEM PROMPT, and the reason it is a second
+ * prompt rather than the one above with the word "caption" swapped out.
+ *
+ * The caption prompt's central instruction is "your ONLY source is the
+ * caption text you are given; you have not watched the video". That sentence
+ * is doing two jobs at once — it fences off outside knowledge, and it fences
+ * off a MEDIUM we deliberately do not read. Reused here it would be false in
+ * the second half and dangerous in the first: this model IS looking at
+ * pixels, and telling it that it has not seen anything while handing it an
+ * image is the kind of contradiction that degrades a small model's
+ * instruction-following exactly where honesty matters most.
+ *
+ * WHAT THIS PROMPT HAS TO ADD THAT THE CAPTION ONE DOES NOT.
+ *
+ * 1. TRANSCRIBE, DO NOT COMPLETE. The caption route's risk is that a model
+ *    fills in what a dish "usually" contains. This route's risk includes
+ *    that, and adds one the caption route cannot have: filling in what a
+ *    SMUDGE probably said. A creased 5, a fold through the middle of a
+ *    quantity, a line that runs into the gutter of a book. The instruction is
+ *    to leave the quantity null rather than guess the digit, which is the
+ *    same anti-invention rule the whole feature turns on, applied to the one
+ *    failure mode only this route has.
+ *
+ * 2. ONE RECIPE, THIS ONE. A photograph of an open book contains two pages,
+ *    and the facing page is very often a different recipe. Reading ingredients
+ *    off one page into the other's method is the most likely wrong-but-
+ *    plausible answer available here, and it is invisible to every validator
+ *    downstream, because the result is perfectly well-formed.
+ *
+ * 3. WHAT IS NOT A RECIPE. The caption prompt says "a video showing off a
+ *    finished dish". The photographic equivalents are different and worth
+ *    naming: a plated meal, a menu, a shopping list, a page of prose about
+ *    food. The point of naming them is the same — calling report_no_recipe is
+ *    the CORRECT answer, not a fallback to be avoided.
+ *
+ * 4. UNREADABLE IS ALSO "NO RECIPE". A photograph too blurred, too dark or
+ *    too angled to read is not a failure of this pipeline and must not be
+ *    reported as a half-read recipe. It is the one case in this whole feature
+ *    that the USER can fix by acting, which is why `no_recipe_in_photo`
+ *    offers a retry where its siblings do not (importResult.ts) — and that
+ *    offer is only honest if the model says "no" instead of guessing.
+ *
+ * WHAT IT KEEPS WORD FOR WORD: the two-function mechanism, the ban on
+ * inventing quantities, the ban on translating, the closed dishTags
+ * vocabulary, and "never estimate". Those are the anti-hallucination design
+ * this feature is built on (see the file header), they are not per-medium,
+ * and rewording them per route is how two prompts quietly stop agreeing.
+ */
+const PHOTO_SYSTEM_PROMPT = `You extract recipes from a photograph of a recipe: a cookbook page, a handwritten card, a magazine clipping, a screenshot.
+
+Your ONLY source of information is the image you are given. Read what is actually written on it. You must not use outside knowledge of what a dish "usually" contains, and you must not guess at ingredients, quantities, or steps that are not legible in the image.
+
+Transcribe, do not complete. If a quantity or a unit is smudged, cut off, folded, or otherwise unreadable, use null for it rather than guessing the most likely number — a wrong quantity someone actually cooks from is worse than a missing one. Never round, convert, or tidy up a number: copy what is written.
+
+If the photo shows more than one recipe — an open book usually shows two pages — extract only the one recipe the photo is plainly centred on, and never mix ingredients from one page into the steps of another. If it is genuinely unclear which recipe the photo is of, call report_no_recipe.
+
+If the image does NOT contain the actual ingredients and steps needed to cook something — for example a photo of a finished dish, a menu, a shopping list, a page of prose about food, or a page of a recipe that does not include its ingredients or its method — you MUST call report_no_recipe instead. This is the correct, expected answer, not a failure.
+
+Call report_no_recipe as well when the image is too blurred, too dark, too small, or too skewed for you to read the text reliably. Reporting that you could not read it is correct and useful; a half-read recipe with invented amounts is not.
+
+Preserve the language written in the image (do not translate). Only set estimatedMinutes or servings when the image explicitly states them — never estimate.
+
+When you call report_recipe, also fill in dishTags: pick every category from the fixed list in that field's schema that plainly applies to the dish, and leave it empty when none clearly does. You may only use values from that list — never invent a category, never reword or translate one, and never add one the image gives you no basis for. dishTags describes what kind of dish this is; it is not a claim about what is safe for anyone to eat.`;
+
+/**
+ * WHAT THE MODEL IS BEING ASKED TO READ, as one word, threaded through the
+ * two tool declarations below.
+ *
+ * SRC-07 IS WHY THIS IS A PARAMETER RATHER THAN THE LITERAL "caption" IT WAS.
+ * The declarations tell the model, three times over, to copy quantities
+ * "verbatim from the caption" and to refuse when "the caption" holds no
+ * recipe. Handed to the photo route unchanged, every one of those sentences
+ * names a thing that is not in front of the model — and a schema that
+ * describes the wrong source is the anti-hallucination mechanism arguing with
+ * itself, on the one route where the model is most likely to fill a gap.
+ *
+ * THE ALTERNATIVE WAS A SECOND COPY OF THE SCHEMA, AND IT IS THE WRONG TRADE
+ * FOR THE REASON THE `dishTags` NOTE IN THIS FILE'S HEADER ALREADY GIVES:
+ * a duplicated declaration that silently drifts would let one route's model
+ * be offered a shape the other route's validator does not accept, which is
+ * invisible in every test and in production alike. The SHAPE is the contract
+ * and there is exactly one of it; only the noun differs.
+ */
+type ExtractionSourceNoun = 'caption' | 'image';
+
+function buildReportRecipeFunction(source: ExtractionSourceNoun): GeminiFunctionDeclaration {
+  return {
   name: 'report_recipe',
-  description:
-    'Report a recipe extracted from the caption. Only call this when the caption itself states concrete ingredients AND concrete steps for cooking something.',
+  description: `Report a recipe extracted from the ${source}. Only call this when the ${source} itself states concrete ingredients AND concrete steps for cooking something.`,
   parameters: {
     type: 'OBJECT',
     properties: {
@@ -155,12 +299,12 @@ const REPORT_RECIPE_FUNCTION: GeminiFunctionDeclaration = {
             quantity: {
               type: 'STRING',
               nullable: true,
-              description: 'Copied verbatim from the caption, or null if not stated.',
+              description: `Copied verbatim from the ${source}, or null if not stated.`,
             },
             unit: {
               type: 'STRING',
               nullable: true,
-              description: 'Copied verbatim from the caption, or null if not stated.',
+              description: `Copied verbatim from the ${source}, or null if not stated.`,
             },
           },
           required: ['name'],
@@ -184,25 +328,60 @@ const REPORT_RECIPE_FUNCTION: GeminiFunctionDeclaration = {
         description:
           'Categories describing what kind of dish this is. Only values from the listed set; empty when none clearly applies.',
       },
-      estimatedMinutes: { type: 'INTEGER', nullable: true, description: 'Only if explicitly stated in the caption.' },
-      servings: { type: 'INTEGER', nullable: true, description: 'Only if explicitly stated in the caption.' },
+      estimatedMinutes: {
+        type: 'INTEGER',
+        nullable: true,
+        description: `Only if explicitly stated in the ${source}.`,
+      },
+      servings: { type: 'INTEGER', nullable: true, description: `Only if explicitly stated in the ${source}.` },
     },
     required: ['title', 'ingredients', 'steps'],
   },
-};
+  };
+}
 
-const REPORT_NO_RECIPE_FUNCTION: GeminiFunctionDeclaration = {
-  name: 'report_no_recipe',
-  description:
-    'Call this INSTEAD of report_recipe when the caption does not contain a usable recipe. Do not guess or invent a plausible recipe just because the video is probably food-related.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      reason: { type: 'STRING', description: 'One short sentence: why no recipe could be extracted from this caption.' },
+/**
+ * The honest-refusal half of the two-function mechanism, in the same
+ * source-parameterised shape as its sibling above and for the same reason.
+ *
+ * ITS SECOND SENTENCE IS THE ONE THAT HAD TO WIDEN. "just because the video
+ * is probably food-related" is the caption route's version of the pressure
+ * this instruction pushes back on. A photograph of a plated dinner exerts the
+ * identical pressure with no video anywhere in sight, so the noun becomes the
+ * source itself — true of a caption, a description and an image alike, and
+ * one fewer medium named in a place that would date.
+ */
+function buildReportNoRecipeFunction(source: ExtractionSourceNoun): GeminiFunctionDeclaration {
+  return {
+    name: 'report_no_recipe',
+    description: `Call this INSTEAD of report_recipe when the ${source} does not contain a usable recipe. Do not guess or invent a plausible recipe just because the ${source} is probably food-related.`,
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        reason: {
+          type: 'STRING',
+          description: `One short sentence: why no recipe could be extracted from this ${source}.`,
+        },
+      },
+      required: [],
     },
-    required: [],
-  },
-};
+  };
+}
+
+/**
+ * Built once per source at module load rather than per request. The
+ * declarations depend on nothing but the noun, and rebuilding two objects
+ * (one of which embeds the whole dish-tag enum) on every import would be
+ * allocation for its own sake.
+ */
+const CAPTION_FUNCTIONS: readonly GeminiFunctionDeclaration[] = [
+  buildReportRecipeFunction('caption'),
+  buildReportNoRecipeFunction('caption'),
+];
+const PHOTO_FUNCTIONS: readonly GeminiFunctionDeclaration[] = [
+  buildReportRecipeFunction('image'),
+  buildReportNoRecipeFunction('image'),
+];
 
 function buildUserMessage(input: ExtractionInput): string {
   const author = input.authorName !== null && input.authorName.trim().length > 0 ? input.authorName.trim() : null;
@@ -231,11 +410,55 @@ export function buildExtractionRequest(input: ExtractionInput): GeminiRequestBod
   return {
     systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents: [{ role: 'user', parts: [{ text: buildUserMessage(input) }] }],
-    tools: [{ functionDeclarations: [REPORT_RECIPE_FUNCTION, REPORT_NO_RECIPE_FUNCTION] }],
+    tools: [{ functionDeclarations: CAPTION_FUNCTIONS }],
     toolConfig: {
       functionCallingConfig: {
         mode: 'ANY',
-        allowedFunctionNames: [REPORT_RECIPE_FUNCTION.name, REPORT_NO_RECIPE_FUNCTION.name],
+        allowedFunctionNames: CAPTION_FUNCTIONS.map((declaration) => declaration.name),
+      },
+    },
+    generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+  };
+}
+
+/**
+ * SRC-07. The same request, with pixels where the text goes.
+ *
+ * WHAT IS SHARED WITH `buildExtractionRequest` ABOVE, AND WHY SHARING IT IS
+ * THE POINT RATHER THAN THE SAVING. Both forced tool calls, both function
+ * SHAPES, the same closed `dishTags` enum, the same output ceiling, the same
+ * `mode: 'ANY'`. Those five are the anti-hallucination design this whole
+ * feature rests on (see the file header), and a photo route that quietly had
+ * four of them would fail in exactly the way nothing catches: a structurally
+ * valid answer that nobody constrained.
+ *
+ * WHAT DIFFERS, AND ALL OF IT IS "WHAT THE MODEL IS LOOKING AT". A different
+ * system prompt (`PHOTO_SYSTEM_PROMPT`, which argues for itself at length), a
+ * different noun in the tool descriptions, and an `inlineData` part instead of
+ * a text one.
+ *
+ * ONE PART, NOT TWO — no text part accompanies the image. The temptation is
+ * to add "Here is a photo of a recipe:" beside it, and it is worth naming why
+ * that is refused: the system instruction already says what the image is, and
+ * a user-role text part that the USER did not write is this pipeline putting
+ * words in their mouth on the one route where the model's job is to read only
+ * what is actually there. The image is the entire message, which is also
+ * exactly what the request is.
+ */
+export function buildPhotoExtractionRequest(input: PhotoExtractionInput): GeminiRequestBody {
+  return {
+    systemInstruction: { parts: [{ text: PHOTO_SYSTEM_PROMPT }] },
+    contents: [
+      {
+        role: 'user',
+        parts: [{ inlineData: { mimeType: input.mimeType, data: input.base64 } }],
+      },
+    ],
+    tools: [{ functionDeclarations: PHOTO_FUNCTIONS }],
+    toolConfig: {
+      functionCallingConfig: {
+        mode: 'ANY',
+        allowedFunctionNames: PHOTO_FUNCTIONS.map((declaration) => declaration.name),
       },
     },
     generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },

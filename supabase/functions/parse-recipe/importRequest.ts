@@ -11,28 +11,42 @@
  *
  * THE BODY IS A CHOICE NOW, WHICH IS WHY GUESSING IS BANNED IN THIS FILE.
  * `{ url }` is a link the user pasted; `{ text }` is a recipe the user pasted
- * — out of a message, an email, or typed off a photo. They are different
- * sources, they take different routes, and NOTHING DOWNSTREAM CAN TELL THEM
- * APART, because by then each is only a string. So all three ways a body can
- * be unusable are refused here, while the distinction still exists:
+ * — out of a message, an email, or typed off a photo; `{ photo }` (SRC-07) is
+ * the photograph itself, so that last one no longer has to be typed at all.
+ * They are different sources, they take different routes, and NOTHING
+ * DOWNSTREAM CAN TELL THEM APART, because by then each is only a string. So
+ * every way a body can be unusable is refused here, while the distinction
+ * still exists:
  *
  *  - NEITHER FIELD — there is nothing to import. (The only case the old
  *    `readUrlFromRequest` had to cover.)
- *  - BOTH FIELDS, which is the case this module exists for. A body carrying a
- *    URL and a text is not a request with a sensible default; it is a caller
- *    that does not know what it is asking for. Picking one — "url wins", say
- *    — would import the wrong thing SILENTLY, and keep doing it for as long
- *    as the bug lived: a client that failed to clear a stale `url` when its
- *    user switched to pasting text would import last week's link, hand back a
- *    perfectly valid recipe, and leave that user no way to discover that the
- *    text they pasted was never read. There is no answer available here that
- *    is right more often than refusing is. Refusing is also what keeps the
- *    paste screen honest: that screen offers ONE input at a time
- *    (src/app/import/paste.tsx), so "both" is unrepresentable in the UI and
- *    refused at the boundary, and the two agree by construction rather than
- *    by luck.
+ *  - MORE THAN ONE FIELD, which is the case this module exists for. A body
+ *    carrying a URL and a text is not a request with a sensible default; it is
+ *    a caller that does not know what it is asking for. Picking one — "url
+ *    wins", say — would import the wrong thing SILENTLY, and keep doing it for
+ *    as long as the bug lived: a client that failed to clear a stale `url`
+ *    when its user switched to pasting text would import last week's link,
+ *    hand back a perfectly valid recipe, and leave that user no way to
+ *    discover that the text they pasted was never read. There is no answer
+ *    available here that is right more often than refusing is. Refusing is
+ *    also what keeps the paste screen honest: that screen offers ONE input at
+ *    a time (src/app/import/paste.tsx), so "more than one" is unrepresentable
+ *    in the UI and refused at the boundary, and the two agree by construction
+ *    rather than by luck.
+ *
+ *    SRC-07 MADE THAT RULE CHEAPER TO GET WRONG, WHICH IS WHY THE CHECK IS
+ *    NOW A COUNT RATHER THAN AN `&&`. With two fields, "both" is one
+ *    comparison. With three it is three comparisons, and a reader has to
+ *    verify that all three were written — the exact shape routeParams.ts's
+ *    `PLATFORM_MEMBERS` note records as having shipped a live bug once
+ *    already. Counting the fields that are present cannot be missing a pair,
+ *    and it stays one line when a fourth source arrives.
  *  - BLANK — a `text` of spaces and newlines is not a recipe, and a request
  *    that spends a model call proving that is a request we paid for twice.
+ *    The photo route's equivalents are an empty payload, an image format the
+ *    model cannot read, and one past the size cap; all three are refused on
+ *    the same grounds and by the same kind of shared classifier
+ *    (`readImportPhoto`, src/domain/import/photoImportLimits.ts).
  *
  * ---
  *
@@ -43,6 +57,17 @@
  * calls too, so the two ends of the wire cannot hold different opinions
  * about what is too long. What this file decides is only what a REQUEST that
  * fails that check gets back.
+ *
+ * THE PHOTO CAP IS THE SAME ARRANGEMENT, ONE MODULE OVER. `readImportPhoto`
+ * (photoImportLimits.ts) owns the byte ceiling, the accepted content types
+ * and the base64 measurement, and the paste screen calls that identical
+ * function before it builds a request. That module's header also carries the
+ * RETENTION decision, which is the one a reviewer of THIS file should read:
+ * the image is never stored, and the code below is one of the places where
+ * that has to be true. The payload is decoded from JSON, measured, and passed
+ * on. It is never logged, and it never appears in the malformed-request
+ * messages below, which name the field and state the limit and quote
+ * nothing.
  *
  * WHAT THE CAP DOES NOT BOUND, said out loud rather than discovered later:
  * the request body itself. By the time it is consulted, `request.json()` has
@@ -91,16 +116,26 @@
  * the paste screen, and none of it is ever assembled server-side.
  *
  * THE `.ts` EXTENSION RULE APPLIES HERE TOO — Deno's resolution rule, see
- * index.ts's header. The single import below is a relative VALUE import into
- * src/domain/, so it spells the extension out; dropping it fails at deploy
- * time and nowhere earlier, because this directory is outside `tsc --noEmit`,
- * ESLint and vitest alike.
+ * index.ts's header. Both imports below are relative VALUE imports into
+ * src/domain/, so both spell the extension out; dropping either fails at
+ * deploy time and nowhere earlier, because this directory is outside
+ * `tsc --noEmit`, ESLint and vitest alike. (This said "the single import"
+ * until SRC-07 added the second — the small way a count in prose rots.)
  */
 
 import {
   MAX_PASTED_RECIPE_TEXT_CHARS,
   readPastedText,
 } from '../../../src/domain/import/pastedTextLimits.ts';
+// SRC-07's half of the same arrangement — the byte cap, the accepted formats
+// and the base64 measurement, shared with the paste screen so the two ends
+// cannot disagree about the same photograph. `.ts` extension for Deno, for
+// the reason the import above spells one.
+import {
+  ACCEPTED_IMPORT_PHOTO_MIME_TYPES,
+  MAX_IMPORT_PHOTO_BYTES,
+  readImportPhoto,
+} from '../../../src/domain/import/photoImportLimits.ts';
 
 /**
  * A request that got far enough to be one of the two routes, or a refusal
@@ -114,14 +149,37 @@ import {
 export type ImportRequest =
   | { readonly kind: 'url'; readonly url: string }
   | { readonly kind: 'text'; readonly text: string }
+  /**
+   * SRC-07. The photograph, carried as the two facts the pipeline needs and
+   * nothing else: what kind of image it is, and the image.
+   *
+   * `mimeType` IS NON-NULLABLE HERE THOUGH THE PICKER'S IS OPTIONAL. By the
+   * time a request reaches this shape it has passed `readImportPhoto`, which
+   * refuses an absent or unrecognised content type outright rather than
+   * guessing JPEG — see that function on why guessing what a model will be
+   * handed is not a saving. So nothing downstream has to ask again.
+   */
+  | { readonly kind: 'photo'; readonly mimeType: string; readonly base64: string }
   | { readonly kind: 'malformed'; readonly message: string };
 
 const MESSAGE_NOT_JSON = 'Request body must be a JSON object';
-const MESSAGE_NO_SOURCE = 'Request body must be { "url": string } or { "text": string }';
-const MESSAGE_AMBIGUOUS = 'Request body must carry exactly one of "url" or "text", never both';
+const MESSAGE_NO_SOURCE =
+  'Request body must be { "url": string }, { "text": string } or { "photo": { "mimeType": string, "base64": string } }';
+const MESSAGE_AMBIGUOUS = 'Request body must carry exactly one of "url", "text" or "photo", never more';
 const MESSAGE_BAD_URL = 'Request field "url" must be a non-empty string';
 const MESSAGE_BAD_TEXT = 'Request field "text" must be a non-empty string';
 const MESSAGE_TEXT_TOO_LONG = `Request field "text" must be at most ${MAX_PASTED_RECIPE_TEXT_CHARS} characters`;
+const MESSAGE_BAD_PHOTO = 'Request field "photo" must be { "mimeType": string, "base64": string }';
+/**
+ * NAMES THE ACCEPTED TYPES, WHERE THE USER-FACING COPY DELIBERATELY DOES NOT
+ * (photoImportCopy.ts). Different audiences, opposite answers: a person
+ * looking at their camera roll cannot tell a HEIC from a JPEG and does not
+ * need to, whereas somebody writing a client against this endpoint needs the
+ * exact list or they are guessing. Built from the shared constant rather than
+ * retyped, so it cannot describe a set this function does not enforce.
+ */
+const MESSAGE_PHOTO_UNSUPPORTED_TYPE = `Request field "photo".mimeType must be one of ${ACCEPTED_IMPORT_PHOTO_MIME_TYPES.join(', ')}`;
+const MESSAGE_PHOTO_TOO_LARGE = `Request field "photo".base64 must decode to at most ${MAX_IMPORT_PHOTO_BYTES} bytes`;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -159,12 +217,17 @@ export async function readImportRequest(request: Request): Promise<ImportRequest
     return malformed(MESSAGE_NOT_JSON);
   }
 
+  // COUNTED RATHER THAN COMPARED PAIRWISE. With two fields, "both" was one
+  // `&&`; with three, pairwise comparison is three of them and a reader has to
+  // check that none was forgotten. A count cannot be missing a pair.
   const hasUrlField = body.url !== undefined;
   const hasTextField = body.text !== undefined;
-  if (hasUrlField && hasTextField) {
+  const hasPhotoField = body.photo !== undefined;
+  const suppliedSources = [hasUrlField, hasTextField, hasPhotoField].filter(Boolean).length;
+  if (suppliedSources > 1) {
     return malformed(MESSAGE_AMBIGUOUS);
   }
-  if (!hasUrlField && !hasTextField) {
+  if (suppliedSources === 0) {
     return malformed(MESSAGE_NO_SOURCE);
   }
 
@@ -173,6 +236,10 @@ export async function readImportRequest(request: Request): Promise<ImportRequest
       return malformed(MESSAGE_BAD_URL);
     }
     return { kind: 'url', url: body.url };
+  }
+
+  if (hasPhotoField) {
+    return readPhotoField(body.photo);
   }
 
   if (typeof body.text !== 'string') {
@@ -186,4 +253,48 @@ export async function readImportRequest(request: Request): Promise<ImportRequest
     return malformed(MESSAGE_TEXT_TOO_LONG);
   }
   return { kind: 'text', text: submission.text };
+}
+
+/**
+ * SRC-07. The photo field, read in a function of its own because it is the
+ * only source that is an OBJECT rather than a string — three shape checks
+ * before the shared classifier can even be asked a question.
+ *
+ * EVERY REFUSAL IS A DISTINCT MESSAGE, on this module's standing rule that a
+ * `message` is written for whoever is building a client. One catch-all "your
+ * photo is wrong" would make an unsupported format and a 12 MB upload
+ * indistinguishable to the only audience that can act on the difference.
+ *
+ * `readiness` IS SWITCHED OVER RATHER THAN TESTED FOR `!== 'ready'`, so a
+ * fifth state added to `ImportPhotoReadiness` fails to compile here instead of
+ * silently falling into a message that does not describe it.
+ *
+ * NOTHING OF THE IMAGE APPEARS IN ANY MESSAGE, and that is the retention
+ * decision enforced at this boundary rather than merely near it: the messages
+ * name the FIELD and state the LIMIT, and never quote or excerpt what
+ * arrived. A 400 carrying a slice of base64 would put a fragment of
+ * somebody's kitchen into whatever logs that response.
+ */
+function readPhotoField(value: unknown): ImportRequest {
+  if (!isRecord(value)) {
+    return malformed(MESSAGE_BAD_PHOTO);
+  }
+  if (typeof value.mimeType !== 'string' || typeof value.base64 !== 'string') {
+    return malformed(MESSAGE_BAD_PHOTO);
+  }
+  const submission = readImportPhoto({ mimeType: value.mimeType, base64: value.base64 });
+  switch (submission.readiness) {
+    case 'empty':
+      return malformed(MESSAGE_BAD_PHOTO);
+    case 'unsupported_type':
+      return malformed(MESSAGE_PHOTO_UNSUPPORTED_TYPE);
+    case 'too_large':
+      return malformed(MESSAGE_PHOTO_TOO_LARGE);
+    case 'ready':
+      // Passed on exactly as it arrived. `readImportPhoto` measures the string
+      // that is actually sent rather than a re-encoded copy of it (see its
+      // header), so there is no trimmed-or-raw question here of the kind the
+      // text route above has to answer.
+      return { kind: 'photo', mimeType: value.mimeType, base64: value.base64 };
+  }
 }

@@ -1,0 +1,105 @@
+-- Remy — SRC-07: photograph a recipe. Widen the one CHECK constraint that
+-- enumerates `ImportPlatform` in full, so a photo import can be metered.
+--
+-- ===========================================================================
+-- WHY THIS IS A NEW FILE AND NOT AN EDIT TO 0012
+-- ===========================================================================
+--
+-- 0012 is applied to the remote database, so its text is history rather than
+-- instructions — the rule 0008 states in full and every migration since has
+-- followed. Editing that CHECK in place would produce a file describing a
+-- constraint the live database does not have, and would silently do nothing
+-- on any environment already migrated. This file is the instruction; 0012
+-- stays the record of what was decided then.
+--
+-- ===========================================================================
+-- WHY ONLY ONE CONSTRAINT NEEDS TOUCHING, WHICH IS THE PART WORTH CHECKING
+-- ===========================================================================
+--
+-- `ImportPlatform` has six members now, and three columns in this schema hold
+-- something derived from it. Only one enumerates the whole union; the other
+-- two are deliberately left alone.
+--
+--   1. `import_attempts.platform` (0012) — WIDENED BELOW. Its own comment
+--      says it "mirrors `ImportPlatform` in full — including 'text', unlike
+--      `recipes.platform` in 0011, because an attempt is countable whether or
+--      not it was ever cacheable", and that asymmetry is exactly why this is
+--      the constraint a new route breaks. An unwidened CHECK would reject the
+--      metering INSERT for every photo import, and it would fail in the worst
+--      available place: `recordAttempt` runs AFTER the model has been called
+--      and paid for, so the money would already be spent and the row proving
+--      it refused. The throttle would then under-count precisely the most
+--      expensive route in the pipeline — see
+--      `ROUTE_CAN_CALL_EXTRACTION_MODEL` in
+--      src/domain/import/importBudgetPolicy.ts on why a photo call costs
+--      several times a text one.
+--
+--   2. `recipes.platform` (0006, widened by 0011) — DELIBERATELY NOT WIDENED,
+--      and it must not be. That table is keyed on `normalized_url`, which is
+--      `not null unique` and is the only thing a canonical lookup can be
+--      keyed on. A photographed recipe has no URL at all, exactly as a pasted
+--      text has none. Adding `'photo'` there would not be a widening, it
+--      would be a broken table: every such row would either fail the insert
+--      or — far worse — be given a synthesised key, at which point the second
+--      person to photograph any recipe would silently receive the first
+--      person's. `canStoreCanonicalRecipe`
+--      (src/domain/import/canonicalRecipe.ts) refuses the platform in code
+--      for the same reason, so no such INSERT is ever attempted. This
+--      paragraph exists so that whoever eventually widens 0011 for `'web'`
+--      does not paste all six members in while they are in there. Read that
+--      function's doc comment before writing that migration.
+--
+--   3. `meals.source_platform` (0001) — NEEDS NO MIGRATION, for the reason
+--      0011's own closing note gives about the routes before this one. It is
+--      nullable, its vocabulary is the legacy pair ('tiktok', 'reels'), and
+--      the import path already writes `null` for any platform that pair
+--      cannot express rather than fabricating a value. `toMealSourcePlatform`
+--      (src/domain/import/toMealDraft.ts) maps `'photo'` to `null` in an
+--      exhaustive `switch`, beside `'text'` and for the same reason: not a
+--      platform the vocabulary ran out of words for, but the absence of one.
+--
+-- ===========================================================================
+-- WHAT THIS MIGRATION DOES NOT ADD, AND WHY THAT IS THE FEATURE
+-- ===========================================================================
+--
+-- NO TABLE, NO COLUMN AND NO BUCKET FOR THE IMAGE ITSELF. A photo import
+-- reads the photograph, sends it to the model once, and discards it. The
+-- decision, and the reasoning behind refusing what storage would have bought
+-- (a real thumbnail instead of the monogram tile, a "what Remy read" panel on
+-- the failure screen, re-extraction without re-photographing), is written out
+-- in full in src/domain/import/photoImportLimits.ts.
+--
+-- The short version, because a schema file is where somebody will come
+-- looking for the storage that is not here: a photograph taken in a kitchen
+-- contains whatever was in frame, not only the recipe the user aimed at. An
+-- image store filling with pictures taken inside people's homes carries a
+-- retention schedule, a deletion path, an erasure-request story and a breach
+-- story, none of which this feature has or needs. PD-005 already keeps a
+-- household's dietary data off surfaces it does not belong on; this is the
+-- same question, larger. The cheapest secure store is the one that does not
+-- exist.
+--
+-- So there is nothing here to enable RLS on, and that absence is deliberate
+-- rather than pending.
+--
+-- ===========================================================================
+-- WHY DROP-AND-ADD RATHER THAN ALTER
+-- ===========================================================================
+--
+-- Postgres has no `alter constraint` for a CHECK expression; the pair below
+-- is the standard replacement and is atomic inside this migration's
+-- transaction. Same shape as 0011, for the same reason.
+--
+-- The ADD cannot fail on legacy data: the new list is a strict superset of
+-- the old one, so every existing row already satisfies it. Worth stating
+-- because it is what makes this safe to run against a populated table with no
+-- backfill and no downtime — and it is a property of WIDENING specifically. A
+-- future migration NARROWING this list would have to delete or rewrite
+-- offending rows first, and would not be a one-liner.
+
+alter table public.import_attempts
+  drop constraint if exists import_attempts_platform_check;
+
+alter table public.import_attempts
+  add constraint import_attempts_platform_check
+  check (platform in ('tiktok', 'instagram', 'youtube', 'web', 'text', 'photo'));

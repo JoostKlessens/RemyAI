@@ -17,7 +17,11 @@ import {
  * failure too — which is what catches a third mode given copy before
  * anybody decided what it should say.
  */
-const EVERY_MODE: readonly ImportSourceMode[] = ['link', 'text'];
+// SRC-07 added the third. Written out rather than imported from
+// `IMPORT_SOURCE_MODES`, on purpose: the assertion further down that the two
+// agree is only worth something while this list is an independent statement of
+// what the screen offers.
+const EVERY_MODE: readonly ImportSourceMode[] = ['link', 'text', 'photo'];
 
 /** Every platform the pipeline can report, so no route can end up narrated by an empty list. */
 const EVERY_PLATFORM: readonly ImportPlatform[] = ['tiktok', 'instagram', 'youtube', 'web', 'text'];
@@ -110,7 +114,12 @@ describe('buildImportSourceModeCopy', () => {
 
   test('the mode switch asks a question rather than naming a category, so its options need no inference', () => {
     expect(IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL.length).toBeGreaterThan(0);
-    expect(IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL).toContain('Wat je plakt');
+    // `'Wat je'` and no longer `'Wat je plakt'`. SRC-07 made the verb false:
+    // you do not paste a photograph, so the label became "Wat je meegeeft".
+    // What this test is actually for — per its own name — is that the label
+    // asks a QUESTION rather than naming a category ("Bron"), and the shorter
+    // needle pins exactly that while surviving the verb changing again.
+    expect(IMPORT_SOURCE_MODE_SWITCH_ACCESSIBILITY_LABEL).toContain('Wat je');
   });
 
   test('the exported mode list is exactly the modes that have copy, in the order they are offered', () => {

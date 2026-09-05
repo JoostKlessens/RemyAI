@@ -77,7 +77,7 @@
 // copy of the blocklist. The `.ts` extension is required because this file
 // is imported by the Deno edge function (see its header).
 import { isBlockedRedirectHost } from './resolveShortLinkTarget.ts';
-import type { ImportPlatform } from './types';
+import type { UrlImportPlatform } from './types';
 
 export type NormalizedUrlResult =
   | {
@@ -96,8 +96,18 @@ export type NormalizedUrlResult =
        * hostname that matched, where `'web'` is by definition the absence of
        * a match; this one describes a normalized URL, and `normalizeWebUrl`
        * genuinely produces one.
+       *
+       * IT IS NOW A NAMED TYPE (`UrlImportPlatform`, importVocabulary.ts)
+       * rather than the `Exclude<ImportPlatform, 'text'>` this said when
+       * `'text'` was the only URL-less route. SRC-07 added a second one, and
+       * a hand-spelled exclusion repeated across eight sites is exactly the
+       * hazard canonicalRecipe.ts's `PLATFORM_MEMBERS` note records: several
+       * of those sites would have gone on compiling while admitting a
+       * platform that has no URL. Stated once now, so the next such route is
+       * one edit rather than a hunt through whichever call sites happened to
+       * break.
        */
-      readonly platform: Exclude<ImportPlatform, 'text'>;
+      readonly platform: UrlImportPlatform;
       readonly normalizedUrl: string;
       /**
        * True only for `vm.tiktok.com` / `vt.tiktok.com` — see file header.
@@ -151,7 +161,16 @@ const YOUTUBE_WATCH_PATH = '/watch';
  * claims for it, on the first union widening after it was written.
  */
 interface HostResolution {
-  readonly platform: Exclude<ImportPlatform, 'web' | 'text'>;
+  /**
+   * One member narrower than `UrlImportPlatform`, and deliberately still
+   * written as an exclusion here rather than sharing that name: this shape
+   * answers "a hostname MATCHED one of ours", where `'web'` means precisely
+   * that none did. Two different questions whose answers happen to overlap,
+   * not one question spelled twice — and expressing it against
+   * `UrlImportPlatform` keeps the URL-less routes excluded automatically,
+   * which is the half that actually rots.
+   */
+  readonly platform: Exclude<UrlImportPlatform, 'web'>;
   readonly isShortLink: boolean;
 }
 

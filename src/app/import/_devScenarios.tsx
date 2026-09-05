@@ -28,7 +28,7 @@
 import type { JSX } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { buildFixtureImportAttempt, type FixtureImportAttempt, type FixtureImportScenario } from './_fixtures';
-import type { ImportPlatform } from '@/domain/import/types';
+import type { ImportPlatform, UrlImportPlatform } from '@/domain/import/types';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 
 /**
@@ -51,15 +51,17 @@ export type DevScenarioValue = FixtureImportScenario | 'unsupported_url' | 'norm
  * happen is worse than no demo.
  */
 // Keyed by the link-paste platforms only — see `FixtureLinkPlatform` in
-// _fixtures.ts for why `'text'` has no entry here rather than a fake one.
-const DEMO_URL_BY_PLATFORM: Readonly<Record<Exclude<ImportPlatform, 'text'>, string>> = {
+// _fixtures.ts for why `'text'` has no entry here rather than a fake one, and
+// why `'photo'` (SRC-07) has none either: neither route has a link to demo.
+// `UrlImportPlatform` is the union's own name for that set.
+const DEMO_URL_BY_PLATFORM: Readonly<Record<UrlImportPlatform, string>> = {
   tiktok: 'https://www.tiktok.com/@kokenmetkees/video/000009',
   instagram: 'https://www.instagram.com/reel/000009',
   youtube: 'https://www.youtube.com/watch?v=demo000009',
   web: 'https://www.voorbeeldkeuken.nl/recepten/ovenschotel-zoete-aardappel',
 };
 
-const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, Exclude<ImportPlatform, 'text'>>> = {
+const DEMO_PLATFORM_BY_SCENARIO: Readonly<Record<FixtureImportScenario, UrlImportPlatform>> = {
   parsed: 'tiktok',
   // RCP-06's other route. `'parsed'` above demos a caption a model read;
   // this one demos a page whose publisher wrote the recipe out in machine-

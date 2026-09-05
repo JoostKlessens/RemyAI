@@ -3,17 +3,25 @@
  * Function, narrowed into the same `ImportResult` the screens already
  * switch on.
  *
- * TWO CALLS, ONE ENDPOINT, AND ONE OF EACH IS THE WHOLE DESIGN.
- * `requestImport` sends `{ url }` — a link the user pasted — and
+ * THREE CALLS, ONE ENDPOINT, AND ONE OF EACH IS THE WHOLE DESIGN.
+ * `requestImport` sends `{ url }` — a link the user pasted;
  * `requestTextImport` sends `{ text }` — a recipe the user pasted with no
- * link behind it (SRC-08). The edge function refuses a body carrying BOTH,
- * on the grounds that it cannot know which the caller meant
+ * link behind it (SRC-08); and `requestPhotoImport` sends `{ photo }` — a
+ * photograph of a recipe, so that last one no longer has to be typed at all
+ * (SRC-07). The edge function refuses a body carrying MORE THAN ONE, on the
+ * grounds that it cannot know which the caller meant
  * (supabase/functions/parse-recipe/importRequest.ts), so this module makes
  * that unrepresentable rather than merely avoided: there is no single
- * function with two optional arguments that a caller could fill in twice.
+ * function with three optional arguments a caller could fill in twice.
  * They differ in exactly two lines each — the body they post and the
  * platform their transport failure reports — and share everything after,
  * which is what keeps the response handling from forking.
+ *
+ * THE THIRD ONE CARRIES AN IMAGE AND STILL SHARES `toAttempt`, which is
+ * worth a line because it is the test a shared response path should pass: the
+ * function answers with the same `ImportResult` union whichever body it was
+ * handed, so a photograph changes what is SENT and nothing whatsoever about
+ * what is READ.
  *
  * This module is the impure shell and nothing else. Every judgement it
  * makes about the response body lives in the pure, tested
@@ -262,5 +270,50 @@ export async function requestTextImport(text: string): Promise<ImportAttempt> {
     return result === null ? transportFailure('text') : toAttempt(result);
   } catch {
     return transportFailure('text');
+  }
+}
+
+/**
+ * SRC-07. The same endpoint and the same narrowing once more, with a
+ * photograph of a recipe: a cookbook page, a handwritten card, a screenshot.
+ *
+ * IT TAKES NO `platform` ARGUMENT, for `requestTextImport`'s reason exactly.
+ * `'photo'` is a fact about which body was posted, decided by the line below
+ * and by nothing else, so client and server cannot differ about it even in
+ * principle. Passing it in would invite a caller to pass something else.
+ *
+ * ONLY EVER CALLED WITH A PHOTOGRAPH THE CALLER HAS ALREADY PUT THROUGH
+ * `readImportPhoto` (src/domain/import/photoImportLimits.ts) — the same
+ * function the edge function's own boundary calls, so the two ends cannot
+ * disagree about the same image. A body the function would refuse should not
+ * cost a round trip, and on this route it would be an expensive one to waste:
+ * the upload is megabytes where the other two are bytes.
+ *
+ * THE IMAGE GOES NO FURTHER THAN THIS CALL. It is not cached here, not
+ * written to storage, and not attached to the `ImportAttempt` that comes back
+ * — `ImportResult` has no field it would fit in. The paste screen holds it in
+ * component state alone, so that "Opnieuw proberen" can re-send the same
+ * photograph, and drops it with the screen. See photoImportLimits.ts for the
+ * retention decision in full.
+ *
+ * Never throws, exactly as its two siblings do not.
+ */
+export async function requestPhotoImport(mimeType: string, base64: string): Promise<ImportAttempt> {
+  try {
+    const { data, error } = await supabase.functions.invoke<unknown>(PARSE_RECIPE_FUNCTION, {
+      // `photo` alone, and NESTED rather than flattened into two top-level
+      // keys. The boundary counts how many SOURCE FIELDS a body carries and
+      // refuses more than one; a photo arriving as `mimeType` + `base64`
+      // beside a stale `url` would be indistinguishable from a caller asking
+      // for two things at once. One key, one source.
+      body: { photo: { mimeType, base64 } },
+    });
+    if (error) {
+      return transportFailure('photo');
+    }
+    const result = parseImportResult(data);
+    return result === null ? transportFailure('photo') : toAttempt(result);
+  } catch {
+    return transportFailure('photo');
   }
 }
