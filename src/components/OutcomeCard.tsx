@@ -89,13 +89,13 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
-import { hapticCompleted } from '@/lib/haptics';
+import { hapticCompleted, hapticRealCommit } from '@/lib/haptics';
 import { elevation, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';
 import { Chip } from './Chip';
 import { ChipGroup } from './ChipGroup';
 import { RatingScale } from './RatingScale';
-import { RATING_QUESTION, RATING_SKIP_LABEL, describeRatingAnnouncement } from './ratingScaleCopy';
+import { RATING_QUESTION, RATING_SKIP_LABEL, describeRatingAnnouncement, formatGrade } from './ratingScaleCopy';
 import { OUTCOME_SEND_ACCESSIBILITY_LABEL, OUTCOME_SEND_LABEL } from './sendRecipeSheetCopy';
 
 export interface OutcomeCardProps {
@@ -202,6 +202,23 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
    * up. The card can close a beat later and the record stands regardless.
    */
   const [chosenMood, setChosenMood] = useState<string | null>(null);
+  /**
+   * The grade the finger has moved to but nobody has recorded yet.
+   *
+   * IT LIVES HERE AND NOT IN `RatingScale` BECAUSE `Klaar` LIVES HERE.
+   * The scale used to write a grade the instant a finger lifted, so a
+   * mis-touch was a permanent number and a closed card. Now the scale only
+   * ever drafts, and the one button below decides: a draft becomes a
+   * grade, no draft becomes a quiet exit.
+   *
+   * PD-008's rule is untouched by this — "skipping must cost exactly what
+   * answering costs" — because it is still a single tap either way, on the
+   * same button. What changed is that the tap is now a DECISION rather than
+   * a side effect of letting go, which is the only reading under which the
+   * scale's own header ("a rating which nags is a rating that gets lied
+   * to") survives contact with a thumb on a 44pt strip.
+   */
+  const [draftRating, setDraftRating] = useState<number | null>(null);
 
   const entrance = useRef(new Animated.Value(0)).current;
   const wash = useRef(new Animated.Value(0)).current;
@@ -275,11 +292,29 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
     AccessibilityInfo.announceForAccessibility(`Gemaakt! ${followUpQuestions}`);
   };
 
+  /**
+   * The one exit, and it is one tap whichever answer it carries. A draft
+   * on the scale is recorded; no draft closes with nothing written, which
+   * is a complete and permitted end to this card rather than an abandoned
+   * one.
+   */
+  const handleFinish = (): void => {
+    if (draftRating === null) {
+      onDismiss();
+      return;
+    }
+    handleRate(draftRating);
+  };
+
   const handleRate = (rating: number): void => {
     if (ratedValue !== null) {
       return;
     }
     setRatedValue(rating);
+    // The commit haptic, moved here from the scale's release handler along
+    // with the commit itself: WS5 §3.2 puts `impactAsync(Medium)` on "a
+    // grade commits", and this is now the only place a grade commits.
+    hapticRealCommit();
     // Persisted immediately rather than from the exit animation's
     // completion callback: the write must not depend on an animation
     // finishing, which it never does if the app is backgrounded mid-beat.
@@ -473,7 +508,7 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
           <Text style={[typeScale.body, styles.subtitle, { color: colors.textSecondary }]}>{RATING_QUESTION}</Text>
           <RatingScale
             selected={ratedValue}
-            onSelect={handleRate}
+            onDraftChange={setDraftRating}
             reduceMotionEnabled={reduceMotionEnabled}
             disabled={isCommitting}
           />
@@ -485,10 +520,19 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
             <Button
               label={RATING_SKIP_LABEL}
               variant="secondary"
-              onPress={onDismiss}
+              onPress={handleFinish}
               disabled={isCommitting}
-              accessibilityLabel="Klaar, zonder beoordeling"
-              accessibilityHint="Sluit zonder een cijfer te geven"
+              // Both halves are announced, because the same word does two
+              // different things and a screen-reader user cannot see which
+              // one is armed. The scale reports its draft through
+              // `accessibilityValue` either way, so the number itself is
+              // never only visual.
+              accessibilityLabel={
+                draftRating === null ? 'Klaar, zonder beoordeling' : `Klaar, cijfer ${formatGrade(draftRating)} opslaan`
+              }
+              accessibilityHint={
+                draftRating === null ? 'Sluit zonder een cijfer te geven' : 'Slaat het gekozen cijfer op en sluit'
+              }
             />
           </View>
           {/* §3.1's `Stuur door`. Stacked under "Klaar" rather than set
