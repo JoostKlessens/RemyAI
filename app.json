@@ -32,7 +32,11 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "474f8c5a-2901-4275-9273-39f9880e82ed"
       }
-    }
+    },
+    "owner": "joostk11"
   }
 }

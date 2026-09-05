@@ -47,8 +47,8 @@ import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { completeSignInFromUrl } from '@/lib/auth';
 import { useSession } from '@/hooks/useSession';
-import { chooseBootstrapMember, startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
-import { registerForDecisionPush } from '@/lib/pushRegistration';
+import { startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
+import { scheduleDecisionNotification } from '@/lib/decisionNotification';
 import { getAppRepository } from '@/lib/repository';
 import { getAppHouseholdSyncEnvironment } from '@/lib/repository/createRepository';
 
@@ -258,49 +258,47 @@ function AuthGate(): null {
  * render — so the listener is not churned on unrelated repaints.
  */
 /**
- * Puts this device's push token in `push_tokens`, which is the half of the
- * 16:00 push that never existed (GAP-30).
+ * Arms the household's daily suggestion notification (GAP-30).
  *
- * IT RIDES THE SAME EFFECT AS THE HOUSEHOLD SYNC, AND THE ORDER MATTERS.
- * `push_tokens`' foreign key is composite — `(member_id, household_id)`
- * references `household_members` — so a token cannot be stored until
- * `ensureRemoteHousehold` has written that membership row. `startHouseholdSync`
- * is fire-and-forget by design and there is nothing here to await it with,
- * so on a first run this call can genuinely lose the race and come back
- * `store_failed`.
+ * IT READS THE LIBRARY BEFORE IT ARMS ANYTHING, and that is the whole
+ * reason this helper does real work instead of forwarding two fields.
+ * `planDecisionNotification` refuses to schedule for an empty library, and
+ * an empty library is exactly the state a fresh install is in — so the
+ * first thing a new user would otherwise experience is Remy interrupting
+ * their evening to offer nothing.
  *
- * That is accepted rather than engineered around, because the retry is
- * already free: the foreground subscription re-runs both on every return
- * to the app, and by then the membership row exists. Serialising them
- * would mean giving `startHouseholdSync` a promise it deliberately does
- * not return, to save one failed insert on one run.
+ * RE-RUN ON EVERY FOREGROUND, which is what makes that check self-healing
+ * in both directions: the evening after a first import the notification
+ * arms itself, and the evening after the last recipe is archived it
+ * disarms. `scheduleDecisionNotification` cancels before it schedules, so
+ * running this a hundred times leaves exactly one trigger.
  *
- * NOTHING IS SHOWN AND NOTHING IS THROWN. `registerForDecisionPush` reports
- * every outcome as a value; this reads it only to keep the failure out of
- * an unhandled rejection. See that module's header for the two reasons it
- * cannot succeed until OPS-02 lands — chiefly that `app.json` carries no
- * `extra.eas.projectId`, without which Expo refuses to issue a token at
- * all.
+ * `listHouseholdMeals` is the same read Kiezen uses for its candidate
+ * pool, so "is there anything to suggest" is answered by the query that
+ * actually decides it rather than by a second definition that could
+ * disagree.
  */
-async function registerPush(canUseApp: boolean, userId: string | null): Promise<void> {
-  if (!canUseApp || userId === null) {
+async function armDecisionNotification(canUseApp: boolean): Promise<void> {
+  if (!canUseApp) {
     return;
   }
   try {
     const repository = getAppRepository();
     const householdId = await repository.getCurrentHouseholdId();
-    const members = await repository.listMembers(householdId);
-    // The same answer householdSync uses for "which member is this
-    // account", imported rather than re-derived — two ways of resolving
-    // one identity is how a token ends up attached to the wrong person.
-    const member = chooseBootstrapMember(members, userId);
-    if (member === null) {
+    const [household, meals] = await Promise.all([
+      repository.getHousehold(householdId),
+      repository.listHouseholdMeals(householdId),
+    ]);
+    if (household === null) {
       return;
     }
-    await registerForDecisionPush({ memberId: member.id, householdId });
+    await scheduleDecisionNotification({
+      candidateMealCount: meals.length,
+      decisionPushTime: household.decisionPushTime,
+    });
   } catch {
-    // Local storage or the network. Same contract as the sync beside it:
-    // no push today is never no app today.
+    // Local storage. Same contract as the sync beside it: no notification
+    // today is never no app today.
   }
 }
 
@@ -314,10 +312,10 @@ function HouseholdBootstrapGate(): null {
     // Not awaited, and there is nothing here to await it with: `start`
     // returns void by design.
     startHouseholdSync(environment, session);
-    void registerPush(canUseApp, userId);
+    void armDecisionNotification(canUseApp);
     return subscribeToForeground(AppState, () => {
       startHouseholdSync(environment, session);
-      void registerPush(canUseApp, userId);
+      void armDecisionNotification(canUseApp);
     });
   }, [isResolving, canUseApp, userId]);
 
