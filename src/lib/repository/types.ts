@@ -22,7 +22,6 @@ import type {
   CookEventId,
   Decision,
   DecisionId,
-  DeclineReason,
   Household,
   HouseholdId,
   IsoDateString,
@@ -235,7 +234,18 @@ export interface CreateDecisionInput {
 }
 
 export interface RespondToDecisionInput {
-  /** Only the two terminal user-driven statuses — 'pending' is the row's own creation-time default, never a response. */
+  /**
+   * Only the two terminal user-driven statuses — 'pending' is the row's
+   * own creation-time default, never a response.
+   *
+   * 'skipped' has had NO CALLER since "Niet koken" left Kiezen; today
+   * every response through this seam is 'accepted'. Narrowing the type to
+   * `'accepted'` was the rejected alternative: it would delete the only
+   * place the repository still knows how to record a refusal, and that
+   * is exactly what has to come back the day plan §8's acceptance rate
+   * needs to tell "offered and refused" apart from "never seen" again.
+   * See DecisionStatus in @/domain/types for the full cost.
+   */
   readonly status: 'accepted' | 'skipped';
 }
 
@@ -664,7 +674,6 @@ export interface RemyRepository {
     offer: { readonly mealId: MealId; readonly reasonCode: ReasonCode; readonly reasonText: string },
   ): Promise<Decision>;
   respondToDecision(decisionId: DecisionId, input: RespondToDecisionInput): Promise<Decision>;
-  setDecisionDeclineReason(decisionId: DecisionId, declineReason: DeclineReason): Promise<Decision>;
 
   /** Populates a single default household on a genuinely fresh install (households table empty) — an honest empty start, no curated data. No-op otherwise. See seedData.ts. */
   seedIfEmpty(): Promise<void>;

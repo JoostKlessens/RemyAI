@@ -829,24 +829,6 @@ describe('localRepository — decisions (decision responses)', () => {
     expect(responded.respondedAt).not.toBeNull();
   });
 
-  test('setDecisionDeclineReason updates the decline reason on an already-declined decision', async () => {
-    const meal = await repository.createMeal(makeCreateMealInput());
-    const decision = await repository.createDecision({
-      householdId: HOUSEHOLD_ID,
-      decisionDate: '2026-08-22',
-      mealId: meal.id,
-      initialMealId: meal.id,
-      reasonCode: 'variety',
-      reasonText: 'Nog niet eerder geprobeerd',
-    });
-    await repository.respondToDecision(decision.id, { status: 'skipped' });
-
-    const updated = await repository.setDecisionDeclineReason(decision.id, 'afhalen');
-
-    expect(updated.declineReason).toBe('afhalen');
-    expect(updated.status).toBe('skipped');
-  });
-
   test('listRecentDecisions filters by householdId and decisionDate >= sinceDate', async () => {
     const meal = await repository.createMeal(makeCreateMealInput());
     await repository.createDecision({

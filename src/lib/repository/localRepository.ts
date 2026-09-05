@@ -111,7 +111,6 @@ import {
   getPendingOutcomeDecision,
   listRecentDecisions,
   respondToDecision,
-  setDecisionDeclineReason,
   updateDecisionOffer,
 } from './local/decisions';
 import { seedIfEmpty } from './local/seed';
@@ -272,8 +271,6 @@ export function createLocalRepository(store: KeyValueStore, mirror: MirrorJobSin
     createDecision: (input) => createDecision(tables, input),
     updateDecisionOffer: (decisionId, offer) => updateDecisionOffer(tables, decisionId, offer),
     respondToDecision: (decisionId, input) => respondToDecision(tables, decisionId, input),
-    setDecisionDeclineReason: (decisionId, declineReason) =>
-      setDecisionDeclineReason(tables, decisionId, declineReason),
 
     seedIfEmpty: () => seedIfEmpty(tables),
   };

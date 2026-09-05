@@ -37,6 +37,11 @@ criterion in plan §8. It must never be a silent fallback.
 
 ## PD-002 — "Niet koken" is a first-class answer with a real destination
 
+> ⚠ **REVERSED on 5 September 2026 by the owner. See PD-021.** The control and its reason
+> chips are removed from the product. The text below is kept because PD-008 cites this
+> decision as its own precedent, and a precedent that vanishes leaves the argument that
+> leaned on it hanging in the air.
+
 **Decision.** One tap confirms, suppresses any further nudges that evening, and shows a calm
 confirmed state — never a dead end.
 
@@ -947,3 +952,58 @@ should be its best one, and that argument deserves its own day.
   retention.
 - **Grocery cart / checkout integration.** No official third-party NL retailer API exists.
 - **Party Link / group hosting.** Phase 3 at the earliest.
+
+---
+
+## PD-021 — Reversed: "Niet koken" leaves Kiezen, and PD-002 goes with it
+
+**Owner decision, 5 September 2026.** The third action is gone. Kiezen offers `Ja`, `Iets
+anders` / `Ik kies zelf`, and nothing else. If you are not cooking tonight you close the app,
+which is what people were doing anyway.
+
+**What is reversed.** PD-002 in full, and PD-001's second exit.
+
+**Why the owner is right about the reasons, measured rather than assumed.** PD-002 claimed the
+`afhalen` / `restjes` / `uit eten` chips would "teach the model about takeaway nights,
+leftovers and eating out". They never did, and the check is one grep: `declineReason` appears
+nowhere under `src/domain/` except its own type declaration and the field on `Decision`.
+`decide.ts` never sees it and `novelty.ts` reads only `mealId` and `initialMealId`. The
+`decline_reason` column in `0001_init.sql` has never held a row either, because `decisions`
+is deliberately not mirrored to Postgres. Three years of intent, zero bytes. Removing an
+input nothing reads degrades no suggestion.
+
+**What is actually given up, and it is not the chips.** `handleDecline` was the ONLY writer of
+`status: 'skipped'` anywhere in this app — verified by grep across `src/` and `tests/` before
+the removal, and no writer remains. A refused evening now stays `'pending'` forever, which is
+byte-identical to an evening nobody opened the app. PD-001 names the "<20% acceptance kill
+criterion in plan §8" as non-optional instrumentation; after this change that metric can still
+read what was offered and what was accepted, and can no longer read what was refused.
+
+That is the real cost of this decision and it is accepted knowingly. If the metric is ever
+needed, the honest instrument is a decision-viewed event, not a button somebody has to press
+to be counted.
+
+**PD-001's "exactly two exits" is now one, and that is recorded rather than papered over.**
+After swap exhaustion `NoCandidateState` renders a single `Ik kies zelf`; `all_excluded`
+likewise. It is not a dead end — the button navigates to Mijn recepten and Kiezen is a tab
+screen, so the tab bar is under all of it. What broke is PD-001's sentence, not the screen.
+No replacement control was invented to make the sentence true again: a button that exists to
+satisfy a document is worse than one honest exit.
+
+**PD-008 loses its stated precedent.** PD-008 justified "skipping a rating costs exactly one
+tap, the same as giving one" by pointing at PD-002's optional decline reason. That precedent
+is now a reversed decision. The RULE stands on its own — one gesture to rate, one tap to
+leave, argued in DESIGN.md §10 — so it is the citation that needs correcting, not the
+behaviour.
+
+**Rejected alternative: keep the button, drop the chips.** One tap, a confirmed state, no
+reasons menu. It keeps the `'skipped'` write and therefore the metric, and it keeps DESIGN.md
+§1's claim that a decline is legitimate rather than a cancel. Rejected by the owner on the
+ground that a screen whose answer to "not tonight" is another screen is still a screen:
+closing the app is already the affordance, and building a destination for it was the mistake
+— not the reasons behind it.
+
+**Not reversed.** Nothing in PD-003 changes: the outcome card still surfaces only on an
+ACCEPTED decision with no recorded outcome, so an evening nobody answered never produces a
+"Gemaakt?". And `novelty.ts` already counted an offered dish as known regardless of status, so
+what the engine remembers about a refused evening is exactly what it remembered before.

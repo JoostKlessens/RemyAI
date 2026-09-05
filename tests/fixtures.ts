@@ -125,7 +125,6 @@ export function makeDecision(overrides: Partial<Decision> = {}): Decision {
     reasonCode: 'variety',
     reasonText: 'Nog niet eerder geprobeerd',
     status: 'pending',
-    declineReason: null,
     createdAt: '2026-08-20T16:00:00.000Z',
     respondedAt: null,
     ...overrides,

@@ -1,7 +1,28 @@
 /**
- * Kiezen — the hero screen. One dish, one stated reason, three actions.
+ * Kiezen — the hero screen. One dish, one stated reason, two actions.
  * No list, no scroll, no browse affordance: this is the entire product
  * thesis. See docs/DESIGN.md §1 and docs/PRODUCT-DECISIONS.md.
+ *
+ * IT WAS THREE ACTIONS UNTIL "Niet koken" WAS REMOVED, and nothing
+ * replaced it. The reason menu behind it (PD-002's optional afhalen /
+ * restjes / uit-eten chips) bought nothing, and an evening you are not
+ * cooking is an evening you close the app — so the button's whole effect
+ * was to trade tonight's dish for a screen saying the refusal had been
+ * noted. The rejected alternative was keeping the button and dropping
+ * only the chips, which leaves a tertiary control whose destination is a
+ * sentence. What remains is `Ja`, `Iets anders`, and — once the two
+ * swaps are spent — `Ik kies zelf`.
+ *
+ * THE COST, written here because it is invisible from the screen.
+ * `handleDecline` was the ONLY writer of `status: 'skipped'` anywhere in
+ * the app; the load-time read that restored a previously declined evening
+ * went with it. A refused evening now stays `'pending'` forever, byte-
+ * identical to an evening on which nobody opened the app at all, so plan
+ * §8's acceptance rate can no longer read "offered and refused" apart
+ * from "never seen" — only "offered and accepted" survives. Getting that
+ * reading back needs a new writer, not this button back; the repository
+ * seam still accepts `'skipped'` (RespondToDecisionInput) precisely so
+ * such a writer has somewhere to land.
  *
  * PD-009 adds one thing above the hero: `DecisionFilterBar`, where the
  * household can say "ik heb 20 minuten" or "iets met pasta" *before* Remy
@@ -35,8 +56,8 @@
  * mirroring what the scheduled Edge Function will do once it exists (see
  * docs/ARCHITECTURE.md). "Iets anders" re-runs `decide()` with a growing
  * `excludedMealIds` list and updates that same row's current offer.
- * Accept/decline write real decision responses; the outcome overlay
- * (PD-003) reads/writes real cook_events.
+ * Accept writes a real decision response — the only one left, see above;
+ * the outcome overlay (PD-003) reads/writes real cook_events.
  *
  * One read on that path is NOT local: `loadFriendProof`
  * (src/lib/friendProof.ts) asks the `shared_cooks` view which recipes this
@@ -83,7 +104,6 @@ import {
 import { Button } from '@/components/Button';
 import { DecisionCard } from '@/components/DecisionCard';
 import { DecisionFilterBar } from '@/components/DecisionFilterBar';
-import { DeclineReasonRow } from '@/components/DeclineReasonRow';
 import { NoCandidateState } from '@/components/NoCandidateState';
 import { OutcomeCard } from '@/components/OutcomeCard';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
@@ -94,7 +114,6 @@ import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import type {
   CookEventId,
   Decision,
-  DeclineReason,
   DecisionFilters,
   DecisionResult,
   HouseholdId,
@@ -112,7 +131,6 @@ import { getColors, radii, resolveDuration, spacing, typeScale } from '@/theme/t
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
-type VanavondView = 'decision' | 'declined';
 type DevScenario = 'normal' | 'empty_rotation' | 'all_excluded' | 'filtered_out' | 'swaps_exhausted' | 'error';
 
 /** How far back "recent" decisions/cook history reach for novelty-tier classification — see novelty.ts. */
@@ -299,8 +317,6 @@ export default function VanavondScreen(): JSX.Element {
   // PD-009. Session state, never persisted and never written to the
   // decision row — see `createTodayDecisionIfSuggested`.
   const [filters, setFilters] = useState<DecisionFilters>(NO_DECISION_FILTERS);
-  const [view, setView] = useState<VanavondView>('decision');
-  const [declineReason, setDeclineReason] = useState<DeclineReason | null>(null);
   const [showOutcomeOverlay, setShowOutcomeOverlay] = useState(false);
   const [pendingOutcomeDecision, setPendingOutcomeDecision] = useState<Decision | null>(null);
   const [pendingOutcomeMeal, setPendingOutcomeMeal] = useState<Meal | null>(null);
@@ -333,8 +349,6 @@ export default function VanavondScreen(): JSX.Element {
         setExcludedMealIds([]);
         setFilters(NO_DECISION_FILTERS);
         setIsAccepting(false);
-        setView(nextSession.decisionRow?.status === 'skipped' ? 'declined' : 'decision');
-        setDeclineReason(nextSession.decisionRow?.declineReason ?? null);
 
         const repository = getAppRepository();
         const outcomeDecision = await repository.getPendingOutcomeDecision(nextSession.householdId);
@@ -371,7 +385,7 @@ export default function VanavondScreen(): JSX.Element {
   );
   const effectivePhase: ScreenPhase = devScenario === 'error' ? 'error' : phase;
   const isEmptyRotation = currentResult.kind === 'no_candidate' && currentResult.reason === 'empty_rotation';
-  const showFilterBar = effectivePhase === 'ready' && view === 'decision' && !isEmptyRotation;
+  const showFilterBar = effectivePhase === 'ready' && !isEmptyRotation;
 
   const getMealById = (mealId: MealId): Meal | undefined => session?.mealById.get(mealId);
 
@@ -443,28 +457,6 @@ export default function VanavondScreen(): JSX.Element {
     // Bibliotheek is the PD-001 escape hatch's destination (see
     // (tabs)/_layout.tsx) — browsing lives there, never on this screen.
     router.push('/recipes');
-  };
-
-  const handleDecline = (): void => {
-    if (devScenario === 'normal' && session?.decisionRow) {
-      const decisionId = session.decisionRow.id;
-      getAppRepository()
-        .respondToDecision(decisionId, { status: 'skipped' })
-        .then((updated) => setSession((current) => (current === null ? current : { ...current, decisionRow: updated })))
-        .catch(() => {});
-    }
-    setView('declined');
-  };
-
-  const handleSelectDeclineReason = (reason: DeclineReason): void => {
-    setDeclineReason(reason);
-    if (devScenario === 'normal' && session?.decisionRow) {
-      const decisionId = session.decisionRow.id;
-      getAppRepository()
-        .setDecisionDeclineReason(decisionId, reason)
-        .then((updated) => setSession((current) => (current === null ? current : { ...current, decisionRow: updated })))
-        .catch(() => {});
-    }
   };
 
   const handleOpenImport = (): void => {
@@ -553,7 +545,7 @@ export default function VanavondScreen(): JSX.Element {
         {effectivePhase === 'loading' ? <LoadingSkeleton /> : null}
         {effectivePhase === 'error' ? <ErrorView onRetry={handleRetry} /> : null}
 
-        {effectivePhase === 'ready' && view === 'decision' ? (
+        {effectivePhase === 'ready' ? (
           currentResult.kind === 'suggestion' ? (
             <SuggestionView
               result={currentResult}
@@ -564,7 +556,6 @@ export default function VanavondScreen(): JSX.Element {
               onAccept={() => handleAccept(currentResult)}
               onRequestAlternative={handleRequestAlternative}
               onChooseSelf={handleChooseSelf}
-              onDecline={handleDecline}
             />
           ) : (
             <View style={styles.heroBlock}>
@@ -573,18 +564,9 @@ export default function VanavondScreen(): JSX.Element {
                 onOpenImport={handleOpenImport}
                 onOpenRecipes={handleChooseSelf}
                 onClearFilters={handleClearFilters}
-                onDecline={handleDecline}
               />
             </View>
           )
-        ) : null}
-
-        {effectivePhase === 'ready' && view === 'declined' ? (
-          <DeclinedView
-            declineReason={declineReason}
-            onSelectReason={handleSelectDeclineReason}
-            reduceMotionEnabled={reduceMotionEnabled}
-          />
         ) : null}
       </View>
 
@@ -642,12 +624,10 @@ interface SuggestionViewProps {
   readonly onAccept: () => void;
   readonly onRequestAlternative: () => void;
   readonly onChooseSelf: () => void;
-  readonly onDecline: () => void;
 }
 
 function SuggestionView(props: SuggestionViewProps): JSX.Element {
-  const { result, meal, reduceMotionEnabled, bottomInset, accepted, onAccept, onRequestAlternative, onChooseSelf, onDecline } =
-    props;
+  const { result, meal, reduceMotionEnabled, bottomInset, accepted, onAccept, onRequestAlternative, onChooseSelf } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -669,7 +649,6 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
           onAccept={onAccept}
           onRequestAlternative={onRequestAlternative}
           onChooseSelf={onChooseSelf}
-          onDecline={onDecline}
         />
       </View>
     </>
@@ -702,34 +681,6 @@ function ErrorView(props: { readonly onRetry: () => void }): JSX.Element {
         Controleer je verbinding en probeer het opnieuw.
       </Text>
       <Button label="Opnieuw" variant="secondary" onPress={onRetry} accessibilityLabel="Probeer opnieuw een suggestie op te halen" />
-    </View>
-  );
-}
-
-interface DeclinedViewProps {
-  readonly declineReason: DeclineReason | null;
-  readonly onSelectReason: (reason: DeclineReason) => void;
-  readonly reduceMotionEnabled: boolean;
-}
-
-function DeclinedView(props: DeclinedViewProps): JSX.Element {
-  const { declineReason, onSelectReason, reduceMotionEnabled } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.heroBlock}>
-      <Text style={[typeScale.title2, styles.centeredTitle, { color: colors.textPrimary }]}>
-        Niet gekookt vanavond. Genoteerd.
-      </Text>
-      <Text style={[typeScale.bodySmall, styles.centeredBody, { color: colors.textMuted }]}>
-        Er komt vanavond geen nieuwe suggestie meer.
-      </Text>
-      <DeclineReasonRow
-        selectedReason={declineReason}
-        onSelectReason={onSelectReason}
-        reduceMotionEnabled={reduceMotionEnabled}
-      />
     </View>
   );
 }

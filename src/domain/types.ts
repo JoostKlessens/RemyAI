@@ -96,22 +96,30 @@ export type ReasonCode =
  * scheduled function creating the row and a member responding to the push —
  * the spec's three user-facing outcomes (accepted/swapped/skipped) are only
  * ever reached from there.
+ *
+ * `'skipped'` CURRENTLY HAS NO WRITER. It was produced from exactly one
+ * place — Kiezen's "Niet koken" button — and that button was removed from
+ * the screen with nothing put in its place, because an evening you are
+ * not cooking is an evening you close the app. The consequence is written
+ * down here rather than left to be rediscovered from a puzzling metric: a
+ * refused evening now stays `'pending'` forever, byte-identical to an
+ * evening on which nobody opened the app at all, so plan §8's acceptance
+ * rate can no longer read "offered and refused" apart from "never seen".
+ * The member is kept, not pruned, because 0001_init.sql still declares
+ * the column and the scheduled decision function may yet need to write
+ * it — but nothing in this app produces it today.
  */
 export type DecisionStatus = 'pending' | 'accepted' | 'swapped' | 'skipped';
 
 /**
- * The three actions available on the 16:00 decision screen: "Ja" / "Iets
- * anders" / "Niet koken". Maps 1:1 onto the non-pending DecisionStatus
- * values.
+ * The actions the 16:00 decision screen can produce: "Ja" / "Iets anders".
+ * Maps 1:1 onto the non-pending DecisionStatus values, and `'decline'` is
+ * as vestigial as its `'skipped'` counterpart above — "Niet koken" is no
+ * longer on Kiezen, so nothing constructs it. Kept in step with
+ * DecisionStatus rather than pruned on its own, so the action vocabulary
+ * and the status vocabulary never disagree about what an outcome can be.
  */
 export type DecisionAction = 'accept' | 'request_alternative' | 'decline';
-
-/**
- * Optional, never-nudged-for reason offered after "Niet koken" (PD-002).
- * The decline itself is fully recorded via DecisionStatus regardless of
- * whether this is given — this is bonus signal, not a required field.
- */
-export type DeclineReason = 'afhalen' | 'restjes' | 'uit_eten';
 
 /** A restriction is either a taste preference or a health-relevant exclusion. */
 export type RestrictionType = 'dislike' | 'allergen';
@@ -445,7 +453,6 @@ export interface Decision {
   readonly reasonCode: ReasonCode;
   readonly reasonText: string;
   readonly status: DecisionStatus;
-  readonly declineReason: DeclineReason | null;
   readonly createdAt: IsoDateTimeString;
   readonly respondedAt: IsoDateTimeString | null;
 }

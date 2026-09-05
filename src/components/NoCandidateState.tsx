@@ -4,9 +4,8 @@
  * differentiated state:
  *  - `empty_rotation`: the honest first-run state (docs/DESIGN.md §1) — no
  *    onboarding to route to any more, since the library only grows through
- *    Plakken (pasting a link). One primary action, "Recept plakken", and no
- *    "Niet koken" — there's nothing to decline yet when nothing has ever
- *    been offered.
+ *    Plakken (pasting a link). One primary action, "Recept plakken", and
+ *    nothing beside it.
  *  - `all_excluded`: restrictions filtered everything — explained with
  *    exclusion framing, never "safety" framing, and offers Mijn recepten
  *    as an alternative.
@@ -17,8 +16,19 @@
  *    choice made ten seconds ago that a single tap undoes. So it leads
  *    with a primary `Filters wissen` and says plainly that the filter, not
  *    the library, is what came up empty.
- *  - `swaps_exhausted`: the PD-001 two exits (`Niet koken` / `Ik kies
- *    zelf`), with no dish to show because none remain.
+ *  - `swaps_exhausted`: one exit, `Ik kies zelf` to Mijn recepten, with
+ *    no dish to show because none remain.
+ *
+ * A KNOWN DIVERGENCE FROM PD-001, recorded rather than papered over. That
+ * decision asks for "exactly two exits" after swap exhaustion, `Niet
+ * koken` and `Ik kies zelf`. "Niet koken" was removed from Kiezen
+ * entirely and nothing replaced it, so `swaps_exhausted` and
+ * `all_excluded` each render a single button now. Inventing a second
+ * control to satisfy the count was the rejected alternative: a button
+ * that exists to make a document true is worse than one honest exit.
+ * Neither branch is a dead end — `Ik kies zelf` navigates to Mijn
+ * recepten and the tab bar sits under all of it — so the thing that is
+ * now out of date is PD-001's text, not this component.
  */
 
 import type { JSX } from 'react';
@@ -67,8 +77,6 @@ export interface NoCandidateStateProps {
    * for it, instead of silently shipping a dead-end state.
    */
   readonly onClearFilters: () => void;
-  /** Not rendered for empty_rotation — see the file header. */
-  readonly onDecline: () => void;
 }
 
 interface ReasonCopy {
@@ -77,7 +85,7 @@ interface ReasonCopy {
 }
 
 export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
-  const { reason, onOpenImport, onOpenRecipes, onClearFilters, onDecline } = props;
+  const { reason, onOpenImport, onOpenRecipes, onClearFilters } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const copy = getCopyForReason(reason);
@@ -125,7 +133,6 @@ export function NoCandidateState(props: NoCandidateStateProps): JSX.Element {
               onPress={onOpenRecipes}
               accessibilityLabel="Open Mijn recepten om zelf te kiezen"
             />
-            <Button label="Niet koken" variant="tertiary" onPress={onDecline} accessibilityLabel="Niet koken vanavond" />
           </>
         )}
       </View>

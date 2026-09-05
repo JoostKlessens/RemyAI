@@ -222,7 +222,6 @@ async function seedPreMirrorStore(
       reasonCode: 'not_recent',
       reasonText: 'Al even niet gemaakt.',
       status: 'accepted',
-      declineReason: null,
       createdAt: CREATED_AT,
       respondedAt: CREATED_AT,
     },

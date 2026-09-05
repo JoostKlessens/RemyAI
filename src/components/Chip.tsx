@@ -1,7 +1,8 @@
 /**
  * The single chip primitive: quick-pick grid items in Rotation Seeding,
- * dislike/allergen tags in Household setup, and the optional decline-reason
- * row on Vanavond (afhalen / restjes / uit eten). Selected state is
+ * dislike/allergen tags in Household setup, the time-cap and Waarmee?
+ * rows in Mijn recepten's search bar, and the mood row on the outcome
+ * card. Selected state is
  * conveyed by fill + border colour change only — deliberately no checkmark
  * icon, per docs/DESIGN.md ("the fill change alone must read as selected
  * from arm's length").
@@ -21,8 +22,9 @@ export interface ChipProps {
   readonly disabled?: boolean;
   readonly testID?: string;
   /**
-   * A8: single-select chip groups (e.g. `DeclineReasonRow`) must announce
-   * radio semantics, not checkbox — screen readers otherwise imply
+   * A8: single-select chip groups (e.g. `LibrarySearchBar`'s time-cap row,
+   * `OutcomeCard`'s mood row) must announce radio semantics, not checkbox
+   * — screen readers otherwise imply
    * "toggle any number of these," which is wrong for a `T | null` choice.
    * Defaults to 'checkbox', the correct role for every existing
    * multi-select usage (quick-pick grid, restriction tags).

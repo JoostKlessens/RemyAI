@@ -3,9 +3,18 @@
  * driven off `alternativesRemaining` from `DecisionResult`. At 0, the
  * affordance is replaced by "Ik kies zelf" — styled identically to the
  * secondary slot it replaces (never accent-filled, never the primary
- * path) so it reads as a clearly secondary escape hatch. "Niet koken" is
- * always present and always tertiary weight — a legitimate answer, not a
- * cancel action.
+ * path) so it reads as a clearly secondary escape hatch.
+ *
+ * TWO buttons, never three. A tertiary "Niet koken" used to sit under
+ * these and it is gone on purpose: an evening you are not cooking is an
+ * evening you close the app, so the button's whole effect was to replace
+ * the dish with a sentence saying the refusal had been noted. The
+ * rejected alternative was keeping the button and dropping only PD-002's
+ * optional reason chips behind it — that keeps the confirmation screen
+ * nobody asked for AND a third tap target competing with the two that
+ * actually go somewhere. If it ever comes back it needs a destination,
+ * not a slot; see this screen's route module for what removing it cost
+ * the `skipped` decision status.
  */
 
 import type { JSX } from 'react';
@@ -18,11 +27,10 @@ export interface VanavondActionRowProps {
   readonly onAccept: () => void;
   readonly onRequestAlternative: () => void;
   readonly onChooseSelf: () => void;
-  readonly onDecline: () => void;
 }
 
 export function VanavondActionRow(props: VanavondActionRowProps): JSX.Element {
-  const { alternativesRemaining, onAccept, onRequestAlternative, onChooseSelf, onDecline } = props;
+  const { alternativesRemaining, onAccept, onRequestAlternative, onChooseSelf } = props;
   const hasAlternativesLeft = alternativesRemaining > 0;
 
   return (
@@ -45,7 +53,6 @@ export function VanavondActionRow(props: VanavondActionRowProps): JSX.Element {
           accessibilityHint="Geen wissels meer beschikbaar vandaag"
         />
       )}
-      <Button label="Niet koken" variant="tertiary" onPress={onDecline} accessibilityLabel="Niet koken vanavond" />
     </View>
   );
 }

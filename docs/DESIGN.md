@@ -154,11 +154,23 @@ card anywhere carries a timestamp or a "nieuw" badge (§8).
 
 ## 1. Kiezen — the decision
 
-**Purpose**: the hero screen. One dish, one stated reason, three actions.
-No list, no scroll, no browse affordance — PD-001/PD-002 govern this
-screen unchanged. "Iets anders" caps at two swaps, then becomes "Ik kies
-zelf" (opens Mijn recepten). "Niet koken" is always legitimate, lowest
-visual weight, never a cancel action.
+**Purpose**: the hero screen. One dish, one stated reason, two actions.
+No list, no scroll, no browse affordance — PD-001 governs this screen.
+"Iets anders" caps at two swaps, then becomes "Ik kies zelf" (opens Mijn
+recepten).
+
+**"Niet koken" is gone from this screen, and nothing replaced it.** The
+reason menu behind it earned nothing: if you are not cooking tonight you
+close the app, and a screen confirming that you closed it is not a
+destination. This supersedes PD-002 outright, and it overrides the second
+half of PD-001's "exactly two exits after swap exhaustion" — that state
+now offers one exit, `Ik kies zelf`, with the tab bar still under it. No
+substitute control was invented to keep the count at two; a button that
+exists to make a document true is worse than one honest exit. The real
+cost is not the menu: `status: 'skipped'` now has no writer anywhere in
+the app, so a refused evening is stored identically to an evening nobody
+opened, and plan §8's acceptance rate loses its "offered and refused"
+reading. Getting it back needs a new writer, not this button.
 
 **Layout** (vertically centered as a group):
 1. `label` eyebrow "KIEZEN" — mono, `textMuted`, tracked, uppercase.
@@ -168,8 +180,8 @@ visual weight, never a cancel action.
    never "Aanbevolen voor jou".
 4. Meta row: `numeral` "25 min" · "voor 4" — mono, middot separator, no icons.
 5. Action row, inside the thumb zone: `Ja` (primary, accent fill) / `Iets
-   anders` or `Ik kies zelf` (secondary, outline) / `Niet koken` (tertiary,
-   text only, smallest weight).
+   anders` or `Ik kies zelf` (secondary, outline). Two buttons, never a
+   third.
 
 **States**:
 - *Loading*: eyebrow renders immediately; a calm `surfaceSunken` bar
@@ -178,12 +190,11 @@ visual weight, never a cancel action.
 - *Empty library* (nothing saved; no longer routes to onboarding, which is
   gone): `title1` "Nog niets om uit te kiezen", `bodySmall` "Plak een link
   en Remy kan morgen iets voorstellen.", one primary `Recept plakken` →
-  Plakken (§3). No "Niet koken" — nothing to decline yet.
+  Plakken (§3).
 - *Filtered/exhausted* (`all_excluded`/`swaps_exhausted` — a real rotation
-  exists but is filtered or swapped out): unchanged behavior — explain why,
-  offer `Kies zelf` → Mijn recepten, keep `Niet koken` available.
-- *Declined*: `title2` "Niet gekookt vanavond. Genoteerd.", optional
-  ignorable reason chips (afhalen/restjes/uit eten, PD-002) below.
+  exists but is filtered or swapped out): explain why, offer `Kies zelf` /
+  `Ik kies zelf` → Mijn recepten. One button — see **Purpose** above for
+  why PD-001's second exit is no longer rendered.
 - *Error*: `title2` "Kon geen suggestie ophalen", `bodySmall` detail, one
   `Opnieuw` (secondary).
 
@@ -211,7 +222,6 @@ never has to re-find the buttons. Reduced motion: instant cut throughout.
 │ ┌─────────────────────────────────┐│
 │ │          Iets anders            ││ surface + borderStrong
 │ └─────────────────────────────────┘│
-│            Niet koken              │ text only, textMuted
 └───────────────────────────────────┘
 ```
 

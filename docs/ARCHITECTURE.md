@@ -51,7 +51,7 @@ just something the UI happens to enforce.
 **Decisions can only be created by the server.** There is no client
 `INSERT` policy on `decisions` — only the scheduled Edge Function, using
 the service-role key, creates the day's row. A household can `UPDATE` its
-own decision (recording Ja/Iets anders/Niet koken) but can never fabricate
+own decision (recording Ja / Iets anders) but can never fabricate
 one. This matters because reason codes like `household_favourite` and
 `variety` are trust signals; letting a client insert its own would make
 them meaningless.
@@ -99,6 +99,26 @@ Two callers, one contract:
 
 ## How the 16:00 push works
 
+> ⚠ **Superseded on 5 September 2026. This section describes a scheduled Edge Function that
+> cannot be written against this database, and the reason is recorded here rather than in a
+> commit nobody will find.** `DecisionRequest` needs the household, its members, their
+> restrictions, the week's saves and the recent decisions — and
+> `src/lib/repository/mirror/types.ts` states that "Saves, decisions, members and restrictions
+> stay local", because nothing outside a household reads them and `member_restrictions` is
+> GDPR Article 9 health data "whose blast radius is not worth widening for a feature that does
+> not want it". Postgres holds meals and cook events; what the engine actually decides on never
+> leaves the phone. A server would therefore have to be handed a household's allergens in order
+> to tell that household what is for dinner.
+>
+> What shipped instead is a LOCAL daily notification scheduled by the device
+> (`src/lib/decisionNotification.ts`, `src/domain/decisionNotificationCopy.ts`). Nothing leaves
+> the phone, it works offline, and it needs no cron, no build and no cost. It cannot name
+> tonight's dish — a local notification is armed ahead of the decision — so it says a
+> suggestion is waiting and stops there. The text below is kept as the argument for the
+> per-household timezone columns, which the local scheduler still reads.
+
+
+
 1. **Schedule**: a Supabase scheduled Edge Function (`pg_cron` → `net.http_post`,
    or the Supabase Scheduled Functions UI) runs frequently — every 15
    minutes is the assumed granularity — not once a day at a fixed UTC time.
@@ -123,7 +143,7 @@ Two callers, one contract:
    `decisions.id`, so tapping it opens straight to that day's Vanavond
    screen. `push_tokens.last_seen_at` lets a future cleanup job prune
    stale tokens (Expo's receipt API reports "DeviceNotRegistered").
-6. **Respond**: when a member taps Ja / Iets anders / Niet koken, the app
+6. **Respond**: when a member taps Ja / Iets anders, the app
    `UPDATE`s the `decisions` row directly (status + `responded_at`) under
    the client's own RLS policy — no Edge Function round-trip needed for
    the simple case. "Iets anders" additionally calls the Edge Function
@@ -133,7 +153,7 @@ Two callers, one contract:
 ## Alignment with docs/PRODUCT-DECISIONS.md
 
 Discovered mid-build (binding, written by the product manager). Three gaps
-closed rather than silently left: `decisions.decline_reason` (PD-002's
+closed rather than silently left: ~~`decisions.decline_reason`~~ (PD-002's
 optional `afhalen`/`restjes`/`uit eten` chip row — never required, decline
 itself is fully captured by `status = 'skipped'` regardless), an explicit-
 consent gate for allergen data, `household_members.health_data_consent_at`

@@ -214,7 +214,6 @@ function legacyStoreContents(): Readonly<Record<string, readonly Row[]>> {
         reasonCode: 'quick_weeknight',
         reasonText: 'Snel op een doordeweekse avond.',
         status: 'accepted',
-        declineReason: null,
         createdAt: '2026-08-10T14:00:00.000Z',
         respondedAt: '2026-08-10T16:00:00.000Z',
       },

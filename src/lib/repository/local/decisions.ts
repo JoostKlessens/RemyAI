@@ -1,6 +1,9 @@
 /**
- * Decision reads/writes — "decision responses" (accept/decline/swap) and
- * PD-003's outcome-pending lookup.
+ * Decision reads/writes — "decision responses" (accept, and the swap that
+ * advances the offer) and PD-003's outcome-pending lookup.
+ * `respondToDecision` still takes 'skipped' as well, but nothing calls it
+ * that way since "Niet koken" left Kiezen — see RespondToDecisionInput in
+ * ../types.ts for why the seam keeps it anyway.
  *
  * `createDecision` is an upsert-by-date on purpose: (householdId,
  * decisionDate) is unique in supabase/migrations/0001_init.sql, and React
@@ -10,7 +13,7 @@
  * safe to call more than once.
  */
 
-import type { Decision, DecisionId, DeclineReason, HouseholdId, IsoDateString } from '@/domain/types';
+import type { Decision, DecisionId, HouseholdId, IsoDateString } from '@/domain/types';
 import type { CreateDecisionInput, RespondToDecisionInput } from '../types';
 import { generateLocalId } from '../id';
 import { nowIso } from '../clock';
@@ -52,7 +55,6 @@ export async function createDecision(tables: RepositoryTables, input: CreateDeci
     reasonCode: input.reasonCode,
     reasonText: input.reasonText,
     status: 'pending',
-    declineReason: null,
     createdAt: nowIso(),
     respondedAt: null,
   };
@@ -110,14 +112,6 @@ export async function respondToDecision(
     status: input.status,
     respondedAt: nowIso(),
   }));
-}
-
-export async function setDecisionDeclineReason(
-  tables: RepositoryTables,
-  decisionId: DecisionId,
-  declineReason: DeclineReason,
-): Promise<Decision> {
-  return updateDecision(tables, decisionId, (decision) => ({ ...decision, declineReason }));
 }
 
 /** PD-003: the most recent accepted decision with no recorded outcome yet — a left join from decisions to cook_events on decisionId, same as the migration's own comment describes. */
