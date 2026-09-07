@@ -4,19 +4,39 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 7 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`741bb38` gepusht, **en de werkboom is voor het eerst in dagen schoon.** De
-sessies van 6 en 7 september staan erin: 143 bestanden, drie migraties
-(`0015`, `0016`, `0017`) en negen hernoemingen. Vier checks groen:
-**3125 tests over 130 bestanden**.
+`fd8ece0` gecommit. De sessies van 6 en 7 september staan in de geschiedenis:
+143 bestanden, drie migraties (`0015`, `0016`, `0017`) en negen hernoemingen.
 
-Twee waarschuwingen die hier dagenlang stonden zijn opgelost en blijven
-alleen als aantekening staan. **`.gitignore` kent nu wel een `.claude/`-regel**
-(`e5532fc`) — daar staan agent-worktrees, dus zonder die regel commit een
-`git add -A` hele kopieën van de repo in de repo; `git status` had er meer
-dan twee minuten voor nodig en liep in een timeout. En **`research/` is niet
-untracked**, wat hier eerder wél stond: drie van de vier bestanden zijn
-gewoon gecommit, en `13-legal-tos.md` staat bewust in `.gitignore` met de
-reden erbij.
+**De werkboom is schoon.** De vier pakketten uit de toestelronde van
+7 september 's avonds staan in vier eigen commits — `a8d686a` (LIB-09),
+`1a49630` (LIB-10), `4dc32d4` (GAP-35/36) en `fd8ece0` (GAP-37) — en elk van
+de vier is apart groen geverifieerd, met de rest van de boom opzij gezet, in
+plaats van alleen samen. Zie *Wat er op 7 september 's avonds gebeurde*. Vier
+checks groen: **3137 tests over 130 bestanden**.
+
+⚠ **Er ging één commit aan vooraf die niets doet en die je moet kennen
+voordat je `git log` leest**: `84e0125` normaliseert de regeleindes van
+`(tabs)/index.tsx` en verder niets. Dat bestand was het enige in de repo
+waarvan de blob CRLF droeg, en met `core.autocrlf=true` normaliseert de
+clean-filter hem bij het eerstvolgende stagen — 783 regels ruis om 50 regels
+inhoud te dragen. Deze commit betaalt dat één keer, apart, zodat de diff van
+GAP-35/36 leesbaar is. De inhoud is byte voor byte gelijk aan zijn voorganger:
+784 bytes eraf, precies de 784 CR-karakters.
+
+Twee waarschuwingen die hier dagenlang stonden zijn opgelost. **`.gitignore`
+kent nu een `.claude/`-regel** (`e5532fc`), en **de drie agent-worktrees zijn
+op 7 september verwijderd**: `.claude` ging van 1,4 GB naar 4 KB. Vóór het
+verwijderen is per worktree nagegaan of zijn toegevoegde regels in main staan
+— 101 van 101, 196 van 196, 246 van 246, overal volledig — en de twee
+schijnbare uitzonderingen bleken opmaak en een hernoemd bestand
+(`_trendingSource.ts` leeft als `src/lib/trendingSource.ts`). De drie
+`worktree-agent-*`-branches zijn ook weg; alle drie waren voorouders van HEAD.
+⚠ Op Windows weigeren zulke mappen met *"Filename too long"*: spiegel er een
+lege map overheen met `robocopy <leeg> <doel> /MIR`, dan gaat het wel.
+
+En **`research/` is niet untracked**, wat hier eerder wél stond: drie van de
+vier bestanden zijn gewoon gecommit, en `13-legal-tos.md` staat bewust in
+`.gitignore` met de reden erbij.
 
 De secties hieronder over 4 t/m 7 september staan er niet als logboek maar
 omdat elke bevinding erin een *patroon* is dat zich herhaalt.
@@ -81,7 +101,7 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 3125 tests / 130 bestanden
+npm test                 3137 tests / 130 bestanden
 ```
 
 ⚠ **`check:functions` groen betekent minder dan het lijkt**, en dat is op
@@ -480,20 +500,104 @@ sessie.
 
 ---
 
+## Wat er op 7 september 's avonds gebeurde
+
+De eigenaar keek voor de tweede keer op een toestel en kwam met zeven punten
+terug. Vier agents hebben ze parallel gebouwd, met strikt gescheiden
+bestandslijsten. **Alle vier staan inmiddels in een eigen commit**
+(`a8d686a`, `1a49630`, `4dc32d4`, `fd8ece0`), elk apart groen geverifieerd.
+
+**Twee van de vier corrigeerden de opdracht op een meting, en dat is de reden
+dat zij het werk deden en niet de planner.**
+
+**De badge (`libraryTileBadge.ts`, `RecipeTile.tsx`).** De eigenaar las het
+vinkje rechtsboven als "dit wil ik ooit koken" terwijl het "al gekookt"
+betekent — de omgekeerde betekenis, op de ene toestand waar fout zijn bepaalt
+wat een huishouden vanavond eet. Het plan was de badge te splitsen in planning
+plus een apart kookmerk. **Dat bleek onmogelijk en het bewijs staat in de
+code**: `resolveRecipeSchedulingState` leest kookgebeurtenissen eerst, dus
+`al_gekookt` sluit de andere drie uit en de vier toestanden zijn *al* precies
+de vraag "heb ik dit gekookt". Een tweede merk zou op drie van de vier per
+definitie afwezig zijn. Twee merken eerlijk maken vraagt een verbreding van
+`RecipeSchedulingInfo` — een type dat 22 modules importeren, inclusief het
+bibliotheekfilter, de sortering, de zoekindex en de vriendenfeed. Dat is een
+domeinwijziging vermomd als badge-herontwerp. Uitkomst: `al_gekookt` wordt een
+**koksmuts** (`chef-hat`), een keukenobject in plaats van een afvinkobject;
+`deze_week` houdt de kalender; `ooit` blijft bewust het wóórd, want elk
+icoonalternatief liegt (`bookmark` is waar voor alle vier, `calendar-blank` is
+op 14pt niet van de kalender te onderscheiden, `clock` betekent op ditzelfde
+scherm al iets anders).
+
+**De filters (`LibrarySearchBar.tsx`, `libraryFilterCopy.ts`).** De eigenaar
+vroeg `Wanneer?` weg én drie zinnen later om een geavanceerd filter "of je het
+al gekookt hebt". **Dat is dezelfde as** — `al_gekookt` is één van de vier
+waarden erin. Er is dus niets nieuws gebouwd; `Wanneer?` en `Welke gang?`
+staan achter een `Geavanceerd`-opening met een teller erop, en een tweede
+control voor dezelfde vraag is vermeden. Die zou hier niet eens een leeg
+raster hebben gegeven maar de filters stilletjes verbreed, want
+`filterRowsBySchedulingStates` OF't deze as. `Waar heb je zin in?` is in de
+gewone balk gebleven — een keuze van de agent, met de reden opgeschreven.
+Gemeten: 191pt dicht, 246pt open, tegen 194pt eerder.
+
+**De Kiezen-kaart (`DecisionCard.tsx`, `(tabs)/index.tsx`).** De
+hoofdingrediënten zijn weg omdat ze niet klopten — geen renderfout maar de
+gok die `mainIngredients.ts` zelf aankondigt, en een plausibel ogende
+onwaarheid is het duurst op het ene scherm dat één keer geloofd moet worden.
+De kooktijd staat nu boven de foto met dezelfde klok als `TimeCapPicker`. En
+er kwam een bug uit die niemand gevraagd had: `Ja`/`Iets anders` werd omhoog
+gehouden door een **dubbel gerekende inset** — Kiezen telde `insets.bottom` op
+bij zijn padding terwijl de tabbalk die al verrekent, zo'n 34pt lege
+achtergrond, en dit was het enige van de vier tabschermen dat het deed.
+
+⚠ **`src/domain/mainIngredients.ts` heeft nu nul productie-aanroepers.** De
+module en zijn tests staan er bewust nog; weggooien is een aparte beslissing.
+
+**De chip (`Chip.tsx`, `IconChip.tsx`).** Het glyph zit nu ín de pil. Dat was
+een schuld die `IconChip` zelf had opgeschreven ("changing `Chip` is one
+small, correct edit that belongs to whoever ships GAP-19"). `Chip` kreeg een
+optionele `icon`-prop; de layout verandert alleen wanneer er echt een glyph
+is, dus een chip zonder icoon houdt zijn breedte byte voor byte — daarom paste
+dit in twee bestanden en bleven de zes aanroepplekken onaangeraakt. `IconChip`
+is een doorgeefluik geworden en blijft bestaan om één reden: zijn `icon` is
+verplicht waar die van `Chip` optioneel is, dus een rij die geïllustreerd
+hoort te zijn kan zijn glyph niet stil verliezen in een refactor.
+
+**Wat GEEN van de vier kon vaststellen: hoe het eruitziet.** Geen agent heeft
+een toestel. Optische uitlijning van een glyph naast een woord, of een
+koksmuts op 14pt als "al gekookt" leest, of 34pt genoeg is — dat zijn alle
+drie toestelvragen. De koksmuts is de zwakste schakel en is als zodanig
+gemarkeerd.
+
+---
+
 ## Wat er nu open ligt
 
 Op volgorde, en de eerste twee zijn van een andere soort dan de rest: die
 kosten geen code maar een handeling van de eigenaar.
 
-1. ~~**De boom committen.**~~ **Gedaan op 7 september** — `741bb38`, met
-   `e5532fc` voor de `.gitignore`-regel ervoor. Het stond hier als eerste
-   punt omdat een agent die op een vuile boom begint zijn eigen wijziging
-   niet van de jouwe kan onderscheiden; dat geldt nog steeds, dus houd hem
-   schoon vóór de volgende ronde. Eén ding was niet te splitsen en is het
-   vermelden waard: de nieuwe bestanden van 6 en 7 september stonden nog
-   nergens in git en het receptscherm importeert modules van 7 september, dus
-   elke knip leverde een commit op die niet compileert. Het is daarom één
-   commit van 143 bestanden geworden.
+1. ~~**De vier pakketten van de toestelronde committen.**~~ **Gedaan op
+   7 september**, en de voorspelling in dit blok klopte: de vier
+   bestandslijsten raakten elkaar niet, dus het werden vier commits en geen
+   één. Wat de vorige ronde tot één commit van 143 bestanden dwong — nieuwe
+   bestanden die nog nergens in git stonden, en een receptscherm dat modules
+   van diezelfde dag importeerde — speelde hier niet.
+
+   **Wat het opleverde en wat de volgende ronde ervan mag overnemen:** elk
+   pakket is apart groen gemeten in plaats van alleen samen, door de rest van
+   de boom met `git stash push --keep-index` opzij te zetten en de vier checks
+   op de gestagede inhoud alleen te draaien. Dat is hetzelfde onderscheid dat
+   de worktrees van 5 september maakten — "mijn wijziging is groen" tegen "de
+   boom is groen" — voor een fractie van de kosten, en het is de goedkope
+   versie zolang de pakketten disjunct zijn.
+
+   De enige verrassing zat in de regeleindes, en die is de moeite waard: de
+   767 regels ruis op `(tabs)/index.tsx` waren **niet** het werk van een agent
+   die het bestand in tekstmodus had geschreven, zoals dit document op
+   4 september vermoedde. Ze kwamen uit `core.autocrlf=true` plus een blob die
+   als enige in de repo CRLF droeg. Dat is dus geen agentfout maar een
+   repo-eigenschap, en hij komt terug zodra een ander bestand ooit met CRLF in
+   git belandt. `git diff --numstat` naast `git diff --numstat
+   --ignore-cr-at-eol` maakt het in één blik zichtbaar.
 
 2. ~~**`npx supabase db push` draaien.**~~ **Gedaan door de eigenaar op
    7 september, en de tool bood hem alleen `0017` aan** — `0015` en `0016`
@@ -502,7 +606,17 @@ kosten geen code maar een handeling van de eigenaar.
    en het gerechttype zijn daarmee te testen. Zie *Wat er draait* voor waarom
    deze regel drie keer op rij onwaar is geweest.
 
-3. **De app op een toestel doorlopen, en dit blijft punt één met stip.**
+3. **De app op een toestel doorlopen, en dit blijft punt één met stip** — nu
+   met zeven verse dingen erbij die niemand heeft gezien. In volgorde van
+   twijfel: de **koksmuts** op `al_gekookt` (leest die als "al gekookt" op
+   14pt, of als "recept"?), de **glyphs in de chips** (een glyph vult zijn
+   hele em-vak waar een letter alleen zijn kaphoogte vult, dus hij oogt snel
+   zwaar — en de schijnbare afstand tot het woord ging van 24pt naar 8pt), de
+   **twee zelfgetekende glyphs** (melkpak en peul, alleen als geometrie
+   geverifieerd en nooit door react-native-svg gerenderd), of
+   `react-native-svg` **in Expo Go** doet wat het SDK-manifest belooft, de
+   **34pt** die `Ja`/`Iets anders` zakten, de **`Geavanceerd`-opening**, en de
+   kooktijd met klok boven de foto.
    Alles wat op 4 t/m 7 september gebouwd is, is precies het soort dat geen
    enkele test kan zien. Vier checks groen betekent hier alleen dat niets
    kapot is.
@@ -554,7 +668,7 @@ kosten geen code maar een handeling van de eigenaar.
    ligt is een oordeel en geen werk.** De seam draagt twee families, alle
    zeventien mappings staan aan, en `isIconAvailable` is van vijftien van de
    drieëndertig naar drieëndertig van de drieëndertig gegaan. Vier checks
-   groen, 3125 tests. Wat hieronder stond als opdracht staat er nu als
+   groen, 3137 tests. Wat hieronder stond als opdracht staat er nu als
    verantwoording; lees het door vóór je aan de mappings tornt.
 
    **Wat er veranderde, en waar.** `iconFont.ts` geeft geen kale glyphnaam
@@ -576,8 +690,12 @@ kosten geen code maar een handeling van de eigenaar.
    | MaterialCommunityIcons | **1277,0 KB** | **212,4 KB** |
 
    Dat is 1,25 MB fontasset plus 212 KB JSON die bij het starten in de
-   JS-bundle geparsed wordt, voor achttien glyphs van de 7448 — 0,24% van de
-   glyphs voor 100% van het gewicht. **Dit is de enige echte prijs van deze
+   JS-bundle geparsed wordt, voor **28** glyphs van de 7448 — 0,38% van de
+   glyphs voor 100% van het gewicht. ⚠ Hier stond "achttien" en "0,24%", en
+   dat was al onwaar toen het geschreven werd: de ingrediëntcategorieën
+   voegden er diezelfde dag negen toe en niemand hertelde. Een agent vond het
+   op 7 september 's avonds en herrekende het in plaats van op te hogen. Zelfde
+   fout als de migratiestand hierboven, in hetzelfde document, op dezelfde dag. **Dit is de enige echte prijs van deze
    route en hij is niet weggeschreven.** De goedkopere weg bestaat en is
    bewust níét genomen: `createIconSet` neemt een eigen glyphmap, dus die
    achttien codepoints kunnen tegen dezelfde `.ttf` die het pakket al
@@ -770,7 +888,18 @@ de naamkwestie rond `remyapp.io` die WS1 opwerpt.
 
 ## Drie schulden die nergens anders staan
 
-**`DESIGN.md` is ouder dan het onderzoek dat hem tegenspreekt** (GAP-13).
+**`DESIGN.md` is ouder dan het onderzoek dat hem tegenspreekt** (GAP-13), **en
+sinds 7 september 's avonds ook ouder dan de code.** Vier concrete plekken,
+door een agent gevonden en niet aangeraakt omdat het bestand niet van hem was:
+`:181` zegt dat de meta-rij `"25 min" · "voor 4"` in mono toont met "**no
+icons**" — er staat nu één feit met een klok ervoor; `:206` zegt "the action
+row never moves", wat in de code al is verzacht naar "beweegt niet bij een
+wissel"; `:209-221` tekent de oude volgorde nog als ASCII; en
+`ui-research/WS5-motion-feedback-cook-mode.md:307-308` citeert diezelfde
+"never moves"-zin. Wie de Kiezen-kaart aanraakt leze eerst dit blok, want
+`DESIGN.md` wordt uit tientallen bestanden als gezag aangehaald.
+
+
 `ui-research/ASSEMBLY.md` zegt te noteren wat het onderzoek "factually
 wrong" vond in de staande documenten. `DESIGN-SOCIAL.md` is bij de makeover
 bijgewerkt; `DESIGN.md` (27 aug), `PRODUCT-DECISIONS.md` (27 aug) en
