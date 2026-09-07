@@ -440,7 +440,27 @@ export default function AddFriendScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {/* OUTSIDE THE SCROLLVIEW, which is the entire point of this row's
+          position. It used to be the first child of the scrolling content
+          below, so the exit scrolled away with everything else: on a screen
+          that carries your own handle, an input, a button, a message and
+          three lists — and whose lists are re-read and re-rendered after
+          every accept or decline — the way back sat wherever the reader
+          happened to have left the scroll offset. Every other pushed route
+          in this app draws its exit in exactly this shape, a fixed
+          `styles.header` row directly under the SafeAreaView and above
+          whatever scrolls (recipe/[mealId].tsx and import/paste.tsx are the
+          two copied here, down to the header's smaller horizontal inset);
+          this screen was the only one that did not.
+
+          A MOVE AND NOT A REDESIGN. The word, the accessibility label and
+          the type styling are carried over untouched. `typeScale.button` in
+          `textSecondary` here, against `bodySmall` in `textMuted` on all
+          eight of the other screens that draw a back row out of text, is a
+          genuine inconsistency — but reconciling it is a decision about
+          every back-word in the app across three copy modules, not a side
+          effect of moving one View. */}
+      <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
@@ -449,7 +469,9 @@ export default function AddFriendScreen(): JSX.Element {
         >
           <Text style={[typeScale.button, { color: colors.textSecondary }]}>{ADD_FRIEND_BACK_LABEL}</Text>
         </Pressable>
+      </View>
 
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={[typeScale.title2, styles.title, { color: colors.textPrimary }]}>{ADD_FRIEND_TITLE}</Text>
         <Text style={[typeScale.bodySmall, styles.intro, { color: colors.textMuted }]}>{ADD_FRIEND_INTRO}</Text>
 
@@ -662,10 +684,25 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space3,
     paddingBottom: spacing.space10,
   },
+  header: {
+    // recipe/[mealId].tsx's and import/paste.tsx's `header`, to the pixel.
+    // The smaller horizontal inset than `content` below is theirs too: it
+    // lets the tap target reach further towards the edge of the screen than
+    // the text column does, without moving the text column.
+    flexDirection: 'row',
+    paddingHorizontal: spacing.space3,
+    paddingTop: spacing.space2,
+  },
   back: {
+    // `minWidth` as well as `minHeight` now, matching the two models: the
+    // label is short enough that the 44pt floor is doing real work on the
+    // horizontal axis too. `alignSelf: 'flex-start'` went with the move
+    // — it was there to stop this Pressable stretching the full width of
+    // the ScrollView's column, and a `flexDirection: 'row'` header stretches
+    // nothing horizontally.
     minHeight: spacing.touchTargetMin,
+    minWidth: spacing.touchTargetMin,
     justifyContent: 'center',
-    alignSelf: 'flex-start',
   },
   title: {
     marginTop: spacing.space2,

@@ -501,6 +501,37 @@ export default function CookModeScreen(): JSX.Element {
       <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
         <View style={styles.emptyState}>
           <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Laden…</Text>
+          {/* THE LAST BRANCH OF THIS SCREEN WITH NO WAY OUT. Why an exit has
+              to be drawn at all is already argued at the progress header
+              further down this file: this route is
+              `presentation: 'fullScreenModal'` and such a modal has no
+              swipe-to-dismiss, so a branch that renders no control renders no
+              door. That argument is not re-derived here; it holds for this
+              branch unchanged.
+
+              What is specific to THIS branch is that it can also never end.
+              `loadMealData` sets up no timeout and `setLoadState('error')`
+              runs only from that promise's `.catch`, so a read that hangs
+              instead of rejecting never becomes the error state below — it
+              stays here. The error, no-steps and no-current-step branches all
+              already answer their own dead end this way; this one was simply
+              skipped, presumably because "laden" reads as temporary.
+
+              `Terug`, NOT `Stoppen`. `Stoppen` is this screen's word for a
+              cook that is underway: it stands beside the step counter and its
+              hint promises "Er wordt niets opgeslagen", a reassurance that
+              only means something once there is progress that could have been
+              lost. Nothing is underway here — the steps have not arrived —
+              so `Stoppen` would name a thing that is not happening. The
+              three sibling branches below all say `Terug` under this same
+              accessibility label, and matching them keeps this screen at two
+              words rather than inventing a third. */}
+          <Button
+            label="Terug"
+            variant="secondary"
+            onPress={() => router.back()}
+            accessibilityLabel="Terug naar Kiezen"
+          />
         </View>
       </SafeAreaView>
     );
