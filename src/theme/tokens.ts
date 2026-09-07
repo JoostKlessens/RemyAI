@@ -102,9 +102,10 @@ export interface ColorTokens {
   /**
    * The marking-green accent — a flat, saturated kelly green, like the
    * grease-pencil circle an editor draws around the take that's getting
-   * used. Reserved for the single moment a choice is being made: the "Ja"
-   * button on Kiezen, a selected allergen chip on Bevestigen. Never used
-   * as decoration or for more than one element at a time.
+   * used. Reserved for the single moment a choice is being made: Kiezen's
+   * accept button ("Dit koken" since 7 September 2026, "Ja" before it), a
+   * selected allergen chip on Bevestigen. Never used as decoration or for
+   * more than one element at a time.
    *
    * OF THE TWO GREENS IN THIS FILE THIS IS ALWAYS THE BRIGHTER AND THE MORE
    * SATURATED ONE, IN BOTH SCHEMES. That is the rule that keeps it apart
@@ -601,8 +602,21 @@ export interface SpacingTokens {
   readonly screenPaddingHorizontal: number;
   /**
    * Height reserved along the bottom edge (above the safe-area inset) for
-   * primary actions — the Kiezen `Ja` / `Iets anders` / `Niet koken` row
-   * must fit inside this band so it sits in thumb reach.
+   * primary actions, so they sit in thumb reach.
+   *
+   * IT NAMED A ROW THAT NO LONGER EXISTS. This used to read "the Kiezen
+   * `Ja` / `Iets anders` / `Niet koken` row must fit inside this band":
+   * `Niet koken` was removed (see (tabs)/index.tsx), `Ja` became `Dit
+   * koken` on 7 September 2026, and on that same day the two survivors
+   * stopped being stacked and became two halves of ONE line — so the band
+   * that row needs is a single button tall now, not two.
+   *
+   * AND NOTHING READS THIS TOKEN. `grep thumbZoneMinHeight` finds only the
+   * declaration here and the value below; Kiezen's `actionZone` is sized
+   * by its own padding, with `heroBlock` taking the slack. So "must fit"
+   * described a constraint nothing was checking. Kept rather than deleted,
+   * because 96 is a measured floor worth having the day a screen wants to
+   * assert it — but stated honestly, so nobody reads it as live.
    */
   readonly thumbZoneMinHeight: number;
   /** Minimum touch target size (WCAG 2.5.5 / iOS HIG), in points. */

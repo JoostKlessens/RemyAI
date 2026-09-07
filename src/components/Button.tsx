@@ -1,13 +1,39 @@
 /**
  * The single button primitive used everywhere in Remy. Four variants map
  * directly onto the token system's visual hierarchy — see docs/DESIGN.md:
- * `primary` (accent fill, e.g. Vanavond "Ja"), `secondary` (surface +
- * border, e.g. "Iets anders"), `tertiary` (text only, lowest visual
- * weight, e.g. "Niet koken"), `positive` (moss fill, reserved for
- * completion moments like Cook Mode's "Klaar" or the outcome card).
+ * `primary` (accent fill, e.g. Vanavond's "Dit koken" — that button
+ * read "Ja" until 7 September 2026, see vanavondActionCopy.ts),
+ * `secondary` (surface + border, e.g. "Iets anders"), `tertiary` (text
+ * only, lowest visual weight, e.g. "Niet koken"), `positive` (moss fill,
+ * reserved for completion moments like Cook Mode's "Klaar" or the
+ * outcome card).
  *
  * Press feedback is a shared micro-interaction (durationInstant scale to
  * 0.98), honouring reduce-motion via `resolveDuration`.
+ *
+ * =========================================================================
+ * THIS BUTTON IS NOT FLEX-ABLE, AND A ROW OF THEM NEEDS WRAPPERS
+ * =========================================================================
+ *
+ * The `Animated.View` below carries no style but its press transform, and
+ * the `Pressable` inside it sets `width: '100%'`. In a COLUMN that is
+ * correct and invisible: Yoga's default `alignItems: 'stretch'` gives the
+ * `Animated.View` the parent's full width, so `100%` resolves against a
+ * real number. In a `flexDirection: 'row'` parent it silently does not —
+ * a row child with no `flex` sizes to its own CONTENT, so `100%` resolves
+ * against a box the label just defined, and two buttons come out at two
+ * different widths rather than as two halves.
+ *
+ * `VanavondActionRow` is the only horizontal row of these in the app and
+ * it wraps each button in its own `<View style={{ flex: 1 }}>` for exactly
+ * this reason — that wrapper has a definite width, so the chain resolves.
+ *
+ * THE REJECTED ALTERNATIVE WAS A `style` OR `flex` PROP HERE. It is one
+ * line and it is the wrong line: 27 files import this component across 66
+ * call sites (both measured 7 September 2026), and a style escape hatch on
+ * a primitive that widely used is how a design system stops being one —
+ * the next caller passes a colour through it. The wrapper costs one `View`
+ * at the single site that needs it and changes nothing for the other 65.
  */
 
 import { useRef, useState, type JSX } from 'react';

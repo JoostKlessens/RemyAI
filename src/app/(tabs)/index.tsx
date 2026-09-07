@@ -40,8 +40,11 @@
  * was to trade tonight's dish for a screen saying the refusal had been
  * noted. The rejected alternative was keeping the button and dropping
  * only the chips, which leaves a tertiary control whose destination is a
- * sentence. What remains is `Ja`, `Iets anders`, and — once the two
- * swaps are spent — `Ik kies zelf`.
+ * sentence. What remains is `Dit koken`, `Iets anders`, and — once the
+ * two swaps are spent — `Ik kies zelf`. The first two sit SIDE BY SIDE
+ * as of 7 September 2026 and the accept label read `Ja` until that same
+ * day; both are argued in src/components/vanavondActionCopy.ts, and the
+ * 64 pt that stacking cost went to DecisionCard's photo.
  *
  * THE COST, written here because it is invisible from the screen.
  * `handleDecline` was the ONLY writer of `status: 'skipped'` anywhere in
@@ -174,7 +177,7 @@ type ScreenPhase = 'loading' | 'error' | 'ready';
 const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
 
 /**
- * How long "Ja" holds the screen before Kookmodus takes over.
+ * How long "Dit koken" holds the screen before Kookmodus takes over.
  *
  * DecisionCard draws its accent stroke over `motion.durationFast`
  * (150ms), and this used to wait exactly `motion.durationFast` too — so
@@ -367,6 +370,9 @@ export default function VanavondScreen(): JSX.Element {
   const [pendingCookEventId, setPendingCookEventId] = useState<CookEventId | null>(null);
   // docs/DESIGN.md §1: "on Ja, a hairline accent stroke draws under the
   // dish name ... before navigating" — the grease-pencil circle landing.
+  // Quoted as that document still words it. The button has read `Dit
+  // koken` since 7 September 2026 (src/components/vanavondActionCopy.ts)
+  // and DESIGN.md has not caught up; the stroke itself is unchanged.
   // Navigation is deliberately delayed by that same duration so the stroke
   // is actually visible; reduced motion collapses the delay to 0 via
   // resolveDuration, same as the stroke animation itself.
@@ -623,6 +629,27 @@ export default function VanavondScreen(): JSX.Element {
         visible={(showOutcomeOverlay || outcomeSend.sheetVisible) && pendingOutcomeMeal !== null}
         transparent
         animationType="fade"
+        // Android's hardware back button. Until 7 September 2026 this was
+        // the ONE `<Modal>` in the app without a handler for it — the other
+        // five (CookSharingAskSheet, LibraryTileActionSheet,
+        // PortionScalingSheet, SaveIntentSheet, SendRecipeSheet) all pass
+        // one — so the outcome card was the single surface in Remy where
+        // back did nothing. The owner asked for the general version: "ik zie
+        // ook dat er nu geen terug naar vorige pagina knop is in elk menu,
+        // dat lijkt me wel handig."
+        //
+        // It closes the CARD, and deliberately not `outcomeSend.onDismiss`:
+        // that only sets `sheetVisible` false (src/lib/useOutcomeSend.ts),
+        // so with the card up and the sheet down it would run, change
+        // nothing visible, and leave back looking broken rather than
+        // missing. This is the same call `OutcomeCard`'s own `onDismiss`
+        // prop makes below, so the hardware button and the card's own
+        // dismiss control are one behaviour instead of two.
+        //
+        // The send sheet needs nothing here: it is a NESTED `<Modal>`, so
+        // while it is up Android delivers the press to it, and it already
+        // maps that to `onDismiss` — sheet first, card second.
+        onRequestClose={() => setShowOutcomeOverlay(false)}
       >
         {pendingOutcomeMeal !== null ? (
           <>
@@ -661,7 +688,7 @@ interface SuggestionViewProps {
   readonly result: Extract<DecisionResult, { kind: 'suggestion' }>;
   readonly meal: Meal | undefined;
   readonly reduceMotionEnabled: boolean;
-  /** True the instant "Ja" is tapped, until navigation to Kookmodus — drives DecisionCard's accept stroke (docs/DESIGN.md §1). */
+  /** True the instant "Dit koken" is tapped, until navigation to Kookmodus — drives DecisionCard's accept stroke (docs/DESIGN.md §1). */
   readonly accepted: boolean;
   readonly onAccept: () => void;
   readonly onRequestAlternative: () => void;

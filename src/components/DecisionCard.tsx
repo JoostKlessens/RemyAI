@@ -1,7 +1,8 @@
 /**
- * The Kiezen hero: eyebrow, dish name, how long it takes, and the dish's own
- * photo. The single most important visual in the product — docs/DESIGN.md
- * §1.
+ * The Kiezen hero: dish name, how long it takes, and the dish's own photo.
+ * The single most important visual in the product — docs/DESIGN.md §1. It
+ * led with a `KIEZEN` eyebrow until 7 September 2026; see below for
+ * where that line went and what its height bought.
  *
  * THE OWNER'S INSTRUCTION, VERBATIM, 6 SEPTEMBER 2026: "Ik denk dat het voor
  * het kiezen goed is als je ook de foto van het recept hebt, kijk even waar
@@ -91,11 +92,17 @@
  * So the surviving half is expressed in the LAYOUT rather than as a ban: the
  * photo sits UNDER the dish name and not above it — with the cook time
  * between the two since 7 September, see below — so the name is still the
- * first and largest thing on the screen (see A6 below), and it is
- * deliberately small — `PHOTO_WIDTH` is the 80 pt frame `FriendProofCard`
- * already uses, at the same 9:16 a short-form video still actually is.
- * "Niet te groot" is the owner's phrase, and this is the size this codebase
- * already had for it.
+ * first and largest thing on the screen (see A6 below).
+ *
+ * IT WAS ALSO DELIBERATELY SMALL, AND IT IS NOT ANY MORE. `PHOTO_WIDTH` was
+ * the 80 pt frame `FriendProofCard` uses, to the token, because "niet te
+ * groot" was the owner's phrase and 80 was the size this codebase already
+ * had for it. Later the same week he asked for the opposite in as many
+ * words — "een grotere thumbnail ... een stuk groter" — and it is 200 pt
+ * now. The next section is the height budget that pays for that, and
+ * `PHOTO_WIDTH`'s own docblock carries the arithmetic. The layout argument
+ * above is untouched by the size: a large still UNDER the name is still one
+ * dish being named, not a feed being browsed.
  *
  * Its null case is not optional (docs/DESIGN.md §2, src/domain/types.ts):
  * the monogram, never a broken image and never a stock placeholder. It goes
@@ -104,6 +111,52 @@
  * alone is precisely the bug that hook exists for. These URLs are pre-signed
  * and short-lived, so here the failure would be a grey rectangle standing
  * where the dish should be.
+ *
+ * ===========================================================================
+ * THE `KIEZEN` EYEBROW IS GONE, AND IT PAID FOR THE BIGGER PHOTO
+ * ===========================================================================
+ *
+ * THE OWNER'S INSTRUCTION, VERBATIM, 7 SEPTEMBER 2026: "Bij kiezen wil ik
+ * een grotere thumbnail van het gerecht, dit kunnen we denk ik al deels
+ * regelen door het volgende te doen: 1. Verwijder de teksten 'hoeveel tijd'
+ * en kiezen. 2. Zorg dat 'Ja' (dit mag je overigens veranderen in 'Dit
+ * koken') en 'iets anders' naast elkaar komen te staan in plaats van boven
+ * elkaar. Zo kunnen we d thumbnail een stuk groter maken dat ziet er beter
+ * uit."
+ *
+ * The eyebrow read `KIEZEN` in tracked-out mono above the dish name. It
+ * named the screen the reader was already looking at, to a household that
+ * opens this app for exactly one thing — a label, not information. Its 15 pt
+ * line and 12 pt margin are the smaller half of what it cost. The larger
+ * half is that it turned the screen into a QUESTION, and a question is what
+ * made `Ja` an answer. So the two numbered halves of the instruction above
+ * are one change and not two: src/components/vanavondActionCopy.ts carries
+ * why that button is `Dit koken` now, and the one line that puts `Ja` back
+ * if this eyebrow ever returns.
+ *
+ * WHAT THE PHOTO ACTUALLY GOT. Measured on a 393x852 screen with a 59 pt top
+ * inset and an 83 pt tab bar (49 plus a 34 pt home indicator), leaving 710
+ * pt of scene:
+ *
+ *   before   filter bar 235 -> content 475
+ *            action zone 16 + 52 + gap 12 + 52 + 24 + 1 border = 157
+ *            heroBlock 318
+ *   after    filter bar  73 -> content 637
+ *            action zone 16 + 52 + 24 + 1 = 93   (ONE button line, not two)
+ *            heroBlock 544
+ *
+ * Neither saving is this file's. The filter bar's collapse from 235 to 73 is
+ * `DecisionFilterBar` becoming a drawer; the action zone's drop from 157 to
+ * 93 is `VanavondActionRow` going side by side. Between them they hand this
+ * card 226 pt it did not have. Worst realistic case for everything that is
+ * NOT the photo — a two-line dish name (2 x 41 plus a 20 pt margin = 102),
+ * the time row (20 plus 16 = 36) and a friend line (12 plus 20 = 32) — comes
+ * to 170, which leaves 374 pt of height, which at 9:16 is 210 pt of width.
+ *
+ * THE FILTER BAR'S 73 IS THE ONE NUMBER HERE THIS FILE DID NOT MEASURE. It
+ * is the collapsed height of a control being rewritten in the same change,
+ * so if that lands taller the slack goes first and the photo starts crowding
+ * the friend line. Nothing here has run on a device yet.
  *
  * ===========================================================================
  * WHY THREE THINGS AND NOT FIVE
@@ -159,8 +212,8 @@
  * row lives outside this component and does not move when the card changes,
  * so the thumb never has to re-find the buttons; and `accepted` draws a
  * hairline `accent` stroke under the dish name (scaleX 0→1, `durationFast`)
- * — "the grease-pencil circle landing" — the instant "Ja" is tapped, before
- * the screen navigates to Kookmodus.
+ * — "the grease-pencil circle landing" — the instant "Dit koken" is tapped,
+ * before the screen navigates to Kookmodus.
  *
  * THAT PROMISE IS ABOUT SWAPS, and it used to be written as "the action row
  * never moves", which is now too strong a sentence for what it means. The
@@ -168,6 +221,16 @@
  * — see `styles.actionZone` in (tabs)/index.tsx for the safe-area inset it
  * was double-counting. A layout decision taken once is not a thing that
  * happens under a thumb that is already reaching.
+ *
+ * IT MOVED A SECOND TIME THE SAME DAY, further and for a different reason:
+ * the two buttons went from stacked to side by side, so the row is one
+ * button tall instead of two and its top edge dropped another 64 pt. The
+ * argument is the same one, and it is restated rather than assumed, because
+ * a promise re-qualified twice in a single day is exactly the promise
+ * somebody later reads as absolute. What holds is the narrow claim: WITHIN a
+ * session, across an "Iets anders" swap, the row is where the thumb left it.
+ * Between releases it moves whenever there is a reason, and there have now
+ * been two.
  */
 
 import type { JSX } from 'react';
@@ -191,15 +254,44 @@ export interface DecisionCardProps {
   readonly friendLine: string | null;
   readonly estimatedMinutes: number | null;
   readonly reduceMotionEnabled: boolean;
-  /** True the instant "Ja" is tapped, until the screen navigates to Kookmodus — draws the accept stroke under the dish name. */
+  /** True the instant "Dit koken" is tapped, until the screen navigates to Kookmodus — draws the accept stroke under the dish name. */
   readonly accepted: boolean;
 }
 
 /**
- * 80 pt wide at 9:16 — `FriendProofCard`'s frame, to the token, because
- * "niet te groot" already had an answer in this codebase and a second
- * small-thumbnail size is how two surfaces start showing one still at two
- * scales.
+ * 200 pt wide at 9:16, so 356 pt tall.
+ *
+ * THIS IS THE NUMBER THE OWNER HAS TO JUDGE ON A DEVICE. Everything else in
+ * this change follows from arithmetic; "een stuk groter" has no right answer
+ * that can be derived, only one that can be looked at.
+ *
+ * IT WAS `spacing.space20` (80 pt), `FriendProofCard`'s frame, to the token
+ * — the right answer to "niet te groot" and the wrong one to the
+ * instruction that replaced it. 200 leaves 18 pt of slack against the worst
+ * realistic card (544 pt of `heroBlock`, 170 pt of name, time and friend
+ * line, 356 pt of photo); see the header for where the 544 comes from. The
+ * hard ceiling is 353 either way — the screen is 393 wide and
+ * `screenPaddingHorizontal` takes 20 off each side — so the height budget
+ * binds long before the width does. It is 2.5x the old width and 6.25x the
+ * old area.
+ *
+ * NOT A SPACING TOKEN, because there is no token for it: that scale stops at
+ * `space24` (96). Adding a `space50` for one call site would put a number in
+ * a shared vocabulary that only this card can use. `CLOCK_GLYPH_SIZE` below
+ * is a raw number for the same reason.
+ *
+ * NOT A FRACTION OF `useWindowDimensions` EITHER, which is the version that
+ * would hold on every screen size and that nobody asked for. It trades a
+ * number somebody can look at on a phone for a rule nobody can, and it does
+ * not close the risk below.
+ *
+ * THE OPEN RISK, ACCEPTED RATHER THAN SOLVED: at very large Dynamic Type the
+ * name and the friend line grow, the photo does not shrink, and the card
+ * runs past `heroBlock` — there is no scroll on this screen. That is the
+ * same exposure A6 below already takes on purpose by refusing to cap the
+ * dish name, and it is what a hero that is one fixed composition costs. If
+ * it ever needs fixing, the fix is a scroll view or a photo that shrinks
+ * with the type, not a smaller default for everybody.
  *
  * 9:16 AND NOT 4:5, even though ui-research/ASSEMBLY.md §2.2 recommends 4:5:
  * that recommendation is about DENSITY (5.8 tiles per screen against 3.7)
@@ -208,7 +300,7 @@ export interface DecisionCardProps {
  * hero's still tighter than the library's would make one image look like
  * two.
  */
-const PHOTO_WIDTH = spacing.space20;
+const PHOTO_WIDTH = 200;
 const PHOTO_ASPECT_RATIO = 9 / 16;
 
 /**
@@ -300,7 +392,10 @@ export function DecisionCard(props: DecisionCardProps): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>KIEZEN</Text>
+      {/* NO EYEBROW. It read `KIEZEN` here until 7 September 2026 — the
+          header has the owner's instruction and what the space bought.
+          Nothing replaces it: the dish name is the first thing on the
+          screen now, which is what it was always meant to be. */}
       <Animated.View style={{ opacity, transform: [{ translateY }] }}>
         <View style={styles.dishTitleWrap}>
           {/* A6: no numberOfLines cap — this is the single most important
@@ -377,10 +472,6 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingHorizontal: spacing.screenPaddingHorizontal,
-  },
-  eyebrow: {
-    textTransform: 'uppercase',
-    marginBottom: spacing.space3,
   },
   dishTitleWrap: {
     position: 'relative',

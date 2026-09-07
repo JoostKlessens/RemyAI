@@ -132,8 +132,8 @@ export type ReasonCode =
 export type DecisionStatus = 'pending' | 'accepted' | 'swapped' | 'skipped';
 
 /**
- * The actions the 16:00 decision screen can produce: "Ja" / "Iets anders".
- * Maps 1:1 onto the non-pending DecisionStatus values, and `'decline'` is
+ * The actions the 16:00 decision screen can produce: "Dit koken" / "Iets
+ * anders". Maps 1:1 onto the non-pending DecisionStatus values, and `'decline'` is
  * as vestigial as its `'skipped'` counterpart above — "Niet koken" is no
  * longer on Kiezen, so nothing constructs it. Kept in step with
  * DecisionStatus rather than pruned on its own, so the action vocabulary

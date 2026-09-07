@@ -77,9 +77,9 @@ export function hapticSmallCommit(): void {
 }
 
 /**
- * A real commitment landed: `Ja` on Kiezen, a grade committing, allergens
- * confirmed. The three moments in the app where the answer changes what
- * the product does next.
+ * A real commitment landed: `Dit koken` on Kiezen, a grade committing,
+ * allergens confirmed. The three moments in the app where the answer
+ * changes what the product does next.
  */
 export function hapticRealCommit(): void {
   fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));

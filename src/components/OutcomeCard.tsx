@@ -492,11 +492,18 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
    *
    * `hapticSmallCommit`, not `hapticRealCommit`. WS5 §3.1's rule 2 is
    * that the style tracks the weight of the consequence: a real commit is
-   * `Ja` on Kiezen, a grade landing, allergens confirmed — the answers
-   * that change what the product does next. This changes who may see one
-   * dinner, it is reversible from Bibliotheek's long-press for as long as
-   * the meal exists, and it must not out-weigh the grade being given
-   * three controls below it.
+   * `Dit koken` on Kiezen (that button read `Ja` until 7 September 2026),
+   * a grade landing, allergens confirmed — the answers that change what
+   * the product does next. This changes who may see one dinner, it is
+   * reversible from Bibliotheek's long-press for as long as the meal
+   * exists, and it must not out-weigh the grade being given three
+   * controls below it.
+   *
+   * THE `Ja` FURTHER DOWN THIS FILE IS A DIFFERENT WORD AND STAYS. It
+   * answers "Heb je ... gemaakt?" against "Nog niet" — a real yes/no
+   * question, asked on the one card that still asks one. Kiezen's `Ja`
+   * went because its question (the `KIEZEN` eyebrow) went; this card's
+   * question is printed directly above the button.
    */
   const handleToggleCookProofSharing = (): void => {
     if (onChangeCookProofSharing === undefined) {
