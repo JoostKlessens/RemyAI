@@ -16,8 +16,8 @@ import { RATING_MAX, RATING_MIN, RATING_STEP, formatGrade } from '@/domain/ratin
 import type { CookEvent } from '@/domain/types';
 
 /** A row shaped exactly as `resolveRecipeSchedulingState` builds one. */
-function info(state: RecipeSchedulingState, lastRating: number | null = null): RecipeSchedulingInfo {
-  return { state, lastCookedOn: state === 'al_gekookt' ? '2026-09-01' : null, lastRating };
+function info(state: RecipeSchedulingState, averageRating: number | null = null): RecipeSchedulingInfo {
+  return { state, lastCookedOn: state === 'al_gekookt' ? '2026-09-01' : null, averageRating };
 }
 
 function cookEvent(cookedOn: string, rating: number | null): CookEvent {
@@ -143,19 +143,41 @@ describe('describeLibraryTileBadge — fed by the resolver, which is the only pa
     expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'text', label: '8,5' });
   });
 
-  test('the LATEST cook event supplies the grade, matching the date the same row already carries', () => {
+  test('cooking it again averages the grades, and the date still names only the LATEST cook', () => {
+    // ⚠ THIS TEST ASSERTED THE OPPOSITE UNTIL 8 SEPTEMBER 2026, and it is
+    // kept rather than deleted because the thing it used to guard is the
+    // thing the owner changed. It read "the LATEST cook event supplies the
+    // grade, matching the date the same row already carries" — 9 then 6 gave
+    // 6,0. He asked for "vanaf dan het gemiddelde cijfer", so the badge now
+    // answers what this recipe is WORTH rather than how last night went, and
+    // the date deliberately no longer describes the same evening as the
+    // number. See src/domain/cookRating.ts.
     const events = [cookEvent('2026-08-10', 9), cookEvent('2026-08-15', 6)];
 
     const scheduling = resolveRecipeSchedulingState('meal-1', [], events);
 
     expect(scheduling.lastCookedOn).toBe('2026-08-15');
+    expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'text', label: '7,5' });
+  });
+
+  test('a single cook still shows its own grade — the average of one is itself, with no branch for it', () => {
+    const scheduling = resolveRecipeSchedulingState('meal-1', [], [cookEvent('2026-08-10', 6)]);
+
     expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'text', label: '6,0' });
+  });
+
+  test('an ungraded second cook leaves the average alone instead of dragging it toward zero', () => {
+    const events = [cookEvent('2026-08-10', 8), cookEvent('2026-08-15', null)];
+
+    const scheduling = resolveRecipeSchedulingState('meal-1', [], events);
+
+    expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'text', label: '8,0' });
   });
 
   test('a skipped rating reaches the badge as an absence, never as a zero', () => {
     const scheduling = resolveRecipeSchedulingState('meal-1', [], [cookEvent('2026-08-10', null)]);
 
-    expect(scheduling.lastRating).toBeNull();
+    expect(scheduling.averageRating).toBeNull();
     expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'icon', icon: 'cooked' });
   });
 
@@ -165,7 +187,7 @@ describe('describeLibraryTileBadge — fed by the resolver, which is the only pa
     // expressed." A badge is the one place that lie would look right.
     const scheduling = resolveRecipeSchedulingState('meal-1', [], [cookEvent('2026-08-10', RATING_MAX + 5)]);
 
-    expect(scheduling.lastRating).toBeNull();
+    expect(scheduling.averageRating).toBeNull();
     expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'icon', icon: 'cooked' });
   });
 
@@ -175,7 +197,7 @@ describe('describeLibraryTileBadge — fed by the resolver, which is the only pa
 
     const scheduling = resolveRecipeSchedulingState('meal-1', [], [legacy]);
 
-    expect(scheduling.lastRating).toBeNull();
+    expect(scheduling.averageRating).toBeNull();
     expect(describeLibraryTileBadge(scheduling)).toEqual({ kind: 'icon', icon: 'cooked' });
   });
 });

@@ -7,8 +7,8 @@
  * vitest's `node` environment — see tests/recipeScheduling.test.ts.
  */
 
-import { isValidRating } from '@/domain/rating';
-import type { CookEvent, Meal, Save } from '@/domain/types';
+import { averageCookRating } from '@/domain/cookRating';
+import type { CookEvent, Meal, MealId, Save } from '@/domain/types';
 
 export type RecipeSchedulingState = 'deze_week' | 'ooit' | 'al_gekookt' | 'geen_planning';
 
@@ -45,6 +45,14 @@ export interface RecipeSchedulingInfo {
    * draws the chef's hat, which is TRUE of any cooked meal — the badge loses
    * information, it never gains a falsehood.
    *
+   * ⚠ IT IS A MEAN OVER EVERY COOK, NOT THE LATEST ONE — the owner asked for
+   * that on 8 September 2026 ("Als je opnieuw het recept kookt, kan je vanaf
+   * dan het gemiddelde cijfer laten zien"). A meal cooked once averages to
+   * its single grade, so nothing changed for the common case and there is no
+   * `count > 1` branch anywhere: one rule, not two that can disagree.
+   * src/domain/cookRating.ts owns the arithmetic and the reason an ungraded
+   * cook is absent from the mean rather than counted as a zero.
+   *
    * ⚠ READ THIS ONLY TO SHOW THE NUMBER. src/domain/types.ts forbids reading
    * `CookEvent.rating` to decide whether a household LIKED a meal, and that
    * still stands: `resolveRepeatSignal` answers that question. Showing what
@@ -53,7 +61,7 @@ export interface RecipeSchedulingInfo {
    * rating.ts's whole middle band, so a 6,0 somebody actually gave would
    * vanish from the tile.
    */
-  readonly lastRating?: number | null;
+  readonly averageRating?: number | null;
 }
 
 function findLatestCookEvent(mealId: string, cookEvents: readonly CookEvent[]): CookEvent | null {
@@ -74,31 +82,6 @@ function findMostRecentActiveSave(mealId: string, saves: readonly Save[]): Save 
 }
 
 /**
- * The grade to SHOW for one cook event, which is not the question
- * `resolveRepeatSignal` answers — see the ⚠ on `lastRating` above.
- *
- * OFF-SCALE VALUES ARE DROPPED RATHER THAN CLAMPED, the stance rating.ts
- * already takes for the same field: "stored data can be older than the
- * current scale, and silently clamping it would invent an opinion nobody
- * expressed." A tile badge is the one place that invention would look
- * entirely convincing — four monospace characters in a chip, with nothing
- * beside it to contradict them. Dropping it costs the tile a chef's hat
- * instead of a numeral, which is the smaller loss by a wide margin.
- *
- * VALIDATING HERE, AND ONLY HERE, is what makes `lastRating` a field a reader
- * can trust: everyone who gets one gets a grade on the current scale or null,
- * and nobody downstream has to remember to re-check. libraryTileBadge.ts
- * therefore formats without re-validating, on purpose.
- */
-function resolveDisplayableRating(event: CookEvent): number | null {
-  const rating = event.rating;
-  if (rating === undefined || rating === null || !isValidRating(rating)) {
-    return null;
-  }
-  return rating;
-}
-
-/**
  * Precedence: cooked beats an active save (once it's been made, "when will
  * I make it" is moot), "this_week" beats "someday". A meal with neither is
  * `geen_planning` — present in the rotation but nothing has scheduled it.
@@ -113,24 +96,28 @@ export function resolveRecipeSchedulingState(
 ): RecipeSchedulingInfo {
   const latestCookEvent = findLatestCookEvent(mealId, cookEvents);
   if (latestCookEvent !== null) {
-    // The grade comes off the SAME event as `lastCookedOn`, which is what
-    // keeps a tile's number and its date describing one evening rather than
-    // two.
+    // ⚠ THE DATE AND THE NUMBER NO LONGER DESCRIBE THE SAME EVENING, and
+    // that is deliberate rather than an oversight. `lastCookedOn` is the most
+    // recent cook; `averageRating` is every cook. This block used to take
+    // both off the one event so a tile's number and its date matched, and the
+    // owner's request replaced that: he wants the recipe's standing grade,
+    // not the last night's. The two answer different questions and only one
+    // of them is ever drawn on the tile.
     return {
       state: 'al_gekookt',
       lastCookedOn: latestCookEvent.cookedOn,
-      lastRating: resolveDisplayableRating(latestCookEvent),
+      averageRating: averageCookRating(cookEvents, mealId as MealId),
     };
   }
 
   const activeSave = findMostRecentActiveSave(mealId, saves);
   if (activeSave?.intent === 'this_week') {
-    return { state: 'deze_week', lastCookedOn: null, lastRating: null };
+    return { state: 'deze_week', lastCookedOn: null, averageRating: null };
   }
   if (activeSave?.intent === 'someday') {
-    return { state: 'ooit', lastCookedOn: null, lastRating: null };
+    return { state: 'ooit', lastCookedOn: null, averageRating: null };
   }
-  return { state: 'geen_planning', lastCookedOn: null, lastRating: null };
+  return { state: 'geen_planning', lastCookedOn: null, averageRating: null };
 }
 
 const STATE_SORT_ORDER: Readonly<Record<RecipeSchedulingState, number>> = {

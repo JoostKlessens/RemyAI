@@ -224,7 +224,7 @@ function resolveShowableGrade(scheduling: RecipeSchedulingInfo): number | null {
   if (scheduling.state !== 'al_gekookt') {
     return null;
   }
-  return scheduling.lastRating ?? null;
+  return scheduling.averageRating ?? null;
 }
 
 /**

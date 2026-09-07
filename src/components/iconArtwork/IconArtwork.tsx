@@ -86,7 +86,6 @@ function renderElement(
   paint: (key: IconPaletteKey | undefined) => string | undefined,
 ): JSX.Element {
   const common = {
-    key: index,
     fill: paint(element.fill) ?? 'none',
     stroke: paint(element.stroke),
     strokeWidth: element.sw,
@@ -97,21 +96,39 @@ function renderElement(
         ? undefined
         : `rotate(${element.rot[0]} ${element.rot[1]} ${element.rot[2]})`,
   };
+  // ⚠ `key` IS PASSED EXPLICITLY AND IS NEVER PART OF `common`. React reads
+  // `key` off the element before props exist, so spreading an object that
+  // carries one both works and warns — "A props object containing a 'key'
+  // prop is being spread into JSX", which is what the owner saw at the bottom
+  // of his screen on 8 September 2026. It has to sit outside the spread, and
+  // for the same reason it must come AFTER it in source order: a later
+  // `{...common}` would put the key back into the props object it was just
+  // taken out of.
   switch (element.k) {
     case 'path':
-      return <Path {...common} d={element.d} />;
+      return <Path {...common} key={index} d={element.d} />;
     case 'polyline':
-      return <Polyline {...common} points={element.p} />;
+      return <Polyline {...common} key={index} points={element.p} />;
     case 'polygon':
-      return <Polygon {...common} points={element.p} />;
+      return <Polygon {...common} key={index} points={element.p} />;
     case 'circle':
-      return <Circle {...common} cx={element.cx} cy={element.cy} r={element.r} />;
+      return <Circle {...common} key={index} cx={element.cx} cy={element.cy} r={element.r} />;
     case 'ellipse':
-      return <Ellipse {...common} cx={element.cx} cy={element.cy} rx={element.rx} ry={element.ry} />;
+      return (
+        <Ellipse
+          {...common}
+          key={index}
+          cx={element.cx}
+          cy={element.cy}
+          rx={element.rx}
+          ry={element.ry}
+        />
+      );
     case 'rect':
       return (
         <Rect
           {...common}
+          key={index}
           x={element.x}
           y={element.y}
           width={element.width}
