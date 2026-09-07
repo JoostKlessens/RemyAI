@@ -35,17 +35,30 @@ omdat elke bevinding erin een *patroon* is dat zich herhaalt.
 ## Wat er draait
 
 **De infrastructuur staat, en is nagemeten in plaats van aangenomen.**
-Migraties `0001` t/m **`0014`** draaien tegen de live database — nagemeten op
-7 september met `npx supabase migration list`, dat leest en niets wijzigt.
-⚠ **Dit document beweerde tot 7 september dat `0014` nog niet toegepast was.
-Dat was onwaar**, en het stond als eerste punt onder "wat er nu open ligt";
-foto-import werkt dus gewoon. Precies de fout waar dit bestand verderop voor
-waarschuwt, gemaakt in dit bestand zelf.
+Migraties `0001` t/m **`0017`** draaien tegen de live database — nagemeten op
+7 september met `npx supabase migration list`, dat leest en niets wijzigt, en
+dat voor alle zeventien `local` en `remote` gelijk teruggeeft. Er staat niets
+meer klaar dat nog gedraaid moet worden.
 
-**`0015`, `0016` en `0017` staan lokaal en niet remote**, en twee daarvan zijn
-blokkerend om te testen: `0016` maakt de view `namable_recipe_votes` waar de
-vriendenkant van Trending op leest, en `0017` de kolom voor het gerechttype.
-Zonder push falen die twee oppervlakken op een toestel.
+⚠ **DE MIGRATIESTAND IN DIT DOCUMENT IS NU DRIE KEER ONWAAR GEBLEKEN, EN
+ALTIJD DEZELFDE KANT OP: het beweerde dat migraties nog niet gedraaid waren
+terwijl ze allang liepen.** Eerst `0011` en `0012` (2 september), toen `0014`
+(7 september, het stond zelfs als eerste punt onder "wat er nu open ligt"), en
+nu `0015` en `0016`. Die laatste twee kwamen aan het licht doordat de eigenaar
+`db push` draaide en de tool hem **alleen `0017`** aanbood — de andere twee
+waren er al.
+
+Dat is geen toeval maar een structurele fout in hoe dit bestand geschreven
+wordt: "ik heb een migratiebestand toegevoegd" wordt hier opgeschreven als
+"de migratie staat nog niet remote", en dat is een aanname vermomd als stand
+van zaken. **Draai `npx supabase migration list` vóór je hier iets over de
+database beweert.** Het kost één commando, het wijzigt niets, en het heeft
+deze fout nu drie keer gevonden nadat het document hem drie keer maakte.
+
+Daarmee vervalt ook de blokkade die hier stond: `0016` maakt de view
+`namable_recipe_votes` waar de vriendenkant van Trending op leest, en `0017`
+de kolom voor het gerechttype. Allebei toegepast, dus allebei te testen op een
+toestel.
 
 De drie secrets staan er (`IMPORT_FINGERPRINT_SALT`, `YOUTUBE_API_KEY`,
 `GEMINI_API_KEY`). De edge functie is gedeployed, dus de throttlepoort en de
@@ -482,11 +495,12 @@ kosten geen code maar een handeling van de eigenaar.
    elke knip leverde een commit op die niet compileert. Het is daarom één
    commit van 143 bestanden geworden.
 
-2. **`npx supabase db push` draaien.** `0015`, `0016` en `0017` staan lokaal
-   en niet remote. Twee ervan blokkeren het testen: `0016` maakt de view
-   `namable_recipe_votes` waar de vriendenkant van Trending op leest, en
-   `0017` de kolom voor het gerechttype. `0014` is wél toegepast — zie
-   *Wat er draait*.
+2. ~~**`npx supabase db push` draaien.**~~ **Gedaan door de eigenaar op
+   7 september, en de tool bood hem alleen `0017` aan** — `0015` en `0016`
+   waren al toegepast, wat dit document opnieuw verkeerd had staan. Nagemeten:
+   `0001` t/m `0017`, `local` en `remote` gelijk voor alle zeventien. Trending
+   en het gerechttype zijn daarmee te testen. Zie *Wat er draait* voor waarom
+   deze regel drie keer op rij onwaar is geweest.
 
 3. **De app op een toestel doorlopen, en dit blijft punt één met stip.**
    Alles wat op 4 t/m 7 september gebouwd is, is precies het soort dat geen

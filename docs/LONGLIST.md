@@ -32,9 +32,12 @@ eigenaar, de drie OPS-regels uit één Expo Go-log, en de twee GAP-regels zijn
 metingen die daarbij vandaan vielen — allebei een filter dat er is maar niet
 filtert.
 
-De database is bij: `0001` t/m **`0014`** draaien, nagemeten tegen de live
-database met `npx supabase migration list`. ⚠ **`0015`, `0016` en `0017` staan
-lokaal en niet remote**, en twee daarvan blokkeren het testen op een toestel.
+De database is bij: `0001` t/m **`0017`** draaien, nagemeten tegen de live
+database met `npx supabase migration list` — `local` en `remote` gelijk voor
+alle zeventien. ⚠ Hier stond dat `0015`, `0016` en `0017` nog niet remote
+waren en het testen blokkeerden; **onwaar, en de derde keer dat de
+migratiestand in de documenten te pessimistisch bleek**. Zie `HANDOVER.md`
+onder *Wat er draait*.
 De drie secrets staan er. De edge functie is gedeployed, dus de throttlepoort
 en de dichting van het anon-key-gat zijn werkelijk actief. Vier checks groen:
 typecheck 0, `check:functions` 0, lint 0, **3125 tests over 130 bestanden**.
