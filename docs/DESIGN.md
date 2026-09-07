@@ -21,8 +21,9 @@ in grease pencil, and anything measured or systemic — timers, counts,
 labels, buttons — reads like **timecode burned into the frame**. Concretely:
 a near-white neutral palette with a faint green cast (paper on a light
 table, not warm cream and not grey) carries ~95% of every screen; one flat
-marking-green `accent` appears only at the instant a choice is made — the
-"Ja" on Kiezen, a selected allergen chip — never as decoration; a separate
+marking-green `accent` appears only at the instant a choice is made —
+Kiezen's accept button (`Dit koken` since 7 September 2026; it read `Ja`
+before that, see §1), a selected allergen chip — never as decoration; a separate
 `positive`, a much deeper and much greyer green, is reserved exclusively for
 completion ("Gemaakt", a verified tag), so "decided" and "done" stay
 visually distinct. Those two greens are the one genuinely hard thing in this
@@ -356,10 +357,29 @@ card anywhere carries a timestamp or a "nieuw" badge (§8).
 
 ## 1. Kiezen — the decision
 
-**Purpose**: the hero screen. One dish, one stated reason, two actions.
-No list, no scroll, no browse affordance — PD-001 governs this screen.
-"Iets anders" caps at two swaps, then becomes "Ik kies zelf" (opens Mijn
-recepten).
+⚠ **THIS SECTION WAS HELD AGAINST THE CODE ON 7 SEPTEMBER 2026 AND SIX OF
+ITS CLAIMS WERE ALREADY FALSE BEFORE THAT DAY BEGAN; THAT DAY'S TWO ROUNDS
+FALSIFIED FOUR MORE.** Every overruled sentence below is kept and marked
+rather than deleted — the posture `PRODUCT-DECISIONS.md` takes toward PD-002,
+PD-015, PD-017 and PD-019, and the one `libraryFilterCopy.ts` takes in
+source. A spec that has quietly swept out its losing arguments reads as
+though it was always right, and this one demonstrably was not. It is cited
+as authority from dozens of source files, and every one of those citations
+inherits whatever is left standing here.
+
+**Purpose**: the hero screen. ~~One dish, one stated reason, two actions.~~
+**One dish, one still of it, two actions.** No list, no scroll, no browse
+affordance — PD-001 governs this screen. "Iets anders" caps at two swaps,
+then becomes "Ik kies zelf" (opens Mijn recepten).
+
+⚠ **"ONE STATED REASON" HAS NOT BEEN TRUE SINCE 6 SEPTEMBER 2026**
+(`b03fa30`). The REDEN block went out attached to the "Niet koken" decision
+below and was never separately argued, which is precisely why the sentence
+stays visible here: it was the original thesis of this screen — a verdict
+you can audit — and it was lost as a side effect rather than on its merits.
+`DecisionCard` now names the dish, the cook time and nothing about why.
+Restoring it is a render and not a migration: `DecisionResult` still carries
+its `ReasonCode`, and nothing was dropped from the domain.
 
 **"Niet koken" is gone from this screen, and nothing replaced it.** The
 reason menu behind it earned nothing: if you are not cooking tonight you
@@ -374,21 +394,80 @@ the app, so a refused evening is stored identically to an evening nobody
 opened, and plan §8's acceptance rate loses its "offered and refused"
 reading. Getting it back needs a new writer, not this button.
 
-**Layout** (vertically centered as a group):
-1. `label` eyebrow "KIEZEN" — mono, `textMuted`, tracked, uppercase.
+**Layout** (vertically centered as a group), as built on 7 September 2026:
+
+1. ~~`label` eyebrow "KIEZEN" — mono, `textMuted`, tracked, uppercase.~~
+   **Gone, at the owner's word and by name**: *"Verwijder de teksten
+   'hoeveel tijd' en kiezen."* It was not removed for its own sake — it
+   paid for item 4. The height it freed is what the still grew into, and
+   `DecisionCard.tsx` keeps the whole argument standing at the empty slot
+   so that a reader who wants the eyebrow back finds the reasoning before
+   the diff. **The coupling matters more than either half**: the eyebrow
+   posed the question that `Ja` answered, which is why item 6 moved on the
+   same day and not on a different one.
 2. `display` dish name — Archivo Bold, `textPrimary`, max 2 lines, centered.
-3. Reason block: `label` "REDEN" over one line of `body`/`textSecondary` —
+   Unchanged, and now the first thing on the screen.
+3. ~~Reason block: `label` "REDEN" over one line of `body`/`textSecondary` —
    always concrete ("Je at dit al 3 weken niet, past binnen 25 minuten."),
-   never "Aanbevolen voor jou".
-4. Meta row: `numeral` "25 min" · "voor 4" — mono, middot separator, no icons.
-5. Action row, inside the thumb zone: `Ja` (primary, accent fill) / `Iets
-   anders` or `Ik kies zelf` (secondary, outline). Two buttons, never a
-   third.
+   never "Aanbevolen voor jou".~~ **Gone since `b03fa30`** — see Purpose.
+4. **The still — and this document has never specified it at all.** A
+   `PHOTO_WIDTH`-wide frame under the name, falling back to the dish's first
+   letter in mono on `surfaceSunken`, the same monogram §2's tiles use. It
+   arrived with the library thumbnails and was drawn here without a line of
+   spec, which is the most expensive kind of omission in a document that
+   gets cited as authority: nobody could contradict it because nobody had
+   written it down. On 7 September it went from **80 to 200 points wide** at
+   the owner's request (*"Zo kunnen we de thumbnail een stuk groter maken
+   dat ziet er beter uit"*) — 2.5× the width and 6.25× the area, paid for by
+   items 1 and 6 rather than by taking room from the dish name. Hidden from
+   assistive technology as one piece: the monogram literally *is* the dish
+   name's first letter, so announcing it spells the initial back at somebody
+   who has just heard the whole word.
+5. Meta row: ~~`numeral` "25 min" · "voor 4" — mono, middot separator, no
+   icons.~~ **One fact, with a glyph, above the still rather than below it.**
+   `voor 4` is gone and the middot with it; what is left is the cook time,
+   preceded by the same `clock` `TimeCapPicker` draws. The glyph is asked
+   for first and drawn only if the installed fonts carry it
+   (`isIconAvailable`), so with it absent the row holds one child, `gap`
+   contributes nothing, and the number stays exactly where it is instead of
+   sitting behind an empty indent. **"no icons" is the rule this breaks, and
+   it broke deliberately**: one unit gets one mark, on both screens in the
+   app that state a time.
+6. Action row, inside the thumb zone: ~~`Ja` (primary, accent fill) / `Iets
+   anders` or `Ik kies zelf` (secondary, outline).~~ **`Dit koken` beside
+   `Iets anders`, side by side as two halves of one line rather than
+   stacked.** Two buttons, never a third — that half holds unchanged.
+   `vanavondActionCopy.ts` carries both the rename and the research it
+   overrules: WS3 §3.10 lists `Ja` among "the four best labels in the
+   product" and calls it "the whole thesis in two letters", and that
+   sentence was written about a screen with a `KIEZEN` eyebrow over it.
+   **Without a question, `Ja` answers nothing.** The measurable reason is
+   item 1's twin: side by side in boxes of identical width, `Ja` (2
+   characters) beside `Iets anders` (11) leaves the primary button mostly
+   empty and reads as a bug — `VANAVOND_LABEL_LENGTH_TOLERANCE` is where
+   that constraint now fails loudly. Putting `Ja` back is one constant, but
+   it should not go back without the eyebrow.
+
+**The filter bar (PD-009) sits above all of this, and §1 has never mentioned
+it.** Second omission of the same kind as item 4. Since 7 September it is a
+drawer behind a `Filters` control, and the heights are measured from the
+stylesheets rather than estimated: **73pt shut, 235pt open for an ordinary
+library (6 tags, no moods), 462pt open worst case** (17 tags, 6 moods,
+wrapping). The property that matters more than any of those numbers is that
+shut, the bar's height no longer depends on how large the library is — the
+same property Mijn recepten bought for itself with `Geavanceerd`. The bar
+says `Ingrediënten` where it said `WAARMEE?`, and no longer prints
+`HOEVEEL TIJD?` above the clock at all; both changes were asked for by name,
+and `decisionFilterCopy.ts` holds the words and the arguments.
 
 **States**:
-- *Loading*: eyebrow renders immediately; a calm `surfaceSunken` bar
+- *Loading*: ~~eyebrow renders immediately;~~ a calm `surfaceSunken` bar
   (~70% width, no shimmer) holds the dish-name space for `durationNormal`
-  minimum before reveal.
+  minimum before reveal. ⚠ **With the eyebrow gone nothing renders
+  instantly any more.** That is a real loss item 1 did not pay for: the
+  screen now opens on a bar and nothing else, and whatever replaces the
+  instant mark has to come from something that is not a heading, because
+  the heading is what the owner asked to remove.
 - *Empty library* (nothing saved; no longer routes to onboarding, which is
   gone): `title1` "Nog niets om uit te kiezen", `bodySmall` "Plak een link
   en Remy kan morgen iets voorstellen.", one primary `Recept plakken` →
@@ -396,36 +475,55 @@ reading. Getting it back needs a new writer, not this button.
 - *Filtered/exhausted* (`all_excluded`/`swaps_exhausted` — a real rotation
   exists but is filtered or swapped out): explain why, offer `Kies zelf` /
   `Ik kies zelf` → Mijn recepten. One button — see **Purpose** above for
-  why PD-001's second exit is no longer rendered.
+  why PD-001's second exit is no longer rendered. `filtered_out` is the
+  exception and gains a primary `Filters wissen` above that exit
+  (`NoCandidateState.tsx`), which is the fourth guard against a filter
+  running where nobody can see it now that the bar folds shut.
 - *Error*: `title2` "Kon geen suggestie ophalen", `bodySmall` detail, one
   `Opnieuw` (secondary).
 
 **Interaction & motion**: reveal fades+rises (`translateY` 8→0, opacity
 0→1, `durationDeliberate`, `easingDecelerate`) — the slowest, most
-considered entrance in the app. On `Ja`, a hairline `accent` stroke draws
+considered entrance in the app. On accept, a hairline `accent` stroke draws
 under the dish name (scaleX 0→1, `durationFast`) — the grease-pencil
 circle landing — before navigating to Kookmodus. "Iets anders" cross-fades
-just the name/reason/meta block; the action row never moves, so the thumb
-never has to re-find the buttons. Reduced motion: instant cut throughout.
+just the name/meta/still block. Reduced motion: instant cut throughout.
+
+⚠ ~~the action row never moves, so the thumb never has to re-find the
+buttons.~~ **THIS SENTENCE HAS BEEN FALSE TWICE OVER, AND IT IS QUOTED
+ELSEWHERE.** It was first softened in code to "does not move on a swap",
+which is the claim that is actually true and the one the cross-fade above
+buys. Then on 7 September the row moved anyway: GAP-36 dropped it roughly
+34pt by removing a double-counted inset, and the same day it went from two
+stacked buttons to one line of two, which changes its height and every
+thumb target on it. The sentence is kept because
+`ui-research/WS5-motion-feedback-cook-mode.md:307-308` cites it by name as
+"§1 says the action row never moves" and reasons from it; anyone
+re-deriving motion from that passage is reasoning from a screen that no
+longer exists.
 
 ```
 ┌───────────────────────────────────┐
-│             KIEZEN                 │ label · mono, textMuted
-│      Kip kerrie met rijst          │ display · Archivo Bold
-│  REDEN                             │ label · mono
-│  Je at dit al 3 weken niet, en     │ body · Archivo
-│  het past binnen 25 minuten.       │
-│      25 min  ·  voor 4             │ numeral · mono
-│                                     │
+│ [ Filters · 2 filters actief ]    │ shut drawer, 73pt
+├───────────────────────────────────┤
+│      Kip kerrie met rijst         │ display · Archivo Bold
+│          ◷ 25 min                 │ clock glyph + numeral · mono
+│      ┌───────────────┐            │
+│      │               │            │ the still, PHOTO_WIDTH 200
+│      │   thumbnail   │            │ (was 80 until 2026-09-07)
+│      │               │            │
+│      └───────────────┘            │
 ├───────────────────────────────────┤ ← thumb zone starts
-│ ┌─────────────────────────────────┐│
-│ │              Ja                 ││ accent fill
-│ └─────────────────────────────────┘│
-│ ┌─────────────────────────────────┐│
-│ │          Iets anders            ││ surface + borderStrong
-│ └─────────────────────────────────┘│
+│ ┌──────────────┐ ┌──────────────┐ │
+│ │  Dit koken   │ │ Iets anders  │ │ accent fill / surface + borderStrong
+│ └──────────────┘ └──────────────┘ │ two flex:1 halves of one line
 └───────────────────────────────────┘
 ```
+
+⚠ The drawing above replaces one that showed `KIEZEN`, a REDEN block, a
+`25 min · voor 4` meta line, no still at all, and two full-width stacked
+buttons reading `Ja` and `Iets anders`. That drawing was accurate the day it
+was written and wrong in six places by the time anyone checked.
 
 ---
 
@@ -446,10 +544,44 @@ on every tab: a name, then exactly one control of the screen's own. Below, a two
 gutter), "deze week" first (existing `sortMealsByScheduling` order,
 unchanged). Each tile: portrait (9:16) thumbnail with a `videoScrim` wash
 across the bottom third, creator handle in `caption` (mono) and dish title
-in `bodySmall` over the scrim, and a corner badge reusing
-`recipeScheduling.ts`'s state→color mapping (`accentMuted`/`accentOnMuted`
-"Deze week", `surfaceSunken`/`textSecondary` "Ooit", `positiveMuted`/
-`positive` "Al gekookt"). Tap → Kookmodus directly (unchanged behavior).
+in `bodySmall` over the scrim, and a corner badge.
+
+⚠ **THE BADGE STOPPED BEING A PLANNING MARK ON 7 SEPTEMBER 2026
+(`378d7d0`), AND THE MAPPING THIS PARAGRAPH SPECIFIED IS GONE.** It said:
+*a corner badge reusing `recipeScheduling.ts`'s state→color mapping
+(`accentMuted`/`accentOnMuted` "Deze week", `surfaceSunken`/`textSecondary`
+"Ooit", `positiveMuted`/`positive` "Al gekookt")*. That is kept here rather
+than deleted because it was a good mapping and it is what the ASCII below
+still draws — four states, four appearances, each naming a plan.
+
+What replaced it answers a different question, and the owner's own words are
+why: he read the old check mark as *"this is one I want to cook sometime"*
+when it meant *"I already cooked this"* — the exact inversion, on the one
+state where being wrong decides what a household eats tonight.
+`libraryTileBadge.ts` now reads, in the owner's own order: **the grade if the
+meal was cooked and rated, otherwise a chef's hat (`cooked`) if it was
+cooked, otherwise that same hat as the neutral mark.** So the corner answers
+"did I cook this, and how was it" instead of "when is this due", and the
+word "Ooit" and the calendar for `deze_week` are both off the tile.
+
+**What was lost, named honestly rather than buried:** a tile no longer says
+on its face which dish is planned for this week. The ordering still does —
+`sortMealsByScheduling` puts `deze_week` first, unchanged — and the
+`Wanneer?` axis behind Mijn recepten's `Geavanceerd` drawer still filters on
+it. **The rejected alternative was two marks, one for the plan and one for
+the cooking**, and it was rejected on a measurement rather than on taste:
+`resolveRecipeSchedulingState` consults cook events FIRST, so `al_gekookt`
+excludes the other three and a second mark would be structurally absent on
+three states out of four. Making two marks honest means widening
+`RecipeSchedulingInfo`, a type 22 modules import — a domain change wearing
+a badge redesign's clothes.
+
+**The grade is the one thing this corner has ever drawn that the tile does
+not otherwise say**, so unlike every earlier mark it is spoken as well as
+shown. WS2 §3.2's "a badge costs a screen-reader user nothing" held for
+every previous occupant of this corner and stops holding here.
+
+Tap → Kookmodus directly (unchanged behavior).
 
 **Data-model consequence**: `Meal` has no thumbnail field yet, even though
 oEmbed already returns `thumbnailUrl` at import (`src/lib/oembed.ts`) and
@@ -477,7 +609,7 @@ image or a stock placeholder.
 │ │▓▓▓▓▓▓▓▓▓▓scrim│ │▓▓▓▓▓▓▓▓▓▓scrim││
 │ │@kokenmetkees  │ │@lekkerNL      ││ caption · mono
 │ │Traybake kip   │ │Pasta pesto    ││ bodySmall
-│ │        DEZE WK│ │           OOIT││ corner badge
+│ │             8,5│ │        [hat]││ corner badge — grade, else hat
 │ └───────────────┘ └───────────────┘│
 │ ┌───────────────┐ ┌───────────────┐│
 │ │   thumbnail   │ │   [monogram]  ││

@@ -4,15 +4,40 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 7 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`fd8ece0` gecommit. De sessies van 6 en 7 september staan in de geschiedenis:
-143 bestanden, drie migraties (`0015`, `0016`, `0017`) en negen hernoemingen.
+`5f0c762` gecommit, plus **een ongecommitte ronde in de werkboom** (zie
+*Ronde B* hieronder). De sessies van 6 en 7 september staan in de
+geschiedenis: 143 bestanden, vier migraties (`0015`, `0016`, `0017`, `0018`)
+en negen hernoemingen. Vier checks groen op de boom zoals hij nu staat:
+**3222 tests over 133 bestanden**, nagemeten met `npm test` en niet
+overgeschreven uit de vorige stand.
 
-**De werkboom is schoon.** De vier pakketten uit de toestelronde van
-7 september 's avonds staan in vier eigen commits — `a8d686a` (LIB-09),
-`1a49630` (LIB-10), `4dc32d4` (GAP-35/36) en `fd8ece0` (GAP-37) — en elk van
-de vier is apart groen geverifieerd, met de rest van de boom opzij gezet, in
-plaats van alleen samen. Zie *Wat er op 7 september 's avonds gebeurde*. Vier
-checks groen: **3137 tests over 130 bestanden**.
+⚠⚠ **NIETS VAN DIT ALLES STAAT OP `origin`, EN DE EIGENAAR DENKT VAN WEL.**
+Gemeten met `git rev-list --left-right --count
+origin/feat/live-import-and-plan-phases...HEAD`, dat `0	11` teruggeeft:
+**elf commits vooruit, nul achter.** `origin/feat/live-import-and-plan-phases`
+staat nog op `8f49b3b` — de docs-commit van 7 september — en alles wat
+daarna gebouwd is (`84e0125` t/m `5f0c762`, plus de ongecommitte ronde) leeft
+uitsluitend op deze laptop.
+
+**Waarom hij dacht dat hij gepusht had, want die redenering is de eigenlijke
+bevinding:** hij zag de wijzigingen op zijn telefoon. Dat bewijst niets over
+`origin`. Expo Go haalt de bundle rechtstreeks van de metro-server op deze
+laptop over hetzelfde wifi-netwerk — dat is precies waarom `npx expo start`
+een QR-code toont en geen build uploadt. **Een wijziging op het toestel zien
+is bewijs dat de laptop draait, niet dat git iets verzonden heeft.** Dit
+onderscheid heeft dit project al een keer geld gekost bij de migratiestand,
+in de omgekeerde richting: daar werd een aanname over de database als stand
+van zaken opgeschreven. Hier is het een aanname over een remote. Beide
+kosten één commando om te controleren.
+
+**De werkboom is NIET schoon.** Ronde A staat wel in commits — de vier
+pakketten van de toestelronde (`a8d686a` LIB-09, `1a49630` LIB-10, `4dc32d4`
+GAP-35/36, `fd8ece0` GAP-37) plus de vijf van de ontwerpronde erna
+(`55c3187` t/m `5f0c762`) — en elk van de eerste vier is apart groen
+geverifieerd met de rest van de boom opzij gezet, in plaats van alleen samen.
+Zie *Wat er op 7 september 's avonds gebeurde*. Maar dertien gewijzigde en
+vier nieuwe bestanden uit Ronde B staan nog ongestaged; die staan hieronder
+opgesomd omdat een verse sessie ze anders voor rommel aanziet.
 
 ⚠ **Er ging één commit aan vooraf die niets doet en die je moet kennen
 voordat je `git log` leest**: `84e0125` normaliseert de regeleindes van
@@ -55,18 +80,27 @@ omdat elke bevinding erin een *patroon* is dat zich herhaalt.
 ## Wat er draait
 
 **De infrastructuur staat, en is nagemeten in plaats van aangenomen.**
-Migraties `0001` t/m **`0017`** draaien tegen de live database — nagemeten op
+Migraties `0001` t/m **`0018`** draaien tegen de live database — nagemeten op
 7 september met `npx supabase migration list`, dat leest en niets wijzigt, en
-dat voor alle zeventien `local` en `remote` gelijk teruggeeft. Er staat niets
+dat voor alle achttien `local` en `remote` gelijk teruggeeft. Er staat niets
 meer klaar dat nog gedraaid moet worden.
 
-⚠ **DE MIGRATIESTAND IN DIT DOCUMENT IS NU DRIE KEER ONWAAR GEBLEKEN, EN
+⚠ **EN DAAR HOORT `0018` BIJ, WAT DE VIERDE KEER IS DAT DIT MIS GING.**
+`0018_ingredient_sections.sql` — de nullable `section` op `meal_ingredients`
+en `recipe_ingredients` waar de ingrediëntenkopjes op leunen — stond in de
+opdracht voor deze ronde nog als "nog niet gedraaid", met de instructie het
+te controleren vóór er iets over beweerd werd. Dat is gedaan, en het
+antwoord is `{"local":"0018","remote":"0018"}`: **hij draait.** De
+subsecties op het receptscherm zijn dus vandaag op een toestel te testen en
+niet geblokkeerd op een `db push`.
+
+⚠ **DE MIGRATIESTAND IN DIT DOCUMENT IS NU VIER KEER ONWAAR GEBLEKEN, EN
 ALTIJD DEZELFDE KANT OP: het beweerde dat migraties nog niet gedraaid waren
 terwijl ze allang liepen.** Eerst `0011` en `0012` (2 september), toen `0014`
-(7 september, het stond zelfs als eerste punt onder "wat er nu open ligt"), en
-nu `0015` en `0016`. Die laatste twee kwamen aan het licht doordat de eigenaar
-`db push` draaide en de tool hem **alleen `0017`** aanbood — de andere twee
-waren er al.
+(7 september, het stond zelfs als eerste punt onder "wat er nu open ligt"),
+toen `0015` en `0016`, en nu `0018`. `0015` en `0016` kwamen aan het licht
+doordat de eigenaar `db push` draaide en de tool hem **alleen `0017`**
+aanbood — de andere twee waren er al.
 
 Dat is geen toeval maar een structurele fout in hoe dit bestand geschreven
 wordt: "ik heb een migratiebestand toegevoegd" wordt hier opgeschreven als
@@ -101,8 +135,16 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 3137 tests / 130 bestanden
+npm test                 3222 tests / 133 bestanden
 ```
+
+⚠ Hier stond **3137 over 130**, en dat was de stand van vóór de twee rondes
+van 7 september. De drie nieuwe testbestanden zijn
+`tests/decisionFilterCopy.test.ts`, `tests/vanavondActionCopy.test.ts` en
+`tests/ingredientSections.test.ts`; de rest van de aanwas zit in bestaande
+bestanden. **Deze telling is gedraaid, niet opgehoogd** — dezelfde fout die
+de bundleberekening onder punt 6 hieronder maakte, waar "achttien glyphs"
+bleef staan terwijl er negen bij waren gekomen.
 
 ⚠ **`check:functions` groen betekent minder dan het lijkt**, en dat is op
 7 september apart bewezen in plaats van aangenomen. De Deno-regel uit OPS-09
@@ -570,6 +612,144 @@ gemarkeerd.
 
 ---
 
+## Wat er op 7 september daarna nog gebeurde: twee ontwerprondes
+
+De eigenaar keek voor de derde keer op een toestel en gaf twee reeksen
+instructies. De eerste reeks staat in vijf commits (`55c3187` t/m
+`5f0c762`); de tweede staat **nog ongecommit in de werkboom** en is
+hieronder per bestand opgesomd, omdat een verse sessie die anders niet van
+rommel kan onderscheiden.
+
+### Ronde A — gecommit, `55c3187` t/m `5f0c762`
+
+**Het palet is wit met twee groenen** (`55c3187`). De accent-groen en de
+positive-groen worden niet meer uit elkaar gehouden op tint maar op
+helderheid én chroma, en dat onderscheid is nu een assertie in
+`tests/contrast.test.ts` in plaats van een afspraak in een document. Dat is
+de belangrijke helft: een WCAG-contrastratio íís een helderheidsratio en
+scoort twee kleuren van gelijke helderheid en wild verschillende tint als
+1,00:1, dus een gewone contrastcheck op deze twee groenen kon per constructie
+niets zien. De test rekent nu in OKLab.
+
+**De bibliotheektegel-badge antwoordt op een andere vraag** (`378d7d0`,
+LIB-10). Een cijfer als het gerecht gekookt én beoordeeld is, een koksmuts
+als het gekookt is zonder cijfer, en diezelfde muts als neutrale stand.
+⚠ **De kalender voor `deze_week` en het woord "Ooit" zijn daarmee van de
+tegel af** — twee goede merken, bewust verloren, met de reden in
+`libraryTileBadge.ts` en in `DESIGN.md` §2 bij het overruled blok. De
+ordening (`sortMealsByScheduling`) en het `Wanneer?`-filter dragen die
+informatie nog; het tegeloppervlak niet meer.
+
+**De ingrediëntenlijst op het receptscherm heeft kopjes en geen icoontjes**
+(`d62e947`). De subsecties ("Voor het beslag") worden **overgeschreven uit
+het bronrecept en nooit afgeleid** — de goedkope variant, die een kopje
+herkent aan een dubbele punt zonder hoeveelheid, is expliciet afgewezen omdat
+"Zout: naar smaak" er dan een kopje wordt en alles eronder stil onder een
+subrecept belandt dat niet bestaat. Migratie `0018` draagt dat, en die draait.
+
+⚠ **`ingredientCategories.ts` en `ingredientCategoryIcons.ts` hebben nu nul
+productie-aanroepers** (RCP-08/RCP-09, gisteren op verzoek van de eigenaar
+gebouwd). Nagemeten: elke overgebleven verwijzing is een comment of een test.
+Dat is de twééde module in twee dagen die dit overkomt —
+`mainIngredients.ts` ging er onder GAP-35 aan vooraf. Beide modules blijven
+staan; weggooien is de beslissing van de eigenaar en niet van een agent.
+
+**45 iconen zijn opnieuw getekend, in kleur, onder `design/icons-v2/`**
+(`d908a1b`) en **niet bedraad**. Nagemeten: 45 `.svg`-bestanden plus een
+contactsheet en een palet-script; geen enkel bestand onder `src/` verwijst
+ernaar. Ze wachten op het oordeel van de eigenaar, en dat oordeel is een
+toestelvraag.
+
+**`Waarmee?` heet `Ingrediënten`** op Mijn recepten (`5f0c762`). ⚠ Die
+commit raakte **tien** bestanden, niet de twaalf die hier eerder gerapporteerd
+is — nagemeten met `git show --stat`.
+
+### Ronde B — ongecommit in de werkboom
+
+Dertien gewijzigde bestanden en vier nieuwe. De nieuwe zijn
+`src/components/decisionFilterCopy.ts`, `src/components/vanavondActionCopy.ts`
+en hun twee tests.
+
+**`DecisionFilterBar` is een uitklaplade geworden**, achter een knop die
+`Filters` heet en niet `Geavanceerd`. Gemeten uit de stylesheets in plaats van
+geschat: **73pt dicht**, tegen 235pt open voor een gewone bibliotheek en 462pt
+in het slechtste geval. Voorheen was de balk altijd 235pt en in het slechtste
+geval 462pt, dus de winst is 162pt respectievelijk 389pt — maar de eigenschap
+die meer waard is dan beide getallen is dat de hoogte dicht **niet meer
+afhangt van hoe groot de bibliotheek is**. Dat is dezelfde eigenschap die
+LIB-06 een dag kostte voor Mijn recepten. Het woord `Filters` is dat van de
+eigenaar en `Geavanceerd` is bewust niet overgenomen: die belooft iets *bóven*
+de gewone controls, wat waar is voor een lade over twee van vier assen en
+onwaar hier, waar de lade elke control bevat die de balk heeft.
+
+Kiezen zegt nu `Ingrediënten` in plaats van `WAARMEE?`, en `HOEVEEL TIJD?`
+staat er niet meer boven de klok. Die laatste constante blijft wél bestaan,
+en dat is met opzet: hij benoemt de verborgen tijd-as in het gesproken label
+van de dichte lade, en een schermlezergebruiker is de één die hem niet even
+open kan klappen om te kijken.
+
+⚠ **Kiezens tagchips tekenen nu dezelfde glyphs als de bibliotheek**
+(`IconChip` + `iconForDishTag`). **Dat is niet gevraagd door de eigenaar.**
+Het staat hier apart omdat het de enige wijziging van deze ronde is zonder
+instructie erachter, en het is in één regel terug te draaien: `IconChip`
+terugruilen voor `Chip`.
+
+**`DecisionCard`: de `KIEZEN`-eyebrow is weg en `PHOTO_WIDTH` ging van 80
+naar 200** — 2,5× de breedte, 6,25× het oppervlak. Die twee horen bij
+elkaar: de eigenaar vroeg om een grotere thumbnail en noemde zelf de twee
+teksten die ervoor moesten wijken. Zie `DESIGN.md` §1, dat nu een
+omkeringsbanner draagt.
+
+**`VanavondActionRow`: de knoppen staan naast elkaar en `Ja` heet
+`Dit koken`.** De hernoeming overruled `ui-research/WS3` §3.10, dat `Ja`
+"the whole thesis in two letters" noemt. Het argument dat wint is een
+koppeling en geen voorkeur: WS3 schreef die zin over een scherm met een
+`KIEZEN`-eyebrow erboven, en zonder vraag antwoordt `Ja` nergens op. De
+meetbare helft staat in `VANAVOND_LABEL_LENGTH_TOLERANCE`: naast elkaar in
+even brede vakken laat `Ja` (2 tekens) naast `Iets anders` (11) de primaire
+knop grotendeels leeg.
+
+**Vier bestanden zijn alleen meegegaan in die hernoeming** en dat is het
+opschrijven waard, want ze staan in de diff en lijken anders op ruis:
+`Button.tsx`, `haptics.ts`, `types.ts` en `tokens.ts` noemden `Ja` alle vier
+bij naam in hun comments. `OutcomeCard.tsx` legt bovendien vast dat **de `Ja`
+verderop in dát bestand blijft**: die beantwoordt "Heb je … gemaakt?" tegen
+"Nog niet", een echte ja/nee-vraag die boven de knop gedrukt staat.
+
+**`Button.tsx` kreeg er een echt argument bij.** Deze primitive is niet
+flex-baar: de `Pressable` erin zet `width: '100%'`, wat in een kolom klopt en
+in een rij stil niet — een rijkind zonder `flex` meet zich naar zijn eigen
+inhoud, dus twee knoppen komen op twee verschillende breedtes uit.
+`VanavondActionRow` wikkelt daarom elke knop in een eigen `flex: 1`-`View`.
+Het afgewezen alternatief was een `style`- of `flex`-prop op de primitive:
+één regel, en de verkeerde — 27 bestanden importeren dit component over 66
+aanroepplekken, en een style-ontsnapping op iets dat zo breed gebruikt wordt
+is hoe een designsysteem ophoudt er een te zijn.
+
+**Drie kleine reparaties die niemand gevraagd had:**
+
+- **`(tabs)/index.tsx` kreeg `onRequestClose`** op de enige `<Modal>` van zes
+  die hem miste. Androids hardware-terugknop deed niets terwijl de
+  uitkomstkaart openstond. De verzendsheet eronder heeft hem niet nodig: dat
+  is een geneste `<Modal>`.
+- **`cook/[mealId].tsx` kreeg een uitgang in de laadstaat.** ⚠ En dat is de
+  ernstigste van de drie, om een reden die niet in de opdracht stond: **die
+  branche kan nooit uit zichzelf eindigen.** `loadMealData` heeft geen
+  timeout en `setLoadState('error')` draait alleen uit de `.catch`, dus een
+  read die *hangt* in plaats van te verwerpen komt nooit in de foutstaat
+  terecht — hij blijft in "Laden…" staan, in een `fullScreenModal`, die op
+  iOS geen veegdismiss heeft. Het is `Terug` geworden en niet `Stoppen`:
+  `Stoppen` is het woord voor een kooksessie die al loopt en belooft "Er
+  wordt niets opgeslagen", een geruststelling die alleen betekenis heeft als
+  er voortgang is die verloren kon gaan.
+- **`friends/add.tsx` zet zijn terugknop in een vaste header.** Hij was het
+  eerste kind van de `ScrollView`, dus de uitgang scrolde weg met de rest —
+  op een scherm met drie lijsten die na elke accept of decline opnieuw
+  gelezen en getekend worden. Elk ander gepusht scherm tekent zijn uitgang
+  al in deze vorm; dit was het enige dat het niet deed.
+
+---
+
 ## Wat er nu open ligt
 
 Op volgorde, en de eerste twee zijn van een andere soort dan de rest: die
@@ -608,8 +788,9 @@ kosten geen code maar een handeling van de eigenaar.
 
 3. **De app op een toestel doorlopen, en dit blijft punt één met stip** — nu
    met zeven verse dingen erbij die niemand heeft gezien. In volgorde van
-   twijfel: de **koksmuts** op `al_gekookt` (leest die als "al gekookt" op
-   14pt, of als "recept"?), de **glyphs in de chips** (een glyph vult zijn
+   twijfel: de **koksmuts** op de tegel (leest die als "al gekookt" op
+   14pt, of als "recept"?), de **200pt foto op Kiezen** en de **dichte
+   filterlade** eromheen, de **glyphs in de chips** (een glyph vult zijn
    hele em-vak waar een letter alleen zijn kaphoogte vult, dus hij oogt snel
    zwaar — en de schijnbare afstand tot het woord ging van 24pt naar 8pt), de
    **twee zelfgetekende glyphs** (melkpak en peul, alleen als geometrie
@@ -648,13 +829,24 @@ kosten geen code maar een handeling van de eigenaar.
    Doe ook de throttle-test (21 imports binnen tien minuten; de 21e hoort
    `import_throttled` te krijgen).
 
-4. **De filterbug is nog maar half weg.** De bibliotheek herberekent zijn
-   chips nu tegen wat de andere filters overlaten; **Kiezen doet dat niet.**
-   Kies daar twee chips die niet samen voorkomen en je krijgt nog steeds een
-   leeg resultaat. Het is geen overname van één functie: de bibliotheek werkt
-   met `LibrarySearchState`, Kiezen met `DecisionFilters`, en Kiezen berekent
-   zijn chips bij het laden in plaats van per render. `index.tsx:273` houdt
-   daarom nog een eigen kopie van `collectAvailableDishTags`.
+4. **De filterbug is nog maar half weg, en Ronde B heeft hem goedkoper
+   gemaakt in plaats van hem op te lossen** (GAP-33). De bibliotheek
+   herberekent zijn chips tegen wat de andere filters overlaten; **Kiezen
+   doet dat niet.** Kies daar twee chips die niet samen voorkomen en je
+   krijgt nog steeds een leeg resultaat. Het is geen overname van één
+   functie: de bibliotheek werkt met `LibrarySearchState`, Kiezen met
+   `DecisionFilters`, en Kiezen berekent zijn chips bij het laden in plaats
+   van per render — `(tabs)/index.tsx:283` houdt daarom nog een eigen kopie
+   van `collectAvailableDishTags`. ⚠ Dit stond hier als `:273`; dat is de
+   aanroep, niet de definitie.
+
+   **Waarom dit bewust niet in Ronde B is meegenomen, terwijl het in dezelfde
+   twee bestanden ligt:** de lade veranderde de vorm van het probleem. Het
+   narrowen gebeurt nu binnen een geópende lade — exact de situatie waar de
+   bibliotheek in zit — dus LIB-07's oplossing past er nu op, waar hij er
+   vóór de lade niet op paste. **Ná de lade is deze fix beter geïnformeerd;
+   ervóór was hij duurder.** Dat is de reden om hem te laten liggen, en niet
+   dat er geen tijd was.
 
 5. **Dislikes doen letterlijk niets, en dat is groter dan een filter.** Je
    typt `paddenstoelen` — het voorbeeld dat de app zelf voorstelt — en het
@@ -668,7 +860,7 @@ kosten geen code maar een handeling van de eigenaar.
    ligt is een oordeel en geen werk.** De seam draagt twee families, alle
    zeventien mappings staan aan, en `isIconAvailable` is van vijftien van de
    drieëndertig naar drieëndertig van de drieëndertig gegaan. Vier checks
-   groen, 3137 tests. Wat hieronder stond als opdracht staat er nu als
+   groen (3137 tests toen; 3222 nu, zie *Wat er draait*). Wat hieronder stond als opdracht staat er nu als
    verantwoording; lees het door vóór je aan de mappings tornt.
 
    **Wat er veranderde, en waar.** `iconFont.ts` geeft geen kale glyphnaam
@@ -867,12 +1059,23 @@ dus die kan geen extensie van dít project registreren. Het vraagt
 `eas.json`, `expo-dev-client`, een development build, en voor iOS een
 betaald Apple Developer-account.
 
-**Twee kleine keuzes die op de eigenaar wachten**, elk één regel om te
-overrulen: `Vrienden · 2` past niet onder 390pt en verliest daar zijn
-teller met een ellips (`Vrienden·2` zonder spaties past wel, maar PD-020
-citeert de vorm mét). En het kopje boven de ingrediëntenchips is
-`Waarmee?` gebleven in plaats van `Ingrediënten`, omdat acht van de
-zeventien chips geen ingrediënt zijn.
+**Één kleine keuze die op de eigenaar wacht**, één regel om te overrulen:
+`Vrienden · 2` past niet onder 390pt en verliest daar zijn teller met een
+ellips (`Vrienden·2` zonder spaties past wel, maar PD-020 citeert de vorm
+mét).
+
+⚠ **Hier stonden er twéé. De tweede is beslist, en waarom hij hier stond is
+het bewaren waard.** Het kopje boven de ingrediëntenchips heette `Waarmee?`,
+en dit blok noemde dat een openstaande keuze op grond van een telling: acht
+van de zeventien chips zijn geen ingrediënt. **Die telling is nog steeds waar
+en heeft de beslissing niet gewonnen.** De eigenaar vroeg op 7 september eerst
+om `Ingrediënten` op Mijn recepten (`5f0c762`), keek toen naar het andere
+scherm en vroeg het daar ook — letterlijk: *"bij kiezen staat er nog wel
+'waarmee' ipv Ingredienten."* Beide schermen zeggen het nu. De voorwaarde om
+het terug te draaien staat vast en is op beide schermen dezelfde: als de acht
+ooit de negen voorbijgroeien, liegt het kopje over de meerderheid van zijn
+eigen rij. `tests/libraryFilterCopy.test.ts` bewaakt die verhouding tegen het
+echte vocabulaire, zodat het geen kwestie van opmerken blijft.
 
 **Beslist en niet heropenen zonder aanleiding:** GAP-08 (`dishTags` blijft
 optioneel, om de symmetrie met `recipeId`), ENT-03 (klembord-detectie
@@ -886,18 +1089,40 @@ de naamkwestie rond `remyapp.io` die WS1 opwerpt.
 
 ---
 
-## Drie schulden die nergens anders staan
+## Schulden die nergens anders staan
 
 **`DESIGN.md` is ouder dan het onderzoek dat hem tegenspreekt** (GAP-13), **en
-sinds 7 september 's avonds ook ouder dan de code.** Vier concrete plekken,
-door een agent gevonden en niet aangeraakt omdat het bestand niet van hem was:
-`:181` zegt dat de meta-rij `"25 min" · "voor 4"` in mono toont met "**no
-icons**" — er staat nu één feit met een klok ervoor; `:206` zegt "the action
-row never moves", wat in de code al is verzacht naar "beweegt niet bij een
-wissel"; `:209-221` tekent de oude volgorde nog als ASCII; en
-`ui-research/WS5-motion-feedback-cook-mode.md:307-308` citeert diezelfde
-"never moves"-zin. Wie de Kiezen-kaart aanraakt leze eerst dit blok, want
-`DESIGN.md` wordt uit tientallen bestanden als gezag aangehaald.
+sinds 7 september 's avonds ook ouder dan de code — maar §1 is nu wel
+bijgewerkt.** Bijgewerkt op de manier die deze repo eist: elke verloren zin
+staat er nog, doorgestreept en met de reden van zijn verlies erbij, in plaats
+van gewist. §1 draagt daarom nu een omkeringsbanner en §2 ook, bij de
+badge-mapping die Ronde A verving.
+
+⚠ **DE ANKERS DIE HIER STONDEN WAREN 202 REGELS VERSCHOVEN, EN DAT IS
+NAGEMETEN IN PLAATS VAN GESCHAT.** Er stond `:181`, `:206` en `:209-221`.
+Dat klopte tegen `b03fa30`, toen `DESIGN.md` 924 regels telde; `55c3187`
+voegde de kleursectie in bóven §1 en maakte er 1149 van — precies 202 regels
+hóger, op alle drie de ankers gelijk. Ze werden dus `:383`, `:408` en
+`:411-428`, en met de herschrijving van §1 zijn ze opnieuw verschoven.
+**Citeer dit bestand daarom voortaan op zijn kopregels en niet op zijn
+regelnummers** — een anker in een document dat van boven groeit is een anker
+dat stil verschuift, en dit document heeft daar nu een gemeten voorbeeld van.
+
+De vier plekken die het betrof, voor wie de geschiedenis wil volgen: de
+meta-rij die `"25 min" · "voor 4"` in mono toonde met "**no icons**" (er
+staat nu één feit met een klok ervoor); "the action row never moves", wat in
+de code al verzacht was naar "beweegt niet bij een wissel" en deze ronde
+alsnog onwaar werd doordat de rij van gestapeld naar naast elkaar ging; de
+ASCII van de oude volgorde; en de **twee dingen die er helemaal niet in
+stonden** — de foto op de kaart en de filterbalk uit PD-009. Die laatste twee
+waren het duurst: niemand kon ze tegenspreken, want niemand had ze
+opgeschreven.
+
+⚠ **`ui-research/WS5-motion-feedback-cook-mode.md:307-308` citeert de
+"never moves"-zin nog bij naam en redeneert eruit.** Dat bestand is
+gedateerd onderzoeksarchief en wordt niet bewerkt; de omkeringsbanner in
+§1 noemt dit citaat expliciet, zodat wie vanaf WS5 terugleest merkt dat hij
+over een scherm redeneert dat niet meer bestaat.
 
 
 `ui-research/ASSEMBLY.md` zegt te noteren wat het onderzoek "factually
@@ -919,6 +1144,65 @@ houdt expres nog de vorm waarin een weigering vastgelegd kan worden — als
 de meting ooit nodig blijkt is het eerlijke instrument een
 decision-viewed-event, geen knop die iemand moet indrukken om geteld te
 worden.
+
+**Het oude palet leeft nog in het onderzoeksarchief en in één echt
+configuratiebestand, en dat tweede telt.** `app.json:25` zet de
+Android-accentkleur van expo-notifications op een hardgecodeerde `#ffffff`,
+nooit afgeleid van het palet en dus ook niet meegegaan met `55c3187` — dat is
+de kleur achter de notificatie die het hele product moet aankondigen. En
+`docs/ui-research/WS1-direction-and-palette.md:600-676` draagt het volledige
+oude palet, terwijl `:1221-1264` **app-icoon én splash specificeert in het
+oude blauw**: `#1D4094` als vouw en accent op een `#DDD9D0`-grond, met een
+varianten-tabel voor licht, donker en tinted, en een splash die diezelfde
+grond herhaalt. Die specificatie is nu achterhaald, tot en met de
+`focusRing`. ⚠ `ui-research/` is gedateerd onderzoeksarchief en wordt
+**niet bewerkt**; dit staat hier omdat het de enige plek is waar een lezer
+erover struikelt vóór hij een icoon laat maken.
+
+**Twee contrastcijfers in de bron komen uit een palet van vóór alles.**
+`OutcomeCard.tsx:544-545` verdedigt `textSecondary` boven `textMuted` met
+"3,60:1 (light) / 4,26:1 (dark) tegen `surfaceRaised`, beide onder 4,5:1".
+`git log -S` legt die regel in `52b45d0` van **23 augustus 2026**, het
+MVP-palet — dus de cijfers gaan over kleuren die daarna vervangen zijn.
+**De beslissing houdt** en `tests/contrast.test.ts` bewijst dat elke ronde
+opnieuw; het zijn alleen de getallen die niets meer meten. Zelfde vorm als
+`tokens.ts:264-265`, waar dit al met een banner is opgelost. Wie erlangs komt
+haalt de cijfers weg of hertelt ze; niemand moet ze citeren.
+
+**Er is geen pijlglyph in dit project, en dat is de kern van de
+terugknop-klacht.** Nagemeten: van de dertien niet-tab-schermen hebben er
+twáálf een uitgang, dus de klacht van de eigenaar ging vrijwel zeker over
+**vindbaarheid** en niet over aanwezigheid. Elke deur is 14pt
+`bodySmall`-tekst in `textMuted` zonder pijl, met **vier verschillende
+woorden** — `Terug`, `Annuleren`, `Sluiten`, `Stoppen`. Een pijl toevoegen
+kan niet goedkoop: `ICON_NAMES` kent `chevron-right` en `close` en géén
+`chevron-left` of `arrow-left`, en er een toevoegen raakt de uitputtende
+`Record<IconFamily, …>` in `iconFont.ts` plus `remyGlyphs.ts` en
+`tests/iconFont.test.ts`. Dat is een eigen ronde. Één gedeeld
+terug-component of één woord is het dúúrdere alternatief en niet het
+goedkopere: het raakt acht routebestanden en drie copy-modules, en het
+overruled twee vastgelegde onderscheiden (`Annuleren` op een editor is niet
+`Terug` op een leesscherm).
+
+⚠ **Het dertiende scherm is `claim-handle.tsx`, en dat heeft helemaal geen
+uitgang.** Nagemeten met `grep -c "router\."`: **nul** treffers in het hele
+bestand — geen `router.back()`, geen `router.replace()`, geen `Annuleren`.
+Zijn enige control is `Klaar`, die opslaat. Dit stond in geen enkel
+overzicht, en het is de enige echte doodlopende route in de app.
+
+⚠ **En er is een veertiende scherm dat nergens geteld werd:**
+`src/app/dev-embed-probe.tsx`, 296 regels, dev-only. Het heeft dezelfde
+scroll-fout die `friends/add.tsx` deze ronde kwijtraakte, én een
+`router.replace('/')` op `:229` waar `router.back()` hoort — dat wist de
+navigatiestack in plaats van één stap terug te gaan.
+
+**`thumbZoneMinHeight` wordt nergens gelezen.** Alleen gedeclareerd
+(`tokens.ts:621`) en gezet op 96 (`:641`); `grep` vindt geen enkele lezer.
+Ronde B heeft dat in het token zelf opgeschreven in plaats van het weg te
+halen — 96 is een gemeten ondergrens die het waard is te hebben op de dag dat
+een scherm hem wél wil afdwingen, maar de zin die eronder stond ("de Kiezen
+`Ja` / `Iets anders` / `Niet koken` rij moet erbinnen passen") beschreef een
+beperking die niets controleerde, over een rij die niet meer bestaat.
 
 **WS2, WS3 en het grootste deel van WS6 zijn nooit tegen de code gehouden**
 (GAP-18). De styling-audit raakte ze alleen waar ze iconen, beeld en motion
