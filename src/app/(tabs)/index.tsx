@@ -147,7 +147,7 @@ import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repo
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import { supabase } from '@/lib/supabase';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
-import { getColors, resolveDuration, spacing } from '@/theme/tokens';
+import { getColors, resolveDuration, spacing } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
