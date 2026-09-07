@@ -89,11 +89,24 @@ export const RECIPE_OVERVIEW_INGREDIENTS_HEADING = 'Ingrediënten';
 export const RECIPE_OVERVIEW_STEPS_HEADING = 'Bereiding';
 
 /**
- * STATEMENTS, NOT THE LIBRARY'S QUESTIONS. `libraryFilterCopy.ts` heads the
- * same two vocabularies with "Waarmee?" and "Waar heb je zin in?" — correct
- * there, because those rows ASK which dishes you want. Nothing is being
- * asked here; these rows describe one dish that already exists. A question
- * mark over a read-only row would advertise a control that is not there.
+ * STATEMENTS, NOT THE FILTER ROWS' QUESTIONS. `libraryFilterCopy.ts` heads
+ * the same two vocabularies with "Ingrediënten" and "Waar heb je zin in?",
+ * and `DecisionFilterBar` on Kiezen still says "WAARMEE?" — correct there,
+ * because those rows ASK which dishes you want. Nothing is being asked here;
+ * these rows describe one dish that already exists. A question mark over a
+ * read-only row would advertise a control that is not there.
+ *
+ * ⚠ ONLY ONE OF THE THREE IS STILL A QUESTION, since the owner had the
+ * library's row renamed on 2026-09-07. The rule this comment states survives
+ * the rename — a read-only row states — but do not read it as evidence that
+ * every filter heading in the app is phrased as a question, because two of
+ * them no longer are.
+ *
+ * ⚠ AND NOTE WHAT THIS SCREEN'S OWN INGREDIENT HEADING IS CALLED, twenty
+ * lines up: "Ingrediënten", the real list. The library's dish-category
+ * filter now carries the same word for a different vocabulary. That collision
+ * is recorded in recipeEditCopy.ts, which is the screen where the two would
+ * otherwise land within one scroll of each other.
  */
 export const RECIPE_OVERVIEW_TAGS_HEADING = 'Soort gerecht';
 export const RECIPE_OVERVIEW_MOODS_HEADING = 'Waar het bij past';

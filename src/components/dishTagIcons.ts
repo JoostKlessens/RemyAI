@@ -1,6 +1,7 @@
 /**
  * One glyph per `DISH_TAGS` entry — the lookup behind the library's
- * "Waarmee?" chip row, and nothing else.
+ * "Ingrediënten" chip row (called "Waarmee?" until 2026-09-07), and
+ * nothing else.
  *
  * SEVENTEEN GLYPHS, NOT A TAXONOMY. `DISH_TAGS` (src/domain/dishTags.ts) is
  * a CLOSED vocabulary with the same posture as `EU_ALLERGENS`: a model may
@@ -76,7 +77,7 @@ const ICON_BY_DISH_TAG: Readonly<Record<string, IconName>> = {
   noedels: 'noodles',
   brood: 'bread',
   // Form of the dish. NOT ingredients — see this file's header and the
-  // "Waarmee?" argument in libraryFilterCopy.ts. The drawings are cookware
+  // heading argument in libraryFilterCopy.ts. The drawings are cookware
   // and vessels here precisely because that is what these six tags
   // describe; a carrot beside "Ovenschotel" would be a drawing that lies.
   soep: 'bowl-steam',

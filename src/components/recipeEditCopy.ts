@@ -121,27 +121,42 @@ export const RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL = 'Dit recept aanpassen';
 // ---------------------------------------------------------------------------
 
 /**
- * "Categorieën" AND NOT "WAARMEE?", WHICH IS THE WORD THE FILTER ROWS USE
- * FOR THE SAME VOCABULARY. Two words for one thing is normally the drift
- * this codebase warns about, so the difference is argued rather than
- * assumed: `DecisionFilterBar` and `LibrarySearchBar` are asking a QUESTION
- * of a pool ("waarmee wil je koken?"), and every eyebrow on those rows is a
- * question. This screen is LABELLING A FIELD, and every label around it is
- * a noun — Titel, Ingrediënten, Bereiding, Minuten, Porties. A question
- * mark in that column would read as the odd one out, and "Waarmee?" as a
- * field label reads as a prompt somebody forgot to finish.
+ * "Categorieën" FOR THE VOCABULARY THE LIBRARY NOW HEADS "INGREDIËNTEN".
+ * Two words for one thing is normally the drift this codebase warns about,
+ * so the difference is argued rather than assumed — and ⚠ THE ARGUMENT
+ * CHANGED SHAPE ON 2026-09-07, which is why this block is worth reading
+ * before you make the two match.
+ *
+ * WHAT IT USED TO SAY, and it was true until that day: the filter rows ask a
+ * QUESTION of a pool ("waarmee wil je koken?") while this screen LABELS A
+ * FIELD, and every label around it is a noun — Titel, Ingrediënten,
+ * Bereiding, Minuten, Porties. A question mark in that column would read as
+ * the odd one out. That distinction is now half gone: the owner had the
+ * library's row renamed from "Waarmee?" to "Ingrediënten", so ONE of the two
+ * filter surfaces is a noun too. `DecisionFilterBar` on Kiezen still asks
+ * "WAARMEE?", so the question-versus-label split survives there and only
+ * there.
+ *
+ * ⚠ "INGREDIËNTEN" IS STILL NOT AVAILABLE AS THE NAME HERE, AND THE REASON
+ * GOT STRONGER RATHER THAN WEAKER. Eight of the seventeen values are not
+ * ingredients (libraryFilterCopy.ts carries the count), and — the part that
+ * is local to this screen — THERE IS A SECTION GENUINELY CALLED
+ * INGREDIËNTEN TWENTY LINES FURTHER DOWN, holding the actual contents of the
+ * pan. Naming the dish-category chips the same thing would put one word on
+ * two different vocabularies within one scroll. The library gets away with
+ * it because its ingredient LIST is on another screen; this screen does not.
+ *
+ * ⚠ WHAT THAT COSTS THE PRODUCT, RECORDED HERE BECAUSE NOWHERE ELSE OWNS IT:
+ * "Ingrediënten" now means the dish-category filter on Mijn recepten and the
+ * real ingredient list on the recipe screen. Two meanings, one word, one app.
+ * That is the price of the rename and it was accepted knowingly; it is not a
+ * defect somebody should silently "fix" by renaming this label to match.
  *
  * The helper is what stops the two words from being two ideas: it names the
  * screen the chips change, so a person who ticks one here knows what it is
  * for. That connection is the whole reason this control was asked for — the
  * owner's "Kan je de tags niet aanpassen handmatig?" was about a recipe he
  * could not find again.
- *
- * "Ingrediënten" is NOT available as a name here for the reason
- * libraryFilterCopy.ts gives at length, and it matters more on this screen
- * than on that one: eight of the seventeen values are not ingredients, and
- * this screen already has a section genuinely called Ingrediënten twenty
- * lines further down.
  */
 export const RECIPE_EDIT_CATEGORIES_LABEL = 'Categorieën';
 export const RECIPE_EDIT_CATEGORIES_HELPER = 'Kies waar dit gerecht bij hoort. Hierop filter je in Mijn recepten.';
@@ -149,7 +164,7 @@ export const RECIPE_EDIT_CATEGORIES_HELPER = 'Kies waar dit gerecht bij hoort. H
 /**
  * "Gang", not "Soort gerecht". The second is plainer and is already spoken
  * for: libraryFilterCopy.ts records "Soort gerecht" as the name it would
- * have given a SPLIT of the Waarmee?-row (the six values that are forms
+ * have given a SPLIT of the dish-category row (the six values that are forms
  * rather than ingredients), and using it here would put one phrase on two
  * different vocabularies. "Gang" is what the four values actually are, and
  * a household that knows the word "driegangenmenu" knows this one.

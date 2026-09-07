@@ -225,8 +225,9 @@ describe('the copy as a whole', () => {
 
   /**
    * Two words for one vocabulary is only safe while the second one points
-   * at the first. "Categorieën" is this screen's noun for what the filter
-   * rows call "Waarmee?", and the helper is what ties them together.
+   * at the first. "Categorieën" is this screen's noun for what the library
+   * heads "Ingrediënten" and Kiezen still asks as "Waarmee?", and the helper
+   * is what ties them together.
    */
   test('the categories helper names the screen those chips actually change', () => {
     expect(RECIPE_EDIT_CATEGORIES_HELPER).toContain('Mijn recepten');

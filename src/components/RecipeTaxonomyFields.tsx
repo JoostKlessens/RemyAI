@@ -14,7 +14,7 @@
  * caption at import — and manual entry wrote `[]`
  * (src/app/import/confirm.tsx). So a recipe the model tagged wrongly, and
  * every recipe anybody typed in by hand, was permanently invisible to the
- * library's "Waarmee?" filter with no way for any person to fix it. The
+ * library's dish-category filter with no way for any person to fix it. The
  * most-used filter in the app was wrong about part of every library, and no
  * amount of work on the filter control repairs that; only a writer does.
  *

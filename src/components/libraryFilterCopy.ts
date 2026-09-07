@@ -33,22 +33,33 @@
  * that only matters to households with untimed meals, and it would sit on
  * the one screen the owner asked to make SHORTER.
  *
- * "WAARMEE?" IS KEPT, AND IT IS NOT A HAPPY WORD. The owner asked for this
- * row to become "ingrediënten". Eight of the seventeen `DISH_TAGS` values
- * are not ingredients at all — `soep`, `salade`, `ovenschotel`, `wok`,
- * `curry` and `stamppot` are forms a dish takes, and `vegetarisch` and
- * `veganistisch` are diets — so a heading reading "Ingrediënten" would be a
- * label that lies about half the chips beneath it, and the two diet chips
- * would read as things you can put in a pan. "Waarmee?" is vague where the
- * list is genuinely mixed, which is the honest failure, and it is the word
- * `DecisionFilterBar` already uses for the identical vocabulary on the
- * other screen — so keeping it also keeps one question phrased one way in
- * two places. The rejected alternative was splitting the row in two
- * ("Ingrediënten" + "Soort gerecht"), which is accurate and costs a whole
- * extra chip row on the screen this change exists to shorten. THE OWNER MAY
- * STILL OVERRULE THIS: it is his product vocabulary, and if "Ingrediënten"
- * is what he wants on screen, the one-line change is here and the argument
- * above is what he would be overruling.
+ * ⚠ "WAARMEE?" WAS KEPT, AND ON 2026-09-07 THE OWNER OVERRULED IT. The block
+ * below is left standing rather than deleted, because it is exactly what he
+ * overruled and this file does not erase an argument just because it lost.
+ * The word on screen is now "Ingrediënten"; see the header on
+ * LIBRARY_FILTER_TAGS_EYEBROW for the count as it stands today and for the
+ * condition under which the word would have to move back.
+ *
+ * THE ARGUMENT AS IT STOOD: eight of the seventeen `DISH_TAGS` values are not
+ * ingredients at all — `soep`, `salade`, `ovenschotel`, `wok`, `curry` and
+ * `stamppot` are forms a dish takes, and `vegetarisch` and `veganistisch` are
+ * diets — so a heading reading "Ingrediënten" is a label that lies about
+ * eight of the chips beneath it, and the two diet chips read as things you
+ * can put in a pan. "Waarmee?" is vague where the list is genuinely mixed,
+ * which is the honest failure. The rejected alternative was splitting the row
+ * in two ("Ingrediënten" + "Soort gerecht"), which is accurate and costs a
+ * whole extra chip row on the screen this change exists to shorten; that
+ * alternative is still rejected, on the same measurement.
+ *
+ * ⚠ ONE CONSEQUENCE OF THE OVERRULE IS NOT PAID FOR, AND IT IS DELIBERATE.
+ * The old argument leaned on `DecisionFilterBar` using the same word for the
+ * identical vocabulary on Kiezen — one question phrased one way in two
+ * places. That is now untrue: Kiezen still renders a hard-coded "WAARMEE?"
+ * (DecisionFilterBar.tsx:226) while this screen says "Ingrediënten". The
+ * owner asked for the change "onder mijn recepten" and only there, so the
+ * scope was not widened for him. It is a one-line change on that screen if he
+ * wants the two to match, and it is recorded here rather than left for
+ * somebody to discover as an inconsistency.
  *
  * EYEBROWS ARE SENTENCE CASE IN SOURCE. `typeScale.label` deliberately does
  * NOT set `textTransform` (tokens.ts says so in as many words); the
@@ -101,7 +112,44 @@ export const LIBRARY_SEARCH_CLEAR_QUERY_LABEL = 'Wis zoekopdracht';
  * quietly start lying.
  */
 export const LIBRARY_FILTER_TIME_EYEBROW = 'Hoeveel tijd?';
-export const LIBRARY_FILTER_TAGS_EYEBROW = 'Waarmee?';
+/**
+ * The dish-category row, and THE ONE EYEBROW IN THIS FILE THAT IS KNOWINGLY
+ * WIDER THAN WHAT IT LABELS. Read this before "fixing" it back.
+ *
+ * It said "Waarmee?" until 2026-09-07, and the argument for that word was a
+ * count, not a preference. `DISH_TAGS` groups itself in its own source, and
+ * the groups decide the question: five entries are a base or carbohydrate
+ * (pasta, rijst, aardappel, noedels, brood) and four are a main protein
+ * (kip, rundvlees, varkensvlees, visgerecht) — nine chips that genuinely name
+ * an ingredient. THE OTHER EIGHT DO NOT. Six name the FORM of the dish (soep,
+ * salade, ovenschotel, wok, curry, stamppot) and two name a DIET
+ * (vegetarisch, veganistisch). "Waarmee?" is true of all seventeen; a
+ * household filtering on `wok` is indeed telling you what it wants its dinner
+ * made with, loosely. "Ingrediënten" is true of nine and false of eight.
+ *
+ * THE OWNER ASKED FOR IT ANYWAY, on a device, having read the row: "Onder
+ * mijn recepten moet 'waarmee' aangepast worden naar 'ingredienten'". The
+ * count above was put to him. This file overrules its own measurement exactly
+ * here, and the reason is that the measurement answers the wrong question: an
+ * eyebrow's job is to let somebody find the row, not to be a complete
+ * description of its contents, and "Waarmee?" was failing the finding job for
+ * the person who uses this screen every day.
+ *
+ * WHAT WOULD CHANGE THIS BACK, so the next reader has a real test rather than
+ * a taste argument: if the eight non-ingredient chips ever grow past the nine
+ * ingredient ones, the heading is lying about the majority of its own row and
+ * the word has to move. Today it is 9 against 8. Count again before you edit;
+ * `ALL_DISH_TAG_VALUES` in dishTags.ts is the list, and its grouping comments
+ * are what the two numbers above are read from.
+ *
+ * NOT A SIGNAL TO SPLIT THE ROW. Two rows — one "Ingrediënten", one
+ * "Soort gerecht" — would make every heading true and is the obvious repair.
+ * It is rejected on the measurement that produced this whole bar: a stacked
+ * row costs 47pt of a band the owner already called too big, and LIB-06 spent
+ * a day getting that band from 452pt down to 262pt. One honest heading is not
+ * worth a fifth of the tile grid.
+ */
+export const LIBRARY_FILTER_TAGS_EYEBROW = 'Ingrediënten';
 export const LIBRARY_FILTER_MOODS_EYEBROW = 'Waar heb je zin in?';
 /**
  * The plan axis (`RecipeSchedulingState`) — the badge every tile already drew

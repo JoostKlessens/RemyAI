@@ -1,6 +1,6 @@
 /**
  * The single chip primitive: quick-pick grid items in Rotation Seeding,
- * dislike/allergen tags in Household setup, the time-cap and Waarmee?
+ * dislike/allergen tags in Household setup, the time-cap and Ingrediënten
  * rows in Mijn recepten's search bar, and the mood row on the outcome
  * card. Selected state is
  * conveyed by fill + border colour change only — deliberately no checkmark

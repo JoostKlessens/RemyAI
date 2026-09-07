@@ -18,6 +18,7 @@ import {
   describeTimeCapOption,
 } from '@/components/libraryFilterCopy';
 import { LIBRARY_TIME_CAP_OPTIONS } from '@/domain/recipeSearch';
+import { DISH_TAGS } from '@/domain/dishTags';
 
 const EXPLICIT_CAPS = LIBRARY_TIME_CAP_OPTIONS.filter((option): option is number => option !== null);
 
@@ -64,8 +65,36 @@ describe('describeTimeCapOption — the visible label', () => {
 });
 
 describe('eyebrows', () => {
-  test('the tag row keeps "Waarmee?" — it is NOT "Ingrediënten", and libraryFilterCopy.ts says why', () => {
-    expect(LIBRARY_FILTER_TAGS_EYEBROW).toBe('Waarmee?');
+  test('the tag row says "Ingrediënten" — the owner overruled "Waarmee?" on 2026-09-07', () => {
+    expect(LIBRARY_FILTER_TAGS_EYEBROW).toBe('Ingrediënten');
+  });
+
+  test('the heading is true of a MAJORITY of its own chips, which is the condition libraryFilterCopy.ts sets for keeping it', () => {
+    // Nine of the seventeen name an ingredient (five base/carbohydrate, four
+    // main protein); eight name a dish form or a diet. The word survives only
+    // while the first number is the larger — see the header on
+    // LIBRARY_FILTER_TAGS_EYEBROW for why that is the test and not taste.
+    const INGREDIENT_TAGS = [
+      'pasta',
+      'rijst',
+      'aardappel',
+      'noedels',
+      'brood',
+      'kip',
+      'rundvlees',
+      'varkensvlees',
+      'visgerecht',
+    ];
+    const allTags = DISH_TAGS.map((entry) => entry.tag);
+    const ingredients = allTags.filter((tag) => INGREDIENT_TAGS.includes(tag));
+    const rest = allTags.filter((tag) => !INGREDIENT_TAGS.includes(tag));
+
+    // Guards the list above against drift rather than trusting it: every name
+    // in INGREDIENT_TAGS has to still exist in the vocabulary, or this test
+    // would quietly start counting a shorter list and pass for the wrong
+    // reason.
+    expect(ingredients).toHaveLength(INGREDIENT_TAGS.length);
+    expect(ingredients.length).toBeGreaterThan(rest.length);
   });
 
   test('every eyebrow is sentence case in source — the component applies textTransform, not the token', () => {

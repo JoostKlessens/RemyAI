@@ -1,6 +1,6 @@
 /**
  * `Chip`, with the icon compulsory rather than optional — the owner's
- * request for the library's "Waarmee?" row, in his words "een
+ * request for the library's dish-category row, in his words "een
  * pasta-icoontje, en dan het woord pasta ernaast".
  *
  * IT DRAWS NOTHING ANY MORE, AND THAT IS THE POINT OF ITS CURRENT SHAPE.

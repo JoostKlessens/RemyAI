@@ -79,7 +79,7 @@
  * close, chevron, filter, shuffle, settings, send, recipes, calendar, timer,
  * warning"). The kitchen half is the vocabulary WS4 §1 measured Feather
  * against and found wanting, plus one glyph per entry in `DISH_TAGS`
- * (src/domain/dishTags.ts) so the library's "Waarmee?" row can be drawn —
+ * (src/domain/dishTags.ts) so the library's dish-category row can be drawn —
  * see dishTagIcons.ts, which owns that mapping and nothing else.
  *
  * EVERY GLYPH NAME BELOW WAS READ OUT OF A GLYPHMAP, NOT REMEMBERED. That is
@@ -350,7 +350,7 @@ const INSTALLED_GLYPH_BY_ICON: Readonly<Partial<Record<IconName, InstalledGlyph>
   // below), and the invariant in tests/iconFont.test.ts refuses two Remy names
   // on one drawing outright — "which would make two controls look identical".
   // (2) That is not a technicality here: LibrarySearchBar draws the
-  // "Waarmee?" chips through iconForDishTag on the SAME screen as the tile
+  // "Ingrediënten" chips through iconForDishTag on the SAME screen as the tile
   // grid, so a `pot-steam` badge would sit inches from a `pot-steam` chip
   // LABELLED "Wokgerecht" — the labelled one would teach the wrong meaning to
   // the unlabelled one, swapping the check mark's misreading for a new one.
