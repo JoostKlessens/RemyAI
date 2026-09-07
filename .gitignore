@@ -27,3 +27,9 @@ web-build-export-tmp/
 # The other research/ notes are committed; only this one is withheld.
 # Citations to it were rewritten to state their finding inline.
 research/13-legal-tos.md
+
+# Agent worktrees. `git worktree add` puts whole checkouts of this repo in
+# here, so without this rule a `git add -A` commits several copies of the
+# project into the project. Added 7 September 2026 after docs/HANDOVER.md had
+# carried it as a warning-to-the-next-person for three days.
+.claude/
