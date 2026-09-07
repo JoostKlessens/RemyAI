@@ -131,11 +131,22 @@ export const RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL = 'Dit recept aanpassen';
  * QUESTION of a pool ("waarmee wil je koken?") while this screen LABELS A
  * FIELD, and every label around it is a noun — Titel, Ingrediënten,
  * Bereiding, Minuten, Porties. A question mark in that column would read as
- * the odd one out. That distinction is now half gone: the owner had the
- * library's row renamed from "Waarmee?" to "Ingrediënten", so ONE of the two
- * filter surfaces is a noun too. `DecisionFilterBar` on Kiezen still asks
- * "WAARMEE?", so the question-versus-label split survives there and only
- * there.
+ * the odd one out.
+ *
+ * WHAT CHANGED, IN TWO STEPS, AND IT IS NOW AN AXIS SPLIT RATHER THAN A
+ * SCREEN SPLIT. The owner had the library's tag row renamed from "Waarmee?"
+ * to "Ingrediënten" on 2026-09-07, and Kiezen followed the same day when
+ * `DecisionFilterBar` became a disclosure. So BOTH filter surfaces now head
+ * their dish-category row with a noun, and neither asks a question there.
+ * What survives is the MOOD axis: `LIBRARY_FILTER_MOODS_EYEBROW` and
+ * `DECISION_FILTER_MOODS_EYEBROW` are both "Waar heb je zin in?", drawn on
+ * both screens (LibrarySearchBar.tsx:520, DecisionFilterBar.tsx:495).
+ *
+ * So the rule this label rests on is intact but narrower than it was: a
+ * filter row may ask, a field label states. It is simply no longer true that
+ * every filter row asks — measured, not remembered, because the previous
+ * version of this paragraph named a screen as the survivor and was wrong
+ * within a day.
  *
  * ⚠ "INGREDIËNTEN" IS STILL NOT AVAILABLE AS THE NAME HERE, AND THE REASON
  * GOT STRONGER RATHER THAN WEAKER. Eight of the seventeen values are not

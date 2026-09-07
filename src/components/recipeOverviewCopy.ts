@@ -89,18 +89,21 @@ export const RECIPE_OVERVIEW_INGREDIENTS_HEADING = 'Ingrediënten';
 export const RECIPE_OVERVIEW_STEPS_HEADING = 'Bereiding';
 
 /**
- * STATEMENTS, NOT THE FILTER ROWS' QUESTIONS. `libraryFilterCopy.ts` heads
- * the same two vocabularies with "Ingrediënten" and "Waar heb je zin in?",
- * and `DecisionFilterBar` on Kiezen still says "WAARMEE?" — correct there,
- * because those rows ASK which dishes you want. Nothing is being asked here;
- * these rows describe one dish that already exists. A question mark over a
- * read-only row would advertise a control that is not there.
+ * STATEMENTS, AND A FILTER ROW MAY ASK. Nothing is being asked here; these
+ * rows describe one dish that already exists, so a question mark over a
+ * read-only row would advertise a control that is not there. That is the
+ * whole rule, and it does not depend on what the filter rows happen to say.
  *
- * ⚠ ONLY ONE OF THE THREE IS STILL A QUESTION, since the owner had the
- * library's row renamed on 2026-09-07. The rule this comment states survives
- * the rename — a read-only row states — but do not read it as evidence that
- * every filter heading in the app is phrased as a question, because two of
- * them no longer are.
+ * ⚠ WHICH IS JUST AS WELL, BECAUSE WHAT THEY SAY MOVED TWICE IN ONE DAY.
+ * Both filter surfaces now head their dish-category row with the NOUN
+ * "Ingrediënten" — the library since 2026-09-07 and Kiezen the same day, when
+ * `DecisionFilterBar` became a disclosure and its hard-coded "WAARMEE?" went.
+ * The mood axis is still a question on both ("Waar heb je zin in?",
+ * LibrarySearchBar.tsx:520 and DecisionFilterBar.tsx:495). Do not read this
+ * block as evidence that filter headings are questions and reading rows are
+ * statements; one axis of the four is a noun on every surface that draws it.
+ * An earlier version of this paragraph made exactly that inference and was
+ * false within a day.
  *
  * ⚠ AND NOTE WHAT THIS SCREEN'S OWN INGREDIENT HEADING IS CALLED, twenty
  * lines up: "Ingrediënten", the real list. The library's dish-category
