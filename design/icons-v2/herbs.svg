@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <path d="M4.8 20.8 C6.8 15.8 10.4 10.4 15.6 6.2" fill="none" stroke="#2E7A4E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="rotate(-58 5.4 15.4)"><path d="M5.4 12.6 C7.19 14.14 7.19 16.66 5.4 18.2 C3.61 16.66 3.61 14.14 5.4 12.6 Z" fill="#2E7A4E" stroke="#26332C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g transform="rotate(32 9.8 17)"><path d="M9.8 14.2 C11.59 15.74 11.59 18.26 9.8 19.8 C8.01 18.26 8.01 15.74 9.8 14.2 Z" fill="#BCDFC6" stroke="#26332C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g transform="rotate(-58 9.4 11.4)"><path d="M9.4 8.6 C11.19 10.14 11.19 12.66 9.4 14.2 C7.61 12.66 7.61 10.14 9.4 8.6 Z" fill="#2E7A4E" stroke="#26332C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g transform="rotate(32 14 12.8)"><path d="M14 10 C15.79 11.54 15.79 14.06 14 15.6 C12.21 14.06 12.21 11.54 14 10 Z" fill="#BCDFC6" stroke="#26332C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g transform="rotate(-20 16.4 5.6)"><path d="M16.4 3 C18.08 4.43 18.08 6.77 16.4 8.2 C14.72 6.77 14.72 4.43 16.4 3 Z" fill="#2E7A4E" stroke="#26332C" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>
