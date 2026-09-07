@@ -48,9 +48,18 @@ export const KEY_INGREDIENT_LIMIT = 3;
 const INGREDIENT_SEPARATOR = ' · ';
 
 /**
- * Between meta facts, matching DecisionCard's own meta row spacing
- * exactly. Exported only so the two card kinds' meta rows cannot drift
- * apart by a space — it is not a design token and belongs to nobody else.
+ * Between meta facts on the friend card.
+ *
+ * ⚠ IT NO LONGER MATCHES ANYTHING, AND THAT IS WORTH KNOWING BEFORE YOU
+ * CHANGE IT. This constant was chosen to match `DecisionCard`'s meta row
+ * spacing exactly, so the two card kinds could not drift apart by a space.
+ * On 7 September 2026 that row stopped existing: the owner had the
+ * hoofdingrediënten line removed and the cook time moved above the photo
+ * with a clock beside it, so `DecisionCard` now has one fact where it had
+ * two and no separator at all. The value is kept because the friend card
+ * still renders through it and its spacing is fine on its own; what is gone
+ * is the reason it had to be THIS value. Whoever next touches the friend
+ * card's meta row may pick freely.
  */
 export const META_SEPARATOR = '  ·  ';
 

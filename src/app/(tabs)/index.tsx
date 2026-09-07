@@ -6,13 +6,32 @@
  * IT WAS "ONE DISH, ONE STATED REASON" UNTIL 6 SEPTEMBER 2026. The owner
  * removed the REDEN block — "De reden hierbij moet weg, dat is niet logisch,
  * ik wil liever dat je de 1 tot max 3 hoofdingredienten er staan en hoe lang
- * het duurt om te maken" — and asked for the dish's photo with it. What the
- * card carries now is the still, one to three hoofdingrediënten, the cook
- * time, and, only when a friend really cooked this dish, PD-017's sentence.
+ * het duurt om te maken" — and asked for the dish's photo with it.
  * `DecisionCard`'s header holds the full argument, including the one it
  * overturns about photos on this screen. The reason itself did not die: it
  * is still composed by `decide()` and still written to the decisions row
  * below, which is what plan §8 reads.
+ *
+ * THE HOOFDINGREDIËNTEN CAME OFF AGAIN ON 7 SEPTEMBER 2026, one day after
+ * they landed, and the owner's words are in DecisionCard's header along with
+ * why they were never going to be right. What the card carries now is the
+ * dish's name, its cook time, the still, and — only when a friend really
+ * cooked this dish — PD-017's sentence.
+ *
+ * WHAT WENT WITH THEM, recorded here because the code is gone and the
+ * measurement it rested on is worth keeping. This screen used to run a
+ * SECOND, lazy read whose only consumer was that line: `getMealIngredients`
+ * for the suggested meal alone, fired per offered dish rather than for the
+ * whole library at session start, because `Meal` carries no ingredients and
+ * local/meals.ts lists the entire ingredients table and filters it — the
+ * cost backfillMirrorOutbox.ts's header priced at "a two-hundred-meal store
+ * would parse the ingredients table four hundred times". Its answer was
+ * keyed by meal id and checked against the dish actually on screen, because
+ * "Iets anders" changes the dish while a read is in flight and three
+ * plausible ingredients under the wrong dish name is the failure nobody can
+ * see. If a surface ever wants those names again — a library tile is the
+ * obvious candidate — that read is the shape to bring back, not a load-time
+ * one.
  *
  * IT WAS THREE ACTIONS UNTIL "Niet koken" WAS REMOVED, and nothing
  * replaced it. The reason menu behind it (PD-002's optional afhalen /
@@ -128,7 +147,6 @@ import { VanavondActionRow } from '@/components/VanavondActionRow';
 import { decide, type DecisionRequestWithProof } from '@/domain/decide';
 import { collectAvailableDishMoods } from '@/domain/dishMoods';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
-import { selectMainIngredients } from '@/domain/mainIngredients';
 import { selectOfferableMeals } from '@/domain/offerablePool';
 import { buildFriendProofLine } from '@/domain/reason';
 import type {
@@ -171,17 +189,6 @@ const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
  * merely sooner.
  */
 const ACCEPT_STROKE_HOLD_MS = 180;
-
-/**
- * Whose ingredients these are, carried WITH them. A bare `readonly string[]`
- * in state would be indistinguishable from the previous dish's answer for
- * the frame between a swap and its read resolving — see the block that reads
- * this for why that is the failure worth spending a field on.
- */
-interface MealMainIngredients {
-  readonly mealId: MealId;
-  readonly names: readonly string[];
-}
 
 interface LiveSession {
   readonly householdId: HouseholdId;
@@ -423,62 +430,6 @@ export default function VanavondScreen(): JSX.Element {
   const effectivePhase: ScreenPhase = devScenario === 'error' ? 'error' : phase;
   const isEmptyRotation = currentResult.kind === 'no_candidate' && currentResult.reason === 'empty_rotation';
   const showFilterBar = effectivePhase === 'ready' && !isEmptyRotation;
-  const suggestedMealId = currentResult.kind === 'suggestion' ? currentResult.mealId : null;
-
-  /**
-   * The one to three hoofdingrediënten under the dish name, read for the
-   * dish actually on screen and for no other.
-   *
-   * WHY A LAZY READ AND NOT PART OF `loadLiveSession`. `Meal` carries no
-   * ingredients (src/domain/types.ts); they live in their own table, and
-   * local/meals.ts's `getMealIngredients` lists that whole table and filters
-   * it. backfillMirrorOutbox.ts's header already measured what doing that
-   * per meal costs — "a two-hundred-meal store would parse the ingredients
-   * table four hundred times" — and loading every candidate's ingredients at
-   * session start, on the app's launch tab, to print three names for one of
-   * them would be exactly that. At most three dishes are offered in an
-   * evening, so at most three reads happen.
-   *
-   * THE ANSWER IS KEYED BY MEAL ID AND CHECKED AGAINST THE CURRENT ONE
-   * rather than merely cancelled on unmount. "Iets anders" changes the dish
-   * while a read is in flight; `useThumbnailFallback` already records the
-   * shape of this bug for images ("a card must never inherit the previous
-   * one's failure") and ingredients are the worse half of it — a stale
-   * image is visibly wrong, three plausible ingredients under the wrong dish
-   * name are not.
-   *
-   * A FAILED READ IS AN EMPTY LINE AND NEVER AN ERROR. The card already
-   * draws nothing for a recipe whose ingredients were never parsed, which is
-   * a real and common state, so there is no new rendering to invent — and a
-   * screen that says "kon ingrediënten niet laden" over tonight's dinner has
-   * promoted a local-storage hiccup to the thing you look at.
-   */
-  const [readIngredients, setReadIngredients] = useState<MealMainIngredients | null>(null);
-
-  useEffect(() => {
-    if (suggestedMealId === null) {
-      setReadIngredients(null);
-      return;
-    }
-    let cancelled = false;
-    getAppRepository()
-      .getMealIngredients(suggestedMealId)
-      .then((ingredients) => {
-        if (!cancelled) {
-          setReadIngredients({ mealId: suggestedMealId, names: selectMainIngredients(ingredients) });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setReadIngredients({ mealId: suggestedMealId, names: [] });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [suggestedMealId]);
-
-  const mainIngredients = readIngredients?.mealId === suggestedMealId ? readIngredients.names : [];
 
   const getMealById = (mealId: MealId): Meal | undefined => session?.mealById.get(mealId);
 
@@ -621,8 +572,8 @@ export default function VanavondScreen(): JSX.Element {
       {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={devScenario} onSelect={setDevScenario} /> : null}
 
       {/* PD-009. Above the hero rather than inside it, so "Iets anders"
-          still cross-fades only the name/reason/meta block and the action
-          row never moves (docs/DESIGN.md §1). Hidden for `empty_rotation`:
+          still cross-fades only the name/time/photo block and the action
+          row does not move on a swap (docs/DESIGN.md §1). Hidden for `empty_rotation`:
           offering to narrow a library that has nothing in it is noise, and
           that state's single job is to get the first link pasted. */}
       {showFilterBar ? (
@@ -643,9 +594,7 @@ export default function VanavondScreen(): JSX.Element {
             <SuggestionView
               result={currentResult}
               meal={getMealById(currentResult.mealId)}
-              mainIngredients={mainIngredients}
               reduceMotionEnabled={reduceMotionEnabled}
-              bottomInset={insets.bottom}
               accepted={isAccepting}
               onAccept={() => handleAccept(currentResult)}
               onRequestAlternative={handleRequestAlternative}
@@ -711,10 +660,7 @@ export default function VanavondScreen(): JSX.Element {
 interface SuggestionViewProps {
   readonly result: Extract<DecisionResult, { kind: 'suggestion' }>;
   readonly meal: Meal | undefined;
-  /** Already selected and already matched to `meal` — see the read that produces it. */
-  readonly mainIngredients: readonly string[];
   readonly reduceMotionEnabled: boolean;
-  readonly bottomInset: number;
   /** True the instant "Ja" is tapped, until navigation to Kookmodus — drives DecisionCard's accept stroke (docs/DESIGN.md §1). */
   readonly accepted: boolean;
   readonly onAccept: () => void;
@@ -723,8 +669,7 @@ interface SuggestionViewProps {
 }
 
 function SuggestionView(props: SuggestionViewProps): JSX.Element {
-  const { result, meal, mainIngredients, reduceMotionEnabled, bottomInset, accepted, onAccept, onRequestAlternative, onChooseSelf } =
-    props;
+  const { result, meal, reduceMotionEnabled, accepted, onAccept, onRequestAlternative, onChooseSelf } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -734,7 +679,6 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
         <DecisionCard
           dishTitle={meal?.title ?? 'Onbekend gerecht'}
           thumbnailUrl={meal?.thumbnailUrl ?? null}
-          mainIngredients={mainIngredients}
           /* The REDEN block is gone (see DecisionCard's header). `reasonText`
              is still composed by `decide()` and still persisted on the
              decisions row above; what reaches the card is only the friend
@@ -745,7 +689,7 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
           accepted={accepted}
         />
       </View>
-      <View style={[styles.actionZone, { borderTopColor: colors.border, paddingBottom: spacing.space6 + bottomInset }]}>
+      <View style={[styles.actionZone, { borderTopColor: colors.border }]}>
         <VanavondActionRow
           alternativesRemaining={result.alternativesRemaining}
           onAccept={onAccept}
@@ -773,6 +717,30 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingHorizontal: spacing.screenPaddingHorizontal,
     paddingTop: spacing.space4,
+    // THE BUTTONS SIT AS LOW AS THIS SCREEN CAN PUT THEM, AND UNTIL
+    // 7 SEPTEMBER 2026 THEY DID NOT. `content` fills the scene and
+    // `heroBlock` takes every spare point above, so this zone is already
+    // flush against the bottom of the tab scene; `space6` is the entire
+    // distance between the buttons and the tab bar.
+    //
+    // It used to add `insets.bottom` on top of that, and that is what the
+    // owner was looking at when he said "the yes and something else button
+    // for selecting the recipe should move down". Kiezen is a TAB screen:
+    // expo-router 57's BottomTabView renders the scene and the tab bar as
+    // SIBLINGS in a column, and `getTabBarHeight` adds `insets.bottom` to
+    // the bar's own height (build/react-navigation/bottom-tabs/views/). The
+    // home indicator is therefore already cleared by the bar, and re-adding
+    // the window inset here reserved the same ~34 pt a second time — a band
+    // of empty background between the buttons and the tab bar, on every
+    // phone that has an inset at all. The other three tab screens never did
+    // this; only this one did, which is the shape of a copied line rather
+    // than a decision.
+    //
+    // Honest limit: on a phone whose `insets.bottom` is 0 nothing moves,
+    // because nothing was being reserved. The rejected alternative was
+    // shrinking `space6` as well — that moves the row by a number nobody
+    // can argue for and leaves the double count in place for the next
+    // person to find.
     paddingBottom: spacing.space6,
     gap: spacing.space3,
   },

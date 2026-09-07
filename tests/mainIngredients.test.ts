@@ -10,6 +10,17 @@
  * third group is the interesting one and it is asserted rather than
  * described, so that a future change which fixes one of them has to delete
  * a test and say so.
+ *
+ * THESE TESTS COVER A MODULE WITH NO PRODUCTION CALLER, since 7 September
+ * 2026. `DecisionCard` was the only one, and the owner had the line taken
+ * off the Kiezen screen after reading three names that did not match the
+ * dish — which is precisely the failure the module's own header predicts.
+ * src/domain/mainIngredients.ts explains why it was kept rather than
+ * deleted; this file is kept for the same reason and one more of its own.
+ * Untested code that comes back after a year comes back as a rewrite. The
+ * cases below are what "correct" means here, and they were expensive to
+ * argue: whichever surface picks the heuristic up next inherits a decided
+ * answer instead of re-litigating "rode peper" from scratch.
  */
 
 import { describe, expect, test } from 'vitest';

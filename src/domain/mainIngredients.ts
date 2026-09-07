@@ -1,9 +1,36 @@
 /**
- * The one to three "hoofdingrediënten" a recipe is about — what goes beside
- * the cook time on a tile.
+ * The one to three "hoofdingrediënten" a recipe is about.
  *
  * THE OWNER'S INSTRUCTION, VERBATIM: "ik wil liever dat je de 1 tot max 3
  * hoofdingredienten er staan en hoe lang het duurt om te maken."
+ *
+ * ===========================================================================
+ * NOTHING CALLS THIS TODAY, AND THAT IS RECORDED RATHER THAN FIXED
+ * ===========================================================================
+ *
+ * `DecisionCard` was the only caller. The owner looked at the Kiezen screen
+ * on a device on 7 September 2026 — one day after asking for these names —
+ * and said the line did not match the dish: "the key ingredients underneath
+ * the title of the video do not match. So I want to remove that." That is
+ * this module's own prediction arriving on the worst possible surface, and
+ * the line was removed; see DecisionCard.tsx's header for the argument,
+ * including why a confidence gate was rejected.
+ *
+ * IT WAS DELIBERATELY NOT DELETED WITH IT. Everything below is argued,
+ * measured and covered by tests/mainIngredients.test.ts, and deleting a
+ * heuristic in order to re-derive it later — badly, from the same absent
+ * data — is how a codebase forgets what it already decided. The plausible
+ * next home is a Bibliotheek tile, where a wrong guess costs a shrug instead
+ * of a dinner; that is a guess about the future and not a plan, because
+ * docs/DESIGN.md §2 specifies that tile as thumbnail, creator handle, dish
+ * title and scheduling badge, with no ingredients on it. A dead-code sweep
+ * that reaches this file should read this paragraph and move on; if the
+ * answer really is "no surface will ever want these", that is the owner's
+ * call to make, in one commit, on purpose.
+ *
+ * Everything below still describes this module's contract exactly. Where it
+ * says "a tile" or "a card", read "the surface that asks", not something on
+ * screen today — no surface asks at the moment.
  *
  * ===========================================================================
  * THIS IS A GUESS, AND THE POINT IS TO MAKE IT WRONG BORINGLY
@@ -39,8 +66,10 @@
  * gives the reason and it is structural, not stylistic — and the two
  * functions want different answers anyway: the friend card summarises a
  * whole ingredient list and says how much it left out, this one names what
- * the dish is and says nothing about the rest. Two callers, two questions,
- * one shared heuristic argued in one place and cited from the other.
+ * the dish is and says nothing about the rest. Two questions, one shared
+ * heuristic argued in one place and cited from the other — and that holds
+ * with this side currently uncalled, because the reason the two were never
+ * merged is the questions, not the call count.
  *
  * ===========================================================================
  * THE STAPLE RULE, AND THE OVER-DROP IT BUYS
@@ -247,13 +276,14 @@ export function selectMainIngredients(ingredients: readonly NameableIngredient[]
 const MAIN_INGREDIENT_SEPARATOR = ' · ';
 
 /**
- * What a tile draws: "kipfilet · paprika · citroen".
+ * What a tile would draw: "kipfilet · paprika · citroen".
  *
- * Lives here rather than in each screen so that the two surfaces asking
- * this question cannot answer it with two different separators — the same
- * reason `joinDutchList` was pulled out of the friend feed. Nothing to say
- * renders as the empty string, so a caller with no ingredients draws
- * nothing rather than a stray middot.
+ * Lives here rather than in each screen so that no two surfaces asking this
+ * question can answer it with two different separators — the same reason
+ * `joinDutchList` was pulled out of the friend feed, and the reason this
+ * stays a shared function now that the count of surfaces is briefly zero.
+ * Nothing to say renders as the empty string, so a caller with no
+ * ingredients draws nothing rather than a stray middot.
  */
 export function formatMainIngredients(names: readonly string[]): string {
   return names.join(MAIN_INGREDIENT_SEPARATOR);
