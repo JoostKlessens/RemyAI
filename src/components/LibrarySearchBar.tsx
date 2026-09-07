@@ -47,16 +47,23 @@
  * surfaces that can afford to grow (Household setup's tag list, the outcome
  * card's moods), and this one cannot.
  *
- * THE BAR IS NOW A FIXED HEIGHT AT EVERY LIBRARY SIZE: 68 (search + clock:
- * `TimeCapPicker`'s 20pt readout, its 4pt margin and its 44pt touch area) +
- * 8 + 47 (plan and course) + 8 + 47 (waarmee and zin in) + 16 = 194pt, plus
- * a 68pt header = 262pt of chrome against 452pt before. A library with
- * seventeen tags and six moods costs exactly the same as one with two — the
- * 813pt case is gone, not reduced.
+ * THE BAR'S HEIGHT STILL DOES NOT DEPEND ON THE LIBRARY. SINCE 2026-09-07 IT
+ * DEPENDS ON ONE THING THE HOUSEHOLD CONTROLS, AND ONLY WHILE THEY USE IT:
  *
- * WHAT THAT BUYS THE GRID, at 393x852 with 452pt of viewport left: a 4:5
- * tile three across is 137.1pt on a 149.1pt pitch, so 3.03 rows are visible
- * where 0.83 of a row was before. Nine recipes instead of one and a half.
+ *   shut  68 (search + clock: `TimeCapPicker`'s 20pt readout, its 4pt margin
+ *            and its 44pt touch area) + 8 + 47 (waarmee and zin in) + 8 + 44
+ *            (the "Geavanceerd" opening, one touch target) + 16 = 191pt
+ *   open  + 8 + 47 (wanneer and welke gang)                     = 246pt
+ *
+ * against 194pt before, when those last two axes were on screen whether or not
+ * anybody wanted them. A library with seventeen tags and six moods still costs
+ * what one with two costs — the 813pt case stays gone.
+ *
+ * WHAT THAT BUYS THE GRID, at 393x852 with 714pt of usable height and a 68pt
+ * header: 455pt of viewport shut, 400pt open. On the 149.1pt tile pitch
+ * measured above, that is 3.05 rows shut and 2.68 open, against 3.03 before
+ * this change — so opening the drawer costs about a third of a tile row, for
+ * as long as it is open and no longer.
  *
  * ===========================================================================
  * WS-2 §3.1's OTHER TWO REDLINES, AND WHERE THIS DEPARTS FROM ONE
@@ -102,27 +109,64 @@
  * rather spend 44pt more on a full-width track.
  *
  * ===========================================================================
- * FOUR CHIP AXES NOW, AND WHY THEY SIT IN THAT ORDER
+ * TWO AXES IN THE BAR, TWO BEHIND AN OPENING, AND THE MEASUREMENT THAT SAID
+ * WHICH
  * ===========================================================================
  *
- * Row one is the two CLOSED, four-value vocabularies: the plan
- * (`RecipeSchedulingState`) and the course (`Meal.dishCourse`). Eight chips
- * at most, so the row is usually entirely visible without a swipe, and both
- * are coarse — they cut the library in halves rather than into slivers.
+ * THE OWNER'S INSTRUCTION, VERBATIM: "in the recipe, my recipes, it says
+ * when. It says sometime or cooked already, and I want to remove that part,
+ * and then it says which course. Also, remove that part doesn't make sense. I
+ * think maybe it's wise to have, like, an advanced filters here, where you
+ * can just select the ingredients and advanced filters will give you the
+ * option if you've cooked it before, which dish it is, so, like, which
+ * course. So, like, dessert or main dish, something like that."
  *
- * Row two is the two OPEN ones: dish tags (up to seventeen) and moods (up to
- * six). These are the long rows the owner's sketch shows scrolling.
+ * HE ASKED FOR THE PLAN AXIS TO GO AND, THREE SENTENCES LATER, ASKED FOR IT
+ * BACK — AND IT IS ONE AXIS, NOT TWO. Measured before building anything:
+ * "sometime or cooked already" is `buildSchedulingLabel`'s "Ooit" and "Al
+ * gekookt" (src/components/recipeScheduling.ts:91-106), and "the option if
+ * you've cooked it before" is that same `al_gekookt` value on that same
+ * four-value union (`RecipeSchedulingState`, recipeScheduling.ts:12). There
+ * was no cooked-before filter to ADD; the one he asked for is the one he was
+ * looking at. So the axis MOVES. A second cooked/not-cooked control beside it
+ * would have been two chips answering one question — and since
+ * `filterRowsBySchedulingStates` (libraryGridFilter.ts) ORs this axis, they
+ * would not even have cancelled into silence; they would have quietly widened
+ * each other.
  *
- * THE PLAN AXIS IS THE ONE THAT SHOULD HAVE BEEN HERE FIRST. Every tile has
- * drawn its scheduling state as a badge since the grid existed and nothing
- * could filter on it — the only axis whose data is 100% populated, unlike
+ * WHAT STAYS IN THE ORDINARY BAR: the title field, the clock, "WAARMEE?" (the
+ * dish tags — "the ingredients", in his words) and "WAAR HEB JE ZIN IN?".
+ * WHAT MOVES BEHIND "GEAVANCEERD": "WANNEER?" and "WELKE GANG?", the two he
+ * named. Row order is reading order: search, the axes that are always on
+ * screen, the opening, then — only while it is open — the two behind it.
+ *
+ * THE MOODS ROW IS A JUDGEMENT CALL AND HE DID NOT MAKE IT. He named what
+ * stays (the ingredients) and what moves (the plan, the course), and said
+ * nothing about "Waar heb je zin in?". It stays in the ordinary bar because
+ * it is the only axis left that asks about TONIGHT rather than describing the
+ * recipe — Kiezen's own mood row asks the same thing — so it belongs beside
+ * the clock rather than behind a fold holding two properties of a dish. The
+ * rejected alternative was moving it too, because one chip row is tidier than
+ * two; that is a designer's reason to overrule an owner who was being
+ * specific. IT IS A SMALL CHANGE IF HE WANTS IT: move the mood block into the
+ * advanced row and add `anyDishMoods.length` to `advancedFilterCount`, so the
+ * count keeps telling the truth.
+ *
+ * THE PLAN AXIS STILL HAS THE BEST DATA ON THIS SCREEN AND IS NOW THE HARDEST
+ * TO REACH. It is the only axis whose data is 100% populated — unlike
  * dishTags (written at import), dishMoods (written after cooking) and
- * dishCourse (written since migration 0017). See libraryGridFilter.ts.
+ * dishCourse (written since migration 0017), see libraryGridFilter.ts. The
+ * owner looked at it on a device and said it did not make sense THERE, which
+ * is a statement about the top of a filter bar and not about the column under
+ * it. If "Al gekookt" turns out to be what households reach for most, this
+ * paragraph is where to start reading.
  *
- * EYEBROWS LEAD THEIR ROWS INSTEAD OF SITTING ABOVE THEM. "WAARMEE?" is now
- * the first thing inside the tag row's scroll rather than a 23pt line over
- * it: the heading costs width, which a scrolling row has, instead of height,
- * which this screen does not — and it stays visible and in reading order.
+ * EYEBROWS LEAD THEIR ROWS INSTEAD OF SITTING ABOVE THEM. "WAARMEE?" is the
+ * first thing inside the tag row's scroll rather than a 23pt line over it:
+ * the heading costs width, which a scrolling row has, instead of height,
+ * which this screen does not — and it stays visible and in reading order. The
+ * two eyebrows behind the opening lead their row in exactly the same way, so
+ * the drawer opens onto a row that reads like the one above it.
  *
  * ===========================================================================
  * THE ICONS, AND WHAT IS HONESTLY DRAWABLE TODAY
@@ -143,9 +187,11 @@
  * feeling and drawing one is a far harder claim than drawing a pan; a course
  * and a plan are words with no picture anybody would read faster than the
  * word. Where an icon genuinely pays on this screen it is already drawn: the
- * header's three controls, the clock on the picker, and the tile badge
- * (libraryTileBadge.ts), which is the one place a glyph buys back space a
- * word could not fit into.
+ * header's three controls, the clock on the picker, the chevron on the
+ * "Geavanceerd" opening — a disclosure is the one control here whose entire
+ * meaning IS a direction, which is the case a word cannot make more cheaply —
+ * and the tile badge (libraryTileBadge.ts), which is the one place a glyph
+ * buys back space a word could not fit into.
  *
  * THE HEADING STAYS "WAARMEE?" AND THE OWNER ASKED FOR "INGREDIËNTEN".
  * libraryFilterCopy.ts carries the argument in full — eight of the
@@ -163,12 +209,39 @@
  * against a full-library pool; it only orders what it is handed, against each
  * closed vocabulary, so chips never rearrange as a library grows.
  *
- * A row with nothing to offer is not rendered, exactly as before: a chip for
- * a category nothing in this household's library carries is a control
- * guaranteed to return zero rows, and for a brand-new library the tag and
- * mood rows are legitimately absent. The time control is NOT gated that way
- * — a cap stays meaningful even for a library with no timed meals, which is
- * itself the signal — mirroring `DecisionFilterBar`.
+ * THAT NARROWING (LIB-07) IS EXACTLY WHY THE OPENING HAS TO CARRY A COUNT.
+ * The four axes are computed against each other, so a plan chip that is ON —
+ * and, since this change, possibly out of sight — thins the tag and mood rows
+ * that are still visible. Until now every cause of that thinning was on
+ * screen. Fold one away and a household watches its chips disappear with
+ * nothing to point at, which is a worse control than the crowded bar the
+ * owner asked to simplify. THREE THINGS STOP IT:
+ *
+ * ONE, THE COUNT ON THE CLOSED CONTROL. `describeAdvancedFilters` puts the
+ * number of selected folded filters on the opening in words ("2 filters
+ * actief"), in the accent colour so it reads as state rather than as a label,
+ * and repeats it in the spoken label after naming the two axes inside.
+ *
+ * TWO, THE DRAWER SEEDS ITSELF OPEN from that count — see `isAdvancedExpanded`
+ * below for why a mount is the one moment that needs it.
+ *
+ * THREE, "WISSEN" IS FREE EVIDENCE: it is pinned to the row that is always
+ * rendered and appears whenever ANY filter is set, folded ones included. A
+ * bar whose visible chips look untouched but whose right edge says WISSEN is
+ * already admitting something before anybody reads the count.
+ *
+ * THE REJECTED ALTERNATIVE WAS REFUSING TO CLOSE while something inside is
+ * selected: it makes "active but hidden" impossible by breaking the control's
+ * only promise, that tapping it puts those rows away — telling a household
+ * that filtered on "Al gekookt" on purpose that it may not have its screen
+ * back.
+ *
+ * A row with nothing to offer is still not rendered: a chip for a category
+ * nothing in this household's library carries is a control guaranteed to
+ * return zero rows, and for a brand-new library the tag and mood rows are
+ * legitimately absent. The time control is NOT gated that way — a cap stays
+ * meaningful even for a library with no timed meals, which is itself the
+ * signal — mirroring `DecisionFilterBar`.
  *
  * THE "SORTEREN" ROW WAS REMOVED ON 2026-09-05 at the owner's request
  * ("sorteren kan voor nu weg"). `src/domain/librarySort.ts` and its tests
@@ -191,6 +264,7 @@ import { Icon } from './Icon';
 import { IconChip } from './IconChip';
 import { TimeCapPicker } from './TimeCapPicker';
 import { iconForDishTag } from './dishTagIcons';
+import { isIconAvailable, type IconName } from './iconFont';
 import { LIBRARY_SCHEDULING_STATES } from './libraryGridFilter';
 import { buildSchedulingLabel, type RecipeSchedulingState } from './recipeScheduling';
 import {
@@ -203,6 +277,7 @@ import {
   LIBRARY_SEARCH_CLEAR_QUERY_LABEL,
   LIBRARY_SEARCH_INPUT_LABEL,
   LIBRARY_SEARCH_PLACEHOLDER,
+  describeAdvancedFilters,
   describeDishCourseChip,
   describeDishMoodChip,
   describeDishTagChip,
@@ -242,6 +317,26 @@ const CLEAR_GLYPH_SIZE = 18;
  */
 const FILTER_ROW_HEIGHT = 47;
 
+/**
+ * The chevron on the "Geavanceerd" opening. Feather has no `chevron-down`, so
+ * the open state is this glyph turned a quarter turn
+ * (`advancedGlyphExpanded`); the rejected alternative was a second name in
+ * iconFont.ts whose only job would be to be the same drawing, rotated.
+ *
+ * Asked through `isIconAvailable` before it is drawn, exactly as `IconChip`
+ * does and for the reason its header gives: `Icon` renders NOTHING for a name
+ * no installed font can draw, so a caller that wants no dangling gap has to
+ * ask first. The label and the count carry the control without it.
+ */
+const DISCLOSURE_GLYPH: IconName = 'chevron-right';
+
+/**
+ * 16pt — the small end of WS4's 16-20pt UI band, and `IconChip`'s size for a
+ * glyph beside a label. Larger reads as an illustration competing with the
+ * word rather than as a mark introducing it.
+ */
+const DISCLOSURE_GLYPH_SIZE = 16;
+
 export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   const {
     search,
@@ -275,8 +370,28 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   const selectedStates = new Set(search.anySchedulingStates);
 
   const isActive = isLibrarySearchActive(search);
-  const hasPlanRow = visibleStates.length > 0 || visibleCourses.length > 0;
   const hasCategoryRow = visibleTags.length > 0 || visibleMoods.length > 0;
+  // Nothing behind the fold means no fold: an opening onto an empty row is a
+  // control that answers a finger with nothing. In practice this closes only
+  // for a library with no rows at all — the plan axis is always populated —
+  // and that is a screen this component is never rendered on.
+  const hasAdvancedRow = visibleStates.length > 0 || visibleCourses.length > 0;
+
+  // How many of the FOLDED axes are switched on — the number the opening
+  // shows. Deliberately not `isLibrarySearchActive`, which also counts the
+  // query, the tag chips and the time cap: those are all on screen, and a
+  // count that included them would claim something is hidden when nothing is.
+  const advancedFilterCount = search.anySchedulingStates.length + search.anyDishCourses.length;
+
+  // Seeded from the count, not started shut — guard two of the three the
+  // header lists against a filter that is set and cannot be seen. It matters
+  // at MOUNT only: within one mount the drawer must already be open for these
+  // chips to be tapped at all, but this component unmounts whenever the
+  // library drops to zero rows while `search` lives on in recipes.tsx, and
+  // that search would otherwise come back invisible. A lazy initializer and
+  // NOT a derived value: after mount the drawer is the household's own
+  // decision, and recomputing would re-open one they just shut on purpose.
+  const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(() => advancedFilterCount > 0);
 
   // Immutable both ways, matching DecisionFilterBar's own toggle — the
   // caller holds this object in state and may still be mid-render with the
@@ -355,13 +470,18 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
         </View>
       </View>
 
-      {/* `|| isActive` is not tidiness. A query that matches nothing narrows
-          every chip list to nothing too, so gating this row on chips alone
-          would take "Wissen" off the screen at the exact moment it is the
-          only control that helps. The zero-results state below the bar
-          carries its own clear button, and that is a second answer to the
-          same problem rather than a reason to drop the first. */}
-      {hasPlanRow || isActive ? (
+      {/* THE ROW THAT CARRIES "WISSEN" IS THE ROW THAT IS ALWAYS THERE, and
+          since the plan and course axes moved behind the opening, that is this
+          one. `|| isActive` is not tidiness: a query that matches nothing
+          narrows every chip list to nothing too, so gating on chips alone
+          would take "Wissen" off the screen at the exact moment it is the only
+          control that helps. It does a second job now — a filter selected
+          behind the fold makes `isActive` true, so this row says WISSEN even
+          when every visible chip looks untouched (guard three, see the
+          header). The zero-results state below the bar carries its own clear
+          button: a second answer to the same problem, not a reason to drop the
+          first. */}
+      {hasCategoryRow || isActive ? (
         <FilterRow
           reset={
             isActive ? (
@@ -378,40 +498,6 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
             ) : null
           }
         >
-          {visibleStates.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_PLAN_EYEBROW} /> : null}
-          {/* OR semantics, spoken in each chip's own label. A recipe
-              resolves to exactly one state, so AND would be empty by
-              construction — libraryGridFilter.ts carries that argument. */}
-          {visibleStates.map((state) => (
-            <Chip
-              key={state}
-              label={buildSchedulingLabel(state)}
-              selected={selectedStates.has(state)}
-              onPress={() => handleToggleState(state)}
-              role="checkbox"
-              accessibilityLabel={describeSchedulingChip(buildSchedulingLabel(state))}
-            />
-          ))}
-          {visibleCourses.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_COURSES_EYEBROW} /> : null}
-          {/* Also OR, and for the same structural reason: dishCourses.ts
-              fixes the cardinality at one course per dish. An untagged
-              recipe IS a hoofdgerecht, so that chip keeps every row written
-              before migration 0017 — see `matchesDishCourses`. */}
-          {visibleCourses.map((entry) => (
-            <Chip
-              key={entry.course}
-              label={entry.label}
-              selected={selectedCourses.has(entry.course)}
-              onPress={() => handleToggleCourse(entry.course)}
-              role="checkbox"
-              accessibilityLabel={describeDishCourseChip(entry.label)}
-            />
-          ))}
-        </FilterRow>
-      ) : null}
-
-      {hasCategoryRow ? (
-        <FilterRow>
           {visibleTags.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_TAGS_EYEBROW} /> : null}
           {/* AND semantics — see DecisionFilterBar's identical row for the
               full argument. Spoken out loud in each chip's own
@@ -446,7 +532,108 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
           ))}
         </FilterRow>
       ) : null}
+
+      {hasAdvancedRow ? (
+        <AdvancedDisclosure
+          isExpanded={isAdvancedExpanded}
+          activeFilterCount={advancedFilterCount}
+          onToggle={() => setIsAdvancedExpanded((wasExpanded) => !wasExpanded)}
+        />
+      ) : null}
+
+      {/* The two axes the owner asked to take out of the ordinary bar.
+          UNMOUNTED rather than hidden with a style, so a shut drawer costs no
+          height and gives a screen reader nothing to walk past. Nothing about
+          the chips themselves changed: same vocabularies, same order, same OR
+          semantics, same spoken labels. */}
+      {hasAdvancedRow && isAdvancedExpanded ? (
+        <FilterRow>
+          {visibleStates.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_PLAN_EYEBROW} /> : null}
+          {/* OR semantics, spoken in each chip's own label. A recipe
+              resolves to exactly one state, so AND would be empty by
+              construction — libraryGridFilter.ts carries that argument. */}
+          {visibleStates.map((state) => (
+            <Chip
+              key={state}
+              label={buildSchedulingLabel(state)}
+              selected={selectedStates.has(state)}
+              onPress={() => handleToggleState(state)}
+              role="checkbox"
+              accessibilityLabel={describeSchedulingChip(buildSchedulingLabel(state))}
+            />
+          ))}
+          {visibleCourses.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_COURSES_EYEBROW} /> : null}
+          {/* Also OR, and for the same structural reason: dishCourses.ts
+              fixes the cardinality at one course per dish. An untagged
+              recipe IS a hoofdgerecht, so that chip keeps every row written
+              before migration 0017 — see `matchesDishCourses`. */}
+          {visibleCourses.map((entry) => (
+            <Chip
+              key={entry.course}
+              label={entry.label}
+              selected={selectedCourses.has(entry.course)}
+              onPress={() => handleToggleCourse(entry.course)}
+              role="checkbox"
+              accessibilityLabel={describeDishCourseChip(entry.label)}
+            />
+          ))}
+        </FilterRow>
+      ) : null}
     </View>
+  );
+}
+
+/**
+ * The "Geavanceerd" opening: one row, one control, the only thing on this bar
+ * that is neither a chip nor a field. IT IS A `button`, NOT A `checkbox` — it
+ * holds no part of `LibrarySearchState` and narrows nothing, it decides
+ * whether two chip rows are on screen, and a checkbox role would file a
+ * control that changes no result with the twenty-odd beside it that do.
+ *
+ * `accessibilityState={{ expanded }}` RATHER THAN A LABEL SAYING "OPEN" OR
+ * "DICHT" — the choice `SourceTextPanel` made, for its reason: the platform
+ * announces expanded/collapsed in the user's own language, and a hand-written
+ * Dutch equivalent is a second translation of a sentence the OS already says,
+ * free to drift from the visible chevron the day somebody edits one of them.
+ *
+ * THE SPOKEN LABEL NAMES WHAT IS INSIDE AND WHAT IS ON. "Geavanceerde
+ * filters: Wanneer? Welke gang? 2 filters actief." A sighted household reads
+ * those facts off the row when it opens; somebody who cannot see the chips
+ * gets them from the control that hides them. libraryFilterCopy.ts owns both
+ * sentences and composes the axis names from the eyebrows themselves, so a
+ * third axis moved behind this fold cannot leave the label listing two.
+ */
+function AdvancedDisclosure(props: {
+  readonly isExpanded: boolean;
+  readonly activeFilterCount: number;
+  readonly onToggle: () => void;
+}): JSX.Element {
+  const { isExpanded, activeFilterCount, onToggle } = props;
+  const scheme = useColorScheme();
+  const colors = getColors(scheme);
+  const copy = describeAdvancedFilters(activeFilterCount);
+
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: isExpanded }}
+      accessibilityLabel={copy.accessibilityLabel}
+      style={styles.advancedToggle}
+    >
+      {isIconAvailable(DISCLOSURE_GLYPH) ? (
+        <View style={isExpanded ? styles.advancedGlyphExpanded : null}>
+          <Icon name={DISCLOSURE_GLYPH} size={DISCLOSURE_GLYPH_SIZE} color={colors.textMuted} />
+        </View>
+      ) : null}
+      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>{copy.label}</Text>
+      {/* The accent colour is the point: a count in `textMuted` beside a muted
+          label reads as more label, and this is the one thing on a shut drawer
+          that says a filter is running. */}
+      {copy.activeBadge !== null ? (
+        <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>{copy.activeBadge}</Text>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -587,5 +774,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'stretch',
     paddingLeft: spacing.space3,
+  },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.space2,
+    // A touch target, stated rather than inherited from a 15pt line of text:
+    // this row's content is `typeScale.label` at 12/15, so without it the
+    // control is a 15pt band nobody can hit. It stretches the full width for
+    // the same reason — the rejected `alignSelf: 'flex-start'` looks tidier in
+    // a screenshot and asks for aim from somebody holding a pan.
+    minHeight: spacing.touchTargetMin,
+    // NOT a scrolling row, so it pays its own screen inset — the rule the
+    // container's comment states for every child that does not scroll.
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+  },
+  advancedGlyphExpanded: {
+    // A quarter turn clockwise: `chevron-right` becomes the chevron-down every
+    // open disclosure draws. See `DISCLOSURE_GLYPH` for why a rotation and not
+    // a second glyph name; it is also compositor-only, so nothing reflows.
+    transform: [{ rotate: '90deg' }],
   },
 });

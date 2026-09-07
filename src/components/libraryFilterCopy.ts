@@ -88,13 +88,37 @@ export const LIBRARY_SEARCH_CLEAR_QUERY_LABEL = 'Wis zoekopdracht';
  * this app uses for that question, `DecisionFilterBar` still draws its own
  * eyebrow above the same control, and the constant is where a second screen
  * should take it from rather than retyping it.
+ *
+ * TWO OF THE FOUR NOW LEAD A ROW THAT IS NOT ON SCREEN UNTIL SOMEBODY ASKS
+ * FOR IT. `LIBRARY_FILTER_PLAN_EYEBROW` and `LIBRARY_FILTER_COURSES_EYEBROW`
+ * moved behind the "Geavanceerd" opening on 2026-09-07, at the owner's
+ * request. NEITHER WORD CHANGED and neither argument for them changed; what
+ * changed is how many taps it takes to reach them, which is a layout fact
+ * and not a copy one. The words the OPENING itself says are at the bottom of
+ * this file (`describeAdvancedFilters`), and they are built out of these two
+ * constants rather than out of a hand-written list of what is behind the
+ * fold — see there for why that composition is the only version that cannot
+ * quietly start lying.
  */
 export const LIBRARY_FILTER_TIME_EYEBROW = 'Hoeveel tijd?';
 export const LIBRARY_FILTER_TAGS_EYEBROW = 'Waarmee?';
 export const LIBRARY_FILTER_MOODS_EYEBROW = 'Waar heb je zin in?';
-/** The plan axis (`RecipeSchedulingState`) — the badge every tile already drew and nothing could filter on. */
+/**
+ * The plan axis (`RecipeSchedulingState`) — the badge every tile already drew
+ * and nothing could filter on. BEHIND THE "GEAVANCEERD" OPENING SINCE
+ * 2026-09-07: this is the row the owner meant by "it says sometime or cooked
+ * already, and I want to remove that part", and it is also the row he asked
+ * the opening to contain ("advanced filters will give you the option if
+ * you've cooked it before"). One axis, two sentences about it — see
+ * LibrarySearchBar.tsx's header for the measurement that settled it.
+ */
 export const LIBRARY_FILTER_PLAN_EYEBROW = 'Wanneer?';
-/** The course axis (`Meal.dishCourse`, migration 0017). "Welk gerecht?" would collide with the screen's own subject. */
+/**
+ * The course axis (`Meal.dishCourse`, migration 0017). "Welk gerecht?" would
+ * collide with the screen's own subject. Behind the same opening, and named
+ * by the owner in the same breath ("which dish it is, so, like, which
+ * course. So, like, dessert or main dish").
+ */
 export const LIBRARY_FILTER_COURSES_EYEBROW = 'Welke gang?';
 
 /** "Wissen" resets the whole `LibrarySearchState` — query and chips together — which is why its spoken label names both. */
@@ -190,4 +214,87 @@ export function describeDishCourseChip(label: string): string {
  */
 export function describeSchedulingChip(label: string): string {
   return `${label}. Filtert op gerechten met een van de plannen die je kiest.`;
+}
+
+// ---------------------------------------------------------------------------
+// THE "GEAVANCEERD" OPENING, AND THE ONE WORD IT PUT ON SCREEN.
+//
+// THE OWNER'S INSTRUCTION, VERBATIM: "in the recipe, my recipes, it says
+// when. It says sometime or cooked already, and I want to remove that part,
+// and then it says which course. Also, remove that part doesn't make sense. I
+// think maybe it's wise to have, like, an advanced filters here, where you can
+// just select the ingredients and advanced filters will give you the option if
+// you've cooked it before, which dish it is, so, like, which course. So, like,
+// dessert or main dish, something like that."
+//
+// "GEAVANCEERD" IS HIS OWN WORD, TRANSLATED AND NOT REPLACED. He said
+// "advanced filters"; this product speaks Dutch, and "geavanceerd" is the
+// word Dutch software has used for exactly this control for thirty years, so
+// a household meets a word it has met before rather than one this app made up.
+//
+// THE REJECTED ALTERNATIVE WAS "MEER FILTERS", and it is the better
+// DESCRIPTION: nothing behind this opening is technically advanced — "welke
+// gang" is the plainest question on the screen. It loses anyway, on two
+// counts. "Meer" promises MORE OF THE SAME — another row of the ingredient
+// chips already visible — where what is actually behind the fold is two
+// different questions, so it would set an expectation the opening then breaks.
+// And it is not what the owner asked for, on a screen he is looking at on a
+// device; overruling his vocabulary is a thing this file does exactly once
+// (see "WAARMEE?" above) and only with a reason as hard as "the heading would
+// lie about half its own chips". There is no such reason here.
+//
+// THE COUNT IS NOT DECORATION, IT IS THE WHOLE PRICE OF THE FOLD. A filter
+// that is switched on and cannot be seen is worse than a filter that takes up
+// room: the household watches its tag chips thin out (LibrarySearchBar's four
+// axes are recomputed against each other, LIB-07) with nothing on screen
+// saying why. So the opening states how many of its own filters are live, in
+// words rather than as a bare numeral — "2 filters actief" survives being read
+// aloud, and a lone "2" beside a word could as easily be counting the filters
+// available as the filters set.
+// ---------------------------------------------------------------------------
+
+/** What the opening says when it is shut and when it is open — one word, because the state is carried by a chevron and by `accessibilityState`, not by re-labelling the control. */
+export const LIBRARY_FILTER_ADVANCED_LABEL = 'Geavanceerd';
+
+export interface LibraryAdvancedFilterCopy {
+  /** The visible word on the control. */
+  readonly label: string;
+  /** The visible count, or `null` when nothing behind the fold is set — the absence of the badge and the absence of the spoken sentence are the same statement, made once. */
+  readonly activeBadge: string | null;
+  /** What a screen reader says: what is inside, then what is on. */
+  readonly accessibilityLabel: string;
+}
+
+/**
+ * `activeFilterCount` is how many chips are selected BEHIND the fold —
+ * `anySchedulingStates.length + anyDishCourses.length` at the call site, and
+ * deliberately not `isLibrarySearchActive`, which counts the query, the tag
+ * chips and the time cap as well. Those three are on screen; a badge that
+ * counted them would tell the household that something is hidden when nothing
+ * is.
+ *
+ * THE SPOKEN LABEL NAMES THE TWO AXES BY REUSING THEIR OWN EYEBROWS rather
+ * than by describing them in fresh prose ("wanneer en welke gang"). Prose
+ * would be a SECOND place the contents of this fold are written down, and the
+ * one that no test and no compiler watches: move a third axis behind the
+ * opening and the hand-written sentence keeps confidently listing two. Reading
+ * "Geavanceerde filters: Wanneer? Welke gang?" is two questions in a row,
+ * which is slightly odd out loud and exactly what the household sees the
+ * moment the fold opens — the same words, in the same order.
+ *
+ * SINGULAR AND PLURAL ARE BOTH WRITTEN OUT because Dutch does not forgive
+ * "1 filters" and this string is read by people, not by a pluralization
+ * library this app does not have.
+ */
+export function describeAdvancedFilters(activeFilterCount: number): LibraryAdvancedFilterCopy {
+  const inside = `Geavanceerde filters: ${LIBRARY_FILTER_PLAN_EYEBROW} ${LIBRARY_FILTER_COURSES_EYEBROW}`;
+  if (activeFilterCount <= 0) {
+    return { label: LIBRARY_FILTER_ADVANCED_LABEL, activeBadge: null, accessibilityLabel: inside };
+  }
+  const counted = activeFilterCount === 1 ? '1 filter actief' : `${activeFilterCount} filters actief`;
+  return {
+    label: LIBRARY_FILTER_ADVANCED_LABEL,
+    activeBadge: counted,
+    accessibilityLabel: `${inside} ${counted}.`,
+  };
 }

@@ -238,7 +238,7 @@ export function describeRecipeOverviewSourceLink(
  * Stored dish tags, as the entries the library already draws.
  *
  * FILTERS `DISH_TAGS` RATHER THAN MAPPING THE STORED ARRAY, which is
- * `LibrarySearchBar.tsx:150`'s own device and buys two things at once. The
+ * `LibrarySearchBar`'s own device and buys two things at once. The
  * row comes out in vocabulary order, so two dishes carrying the same
  * categories present them the same way round instead of in whatever order
  * the extraction happened to emit. And a value outside the closed

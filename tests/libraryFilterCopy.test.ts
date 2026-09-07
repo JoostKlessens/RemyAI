@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  LIBRARY_FILTER_ADVANCED_LABEL,
   LIBRARY_FILTER_COURSES_EYEBROW,
   LIBRARY_FILTER_MOODS_EYEBROW,
   LIBRARY_FILTER_PLAN_EYEBROW,
@@ -9,6 +10,7 @@ import {
   LIBRARY_FILTER_TIME_EYEBROW,
   LIBRARY_SEARCH_PLACEHOLDER,
   LIBRARY_TIME_CAP_UNTIMED_NOTE,
+  describeAdvancedFilters,
   describeDishCourseChip,
   describeDishMoodChip,
   describeDishTagChip,
@@ -150,5 +152,56 @@ describe('the two new eyebrows', () => {
       LIBRARY_FILTER_COURSES_EYEBROW,
     ];
     expect(new Set(eyebrows).size).toBe(eyebrows.length);
+  });
+});
+
+describe('the "Geavanceerd" opening — the words on the fold the owner asked for', () => {
+  test('uses his own word, translated and not replaced', () => {
+    expect(LIBRARY_FILTER_ADVANCED_LABEL).toBe('Geavanceerd');
+    expect(describeAdvancedFilters(0).label).toBe(LIBRARY_FILTER_ADVANCED_LABEL);
+    expect(describeAdvancedFilters(3).label).toBe(LIBRARY_FILTER_ADVANCED_LABEL);
+  });
+
+  test('is sentence case in source, like every other label this bar draws', () => {
+    expect(LIBRARY_FILTER_ADVANCED_LABEL).not.toBe(LIBRARY_FILTER_ADVANCED_LABEL.toUpperCase());
+  });
+
+  test('says nothing about counts when nothing behind the fold is set', () => {
+    const copy = describeAdvancedFilters(0);
+    expect(copy.activeBadge).toBeNull();
+    expect(copy.accessibilityLabel).not.toMatch(/actief/);
+  });
+
+  test('COUNTS a filter that is set but out of sight — the whole reason a fold is allowed here at all', () => {
+    const copy = describeAdvancedFilters(2);
+    expect(copy.activeBadge).toBe('2 filters actief');
+    expect(copy.accessibilityLabel).toContain('2 filters actief');
+  });
+
+  test('one is singular — Dutch does not forgive "1 filters"', () => {
+    expect(describeAdvancedFilters(1).activeBadge).toBe('1 filter actief');
+    expect(describeAdvancedFilters(1).activeBadge).not.toMatch(/1 filters/);
+  });
+
+  test('a count below zero reads as nothing set, never as a badge saying "-1 filters actief"', () => {
+    expect(describeAdvancedFilters(-1).activeBadge).toBeNull();
+  });
+
+  test('the spoken label names BOTH hidden axes, in the row\u2019s own words', () => {
+    // Composed from the eyebrows themselves, so moving a third axis behind
+    // this fold cannot leave the label confidently listing two.
+    const spoken = describeAdvancedFilters(0).accessibilityLabel;
+    expect(spoken).toContain(LIBRARY_FILTER_PLAN_EYEBROW);
+    expect(spoken).toContain(LIBRARY_FILTER_COURSES_EYEBROW);
+  });
+
+  test('it names only what is hidden — the axes that stayed in the ordinary bar are not in it', () => {
+    const spoken = describeAdvancedFilters(1).accessibilityLabel;
+    expect(spoken).not.toContain(LIBRARY_FILTER_TAGS_EYEBROW);
+    expect(spoken).not.toContain(LIBRARY_FILTER_MOODS_EYEBROW);
+  });
+
+  test('the visible word never carries the number — the badge is a separate string a narrow row may drop', () => {
+    expect(describeAdvancedFilters(4).label).not.toMatch(/\d/);
   });
 });
