@@ -201,9 +201,18 @@ export function Chip(props: ChipProps): JSX.Element {
             `accessibilityLabel ?? label`, so a screen-reader user hears
             exactly what they heard before any chip had a drawing. `Icon`
             additionally marks every glyph it renders as not an
-            accessibility element — checked in all three of its branches
-            (Feather, MaterialCommunityIcons and the hand-drawn `Svg`), not
-            taken on trust — which is the belt to this braces. An icon beside
+            accessibility element — checked in both of its branches (the
+            coloured `IconArtwork` drawing and the Feather fallback), not
+            taken on trust — which is the belt to this braces.
+
+            ⚠ THE GLYPH NO LONGER TAKES THIS CHIP'S TINT. Until the drawings
+            landed, `Icon` was handed `selected ? accentOnMuted : textPrimary`
+            below and the glyph shifted with the pill. A drawing that IS a
+            carrot cannot do that and stay a carrot, so the `color` prop is
+            inert for every name that has artwork — which today is all of
+            them. The selected state is unharmed because it was never the
+            glyph: A3 below and the fill-plus-border argument in this file's
+            own header are what carry it, and both are untouched. An icon beside
             a word adds nothing a screen reader should read twice.
 
             A3, the same rule the label below states for itself: the selected
