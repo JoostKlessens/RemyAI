@@ -6,6 +6,16 @@
  * if a test asserted contrast ratios. This file is that gate, so retuning a
  * token fails the suite instead of failing a manual audit months later.
  *
+ * SINCE THE WHITE-AND-GREEN PALETTE (7 September 2026) IT GUARDS TWO MORE
+ * THINGS, both added because that palette moved the two properties a WCAG
+ * ratio cannot see. `accent` and `positive` are now both green, so they no
+ * longer differ by hue family and their separation has to be asserted as a
+ * perceptual distance instead (see "green role separation" at the bottom).
+ * And the neutral ground is now near-white, where WCAG ratios compress so
+ * hard that a visible surface step and an invisible one report almost the
+ * same number — so the surface ladder is asserted in CIE L*, which stays
+ * perceptually even across the whole range (see "surface ladder").
+ *
  * It imports `colors` from the real tokens module rather than mirroring the
  * hex values locally: a hand-synced copy drifts, and a drifted copy makes
  * this test worse than useless -- it would keep passing while the colours it
@@ -47,6 +57,65 @@ function contrastRatio(hexA: string, hexB: string): number {
   const lighter = Math.max(luminanceA, luminanceB);
   const darker = Math.min(luminanceA, luminanceB);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * CIE L* (0-100) — perceptually uniform lightness, unlike the WCAG ratio.
+ * Used for the surface ladder only. Two surfaces a user can just tell
+ * apart differ by roughly 5 L* wherever they sit in the range; the same
+ * pair reports 1.17:1 down at the old warm-grey ground and 1.05:1 up
+ * against white, which is why the ratio alone stopped being a usable
+ * description of this palette's steps.
+ */
+function cieLstar(hex: string): number {
+  const y = relativeLuminance(hex);
+  return y > 0.008856 ? 116 * y ** (1 / 3) - 16 : 903.3 * y;
+}
+
+/**
+ * OKLab coordinates, for measuring how far apart two colours actually look.
+ *
+ * This exists because `accent` and `positive` are both green now. A WCAG
+ * contrast ratio is a lightness ratio: it scores two colours of identical
+ * lightness and wildly different hue as 1.00:1, and it cannot see chroma at
+ * all. The palette that shipped before this one relied on exactly that blind
+ * spot — its dark `accent` (#83ADF9) and dark `positive` (#79C18D) sat
+ * 0.001 apart in OKLab lightness and 0.016 apart in chroma, i.e. they were
+ * the same brightness and differed only in hue, which is the one axis a
+ * red-green colour-blind reader cannot use. Distance in OKLab is the
+ * cheapest honest measure that sees all three axes at once.
+ */
+function toOklab(hex: string): readonly [number, number, number] {
+  const [r255, g255, b255] = hexToRgb(hex);
+  const r = linearizeChannel(r255);
+  const g = linearizeChannel(g255);
+  const b = linearizeChannel(b255);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+/** Perceptual distance in OKLab — bigger means "reads as another colour". */
+function oklabDistance(hexA: string, hexB: string): number {
+  const [l1, a1, b1] = toOklab(hexA);
+  const [l2, a2, b2] = toOklab(hexB);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
+/** OKLab chroma — how saturated a colour is, independent of its lightness. */
+function oklabChroma(hex: string): number {
+  const [, a, b] = toOklab(hex);
+  return Math.hypot(a, b);
+}
+
+/** OKLab lightness, 0-1. */
+function oklabLightness(hex: string): number {
+  return toOklab(hex)[0];
 }
 
 /** WCAG 2.2 §1.4.3 — body/reading text minimum. */
@@ -224,6 +293,135 @@ describe('token contrast (WCAG 2.2)', () => {
           expect(ratio).toBeGreaterThanOrEqual(UI_BOUNDARY_MIN_RATIO);
         });
       }
+    });
+  }
+});
+
+/**
+ * THE SURFACE LADDER.
+ *
+ * WS1's argument for replacing the ground before last was a measurement:
+ * the old one stepped background -> surface at 1.10:1, "a hierarchy the eye
+ * cannot see". Nothing asserted that, so nothing stopped the white palette
+ * from quietly undoing it — and a white-on-white app with no visible
+ * surface step is the known way this exact change goes wrong.
+ *
+ * ASSERTED IN CIE L*, NOT IN THE WCAG RATIO, and that is the point of the
+ * table rather than an implementation detail. Contrast ratio compresses
+ * near white: `surface` -> `surfaceRaised` steps 1.045:1 in the light
+ * scheme, which sounds like nothing, while the load-bearing `background`
+ * -> `surface` step reports 1.183:1 — the same number the warm-grey
+ * palette scored for that pair, on a page 13% brighter. L* separates them
+ * honestly (1.77 versus 6.58).
+ *
+ * THE MINIMUMS DIFFER PER PAIR AND PER SCHEME ON PURPOSE. A flat threshold
+ * would either fail the light scheme or be too weak to catch anything:
+ *
+ * - `background` -> `surface` carries the hierarchy alone. A card lies
+ *   directly on the page with no scrim and, per DESIGN.md's global rules,
+ *   no coloured bar. 6.3 is the step the palette this replaced achieved.
+ * - `surfaceSunken` -> `background`: wells (chips, inputs) are always drawn
+ *   with a `border` as well — Chip.tsx:191 — so the value step is not the
+ *   only cue and 5.0 is enough.
+ * - `surface` -> `surfaceRaised` in LIGHT is deliberately tiny: every
+ *   `surfaceRaised` in the app is a sheet over the `overlay` scrim, or
+ *   OutcomeCard, which sits on `background` (OutcomeCard.tsx:521) or on the
+ *   `positiveMuted` wash (OutcomeCard.tsx:651). That pair is never drawn
+ *   adjacent, so the last two L* of the range were spent on the page
+ *   instead. 1.5 asserts the ladder still points the right way and that
+ *   `surfaceRaised` has not silently become equal to `surface`. If a
+ *   component ever does put a raised card straight onto `surface`, this row
+ *   is the assumption it breaks and this comment is the reason why.
+ */
+interface LadderStep {
+  readonly from: ColorKey;
+  readonly to: ColorKey;
+  readonly minDeltaLstar: Record<ColorScheme, number>;
+}
+
+const SURFACE_LADDER: readonly LadderStep[] = [
+  { from: 'surfaceSunken', to: 'background', minDeltaLstar: { light: 5.0, dark: 5.0 } },
+  { from: 'background', to: 'surface', minDeltaLstar: { light: 6.3, dark: 6.3 } },
+  { from: 'surface', to: 'surfaceRaised', minDeltaLstar: { light: 1.5, dark: 5.0 } },
+];
+
+describe('surface ladder (perceptual, CIE L*)', () => {
+  for (const scheme of SCHEMES) {
+    const tokens = colors[scheme];
+
+    describe(`${scheme} scheme`, () => {
+      for (const { from, to, minDeltaLstar } of SURFACE_LADDER) {
+        const floor = minDeltaLstar[scheme];
+
+        test(`${from} -> ${to} steps at least ${floor} L*`, () => {
+          expect(cieLstar(tokens[to]) - cieLstar(tokens[from])).toBeGreaterThanOrEqual(floor);
+        });
+      }
+    });
+  }
+});
+
+/**
+ * GREEN ROLE SEPARATION — "chosen" must not become "done".
+ *
+ * tokens.ts has always insisted that `accent` (a choice being made) and
+ * `positive` (a loop closed) stay legibly different, and until the
+ * white-and-green palette that was free: one was blue, the other green.
+ * They are both green now, so the rule needs teeth. Nothing else in this
+ * file can provide them — every assertion above compares a colour against a
+ * BACKGROUND it is drawn on, and these two are never drawn on each other.
+ *
+ * WHAT IS ASSERTED, and why it is four rows rather than one:
+ *
+ * 1. Distance. 0.12 in OKLab is the floor, against measured 0.138 (light)
+ *    and 0.165 (dark). For scale: the blue/green pair these replace sat at
+ *    0.207 and 0.183, so the light scheme knowingly spends about a third of
+ *    its old separation to satisfy the brief, and the dark scheme spends
+ *    almost none. The floor is set just under the value that shipped, so it
+ *    catches a retune that collapses the pair without failing the day it
+ *    lands.
+ * 2/3. Ordering. `accent` must stay the LIGHTER and the MORE SATURATED of
+ *    the two in both schemes. Distance alone would be satisfied by swapping
+ *    them, and a swap would break the app's one memorable rule for reading
+ *    these colours apart — including in TimerDisplay.tsx:162, where the
+ *    same circle is filled with `accent` while a timer runs and `positive`
+ *    when it finishes, and the two are compared from memory rather than
+ *    side by side.
+ * 4. The muted pair. `accentMuted` (selected chip) and `positiveMuted` (the
+ *    completion wash) are large flat fills, and the rating chips put one
+ *    directly on top of the other in OutcomeCard. 0.06 is a deliberately
+ *    low floor: it is roughly what the blue/green palette itself managed
+ *    (0.067 light, 0.093 dark), because two pale tints have little room. It
+ *    is asserted anyway, since a retune that leaves the two washes
+ *    identical is exactly the regression nobody would see in review.
+ */
+const MIN_GREEN_ROLE_DISTANCE = 0.12;
+const MIN_MUTED_TINT_DISTANCE = 0.06;
+
+describe('green role separation (OKLab)', () => {
+  for (const scheme of SCHEMES) {
+    const tokens = colors[scheme];
+
+    describe(`${scheme} scheme`, () => {
+      test(`accent and positive are at least ${MIN_GREEN_ROLE_DISTANCE} apart`, () => {
+        expect(oklabDistance(tokens.accent, tokens.positive)).toBeGreaterThanOrEqual(
+          MIN_GREEN_ROLE_DISTANCE,
+        );
+      });
+
+      test('accent is the lighter of the two greens', () => {
+        expect(oklabLightness(tokens.accent)).toBeGreaterThan(oklabLightness(tokens.positive));
+      });
+
+      test('accent is the more saturated of the two greens', () => {
+        expect(oklabChroma(tokens.accent)).toBeGreaterThan(oklabChroma(tokens.positive));
+      });
+
+      test(`accentMuted and positiveMuted are at least ${MIN_MUTED_TINT_DISTANCE} apart`, () => {
+        expect(oklabDistance(tokens.accentMuted, tokens.positiveMuted)).toBeGreaterThanOrEqual(
+          MIN_MUTED_TINT_DISTANCE,
+        );
+      });
     });
   }
 });

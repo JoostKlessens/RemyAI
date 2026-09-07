@@ -11,11 +11,15 @@
  * (`fontFamily.sans*`) carries everything *read* — dish names, reasons,
  * steps — and a monospace (`fontFamily.mono*`) now carries everything
  * *systemic* — labels, buttons, captions, timers — not just numerals.
- * Colour stays rationed exactly like before: one cool-neutral palette
- * covers ~95% of every screen, a single marking-blue `accent` appears only
- * at the moment a choice is made, and a separate green `positive` is
- * reserved exclusively for completion, so "decided" and "done" never look
- * the same.
+ * Colour stays rationed exactly as before, but the ground is now white and
+ * the rationed hue is green: one near-white, faintly green neutral palette
+ * covers ~95% of every screen, a single marking-green `accent` appears only
+ * at the moment a choice is made, and a separate `positive` -- deliberately
+ * a much deeper and much greyer green, not a second shade of the same one --
+ * is reserved exclusively for completion, so "decided" and "done" still
+ * never look the same. That last sentence used to be free: `accent` was
+ * blue. It is now paid for, and "THE WHITE-AND-GREEN PALETTE" below records
+ * what it cost and what was measured to keep it true.
  *
  * Every export here is a plain, frozen constant. Nothing in this file
  * depends on component state — screens read tokens, they never write them.
@@ -96,11 +100,16 @@ export interface ColorTokens {
   readonly textMuted: string;
 
   /**
-   * The marking-blue accent — a flat, saturated cobalt, like the
+   * The marking-green accent — a flat, saturated kelly green, like the
    * grease-pencil circle an editor draws around the take that's getting
    * used. Reserved for the single moment a choice is being made: the "Ja"
    * button on Kiezen, a selected allergen chip on Bevestigen. Never used
    * as decoration or for more than one element at a time.
+   *
+   * OF THE TWO GREENS IN THIS FILE THIS IS ALWAYS THE BRIGHTER AND THE MORE
+   * SATURATED ONE, IN BOTH SCHEMES. That is the rule that keeps it apart
+   * from `positive`, and it is asserted in tests/contrast.test.ts rather
+   * than left to whoever retunes it next. See "THE WHITE-AND-GREEN PALETTE".
    */
   readonly accent: string;
   /** Text/icon color guaranteed to contrast against an `accent` fill. */
@@ -119,10 +128,20 @@ export interface ColorTokens {
   readonly accentOnMuted: string;
 
   /**
-   * Forest green. Reserved exclusively for completion: "Gemaakt", a
-   * verified allergen tag, streaks. Never reused for "decided" states —
-   * that's `accent`'s job. Keeping these separate is what stops "chosen"
-   * and "cooked" from blurring into the same visual language.
+   * Deep moss. Reserved exclusively for completion: "Gemaakt", a verified
+   * allergen tag, streaks. Never reused for "decided" states — that's
+   * `accent`'s job. Keeping these separate is what stops "chosen" and
+   * "cooked" from blurring into the same visual language.
+   *
+   * IT IS NOW A SECOND GREEN RATHER THAN A SECOND HUE, so "separate" can no
+   * longer mean "obviously a different colour" and has to mean something
+   * measurable instead: `positive` is the DEEPER and the GREYER of the two
+   * greens (light: L* 25.9 at chroma 0.050 against `accent`'s L* 39.9 at
+   * 0.123; dark: L* 66.0 at 0.050 against L* 82.3 at 0.146), and it leans
+   * warm/olive where `accent` leans cool/emerald. Ink pressed into paper
+   * versus wet grease pencil. The gap is guarded in tests/contrast.test.ts
+   * as an OKLab distance, because a WCAG ratio cannot see the difference
+   * between two colours of equal lightness and says nothing about chroma.
    */
   readonly positive: string;
   readonly onPositive: string;
@@ -134,8 +153,17 @@ export interface ColorTokens {
   readonly warningMuted: string;
 
   /** Form validation errors, destructive confirmations. Deliberately a
-   * different hue FAMILY from `accent` (red vs. blue, not two reds) so an
-   * error never reads as "the decision color". */
+   * different hue FAMILY from `accent` (red vs. green, not two reds) so an
+   * error never reads as "the decision color".
+   *
+   * RED AGAINST GREEN IS THE ONE PAIR THIS PALETTE MADE WORSE, and it is
+   * worth saying out loud rather than discovering later: red/green is
+   * exactly the axis a deuteranope cannot use, where red/blue was not. It
+   * is not a WCAG 1.4.3 failure (every pair here still clears 4.5:1 as
+   * measured lightness, and `danger` is far darker than `accent` is
+   * light), but it does mean hue alone must never be the carrier — WCAG
+   * 1.4.1. Every destructive surface in this app already pairs the colour
+   * with a word ("Verwijderen") or an icon, and it must keep doing so. */
   readonly danger: string;
   readonly onDanger: string;
   readonly dangerMuted: string;
@@ -160,100 +188,217 @@ export interface ColorTokens {
 }
 
 /**
- * THE PALETTE THE UI RESEARCH CHOSE, APPLIED 4 SEPTEMBER 2026.
+ * THE WHITE-AND-GREEN PALETTE, APPLIED 7 SEPTEMBER 2026.
  *
- * Source: docs/ui-research/WS1-direction-and-palette.md 4.1 and 4.2, pasted
- * as written. The research shipped on 2 September with the makeover; these
- * values did not, and for two days every screen ran on the palette the
- * research had replaced. All 26 tokens per scheme differed.
+ * The owner's brief, verbatim: "Ik wil ook dat het design van de app wat
+ * vrolijker wordt, alles is nu in grijstinten, dit mag wit worden met groene
+ * accenten." The previous ground was a warm grey (`background: #DDD9D0`) and
+ * that is the "grijstinten" being named. docs/DESIGN.md "Colour: white, and
+ * two greens" carries the full palette table and the reasoning in prose;
+ * this comment carries the parts a future retune will break if it does not
+ * read them.
  *
- * WHY THIS DOES NOT CONTRADICT THE EARLIER RULING. The previous block
- * defended itself as "deliberately NOT the cream + serif + terracotta
- * AI-cliche palette". WS1 read that ruling and drew the distinction it
- * turns on -- ASSEMBLY.md:214: the owner "ruled that he rejected the
- * cliche, not warmth". A warm ground with a single blue accent and no serif
- * is not that cliche; it is the thing the cliche is a bad version of.
+ * WHAT REPLACED WHAT. The ground went from warm taupe to near-white with a
+ * faint green cast, and the accent went from a cobalt "marking blue" to a
+ * kelly "marking green". `positive` stayed green, which is the whole
+ * problem: the block this one replaces defended keeping `accent` and
+ * `positive` in DIFFERENT HUE FAMILIES as the thing that stops "chosen" and
+ * "done" from becoming one idea. Green accents collapse that distinction by
+ * construction. It is not a detail that was overlooked here; it is the
+ * design question the brief actually asks, and the answer is below.
  *
- * WHY IT IS ALSO A MEASURED IMPROVEMENT, not only a direction. The old
- * ground stepped background -> surface at 1.10:1 (WS1 178), which is a
- * hierarchy the eye cannot see; this one steps at 1.24:1. WS1 711 carries
- * the full verification: rows 1-30 assert 4.5:1 for text, rows 31-36 assert
- * 3.0:1 for boundaries.
+ * HOW THE TWO GREENS STAY TWO MEANINGS. Not by hue — 22 degrees of hue
+ * between two greens is a distinction nobody keeps in memory between one
+ * screen and the next, and the same 22 degrees vanishes entirely for a
+ * red-green colour-blind reader. They are separated on the two axes that
+ * survive both: LIGHTNESS and CHROMA. `accent` is the brighter, saturated
+ * one (light L* 39.9 / chroma 0.123; dark L* 82.3 / 0.146); `positive` is
+ * the deeper, near-grey one (light L* 25.9 / 0.050; dark L* 66.0 / 0.050).
+ * Measured as OKLab distance the pair sits 0.138 apart in light and 0.165
+ * in dark. The blue/green pair they replace sat at 0.207 and 0.183. So the
+ * light scheme genuinely gives up a third of its separation and the dark
+ * scheme gives up almost nothing — and the dark scheme is the interesting
+ * number, because the pair it replaces was 0.001 apart in lightness and
+ * 0.016 in chroma: identical brightness, differing only in hue. The old
+ * dark scheme was already leaning on the one axis that fails for colour
+ * blindness. This palette leans on it least of the two.
  *
- * THE PER-TOKEN RATIO COMMENTS THAT USED TO SIT HERE ARE GONE ON PURPOSE.
- * They asserted figures measured against the old values -- "verified
- * >=3.95:1 against all four neutral surfaces" and similar -- and would have
- * become confident falsehoods the moment the values under them changed. The
- * verification now lives where the numbers were computed.
+ * WHERE IT IS TIGHTEST, so nobody has to find out from a bug report:
+ * TimerDisplay.tsx:162 fills the SAME circle with `accent` while a timer
+ * runs and with `positive` when it finishes, and Button.tsx:128 has a
+ * `positive`-filled variant. Those are the places the two greens are read
+ * one after the other rather than side by side, which is the hardest kind
+ * of colour comparison there is. They still differ by 1.6:1 in luminance,
+ * so the swap reads as "the circle went dark and quiet", not as a hue
+ * nobody can name. If that ever proves too subtle in the hand, the fix is
+ * a shape or a glyph change in those two components, NOT a brighter
+ * `positive` — see the next paragraph for why `positive` cannot be brighter.
+ *
+ * WHY `accent` IS THE BRIGHT ONE AND `positive` THE DEEP ONE, and not the
+ * other way round, which is the more obvious emotional choice ("done"
+ * should glow). It is forced, not chosen. `positive` is used as TEXT on the
+ * pale `positiveMuted` fill (RecipeTile's badge, FriendProofCard's
+ * "gemaakt" chip), and 4.5:1 against that fill caps it at about L* 43.
+ * `accent` is used as TEXT on `surfaceRaised`, which is now pure white, and
+ * 4.5:1 there caps it at about L* 50 — but it is also used as text on
+ * `surfaceSunken`, the darkest light surface, which caps it at L* 40.1.
+ * Both greens are therefore pushed dark by the white ground, both ceilings
+ * are close together, and the only way to buy separation is to push
+ * `positive` well below its ceiling rather than to push `accent` above one.
+ * That is why the completion colour is a deep moss and the celebration is
+ * carried by the pale `positiveMuted` wash and the word instead.
+ *
+ * REJECTED, WITH REASONS. (a) Keep `accent` blue and paint only the
+ * neutrals green — safest, and it ignores the brief: the accent is the one
+ * colour a user actually points at, and "groene accenten" means that one.
+ * (b) Two greens differing mainly in hue, e.g. emerald against forest —
+ * that is measurably what the current dark scheme already does (0.001 apart
+ * in lightness) and it is the version of this idea that fails quietly.
+ * (c) Move `positive` out of green altogether, to teal or gold — gold is
+ * already `warning`, and a teal "done" next to a green "chosen" reads as a
+ * bug rather than a distinction.
+ *
+ * THE SURFACE LADDER, WHICH IS THE OTHER THING THAT CAN GO WRONG. The
+ * previous block defended its ground with a measurement: the ground before
+ * it stepped background -> surface at 1.10:1, "a hierarchy the eye cannot
+ * see", and it claimed 1.24:1 for itself. That claim did not reproduce --
+ * the shipped values measure 1.183:1 (the 1.24 figure matches no adjacent
+ * pair in the palette it described). This palette therefore matches the
+ * MEASURED predecessor rather than the claimed one, and reports a second
+ * number as well, because near white a WCAG ratio stops being a useful
+ * description of a surface step: WCAG contrast compresses hard at the top
+ * of the range, while CIE L* stays perceptually even. Measured:
+ *
+ *   light   surfaceSunken -> background    1.156:1  dL* 5.41  (was 1.169 / 5.62)
+ *           background    -> surface       1.183:1  dL* 6.58  (was 1.183 / 6.32)
+ *           surface       -> surfaceRaised 1.045:1  dL* 1.77  (was 1.172 / 6.26)
+ *   dark    surfaceSunken -> background    1.177:1  dL* 8.07
+ *           background    -> surface       1.219:1  dL* 7.42
+ *           surface       -> surfaceRaised 1.244:1  dL* 6.70
+ *
+ * The load-bearing step is background -> surface: a card lying directly on
+ * the page, with no scrim and (per DESIGN.md's global rules) no coloured
+ * bar to help it. It comes out identical in ratio and larger in dL* than
+ * the palette it replaces, on a page that is 13% brighter. The step that
+ * shrank is surface -> surfaceRaised, and it shrank deliberately: every
+ * `surfaceRaised` in this app is either a sheet over the `overlay` scrim
+ * (SaveIntentSheet, SendRecipeSheet, PortionScalingSheet,
+ * LibraryTileActionSheet, CookSharingAskSheet) or OutcomeCard, which sits
+ * on `background` (OutcomeCard.tsx:521) or on the `positiveMuted` wash
+ * (OutcomeCard.tsx:651). Grep says `surfaceRaised` is never drawn directly
+ * on `surface`, so that pair never has to carry a step on its own, and
+ * spending the last two L* of the range there instead of on the page would
+ * have bought nothing visible. If a future component does put a raised card
+ * on a plain `surface`, this is the assumption it breaks.
+ *
+ * THE 4 SEPTEMBER LESSON, KEPT. That revision existed only because a
+ * makeover shipped with all 26 tokens per scheme differing from the palette
+ * its own research had chosen, and nobody noticed for two days. The defence
+ * against a repeat is not diligence, it is that docs/DESIGN.md now prints
+ * the hex values and tests/contrast.test.ts asserts the relationships
+ * between them; a value edited here without the doc and the test agreeing
+ * is a failing test, not a discovery months later.
+ *
+ * PER-TOKEN RATIO COMMENTS ARE STILL DELIBERATELY ABSENT. They asserted
+ * figures measured against values that then changed, which turns them into
+ * confident falsehoods. The verification lives in tests/contrast.test.ts,
+ * which imports these constants instead of copying them.
  */
 const lightColors = {
-  background: '#DDD9D0',
-  surface: '#EEEBE4',
-  surfaceRaised: '#FFFDF9',
-  surfaceSunken: '#CFC9BE',
-  border: '#B8B2A5',
-  borderStrong: '#6D6960',
+  // The page. A near-white with a green cast rather than a grey one: this
+  // is the "wit" in the brief, and the cast is what stops white + green
+  // accents from reading as a default template with a colour swapped in.
+  background: '#D9ECDC',
+  // Cards, rows, panels — effectively white, and the surface most of the
+  // reading happens on.
+  surface: '#F7FBF7',
+  // The only pure white in the light scheme, reserved for things genuinely
+  // lifted off the page: sheets over the scrim, the outcome card.
+  surfaceRaised: '#FFFFFF',
+  // Recessed wells. Always drawn with a `border` in practice (Chip.tsx:191),
+  // which is why this step is allowed to be the shallower one.
+  surfaceSunken: '#C6DEC9',
+  border: '#A9C6AE',
+  borderStrong: '#59765F',
 
-  textPrimary: '#1D1913',
-  textSecondary: '#524D45',
-  textMuted: '#575249',
+  textPrimary: '#141E15',
+  textSecondary: '#445446',
+  textMuted: '#4F5F52',
 
-  accent: '#1D4094',
-  onAccent: '#FBF8F2',
-  accentMuted: '#CCE0FC',
-  accentOnMuted: '#153177',
+  // Marking green: the brighter, saturated one. L* 39.9, chroma 0.123.
+  accent: '#006D35',
+  onAccent: '#FFFFFF',
+  accentMuted: '#ABFEC8',
+  accentOnMuted: '#00682F',
 
-  positive: '#23643A',
-  onPositive: '#F1F9F3',
-  positiveMuted: '#CDE8D3',
+  // Deep moss: the darker, near-grey one. L* 25.9, chroma 0.050.
+  positive: '#374123',
+  onPositive: '#F3F8EA',
+  positiveMuted: '#D2E0B9',
 
-  warning: '#7F4E07',
-  onWarning: '#FDF6EA',
-  warningMuted: '#F2DDB8',
+  warning: '#8D5700',
+  onWarning: '#FFF7E9',
+  warningMuted: '#FEDEAB',
 
-  danger: '#9F1718',
-  onDanger: '#FFF2F0',
-  dangerMuted: '#FDD0CA',
+  danger: '#A72C28',
+  onDanger: '#FFF4F3',
+  dangerMuted: '#FFCFC8',
 
-  overlay: 'rgba(28, 22, 14, 0.5)',
-  videoScrim: 'rgba(16, 13, 9, 0.68)',
-  onVideoScrim: '#F9F6F1',
-  focusRing: '#1D4094',
+  overlay: 'rgba(11, 24, 14, 0.52)',
+  videoScrim: 'rgba(8, 18, 11, 0.68)',
+  onVideoScrim: '#F2F8F1',
+  focusRing: '#006D35',
 } as const satisfies ColorTokens;
 
+/**
+ * DARK IS NOT AN INVERSION, AND "WHITE WITH GREEN" HAD TO BE TRANSLATED
+ * RATHER THAN NEGATED. Inverting a white app gives black, and black is not
+ * what the light scheme means — the light scheme means "paper under a lamp,
+ * with one green mark on it". At night that is the same bench with the lamp
+ * off: a deep green-graphite ground that has kept the leaf colour in it
+ * (every neutral here carries the same 150-degree hue at chroma 0.011-0.025,
+ * so the dark scheme is green-cast rather than the previous brown-cast),
+ * with both greens re-tuned up for that ground instead of flipped. The two
+ * roles keep exactly the relationship they have in light: `accent` is the
+ * brighter and more saturated green, `positive` the deeper and greyer one.
+ * The dark ladder keeps all three of its surface steps at dL* 6.7 or more,
+ * because unlike white there is room below.
+ */
 const darkColors = {
-  background: '#1A1814',
-  surface: '#292622',
-  surfaceRaised: '#3A3630',
-  surfaceSunken: '#040302',
-  border: '#544F48',
-  borderStrong: '#908B83',
+  background: '#19201A',
+  surface: '#273028',
+  surfaceRaised: '#353F36',
+  surfaceSunken: '#090D09',
+  border: '#4D584E',
+  borderStrong: '#869589',
 
-  textPrimary: '#F2F0EC',
-  textSecondary: '#CAC7C1',
-  textMuted: '#A9A59E',
+  textPrimary: '#ECF2ED',
+  textSecondary: '#C3CCC4',
+  textMuted: '#A1ABA3',
 
-  accent: '#83ADF9',
-  onAccent: '#070F21',
-  accentMuted: '#1F3050',
-  accentOnMuted: '#9AC0FF',
+  // Marking green, night tuning. L* 82.3, chroma 0.146.
+  accent: '#7CE294',
+  onAccent: '#0F2314',
+  accentMuted: '#084B24',
+  accentOnMuted: '#7DE49C',
 
-  positive: '#79C18D',
-  onPositive: '#021106',
-  positiveMuted: '#193521',
+  // Deep moss, night tuning — still the greyer of the two. L* 66.0, chroma 0.050.
+  positive: '#99A583',
+  onPositive: '#161B0C',
+  positiveMuted: '#283114',
 
-  warning: '#E5AC53',
-  onWarning: '#1A0D00',
-  warningMuted: '#402C0D',
+  warning: '#ECB86D',
+  onWarning: '#261704',
+  warningMuted: '#492F0E',
 
-  danger: '#F0857D',
-  onDanger: '#1D0504',
-  dangerMuted: '#4B1D1B',
+  danger: '#FD8A83',
+  onDanger: '#2D1210',
+  dangerMuted: '#582523',
 
-  overlay: 'rgba(0, 0, 0, 0.62)',
-  videoScrim: 'rgba(0, 0, 0, 0.72)',
-  onVideoScrim: '#F9F6F1',
-  focusRing: '#83ADF9',
+  overlay: 'rgba(3, 9, 5, 0.66)',
+  videoScrim: 'rgba(4, 9, 5, 0.72)',
+  onVideoScrim: '#F2F8F1',
+  focusRing: '#7CE294',
 } as const satisfies ColorTokens;
 
 export const colors = { light: lightColors, dark: darkColors } as const;

@@ -1,0 +1,156 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Remy palette - white, and two greens</title><style>
+:root{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:light}
+body{margin:0;background:#f4f4f2;color:#15201a;padding:32px 24px 64px}
+header,footer{max-width:1180px;margin:0 auto}
+header{margin-bottom:28px}
+h1{font-size:26px;margin:0 0 8px;letter-spacing:-.02em}
+header p{margin:0 0 6px;max-width:64ch;line-height:1.55;color:#424d45;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:24px;max-width:1180px;margin:0 auto;align-items:start}
+.scheme{background:var(--bg);color:var(--text);border:1px solid rgba(0,0,0,.18);border-radius:10px;padding:20px;overflow:hidden}
+.scheme h2{margin:0 0 16px;font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+.scheme h3{margin:26px 0 10px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
+code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11px}
+.l-bg{padding:14px;border-radius:8px;background:var(--bg);border:1px solid var(--border);font-size:11px;color:var(--muted)}
+.l-surface{margin-top:8px;padding:14px;border-radius:6px;background:var(--surface)}
+.l-raised{margin-top:8px;padding:16px;border-radius:6px;background:var(--raised);box-shadow:0 4px 10px rgba(0,0,0,.10)}
+.l-sunken{margin-top:8px;padding:16px;border-radius:6px;background:var(--sunken);border:1px solid var(--border)}
+table.data{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+table.data td{padding:5px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+.num{text-align:right;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
+.num.strong{font-weight:700}
+.req{color:var(--muted)}
+.pass::after{content:" OK";color:var(--positive);font-weight:700}
+.fail::after{content:" FAIL";color:var(--danger);font-weight:700}
+.was{color:var(--muted);font-size:10.5px}
+.sw span{display:inline-block;width:16px;height:16px;border-radius:3px;border:1px solid var(--border);margin-right:2px;vertical-align:middle}
+.chipdot{display:inline-block;padding:1px 7px;border-radius:4px;margin-right:7px;font-size:11px;font-weight:600}
+.card{background:var(--surface);border-radius:8px;padding:16px;margin-top:10px}
+.card.done{background:var(--positiveMuted)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.eyebrow{margin:0 0 6px;font-size:10px;letter-spacing:.14em;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.dish{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em}
+.dish.small{font-size:17px}
+.meta{margin:6px 0 0;font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.btnrow{display:flex;gap:8px;margin-top:14px}
+button{font:inherit;font-size:13px;font-weight:600;padding:9px 18px;border-radius:6px;cursor:default}
+.btn-accent{background:var(--accent);color:var(--onAccent);border:0}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid var(--borderStrong)}
+.chiprow{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.chip,.chip-selected{font-size:11.5px;padding:5px 11px;border-radius:5px}
+.chip{background:var(--sunken);border:1px solid var(--border);color:var(--text2)}
+.chip-selected{background:var(--accentMuted);border:1.5px solid var(--accent);color:var(--accentOn);font-weight:600}
+.badge-done{display:inline-block;margin-top:12px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:4px;background:var(--positiveMuted);color:var(--positive);border:1px solid var(--positive)}
+.circles{display:flex;gap:18px;margin-top:12px;text-align:center;font-size:10px;color:var(--muted)}
+.circle{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:999px;font-size:20px}
+.circle.accent{background:var(--accent);color:var(--onAccent)}
+.circle.positive{background:var(--positive);color:var(--onPositive)}
+footer{margin-top:26px;font-size:12.5px;color:#424d45;line-height:1.6;max-width:80ch}
+</style></head><body><header><h1>Remy palette &mdash; white, and two greens</h1><p>Generated straight from <code>src/theme/tokens.ts</code>, so every swatch and every number below is a value the app actually ships. Both schemes, side by side.</p><p><b>What to look for:</b> (1) can you see the step from the page to a card, and from a card to a sheet? (2) do the green &ldquo;Ja&rdquo; button and the green &ldquo;gemaakt&rdquo; badge read as two different things? (3) does the timer circle visibly change when it finishes?</p></header><div class="grid">
+<section class="scheme" style="--bg:#D9ECDC;--surface:#F7FBF7;--raised:#FFFFFF;--sunken:#C6DEC9;--border:#A9C6AE;--borderStrong:#59765F;--text:#141E15;--text2:#445446;--muted:#4F5F52;--accent:#006D35;--onAccent:#FFFFFF;--accentMuted:#ABFEC8;--accentOn:#00682F;--positive:#374123;--onPositive:#F3F8EA;--positiveMuted:#D2E0B9;--warning:#8D5700;--warningMuted:#FEDEAB;--danger:#A72C28;--dangerMuted:#FFCFC8">
+  <h2>light scheme</h2>
+
+  <h3>1 &middot; The surface ladder</h3>
+  <div class="l-bg">background <code>#D9ECDC</code>
+    <div class="l-surface">surface <code>#F7FBF7</code>
+      <div class="l-raised">surfaceRaised <code>#FFFFFF</code></div>
+      <div class="l-sunken">surfaceSunken <code>#C6DEC9</code></div>
+    </div>
+  </div>
+  <table class="data"><tbody><tr><td class="sw"><span style="background:#C6DEC9"></span><span style="background:#D9ECDC"></span></td><td><code>surfaceSunken</code> &rarr; <code>background</code></td><td class="num">1.156:1</td><td class="num">&Delta;L* 5.41</td><td class="num"><span class="was">was 1.169:1 &middot; &Delta;L* 5.62</span></td></tr><tr><td class="sw"><span style="background:#D9ECDC"></span><span style="background:#F7FBF7"></span></td><td><code>background</code> &rarr; <code>surface</code></td><td class="num">1.183:1</td><td class="num">&Delta;L* 6.58</td><td class="num"><span class="was">was 1.183:1 &middot; &Delta;L* 6.32</span></td></tr><tr><td class="sw"><span style="background:#F7FBF7"></span><span style="background:#FFFFFF"></span></td><td><code>surface</code> &rarr; <code>surfaceRaised</code></td><td class="num">1.045:1</td><td class="num">&Delta;L* 1.77</td><td class="num"><span class="was">was 1.172:1 &middot; &Delta;L* 6.26</span></td></tr></tbody></table>
+
+  <h3>2 &middot; The two greens, in context</h3>
+  <div class="card">
+    <p class="eyebrow">VANAVOND</p>
+    <p class="dish">Kip met citroen en tijm</p>
+    <p class="meta">25 min &middot; voor 4</p>
+    <div class="btnrow">
+      <button class="btn-accent">Ja</button>
+      <button class="btn-ghost">Iets anders</button>
+    </div>
+    <div class="chiprow">
+      <span class="chip-selected">gluten</span>
+      <span class="chip">noten</span>
+      <span class="chip">lactose</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="card done">
+      <p class="dish small">Gemaakt!</p>
+      <p class="meta">the loop closed &mdash; <code>positiveMuted</code> wash</p>
+      <span class="badge-done">gemaakt</span>
+    </div>
+    <div class="card">
+      <p class="meta">TimerDisplay &mdash; one circle, before and after</p>
+      <div class="circles">
+        <div><span class="circle accent">&#9654;</span><br><small>running &middot; accent</small></div>
+        <div><span class="circle positive">&#10003;</span><br><small>done &middot; positive</small></div>
+      </div>
+    </div>
+  </div>
+  <table class="data"><tbody>
+    <tr><td class="sw"><span style="background:#006D35"></span></td><td><code>accent</code> #006D35</td>
+        <td class="num">L* 39.9</td><td class="num">chroma 0.123</td><td></td></tr>
+    <tr><td class="sw"><span style="background:#374123"></span></td><td><code>positive</code> #374123</td>
+        <td class="num">L* 25.9</td><td class="num">chroma 0.050</td><td></td></tr>
+    <tr><td></td><td>perceptual distance (OKLab)</td><td class="num strong">0.138</td>
+        <td class="num">muted tints 0.082</td>
+        <td class="num"><span class="was">blue/green pair was 0.206</span></td></tr>
+  </tbody></table>
+
+  <h3>3 &middot; Measured contrast</h3>
+  <table class="data"><tbody><tr><td><span class="chipdot" style="background:#F7FBF7;color:#141E15">Aa</span><code>textPrimary</code> on <code>surface</code></td><td class="num pass">16.39:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#F7FBF7;color:#445446">Aa</span><code>textSecondary</code> on <code>surface</code></td><td class="num pass">7.72:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#C6DEC9;color:#4F5F52">Aa</span><code>textMuted</code> on <code>surfaceSunken</code></td><td class="num pass">4.75:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#FFFFFF;color:#006D35">Aa</span><code>accent</code> on <code>surfaceRaised</code></td><td class="num pass">6.48:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#C6DEC9;color:#006D35">Aa</span><code>accent</code> on <code>surfaceSunken</code></td><td class="num pass">4.54:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#006D35;color:#FFFFFF">Aa</span><code>onAccent</code> on <code>accent</code></td><td class="num pass">6.48:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#ABFEC8;color:#00682F">Aa</span><code>accentOnMuted</code> on <code>accentMuted</code></td><td class="num pass">5.87:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#D2E0B9;color:#374123">Aa</span><code>positive</code> on <code>positiveMuted</code></td><td class="num pass">7.77:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#374123;color:#F3F8EA">Aa</span><code>onPositive</code> on <code>positive</code></td><td class="num pass">10.00:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#FFFFFF;color:#59765F">Aa</span><code>borderStrong</code> on <code>surfaceRaised</code></td><td class="num pass">5.02:1</td><td class="num req">&ge; 3.0</td></tr><tr><td><span class="chipdot" style="background:#C6DEC9;color:#59765F">Aa</span><code>borderStrong</code> on <code>surfaceSunken</code></td><td class="num pass">3.51:1</td><td class="num req">&ge; 3.0</td></tr><tr><td><span class="chipdot" style="background:#D2E0B9;color:#006D35">Aa</span><code>accent</code> on <code>positiveMuted</code></td><td class="num pass">4.66:1</td><td class="num req">&ge; 3.0</td></tr><tr><td><span class="chipdot" style="background:#FEDEAB;color:#8D5700">Aa</span><code>warning</code> on <code>warningMuted</code></td><td class="num pass">4.65:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#C6DEC9;color:#A72C28">Aa</span><code>danger</code> on <code>surfaceSunken</code></td><td class="num pass">4.84:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#D2E0B9;color:#4F5F52">Aa</span><code>textMuted</code> on <code>positiveMuted</code></td><td class="num pass">4.89:1</td><td class="num req">&ge; 4.5</td></tr></tbody></table>
+</section>
+<section class="scheme" style="--bg:#19201A;--surface:#273028;--raised:#353F36;--sunken:#090D09;--border:#4D584E;--borderStrong:#869589;--text:#ECF2ED;--text2:#C3CCC4;--muted:#A1ABA3;--accent:#7CE294;--onAccent:#0F2314;--accentMuted:#084B24;--accentOn:#7DE49C;--positive:#99A583;--onPositive:#161B0C;--positiveMuted:#283114;--warning:#ECB86D;--warningMuted:#492F0E;--danger:#FD8A83;--dangerMuted:#582523">
+  <h2>dark scheme</h2>
+
+  <h3>1 &middot; The surface ladder</h3>
+  <div class="l-bg">background <code>#19201A</code>
+    <div class="l-surface">surface <code>#273028</code>
+      <div class="l-raised">surfaceRaised <code>#353F36</code></div>
+      <div class="l-sunken">surfaceSunken <code>#090D09</code></div>
+    </div>
+  </div>
+  <table class="data"><tbody><tr><td class="sw"><span style="background:#090D09"></span><span style="background:#19201A"></span></td><td><code>surfaceSunken</code> &rarr; <code>background</code></td><td class="num">1.177:1</td><td class="num">&Delta;L* 8.07</td><td class="num"></td></tr><tr><td class="sw"><span style="background:#19201A"></span><span style="background:#273028"></span></td><td><code>background</code> &rarr; <code>surface</code></td><td class="num">1.219:1</td><td class="num">&Delta;L* 7.42</td><td class="num"></td></tr><tr><td class="sw"><span style="background:#273028"></span><span style="background:#353F36"></span></td><td><code>surface</code> &rarr; <code>surfaceRaised</code></td><td class="num">1.244:1</td><td class="num">&Delta;L* 6.70</td><td class="num"></td></tr></tbody></table>
+
+  <h3>2 &middot; The two greens, in context</h3>
+  <div class="card">
+    <p class="eyebrow">VANAVOND</p>
+    <p class="dish">Kip met citroen en tijm</p>
+    <p class="meta">25 min &middot; voor 4</p>
+    <div class="btnrow">
+      <button class="btn-accent">Ja</button>
+      <button class="btn-ghost">Iets anders</button>
+    </div>
+    <div class="chiprow">
+      <span class="chip-selected">gluten</span>
+      <span class="chip">noten</span>
+      <span class="chip">lactose</span>
+    </div>
+  </div>
+  <div class="two">
+    <div class="card done">
+      <p class="dish small">Gemaakt!</p>
+      <p class="meta">the loop closed &mdash; <code>positiveMuted</code> wash</p>
+      <span class="badge-done">gemaakt</span>
+    </div>
+    <div class="card">
+      <p class="meta">TimerDisplay &mdash; one circle, before and after</p>
+      <div class="circles">
+        <div><span class="circle accent">&#9654;</span><br><small>running &middot; accent</small></div>
+        <div><span class="circle positive">&#10003;</span><br><small>done &middot; positive</small></div>
+      </div>
+    </div>
+  </div>
+  <table class="data"><tbody>
+    <tr><td class="sw"><span style="background:#7CE294"></span></td><td><code>accent</code> #7CE294</td>
+        <td class="num">L* 82.3</td><td class="num">chroma 0.146</td><td></td></tr>
+    <tr><td class="sw"><span style="background:#99A583"></span></td><td><code>positive</code> #99A583</td>
+        <td class="num">L* 66.0</td><td class="num">chroma 0.050</td><td></td></tr>
+    <tr><td></td><td>perceptual distance (OKLab)</td><td class="num strong">0.165</td>
+        <td class="num">muted tints 0.085</td>
+        <td class="num"><span class="was">blue/green pair was 0.183</span></td></tr>
+  </tbody></table>
+
+  <h3>3 &middot; Measured contrast</h3>
+  <table class="data"><tbody><tr><td><span class="chipdot" style="background:#273028;color:#ECF2ED">Aa</span><code>textPrimary</code> on <code>surface</code></td><td class="num pass">12.01:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#273028;color:#C3CCC4">Aa</span><code>textSecondary</code> on <code>surface</code></td><td class="num pass">8.28:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#090D09;color:#A1ABA3">Aa</span><code>textMuted</code> on <code>surfaceSunken</code></td><td class="num pass">8.27:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#353F36;color:#7CE294">Aa</span><code>accent</code> on <code>surfaceRaised</code></td><td class="num pass">6.87:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#090D09;color:#7CE294">Aa</span><code>accent</code> on <code>surfaceSunken</code></td><td class="num pass">12.27:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#7CE294;color:#0F2314">Aa</span><code>onAccent</code> on <code>accent</code></td><td class="num pass">10.36:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#084B24;color:#7DE49C">Aa</span><code>accentOnMuted</code> on <code>accentMuted</code></td><td class="num pass">6.59:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#283114;color:#99A583">Aa</span><code>positive</code> on <code>positiveMuted</code></td><td class="num pass">5.24:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#99A583;color:#161B0C">Aa</span><code>onPositive</code> on <code>positive</code></td><td class="num pass">6.74:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#353F36;color:#869589">Aa</span><code>borderStrong</code> on <code>surfaceRaised</code></td><td class="num pass">3.48:1</td><td class="num req">&ge; 3.0</td></tr><tr><td><span class="chipdot" style="background:#090D09;color:#869589">Aa</span><code>borderStrong</code> on <code>surfaceSunken</code></td><td class="num pass">6.22:1</td><td class="num req">&ge; 3.0</td></tr><tr><td><span class="chipdot" style="background:#283114;color:#7CE294">Aa</span><code>accent</code> on <code>positiveMuted</code></td><td class="num pass">8.55:1</td><td class="num req">&ge; 3.0</td></tr><tr><td><span class="chipdot" style="background:#492F0E;color:#ECB86D">Aa</span><code>warning</code> on <code>warningMuted</code></td><td class="num pass">6.86:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#090D09;color:#FD8A83">Aa</span><code>danger</code> on <code>surfaceSunken</code></td><td class="num pass">8.52:1</td><td class="num req">&ge; 4.5</td></tr><tr><td><span class="chipdot" style="background:#283114;color:#A1ABA3">Aa</span><code>textMuted</code> on <code>positiveMuted</code></td><td class="num pass">5.76:1</td><td class="num req">&ge; 4.5</td></tr></tbody></table>
+</section></div><footer><p><b>The one honest caveat.</b> <code>accent</code> and <code>positive</code> used to be different colours (blue and green); they are now two greens, kept apart by lightness and chroma rather than by hue. Measured distance: 0.138 in light and 0.165 in dark, against 0.207 and 0.183 for the pair they replace. The light scheme genuinely gives up about a third of that separation in order to be white with green accents. If the timer circle above does not read as changed, that is the trade showing, and the fix belongs in the component (a different glyph or shape), not in a brighter green.</p><p>Light ladder: surfaceSunken&rarr;background 1.156:1 &middot; background&rarr;surface 1.183:1 &middot; surface&rarr;surfaceRaised 1.045:1</p></footer></body></html>

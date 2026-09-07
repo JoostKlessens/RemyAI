@@ -19,12 +19,14 @@ than a kitchen instrument panel: saved recipes are a **proof sheet of
 takes**, choosing tonight's dish is **circling the one that's getting used**
 in grease pencil, and anything measured or systemic — timers, counts,
 labels, buttons — reads like **timecode burned into the frame**. Concretely:
-a single cool-graphite neutral palette (paper/light-table tones, not warm
-cream) carries ~95% of every screen; one flat marking-blue `accent` appears
-only at the instant a choice is made — the "Ja" on Kiezen, a selected
-allergen chip — never as decoration; a separate forest-green `positive` is
-reserved exclusively for completion ("Gemaakt", a verified tag), so
-"decided" and "done" stay visually distinct. Typography is inverted from
+a near-white neutral palette with a faint green cast (paper on a light
+table, not warm cream and not grey) carries ~95% of every screen; one flat
+marking-green `accent` appears only at the instant a choice is made — the
+"Ja" on Kiezen, a selected allergen chip — never as decoration; a separate
+`positive`, a much deeper and much greyer green, is reserved exclusively for
+completion ("Gemaakt", a verified tag), so "decided" and "done" stay
+visually distinct. Those two greens are the one genuinely hard thing in this
+palette and "Colour: white, and two greens" below is entirely about them. Typography is inverted from
 Remy's previous system: a warm grotesk (Archivo) now carries everything you
 *read* — dish names, reasons, ingredients, steps — while a monospace (IBM
 Plex Mono) carries everything *systemic* — eyebrows, buttons, captions,
@@ -37,15 +39,212 @@ committing to a wholly different, ownable visual identity.
 **Explicitly avoided**, per the founder's brief: cream+serif+terracotta,
 near-black+acid-green, purple-to-blue gradients, Inter/Space Grotesk,
 emoji section markers, uniform rounded cards with an accent bar. The
-palette is *cool* neutral (green-grey, not beige); accent is blue (not
-orange/terracotta) so it never collides with red `danger`; nothing here
-uses a gradient except the pre-existing flat-alpha `videoScrim`.
+palette is near-white with a green cast (not beige, not grey); accent is
+green (not orange/terracotta) and `danger` stays red, far darker and far
+warmer, so the two never trade places; nothing here uses a gradient except
+the pre-existing flat-alpha `videoScrim`.
 
 **Light and dark are both designed, not inverted.** Light is a light table
-under daylight — near-white paper, near-black ink. Dark is the edit bay,
-safelight off — deep cool graphite (`#121417`), not brown-charcoal and not
-OLED black, every saturated hue re-tuned brighter for that ground rather
-than mechanically inverted; see tokens.ts's inline comments for why.
+under daylight — near-white paper (`#D9ECDC` page, `#FFFFFF` sheets),
+near-black ink. Dark is the edit bay, safelight off — deep green-graphite
+(`#19201A`), not brown-charcoal and not OLED black, carrying the same leaf
+hue as the light scheme rather than dropping it, with every saturated hue
+re-tuned brighter for that ground rather than mechanically inverted; see
+tokens.ts's inline comments for why.
+
+## Colour: white, and two greens
+
+The brief, verbatim: *"Ik wil ook dat het design van de app wat vrolijker
+wordt, alles is nu in grijstinten, dit mag wit worden met groene accenten."*
+The ground it calls grey was `#DDD9D0`, a warm taupe. This is the palette
+that replaced it on 7 September 2026. Values live in `src/theme/tokens.ts`;
+the tables below are the same values written out, so a mismatch between this
+document and that file is a bug in one of them — the last time a palette
+shipped without being pasted into the code, all 26 tokens per scheme
+differed and nobody noticed for two days.
+
+### Light
+
+| Token | Hex | Role |
+| :-- | :-- | :-- |
+| `background` | `#D9ECDC` | the page — near-white with a green cast |
+| `surface` | `#F7FBF7` | cards, rows, panels — effectively white |
+| `surfaceRaised` | `#FFFFFF` | the only pure white: sheets, the outcome card |
+| `surfaceSunken` | `#C6DEC9` | wells — unselected chips, inputs, grid gutters |
+| `border` | `#A9C6AE` | decorative hairline |
+| `borderStrong` | `#59765F` | interactive boundaries (WCAG 1.4.11) |
+| `textPrimary` | `#141E15` | reading text |
+| `textSecondary` | `#445446` | metadata, sub-labels |
+| `textMuted` | `#4F5F52` | helper copy, timestamps |
+| `accent` | `#006D35` | **marking green** — the moment a choice is made |
+| `onAccent` | `#FFFFFF` | on an `accent` fill |
+| `accentMuted` | `#ABFEC8` | selected-chip fill, badges |
+| `accentOnMuted` | `#00682F` | text on `accentMuted` |
+| `positive` | `#374123` | **deep moss** — completion, and nothing else |
+| `onPositive` | `#F3F8EA` | on a `positive` fill |
+| `positiveMuted` | `#D2E0B9` | the completion wash |
+| `warning` | `#8D5700` | caution — allergens, cook-mode alerts |
+| `onWarning` | `#FFF7E9` | on a `warning` fill |
+| `warningMuted` | `#FEDEAB` | caution fill |
+| `danger` | `#A72C28` | errors, destructive confirmations |
+| `onDanger` | `#FFF4F3` | on a `danger` fill |
+| `dangerMuted` | `#FFCFC8` | error fill |
+| `overlay` | `rgba(11, 24, 14, 0.52)` | scrim behind sheets |
+| `videoScrim` | `rgba(8, 18, 11, 0.68)` | legibility wash on a thumbnail |
+| `onVideoScrim` | `#F2F8F1` | text on that wash — same value in both schemes |
+| `focusRing` | `#006D35` | focus outline |
+
+### Dark
+
+| Token | Hex | Role |
+| :-- | :-- | :-- |
+| `background` | `#19201A` | the page — deep green-graphite |
+| `surface` | `#273028` | cards, rows, panels |
+| `surfaceRaised` | `#353F36` | sheets, the outcome card |
+| `surfaceSunken` | `#090D09` | wells |
+| `border` | `#4D584E` | decorative hairline |
+| `borderStrong` | `#869589` | interactive boundaries |
+| `textPrimary` | `#ECF2ED` | reading text |
+| `textSecondary` | `#C3CCC4` | metadata, sub-labels |
+| `textMuted` | `#A1ABA3` | helper copy, timestamps |
+| `accent` | `#7CE294` | **marking green**, night tuning |
+| `onAccent` | `#0F2314` | on an `accent` fill |
+| `accentMuted` | `#084B24` | selected-chip fill, badges |
+| `accentOnMuted` | `#7DE49C` | text on `accentMuted` |
+| `positive` | `#99A583` | **deep moss**, night tuning |
+| `onPositive` | `#161B0C` | on a `positive` fill |
+| `positiveMuted` | `#283114` | the completion wash |
+| `warning` | `#ECB86D` | caution |
+| `onWarning` | `#261704` | on a `warning` fill |
+| `warningMuted` | `#492F0E` | caution fill |
+| `danger` | `#FD8A83` | errors, destructive confirmations |
+| `onDanger` | `#2D1210` | on a `danger` fill |
+| `dangerMuted` | `#582523` | error fill |
+| `overlay` | `rgba(3, 9, 5, 0.66)` | scrim behind sheets |
+| `videoScrim` | `rgba(4, 9, 5, 0.72)` | legibility wash on a thumbnail |
+| `onVideoScrim` | `#F2F8F1` | text on that wash — same value in both schemes |
+| `focusRing` | `#7CE294` | focus outline |
+
+### The problem this palette had to solve
+
+Remy has always kept `accent` and `positive` in different hue families on
+purpose: `accent` is a choice being made, `positive` is a loop closed, and
+keeping them apart is what stops "chosen" and "done" from becoming one idea
+in the user's head. That was free when `accent` was cobalt blue. Green
+accents collapse it by construction, and a palette that quietly shipped two
+similar greens would have thrown away a real distinction to satisfy a
+sentence about colour.
+
+**They are separated on lightness and chroma instead of hue.** Hue is the
+wrong axis for two greens: 22 degrees is not a difference anyone holds in
+memory from one screen to the next, and it disappears entirely for a
+red-green colour-blind reader. So:
+
+| | light | dark |
+| :-- | :-- | :-- |
+| `accent` — brighter, saturated | L\* 39.9, chroma 0.123 | L\* 82.3, chroma 0.146 |
+| `positive` — deeper, near-grey | L\* 25.9, chroma 0.050 | L\* 66.0, chroma 0.050 |
+| distance (OKLab) | 0.138 | 0.165 |
+| the blue/green pair it replaces | 0.207 | 0.183 |
+
+The light scheme therefore gives up about a third of the separation it had;
+the dark scheme gives up almost nothing. That second number is the more
+interesting one, because the dark pair being replaced (`#83ADF9` against
+`#79C18D`) sat **0.001 apart in lightness and 0.016 in chroma** — identical
+brightness, differing only in hue. The scheme that claimed to keep the two
+roles in different families was, at night, leaning entirely on the one axis
+that fails for colour blindness. This palette leans on it less.
+
+**`accent` is always the brighter and more saturated of the two, in both
+schemes.** That is the rule to remember, and it is asserted in
+`tests/contrast.test.ts` rather than trusted. It is also forced rather than
+chosen: `positive` has to clear 4.5:1 as *text* on the pale `positiveMuted`
+fill (RecipeTile's badge, FriendProofCard's "gemaakt" chip), which caps it
+around L\* 43, and `accent` has to clear 4.5:1 as text on `surfaceSunken`,
+which caps it at L\* 40.1. A white ground pushes every green that can carry
+text downward, both ceilings land close together, and the only way to buy
+separation is to push `positive` far below its ceiling. Hence a deep moss
+for completion, with the celebration carried by the pale `positiveMuted`
+wash and the word rather than by a bright green.
+
+**Rejected, and why.** *Keep `accent` blue, paint only the neutrals green* —
+safest, and it ignores the brief: the accent is the one colour a user points
+at. *Two greens differing mainly in hue (emerald against forest)* — that is
+measurably what the old dark scheme already did, and it is the version of
+this idea that fails silently. *Move `positive` out of green, to teal or
+gold* — gold is `warning` already, and a teal "done" beside a green "chosen"
+reads as a bug rather than as a distinction.
+
+**Where it is tightest.** `TimerDisplay` fills the same circle with `accent`
+while a timer runs and with `positive` when it finishes, and `Button` has a
+`positive`-filled variant — the two places the greens are compared from
+memory rather than side by side. They differ 1.6:1 in luminance there, so
+the swap reads as "the circle went dark and quiet". If that proves too
+subtle in the hand, the fix is a glyph or shape change in those components,
+not a brighter `positive`.
+
+**Hue is never the only carrier.** Red `danger` against green `accent` is
+the one pair this palette made worse: red/green is exactly the axis a
+deuteranope cannot use, where red/blue was not. Every destructive surface
+already pairs the colour with a word or an icon, and it must keep doing so
+(WCAG 1.4.1).
+
+### The surface ladder, measured
+
+A white app with no visible step between page and card is the known way this
+change goes wrong, so the ladder is measured rather than assumed — in two
+units. WCAG contrast ratios compress near white to the point of being
+useless for this (a clearly visible step and an invisible one report almost
+the same number), while CIE L\* stays perceptually even; roughly 5 L\* is
+where two surfaces become tellable apart.
+
+| step | light | dark | previous palette (light) |
+| :-- | :-- | :-- | :-- |
+| `surfaceSunken` → `background` | 1.156:1 · ΔL\* 5.41 | 1.177:1 · ΔL\* 8.07 | 1.169:1 · ΔL\* 5.62 |
+| `background` → `surface` | 1.183:1 · ΔL\* 6.58 | 1.219:1 · ΔL\* 7.42 | 1.183:1 · ΔL\* 6.32 |
+| `surface` → `surfaceRaised` | 1.045:1 · ΔL\* 1.77 | 1.244:1 · ΔL\* 6.70 | 1.172:1 · ΔL\* 6.26 |
+
+`background` → `surface` is the load-bearing step: a card lies directly on
+the page with no scrim and, per the global rules above, no coloured bar to
+help it. It comes out **identical in ratio and larger in ΔL\*** than the
+palette it replaces, on a page 13% brighter — which is the whole trick, and
+the reason the page is a soft mint rather than paper white.
+
+The step that shrank is `surface` → `surfaceRaised`, deliberately. Every
+`surfaceRaised` in the app is either a sheet over the `overlay` scrim
+(`SaveIntentSheet`, `SendRecipeSheet`, `PortionScalingSheet`,
+`LibraryTileActionSheet`, `CookSharingAskSheet`) or `OutcomeCard`, which
+sits on `background` or on the `positiveMuted` wash. That pair is never
+drawn adjacent, so the last two L\* of the range were spent on the page
+instead of on a step nobody can see. **A component that puts a raised card
+straight onto `surface` breaks this assumption** and needs a border.
+`surfaceSunken` gets the other shallow step because wells always carry a
+`border` as well.
+
+Note also that a caveat from the old palette no longer applies: with
+`surfaceRaised` now pure white, `#FFFFFF` is reserved — a component that
+wants "white" should ask for `surfaceRaised`, not hardcode it.
+
+### What dark means here
+
+"White with green accents" cannot be inverted, because inverting white gives
+black and black is not what the light scheme means. The light scheme means
+paper under a lamp with one green mark on it; dark is the same bench with
+the lamp off. So the dark neutrals keep the light scheme's leaf hue at very
+low chroma (a green-graphite, where the previous scheme was brown-charcoal),
+both greens are re-tuned up for that ground rather than flipped, and the two
+roles keep exactly the relationship they have in light. Dark also keeps all
+three surface steps at ΔL\* 6.7 or more, because unlike white there is room
+below.
+
+### Verification
+
+`tests/contrast.test.ts` imports `src/theme/tokens.ts` directly and asserts,
+for both schemes: every text token at 4.5:1 against all four neutral
+surfaces and against the fills it is drawn on; `borderStrong` at 3:1 against
+all four surfaces (WCAG 1.4.11); every surface step against the ΔL\*
+minimums in the table above; and the OKLab separation and ordering of the
+two greens. 86 assertions, all passing at the values printed here.
 
 ## Typography
 
@@ -76,10 +275,13 @@ re-weighted via `fontWeight` like the OS system font, hence `sansBold`/
 - **Touch targets**: `spacing.touchTargetMin` (44pt) minimum everywhere
   interactive, including chips, icon buttons and grid tiles.
 - **Contrast**: body text never below 4.5:1; interactive boundaries
-  (`borderStrong`) never below 3:1 — every pair pre-verified in both
-  schemes (frontend report has the arithmetic). Never mix a fill with a
-  text color from a different pair (e.g. `accent` text needs `accentMuted`'s
-  own `accentOnMuted`, not `accent` itself).
+  (`borderStrong`) never below 3:1 — every pair asserted in both schemes by
+  `tests/contrast.test.ts`, which imports the real tokens rather than a
+  copy. That file also guards the two things a contrast ratio cannot see
+  and this palette depends on: the surface ladder in CIE L*, and the
+  perceptual distance between the two greens. Never mix a fill with a text
+  color from a different pair (e.g. `accent` text needs `accentMuted`'s own
+  `accentOnMuted`, not `accent` itself).
 - **Dynamic Type**: never `allowFontScaling={false}`, never cap
   `maxFontSizeMultiplier` — cook mode must survive 200% scale (§6).
   Elsewhere, prefer letting a row grow over capping it.
