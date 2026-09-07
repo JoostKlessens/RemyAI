@@ -11,10 +11,10 @@ de import; hun tweede helft (boodschappen, prijzen, supermarktkoppeling) is
 grotendeels bewust niet overgenomen.
 
 **Stand:** 7 september 2026, `feat/live-import-and-plan-phases`, t/m
-`605c795` gepusht. ⚠ **Twee dagen werk staat ongecommit in de werkboom**, dus
-voor alles wat op 6 en 7 september gebouwd is betekent `✅` hieronder
-"gebouwd, getest en groen", nog niet "gepusht". Negen bestanden staan als
-hernoeming in de git-index — dat is hoe `git mv` het registreert.
+`741bb38` gepusht, werkboom schoon. Het voorbehoud dat hier stond — dat `✅`
+voor het werk van 6 en 7 september "gebouwd en groen" betekende maar nog niet
+"gepusht" — is daarmee vervallen: `✅` betekent weer wat de tabel hieronder
+zegt.
 
 **Dit document is op 5 september herzien.** Alles wat af is staat nu onder
 **Afgerond** onderaan in plaats van tussen het openstaande werk; het bovenste

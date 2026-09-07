@@ -4,16 +4,19 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 7 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`605c795` gepusht — **maar de werkboom is niet schoon, en dat is het eerste
-wat je moet weten.** De hele sessie van 6 en 7 september staat ongecommit in
-de boom: ruim zeventig gewijzigde bestanden, drie migraties (`0015`, `0016`,
-`0017`) en negen hernoemingen die in de git-index staan omdat `git mv` dat zo
-registreert. Vier checks groen: **3125 tests over 130 bestanden**.
+`741bb38` gepusht, **en de werkboom is voor het eerst in dagen schoon.** De
+sessies van 6 en 7 september staan erin: 143 bestanden, drie migraties
+(`0015`, `0016`, `0017`) en negen hernoemingen. Vier checks groen:
+**3125 tests over 130 bestanden**.
 
-⚠ **`.gitignore` kent geen `.claude/`-regel**, en daar staan agent-worktrees.
-`git add -A` zou hele kopieën van de repo committen. Ook `research/` is
-volledig untracked — vier bestanden, waaronder de ToS-analyse waar de
-embed-beslissing op rust, in geen enkele commit op geen enkele branch.
+Twee waarschuwingen die hier dagenlang stonden zijn opgelost en blijven
+alleen als aantekening staan. **`.gitignore` kent nu wel een `.claude/`-regel**
+(`e5532fc`) — daar staan agent-worktrees, dus zonder die regel commit een
+`git add -A` hele kopieën van de repo in de repo; `git status` had er meer
+dan twee minuten voor nodig en liep in een timeout. En **`research/` is niet
+untracked**, wat hier eerder wél stond: drie van de vier bestanden zijn
+gewoon gecommit, en `13-legal-tos.md` staat bewust in `.gitignore` met de
+reden erbij.
 
 De secties hieronder over 4 t/m 7 september staan er niet als logboek maar
 omdat elke bevinding erin een *patroon* is dat zich herhaalt.
@@ -469,11 +472,15 @@ sessie.
 Op volgorde, en de eerste twee zijn van een andere soort dan de rest: die
 kosten geen code maar een handeling van de eigenaar.
 
-1. **De boom committen.** Twee dagen werk staat ongecommit, en negen
-   hernoemingen staan al in de index. Doe dit vóór de volgende agentronde:
-   een agent die op een vuile boom begint kan zijn eigen wijziging niet van
-   de jouwe onderscheiden. Voeg eerst `.claude/` aan `.gitignore` toe en
-   beslis of `research/` mee moet — die map is nu volledig untracked.
+1. ~~**De boom committen.**~~ **Gedaan op 7 september** — `741bb38`, met
+   `e5532fc` voor de `.gitignore`-regel ervoor. Het stond hier als eerste
+   punt omdat een agent die op een vuile boom begint zijn eigen wijziging
+   niet van de jouwe kan onderscheiden; dat geldt nog steeds, dus houd hem
+   schoon vóór de volgende ronde. Eén ding was niet te splitsen en is het
+   vermelden waard: de nieuwe bestanden van 6 en 7 september stonden nog
+   nergens in git en het receptscherm importeert modules van 7 september, dus
+   elke knip leverde een commit op die niet compileert. Het is daarom één
+   commit van 143 bestanden geworden.
 
 2. **`npx supabase db push` draaien.** `0015`, `0016` en `0017` staan lokaal
    en niet remote. Twee ervan blokkeren het testen: `0016` maakt de view
