@@ -51,15 +51,28 @@
  * whole extra chip row on the screen this change exists to shorten; that
  * alternative is still rejected, on the same measurement.
  *
- * ⚠ ONE CONSEQUENCE OF THE OVERRULE IS NOT PAID FOR, AND IT IS DELIBERATE.
- * The old argument leaned on `DecisionFilterBar` using the same word for the
- * identical vocabulary on Kiezen — one question phrased one way in two
- * places. That is now untrue: Kiezen still renders a hard-coded "WAARMEE?"
- * (DecisionFilterBar.tsx:226) while this screen says "Ingrediënten". The
- * owner asked for the change "onder mijn recepten" and only there, so the
- * scope was not widened for him. It is a one-line change on that screen if he
- * wants the two to match, and it is recorded here rather than left for
- * somebody to discover as an inconsistency.
+ * ⚠ THAT DEBT WAS PAID ON 2026-09-07. The block is rewritten rather than
+ * deleted, because what it recorded — a known inconsistency, deliberately
+ * left standing — is exactly the kind of thing a reader deserves to see
+ * settled rather than vanished.
+ *
+ * IT SAID: one consequence of the overrule is not paid for, and it is
+ * deliberate. The old argument leaned on `DecisionFilterBar` using the same
+ * word for the identical vocabulary on Kiezen — one question phrased one way
+ * in two places. That is now untrue: Kiezen still renders a hard-coded
+ * "WAARMEE?" while this screen says "Ingrediënten". The owner asked for the
+ * change "onder mijn recepten" and only there, so the scope was not widened
+ * for him. It is a one-line change on that screen if he wants the two to
+ * match.
+ *
+ * HE WANTED THE TWO TO MATCH. VERBATIM: "bij kiezen staat er nog wel
+ * 'waarmee' ipv Ingredienten." Kiezen's bar now draws
+ * `DECISION_FILTER_TAGS_EYEBROW` (src/components/decisionFilterCopy.ts),
+ * which is the same word this constant holds. It is a SEPARATE constant and
+ * not an import of this one — a `LIBRARY_`-prefixed name rendered on the
+ * decision screen would misstate where the word belongs, and either screen
+ * could be told to change without the other. tests/decisionFilterCopy.test.ts
+ * asserts the two are EQUAL instead, so the pair cannot drift in silence.
  *
  * EYEBROWS ARE SENTENCE CASE IN SOURCE. `typeScale.label` deliberately does
  * NOT set `textTransform` (tokens.ts says so in as many words); the
@@ -84,9 +97,9 @@ export const LIBRARY_SEARCH_CLEAR_QUERY_LABEL = 'Wis zoekopdracht';
  * them were 69pt of a 452pt band.
  *
  * FOUR OF THEM NOW LEAD THEIR OWN ROW, inline, as the first thing inside the
- * horizontal scroll: "WAARMEE?" sits to the left of the tag chips rather than
- * above them. That costs width, which a scrolling row has, instead of height,
- * which this screen does not — and it keeps the heading VISIBLE and in
+ * horizontal scroll: "INGREDIËNTEN" sits to the left of the tag chips rather
+ * than above them. That costs width, which a scrolling row has, instead of
+ * height, which this screen does not — and it keeps the heading VISIBLE and in
  * reading order for a screen reader, which is what an eyebrow was for. The
  * words did not change; only the axis they are laid out on.
  *
@@ -96,9 +109,19 @@ export const LIBRARY_SEARCH_CLEAR_QUERY_LABEL = 'Wis zoekopdracht';
  * a clock showing a number of minutes is the same sentence twice, and the
  * picker sits on the search row where there is no space for one anyway. It
  * survives for the reason `LIBRARY_TIME_CAP_OPTIONS` does: this is the word
- * this app uses for that question, `DecisionFilterBar` still draws its own
- * eyebrow above the same control, and the constant is where a second screen
+ * this app uses for that question, and the constant is where a second screen
  * should take it from rather than retyping it.
+ *
+ * IT USED TO SAY "`DecisionFilterBar` still draws its own eyebrow above the
+ * same control", AND THAT STOPPED BEING TRUE ON 2026-09-07. The owner asked
+ * for Kiezen's heading to go ("Verwijder de teksten 'hoeveel tijd' en
+ * kiezen"), so NEITHER screen draws this question over the picker now — which
+ * is the conclusion this paragraph had already reached for its own bar, on
+ * the ground that a heading over a clock showing a numeral is the same
+ * sentence twice. Kiezen keeps its own `DECISION_FILTER_TIME_EYEBROW` for one
+ * job this screen has no equivalent of: naming the hidden time axis inside
+ * the accessibility label of its "Filters" drawer, which a screen-reader user
+ * cannot open and glance into.
  *
  * TWO OF THE FOUR NOW LEAD A ROW THAT IS NOT ON SCREEN UNTIL SOMEBODY ASKS
  * FOR IT. `LIBRARY_FILTER_PLAN_EYEBROW` and `LIBRARY_FILTER_COURSES_EYEBROW`

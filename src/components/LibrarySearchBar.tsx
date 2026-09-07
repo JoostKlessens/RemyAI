@@ -51,7 +51,7 @@
  * DEPENDS ON ONE THING THE HOUSEHOLD CONTROLS, AND ONLY WHILE THEY USE IT:
  *
  *   shut  68 (search + clock: `TimeCapPicker`'s 20pt readout, its 4pt margin
- *            and its 44pt touch area) + 8 + 47 (waarmee and zin in) + 8 + 44
+ *            and its 44pt touch area) + 8 + 47 (the two chip rows) + 8 + 44
  *            (the "Geavanceerd" opening, one touch target) + 16 = 191pt
  *   open  + 8 + 47 (wanneer and welke gang)                     = 246pt
  *
@@ -134,8 +134,8 @@
  * would not even have cancelled into silence; they would have quietly widened
  * each other.
  *
- * WHAT STAYS IN THE ORDINARY BAR: the title field, the clock, "WAARMEE?" (the
- * dish tags — "the ingredients", in his words) and "WAAR HEB JE ZIN IN?".
+ * WHAT STAYS IN THE ORDINARY BAR: the title field, the clock, "INGREDIËNTEN"
+ * (the dish tags, in his own word since 2026-09-07) and "WAAR HEB JE ZIN IN?".
  * WHAT MOVES BEHIND "GEAVANCEERD": "WANNEER?" and "WELKE GANG?", the two he
  * named. Row order is reading order: search, the axes that are always on
  * screen, the opening, then — only while it is open — the two behind it.
@@ -161,8 +161,8 @@
  * it. If "Al gekookt" turns out to be what households reach for most, this
  * paragraph is where to start reading.
  *
- * EYEBROWS LEAD THEIR ROWS INSTEAD OF SITTING ABOVE THEM. "WAARMEE?" is the
- * first thing inside the tag row's scroll rather than a 23pt line over it:
+ * EYEBROWS LEAD THEIR ROWS INSTEAD OF SITTING ABOVE THEM. "INGREDIËNTEN" is
+ * the first thing inside the tag row's scroll rather than a 23pt line over it:
  * the heading costs width, which a scrolling row has, instead of height,
  * which this screen does not — and it stays visible and in reading order. The
  * two eyebrows behind the opening lead their row in exactly the same way, so
@@ -172,7 +172,7 @@
  * THE ICONS, AND WHAT IS HONESTLY DRAWABLE TODAY
  * ===========================================================================
  *
- * THE "WAARMEE?" ROW DRAWS AN ICON BESIDE EACH NAME — the owner's "een
+ * THE "INGREDIËNTEN" ROW DRAWS AN ICON BESIDE EACH NAME — the owner's "een
  * pasta-icoontje, en dan het woord pasta ernaast" — through `IconChip` and
  * dishTagIcons.ts. IT ACTUALLY DRAWS THEM SINCE 7 SEPTEMBER 2026. Until
  * that day the row looked exactly as it did before the mapping existed:
@@ -193,10 +193,12 @@
  * and the tile badge (libraryTileBadge.ts), which is the one place a glyph
  * buys back space a word could not fit into.
  *
- * THE HEADING STAYS "WAARMEE?" AND THE OWNER ASKED FOR "INGREDIËNTEN".
- * libraryFilterCopy.ts carries the argument in full — eight of the
- * seventeen values are not ingredients, so the heading would lie about half
- * its own chips — and it is his word to overrule.
+ * ⚠ THE HEADING SAYS "INGREDIËNTEN"; THIS PARAGRAPH SAID THE OPPOSITE — "THE
+ * HEADING STAYS 'WAARMEE?' ... it is his word to overrule" — and is quoted
+ * rather than deleted, as every overruled argument is here. He overruled it on
+ * 2026-09-07; the sweep that followed (5f0c762) crossed ten files and missed
+ * this one, which draws the row. libraryFilterCopy.ts holds the count and the
+ * condition for putting the word back; Kiezen says it too (decisionFilterCopy).
  *
  * ===========================================================================
  * WHAT IS OFFERED, AND WHAT USED TO BE
