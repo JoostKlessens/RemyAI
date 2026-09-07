@@ -44,10 +44,12 @@
  * contributes no node at all — no reserved width, no gap. A caller that
  * wants a stable slot regardless (a settings row whose chevron column must
  * not shift) has to reserve it itself; a caller that would rather collapse
- * (the library's chip row) gets that for free. `IconChip` is the worked
- * example of the second, and it asks `isIconAvailable` FIRST rather than
- * rendering an `Icon` and hoping, because a wrapper `View` with a gap
- * around nothing is still a gap.
+ * (the library's chip row) gets that for free. `Chip` is the worked example
+ * of the second, and it asks `isIconAvailable` FIRST rather than rendering
+ * an `Icon` and hoping, because a wrapper `View` with a gap around nothing
+ * is still a gap. That check lived in `IconChip` until 7 September 2026,
+ * when the glyph moved inside the pill and `IconChip` became a pass-through;
+ * the contract did not change, only the file that keeps it.
  *
  * NO ACCESSIBILITY LABEL, ALSO ON PURPOSE. WS4 §"Icon fonts and screen
  * readers" is explicit that a glyph living at a private-use codepoint is

@@ -240,7 +240,8 @@ function IngredientLine(props: {
 
 /**
  * 16 pt, the small end of WS4's 16-20 pt UI band and the same size
- * `IconChip` uses beside a `typeScale.body` label. A glyph at the top of that
+ * `Chip` uses inside its pill beside a `typeScale.body` label. A glyph at the
+ * top of that
  * band beside an ingredient name reads as an illustration competing with the
  * word rather than a mark introducing it.
  */
