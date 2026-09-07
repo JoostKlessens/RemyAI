@@ -1,9 +1,24 @@
 /**
  * The settings section for the cook-proof opt-in — PD-015 /
  * DESIGN-SOCIAL.md §5's "one switch per household: Deel wat ik kook met
- * vrienden", off by default. Until this shipped, `share_cooks_with_friends`
- * defaulted to `false` with no way whatsoever to turn it on, so every
- * surface that depends on ambient proof was dead on real data.
+ * vrienden". Until this shipped, `share_cooks_with_friends` defaulted to
+ * `false` with no way whatsoever to turn it on, so every surface that
+ * depends on ambient proof was dead on real data.
+ *
+ * IT IS NO LONGER OFF BY DEFAULT, and this header used to say it was.
+ * Migration 0015 flips the column default to `true` for households created
+ * after it, on the owner's instruction — verbatim, "it should be standard
+ * that you share it with friends" — while households that predate it keep
+ * whatever they had and are reached through the one-time contextual ask
+ * (`CookSharingAskSheet`), which now arrives pre-checked.
+ *
+ * NOTHING IN THIS COMPONENT CHANGED FOR THAT, and that is the part worth
+ * recording rather than the reversal itself: this section renders the
+ * state it is handed and has no default of its own to get wrong. A
+ * component that had hardcoded "uit" anywhere — a fallback, a placeholder,
+ * a default prop — would have needed an edit here, and one of those edits
+ * is how a screen ends up disagreeing with the database about what
+ * somebody consented to.
  *
  * THE LAYOUT IS THE DECISION. Four paragraphs of consequence, then the
  * control — in that order, always, with nothing collapsible between them.

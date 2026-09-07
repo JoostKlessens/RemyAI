@@ -31,3 +31,37 @@
  * is the wrong direction. One line, one file, obvious in a diff.
  */
 export const DEV_SCENARIO_ROWS_VISIBLE = false;
+
+/**
+ * Whether the embed probe at `/dev-embed-probe` renders its instrument.
+ *
+ * WHAT IT IS. A development-only screen that mounts `SourceVideoPlayer`
+ * against one real post per platform and prints, beside each, the embed
+ * URL it resolved and what happened when that URL was loaded. It exists to
+ * answer a question no test in this repo can reach: which of TikTok,
+ * Instagram, YouTube and Facebook actually plays inside a WebView on a
+ * phone. See src/app/dev-embed-probe.tsx.
+ *
+ * ON BY DEFAULT, WHICH IS THE OPPOSITE OF THE FLAG ABOVE, AND THE
+ * ASYMMETRY IS THE POINT RATHER THAN AN INCONSISTENCY.
+ *
+ * `DEV_SCENARIO_ROWS_VISIBLE` is off because those rows RENDERED
+ * THEMSELVES - four fixture pickers at the top of four product screens,
+ * unbidden, above the app, on every run. The harm was that a developer
+ * surface appeared where the product was.
+ *
+ * This screen renders nowhere. Nothing links to it, it is not a tab, no
+ * `_layout.tsx` declares it, and it is reachable only by deliberately
+ * opening its route. So the harm the `false` default prevents cannot
+ * occur here, and a `false` default would instead mean the owner cannot
+ * take the measurement without editing source and reloading - which
+ * defeats the only reason the instrument was built.
+ *
+ * It is still a flag rather than nothing, for two reasons: it is the one
+ * switch to flip if the screen ever starts costing something, and it puts
+ * this surface in the same place a reader already looks for
+ * development-only affordances. It is additionally behind `__DEV__` at the
+ * screen itself, so it is inert in any production build regardless of what
+ * this constant says.
+ */
+export const DEV_EMBED_PROBE_VISIBLE = true;

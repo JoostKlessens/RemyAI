@@ -1,6 +1,31 @@
 /**
  * Step 4 of the decision engine: turning a `ReasonCode` into the short,
- * natural Dutch copy shown on the Vanavond screen.
+ * natural Dutch copy recorded with a decision.
+ *
+ * WHERE THIS COPY GOES, CORRECTED 6 SEPTEMBER 2026. This header said "shown
+ * on the Vanavond screen" until the owner removed the REDEN block from
+ * Kiezen: "De reden hierbij moet weg, dat is niet logisch, ik wil liever dat
+ * je de 1 tot max 3 hoofdingredienten er staan en hoe lang het duurt om te
+ * maken." Every sentence below is still composed and `decide.ts` still puts
+ * it in `DecisionResult.reasonText`, which `(tabs)/index.tsx` persists on the
+ * `decisions` row through `createDecision` and `updateDecisionOffer` — the
+ * record of what Remy actually offered, which plan §8's acceptance rate
+ * reads. What no longer happens is a screen printing the reason it chose.
+ *
+ * ONE OF THE EIGHT BRANCHES STILL REACHES A READER, AND ONLY THAT ONE:
+ * `friend_proof`, on two surfaces. Kiezen takes it through
+ * `buildFriendProofLine` at the bottom of this file. `src/app/import/
+ * confirm.tsx`'s `readFriendProofLine` composes the same branch directly
+ * from the proof map it has just fetched. Neither renders any of the other
+ * seven, and both refuse the sentence that names nobody — see
+ * `buildFriendProofLine` for why they refuse it from different ends.
+ *
+ * THE COST, STATED RATHER THAN LEFT TO BE DISCOVERED: `reasonText` is now
+ * written and never read back. Nothing in this module became unreachable —
+ * `decide.ts` calls `buildReasonText` for every suggestion, so all eight
+ * branches still run — but a sentence no screen renders is a sentence that
+ * can rot with nobody noticing, and tests/reason.test.ts is the only thing
+ * that would catch it.
  *
  * Kept deliberately separate from selection logic (scoring.ts,
  * novelty.ts) per the brief: copy should be free to change — a different
@@ -11,7 +36,14 @@
  * PD (three rules that override everything) #2: every suggestion carries
  * a stated reason. Every branch below is deliberately concrete ("Klaar in
  * 20 minuten") rather than generic ("Aanbevolen voor jou"), matching
- * docs/DESIGN.md's explicit instruction for this screen.
+ * docs/DESIGN.md's original instruction for this screen. Read that rule now
+ * as a rule about the RECORD rather than about the render: a suggestion
+ * still carries a stated reason, and after the owner's change the reason is
+ * stated to the decisions row instead of to the reader. DESIGN.md §1 still
+ * draws the block ("Reason block: `label` 'REDEN' over one line of
+ * `body`/`textSecondary`") and is wrong about the screen from 6 September
+ * 2026 onward; ui-research/ASSEMBLY.md §3 already lists that document as
+ * older than the work that contradicts it.
  *
  * Weekday names come from `dutchWeekdayName` (date.ts), which derives the
  * day purely from a date string in the request — never from
@@ -66,6 +98,16 @@ export interface FriendProofContext {
  */
 const FRIEND_PROOF_NAME_LIMIT = 2;
 
+/**
+ * The one friend-proof sentence that names nobody.
+ *
+ * Named rather than written inline because `buildFriendProofLine` has to
+ * recognise it, and a second literal of one string in one module is how a
+ * producer and the gate in front of it come to disagree. Private on purpose:
+ * nothing outside this file has any business printing it or matching on it.
+ */
+const ANONYMOUS_FRIEND_PROOF_TEXT = 'Iemand die je kent heeft dit ook gemaakt.';
+
 function savedThisWeekText(context: ReasonContext): string {
   // Prefer the actual save date so "dit dinsdag" refers to when the
   // household saved the dish, not to today. Falls back to targetDate only
@@ -101,11 +143,15 @@ function fitsTimeText(context: ReasonContext): string {
  * exclusively when friends cooked the dish, so an empty list means a
  * caller assembled the context wrongly; the copy stays true anyway rather
  * than inventing a name or falling back to a bare count.
+ *
+ * TAKES THE PROOF AND NOT THE WHOLE `ReasonContext`, because that is all it
+ * ever read and because `buildFriendProofLine` below has to be able to
+ * recognise the one string it produces without assembling a context that
+ * has no other purpose.
  */
-function friendProofText(context: ReasonContext): string {
-  const proof = context.friendProof;
+function friendProofText(proof: FriendProofContext | null): string {
   if (proof === null || proof.friendNames.length === 0) {
-    return 'Iemand die je kent heeft dit ook gemaakt.';
+    return ANONYMOUS_FRIEND_PROOF_TEXT;
   }
 
   const named = proof.friendNames.slice(0, FRIEND_PROOF_NAME_LIMIT);
@@ -141,7 +187,7 @@ export function buildReasonText(reasonCode: ReasonCode, context: ReasonContext):
     case 'household_favourite':
       return 'Een favoriet in huis';
     case 'friend_proof':
-      return friendProofText(context);
+      return friendProofText(context.friendProof);
     case 'variety':
       return 'Nog niet eerder geprobeerd';
     case 'requested_repeat':
@@ -156,4 +202,64 @@ export function buildReasonText(reasonCode: ReasonCode, context: ReasonContext):
       throw new Error(`Unhandled reasonCode: ${String(exhaustiveCheck)}`);
     }
   }
+}
+
+/**
+ * The one line of reason copy a screen still renders, or null.
+ *
+ * THE OWNER'S INSTRUCTION, VERBATIM: "De reden hierbij moet weg, dat is niet
+ * logisch, ik wil liever dat je de 1 tot max 3 hoofdingredienten er staan en
+ * hoe lang het duurt om te maken."
+ *
+ * SIX OF THE SEVEN GO AND THIS ONE IS KEPT OUT BY NAME — the owner's
+ * distinction, not an exception carved for a favourite sentence. "Alweer
+ * even geleden" and "Een favoriet in huis" are the app narrating its own
+ * arithmetic back at the reader, which is the part he called niet logisch;
+ * they say nothing a person could not have worked out from their own week.
+ * "Sanne heeft dit ook gemaakt en gaf het een 8,5." is not about the
+ * decision at all. It is a fact about the DISH, it comes from another
+ * household, and it appears on no other surface this person will open
+ * tonight. PD-017 calls it "the strongest concrete [reason] this product can
+ * produce" and puts it on "the one surface measured by acceptance"; deleting
+ * the block argues against none of that.
+ *
+ * IT TAKES THE SENTENCE `decide.ts` ALREADY COMPOSED RATHER THAN
+ * RE-DERIVING IT. The rejected alternative was handing this function the
+ * `FriendProofContext` and calling `friendProofText` a second time, which
+ * reads cleaner and is worse: the card and the persisted
+ * `decisions.reason_text` would then be two computations of one sentence,
+ * and two computations of one sentence is how a screen and a record come to
+ * disagree about what the app said. The caller already holds both halves of
+ * `DecisionResult`; all that is left to decide is which may be drawn.
+ *
+ * WHAT IT REFUSES MATTERS AS MUCH AS WHAT IT PASSES. `friendProofText`'s
+ * defensive branch names nobody, and DESIGN-SOCIAL.md §2.1 bans a count
+ * without a name because "an anonymous count is a stranger-aggregate wearing
+ * a friendly tone". `decide.ts` argues that branch is unreachable — it
+ * derives `friendCookedRecipeIds` from the proof map's own keys, so
+ * "boosted" and "sayable" are one condition by construction — and that
+ * argument is sound about today's only producer. `ReasonCode` is a shared,
+ * open contract (see `buildReasonText` above on why every code gets copy),
+ * so a screen must not rest on an invariant enforced in a module it does not
+ * import. The refusal costs one comparison.
+ *
+ * NULL MEANS THE CARD DRAWS NOTHING. There is no empty state, no
+ * placeholder, and never a "nog niemand die je kent" — a slot that has to be
+ * filled is how a social surface starts advertising its own emptiness.
+ *
+ * WHY `import/confirm.tsx` DOES NOT CALL THIS, though it answers the same
+ * question. `readFriendProofLine` there holds the proof map itself, so it
+ * refuses from the DATA side — a recipe missing from the map returns null
+ * before a sentence is built at all — which is strictly the better place to
+ * refuse from. Kiezen cannot: `decide()` hands the screen a composed
+ * `DecisionResult` and the map that produced it is not in the card's hands.
+ * Two call sites, one rule, refused at whichever end each caller can see. If
+ * a third surface ever wants this line, it should ask which of the two it
+ * is before picking.
+ */
+export function buildFriendProofLine(reasonCode: ReasonCode, reasonText: string): string | null {
+  if (reasonCode !== 'friend_proof') {
+    return null;
+  }
+  return reasonText === ANONYMOUS_FRIEND_PROOF_TEXT ? null : reasonText;
 }

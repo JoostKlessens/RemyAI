@@ -20,9 +20,23 @@
  * So the server would have to be handed a household's allergens in order
  * to tell that household what is for dinner. The device already knows, so
  * the device schedules. Nothing leaves the phone, it works with the
- * network off, and it needs no build, no cron and no cost —
- * `warnOfExpoGoPushUsage` guards the remote-token paths only, never
- * `scheduleNotificationAsync`.
+ * network off, and it needs no build, no cron and no cost.
+ *
+ * ONE CORRECTION TO WHAT THIS COMMENT USED TO SAY, kept rather than
+ * quietly deleted because the sentence was true and still misled. It read:
+ * "`warnOfExpoGoPushUsage` guards the remote-token paths only, never
+ * `scheduleNotificationAsync`". Both halves check out against
+ * `expo-notifications@57.0.16` — that function is called from exactly four
+ * places and all four are remote-token paths. What it invited the reader
+ * to conclude is false. `build/index.js` re-exports
+ * `./DevicePushTokenAutoRegistration.fx`, whose module body calls
+ * `addPushTokenListener` at load, so merely IMPORTING the package trips
+ * the guard: the owner's Expo Go log carried that push warning on every
+ * launch of an app that has never asked for a token. On Android the same
+ * guard throws rather than warns. See `src/lib/decisionNotification.ts`'s
+ * header for the measurement and for why the import now happens inside
+ * the function. Deciding against remote push does not exempt you from a
+ * dependency that registers for it on your behalf.
  *
  * WHAT IT COSTS, STATED HONESTLY: a local notification is scheduled ahead
  * of time, so it cannot name tonight's dish — the dish is chosen when the

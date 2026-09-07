@@ -427,13 +427,25 @@ describe('the cook-proof question is asked once, not campaigned', () => {
   });
 
   /**
-   * The second guard, and the one that holds inside a single session before
-   * `markHouseholdCookSharingAsked` has had a chance to land: the second
-   * accept is not the first friendship, so it cannot re-raise the sheet
-   * even if the flag write failed.
+   * BROADENED FROM `=== 1` WHEN SHARING BECAME THE DEFAULT (0015), and
+   * this test is that reversal written down.
+   *
+   * The old form could never ask a household that already had two or more
+   * accepted friends — their first friendship was in the past, and nothing
+   * raises this sheet twice — so the households most likely to want the
+   * state the product now calls standard were the only ones never offered
+   * it. "Asked once, not campaigned" is enforced by `alreadyAsked`, which
+   * is unchanged and is pinned from both sides here.
    */
-  test('a second friendship is not a first one', () => {
-    expect(shouldAskCookSharing({ acceptedFriendCount: 2, alreadyAsked: false })).toBe(false);
+  test('a household that already has friends is still asked, once', () => {
+    expect(shouldAskCookSharing({ acceptedFriendCount: 2, alreadyAsked: false })).toBe(true);
+    expect(shouldAskCookSharing({ acceptedFriendCount: 9, alreadyAsked: false })).toBe(true);
+  });
+
+  test('and having been asked shuts it for every count, which is what makes it once', () => {
+    for (const acceptedFriendCount of [0, 1, 2, 9]) {
+      expect(shouldAskCookSharing({ acceptedFriendCount, alreadyAsked: true })).toBe(false);
+    }
   });
 
   test('no accepted friendship asks nothing', () => {

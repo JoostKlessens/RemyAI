@@ -63,9 +63,39 @@ export const LIBRARY_SEARCH_INPUT_LABEL = 'Zoek in Mijn recepten, op titel';
 /** The clear control beside the input — clears only the typed text, never the chips. */
 export const LIBRARY_SEARCH_CLEAR_QUERY_LABEL = 'Wis zoekopdracht';
 
+/**
+ * THE EYEBROWS ARE NO LONGER STACKED ABOVE THEIR ROWS. FOUR MOVED INTO THEM;
+ * ONE IS NOT DRAWN AT ALL.
+ *
+ * The owner asked for a shorter bar ("de filters zijn te groot") and approved
+ * a layout with the chip rows scrolling sideways. A stacked eyebrow costs
+ * `typeScale.label`'s 15pt plus 8pt of margin, EVERY row, forever — three of
+ * them were 69pt of a 452pt band.
+ *
+ * FOUR OF THEM NOW LEAD THEIR OWN ROW, inline, as the first thing inside the
+ * horizontal scroll: "WAARMEE?" sits to the left of the tag chips rather than
+ * above them. That costs width, which a scrolling row has, instead of height,
+ * which this screen does not — and it keeps the heading VISIBLE and in
+ * reading order for a screen reader, which is what an eyebrow was for. The
+ * words did not change; only the axis they are laid out on.
+ *
+ * `LIBRARY_FILTER_TIME_EYEBROW` IS THE ONE THAT IS NOT DRAWN, and it is kept
+ * rather than deleted. Its row is now `TimeCapPicker`, which draws a clock
+ * and the cap as a numeral ("45 min") — a heading saying "Hoeveel tijd?" over
+ * a clock showing a number of minutes is the same sentence twice, and the
+ * picker sits on the search row where there is no space for one anyway. It
+ * survives for the reason `LIBRARY_TIME_CAP_OPTIONS` does: this is the word
+ * this app uses for that question, `DecisionFilterBar` still draws its own
+ * eyebrow above the same control, and the constant is where a second screen
+ * should take it from rather than retyping it.
+ */
 export const LIBRARY_FILTER_TIME_EYEBROW = 'Hoeveel tijd?';
 export const LIBRARY_FILTER_TAGS_EYEBROW = 'Waarmee?';
 export const LIBRARY_FILTER_MOODS_EYEBROW = 'Waar heb je zin in?';
+/** The plan axis (`RecipeSchedulingState`) — the badge every tile already drew and nothing could filter on. */
+export const LIBRARY_FILTER_PLAN_EYEBROW = 'Wanneer?';
+/** The course axis (`Meal.dishCourse`, migration 0017). "Welk gerecht?" would collide with the screen's own subject. */
+export const LIBRARY_FILTER_COURSES_EYEBROW = 'Welke gang?';
 
 /** "Wissen" resets the whole `LibrarySearchState` — query and chips together — which is why its spoken label names both. */
 export const LIBRARY_FILTER_RESET_LABEL = 'Wissen';
@@ -123,4 +153,41 @@ export function describeDishTagChip(label: string): string {
 /** OR semantics — the deliberate asymmetry with the row above, and the reason each row says which it is. */
 export function describeDishMoodChip(label: string): string {
   return `${label}. Filtert op gerechten met een van de dingen die je hier kiest.`;
+}
+
+/**
+ * The course chips (`DISH_COURSES`), and they say OR because the axis cannot
+ * be anything else: `dishCourses.ts` fixes the cardinality at one course per
+ * dish, so "een voorgerecht én een toetje" is empty by construction.
+ *
+ * IT DOES NOT MENTION THE DEFAULT, and that omission is deliberate rather
+ * than an oversight. Every recipe saved before migration 0017 reads as
+ * `hoofdgerecht` (the owner: "standaard is iets een hoofdgerecht"), so
+ * tapping that chip keeps them — which is the behaviour a household expects
+ * and therefore not news. Saying "ook gerechten waarvan niemand het gezegd
+ * heeft" out loud would describe an implementation detail of a migration to
+ * somebody who is looking for a starter, and it would be untrue of the other
+ * three chips, which is worse than saying nothing.
+ */
+export function describeDishCourseChip(label: string): string {
+  return `${label}. Filtert op gerechten met een van de gangen die je kiest.`;
+}
+
+/**
+ * The plan chips (`LIBRARY_SCHEDULING_STATES`) — "Deze week", "Ooit", "Nog
+ * geen planning", "Al gekookt".
+ *
+ * ORed like the two rows above, and the label says so in their words rather
+ * than in new ones: a household that has learned what a mood chip does
+ * should not have to learn a second grammar for a state chip.
+ *
+ * The labels themselves come from `buildSchedulingLabel`
+ * (recipeScheduling.ts) and are NOT restated here, which is the same posture
+ * `timeCapCopy.ts` takes toward this module: the words on the chip are the
+ * words on the tile's badge and in its spoken label, and a household that
+ * filters on "Al gekookt" is looking for tiles that say "Al gekookt". Two
+ * spellings of one state is exactly the drift a copy module exists to stop.
+ */
+export function describeSchedulingChip(label: string): string {
+  return `${label}. Filtert op gerechten met een van de plannen die je kiest.`;
 }

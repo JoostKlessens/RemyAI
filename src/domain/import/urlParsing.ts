@@ -34,10 +34,15 @@
  * fetch the edge function will genuinely attempt against a
  * user-controlled address. That promotes this function from an incidental
  * filter to the FIRST LINE OF SSRF DEFENCE, which is why
- * `isBlockedRedirectHost` is imported from resolveShortLinkTarget.ts and
+ * `isBlockedRedirectHost` is imported from privateNetworkHosts.ts and
  * reused verbatim rather than reimplemented: two copies of a
  * private-network blocklist is one copy too many, and the weaker copy is
- * always the one that ends up being called.
+ * always the one that ends up being called. That module is new, and this
+ * sentence used to name resolveShortLinkTarget.ts instead — importing the
+ * blocklist from there is what made the require cycle this file carried
+ * until now. The reuse survived the fix untouched; only the address
+ * changed. See the import below, and privateNetworkHosts.ts's header for
+ * the whole account.
  *
  * PINTEREST FALLS OUT OF THIS FOR FREE, said out loud here because
  * otherwise someone will write a Pinterest branch. `pinterest.com/pin/<id>`
@@ -69,14 +74,34 @@
  * deduplication-ready form is.
  */
 
-// A deliberate import cycle: resolveShortLinkTarget.ts already imports
-// `normalizeRecipeUrl` from here to validate where a redirect chain ended.
-// Both directions are plain function declarations called at run time, never
-// read while the modules evaluate, so the cycle is inert — and it is the
-// cheaper of the two options, the other being a second, inevitably weaker
-// copy of the blocklist. The `.ts` extension is required because this file
-// is imported by the Deno edge function (see its header).
-import { isBlockedRedirectHost } from './resolveShortLinkTarget.ts';
+// THIS COMMENT USED TO OPEN WITH "A deliberate import cycle", AND IT WAS
+// RIGHT ABOUT EVERYTHING EXCEPT THE PRICE. The blocklist lived in
+// resolveShortLinkTarget.ts, this file imported it from there, and
+// resolveShortLinkTarget.ts imports `normalizeRecipeUrl` back out of here
+// to validate where a redirect chain ended — a cycle, accepted on purpose.
+// The argument was that both directions are plain function declarations
+// called at run time, never read while the modules evaluate, so the cycle
+// is inert; and that it was the cheaper of the two options on the table,
+// the other being a second, inevitably weaker copy of the blocklist.
+//
+// Both halves of that argument still check out. Nothing at the top level of
+// either file touches an import — every initializer there is a literal
+// `Set`, string or `RegExp` — so the cycle never produced the uninitialized
+// value Metro warns it can. And a duplicated private-network blocklist is
+// still the worse option, for exactly the reason given: the weaker copy is
+// the one that ends up being called.
+//
+// WHAT CHANGED IS THAT INERT IS NOT FREE. Metro reports the cycle on every
+// start (`WARN  Require cycle: src/domain/import/urlParsing.ts -> ... ->
+// src/domain/import/urlParsing.ts`), which is how a log trains its reader
+// to skip warnings, and the inertness is a property of where today's calls
+// happen to sit rather than of the arrangement: move one to the top level
+// and it silently stops holding. privateNetworkHosts.ts is the third
+// option the old comment never weighed — it owns the list, both files
+// import it, the arrows point one way, and there is still exactly one
+// blocklist. The `.ts` extension is required because this file is imported
+// by the Deno edge function (see its header).
+import { isBlockedRedirectHost } from './privateNetworkHosts.ts';
 import type { UrlImportPlatform } from './types';
 
 export type NormalizedUrlResult =
@@ -490,9 +515,11 @@ function stripTrackingParams(search: string): string {
  */
 function normalizeWebUrl(parsed: URL, hostname: string): NormalizedUrlResult {
   // The pure half of SSRF defence, before any fetch is even considered —
-  // see the file header. Reused from resolveShortLinkTarget.ts rather than
-  // reimplemented, so the redirect chain and the pasted URL are held to
-  // one blocklist.
+  // see the file header. The list lives in privateNetworkHosts.ts (it was
+  // resolveShortLinkTarget.ts until the require cycle was taken out; the
+  // import above records that) rather than being reimplemented here, so
+  // the pasted URL and every hop of a redirect chain are held to one
+  // blocklist.
   if (isBlockedRedirectHost(hostname)) {
     return { kind: 'unsupported_url' };
   }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixtureImportAttempt, detectFixtureScenario } from '@/app/import/_fixtures';
+import { buildFixtureImportAttempt, detectFixtureScenario } from '@/fixtures/importFixtures';
 
 describe('detectFixtureScenario', () => {
   test('defaults to the happy "parsed" path for an ordinary URL', () => {

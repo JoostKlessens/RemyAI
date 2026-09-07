@@ -3,21 +3,28 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
-**Stand:** 6 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`268d0a6`, gepusht en in sync met `origin`. Werkboom schoon op één untracked
-`verify-gate.ps1` na, die niet van deze sessies is.
+**Stand:** 7 september 2026, branch `feat/live-import-and-plan-phases`, t/m
+`605c795` gepusht — **maar de werkboom is niet schoon, en dat is het eerste
+wat je moet weten.** De hele sessie van 6 en 7 september staat ongecommit in
+de boom: ruim zeventig gewijzigde bestanden, drie migraties (`0015`, `0016`,
+`0017`) en negen hernoemingen die in de git-index staan omdat `git mv` dat zo
+registreert. Vier checks groen: **3125 tests over 130 bestanden**.
 
-Vijftien commits sinds `6158bc3`, allemaal van 4 en 5 september. De twee
-secties hieronder over die dagen zijn de kern van dit document: ze staan er
-niet als logboek maar omdat elke bevinding erin een *patroon* is dat zich
-herhaalt.
+⚠ **`.gitignore` kent geen `.claude/`-regel**, en daar staan agent-worktrees.
+`git add -A` zou hele kopieën van de repo committen. Ook `research/` is
+volledig untracked — vier bestanden, waaronder de ToS-analyse waar de
+embed-beslissing op rust, in geen enkele commit op geen enkele branch.
+
+De secties hieronder over 4 t/m 7 september staan er niet als logboek maar
+omdat elke bevinding erin een *patroon* is dat zich herhaalt.
 
 | Lees dit | Waarvoor |
 |---|---|
 | `LONGLIST.md` | De genummerde backlog. Elke code (IMP-, SRC-, ENT-, OPS-, GAP-…) is daar gedefinieerd, met status en reden. **Sinds 5 september gaat het bovenste deel alleen over openstaand werk**; alles wat af is staat onderaan onder *Afgerond*, verplaatst en niet verwijderd, omdat commit-messages en codecommentaar naar die codes bij naam verwijzen. |
 | `OPEN-BESLISSINGEN.md` | Wat er nog open staat en waarom. Open vragen A t/m H, plus de beantwoorde met hun bewijs. |
 | `STYLING-PLAN.md` | Iconen, beeld en animatie: wat het onderzoek besloot, wat daarvan geland is, en wat niet. Nieuw op 4 september. |
-| `PRODUCT-DECISIONS.md` | PD-001 t/m PD-021. Vastgelegd; niet heropenen zonder aanleiding. PD-002 draagt sinds 5 september een omkeringsbanner — hij blijft staan omdat PD-008 hem als precedent aanhaalt. Let op: dit document is Engels, in tegenstelling tot de rest van `docs/`. |
+| `PRODUCT-DECISIONS.md` | PD-001 t/m **PD-023**. Vastgelegd; niet heropenen zonder aanleiding. PD-002 draagt sinds 5 september een omkeringsbanner, en **PD-015, PD-017 en PD-019 sinds 6 september** — alle vier blijven staan, want dit document draait beslissingen schriftelijk terug en verwijdert het argument nooit. Let op: dit document is Engels, in tegenstelling tot de rest van `docs/`. |
+| `SESSIE-6-SEPTEMBER.md` | Wat er op 6 september gevraagd, gebouwd en gevonden is, inclusief het groeiplan voor de sociale laag en het antwoord op de embed-vraag. **Wegwerpdocument**: zodra dit handover-bestand het heeft opgenomen mag het weg — deze repo heeft zijn procesdocumenten op 3 september bewust opgeruimd. |
 | `DESIGN.md`, `DESIGN-SOCIAL.md`, `ARCHITECTURE.md` | Staande documenten. Zie de waarschuwing onderaan over `DESIGN.md`. `ARCHITECTURE.md`'s sectie over de 16:00-push draagt sinds 5 september een banner: die specificatie is niet tegen deze database te bouwen. |
 
 ---
@@ -25,10 +32,21 @@ herhaalt.
 ## Wat er draait
 
 **De infrastructuur staat, en is nagemeten in plaats van aangenomen.**
-Migraties `0001` t/m `0013` draaien tegen de live database. De drie secrets
-staan er (`IMPORT_FINGERPRINT_SALT`, `YOUTUBE_API_KEY`, `GEMINI_API_KEY`).
-De edge functie is gedeployed, dus de throttlepoort en de dichting van het
-anon-key-gat zijn werkelijk actief.
+Migraties `0001` t/m **`0014`** draaien tegen de live database — nagemeten op
+7 september met `npx supabase migration list`, dat leest en niets wijzigt.
+⚠ **Dit document beweerde tot 7 september dat `0014` nog niet toegepast was.
+Dat was onwaar**, en het stond als eerste punt onder "wat er nu open ligt";
+foto-import werkt dus gewoon. Precies de fout waar dit bestand verderop voor
+waarschuwt, gemaakt in dit bestand zelf.
+
+**`0015`, `0016` en `0017` staan lokaal en niet remote**, en twee daarvan zijn
+blokkerend om te testen: `0016` maakt de view `namable_recipe_votes` waar de
+vriendenkant van Trending op leest, en `0017` de kolom voor het gerechttype.
+Zonder push falen die twee oppervlakken op een toestel.
+
+De drie secrets staan er (`IMPORT_FINGERPRINT_SALT`, `YOUTUBE_API_KEY`,
+`GEMINI_API_KEY`). De edge functie is gedeployed, dus de throttlepoort en de
+dichting van het anon-key-gat zijn werkelijk actief.
 
 **De app draait op een telefoon.** Sinds de SDK-upgrade van 51 naar 57
 (OPS-01, zes stappen, zes commits) is dit de versie die Expo Go
@@ -47,8 +65,17 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 2698 tests / 111 bestanden
+npm test                 3125 tests / 130 bestanden
 ```
+
+⚠ **`check:functions` groen betekent minder dan het lijkt**, en dat is op
+7 september apart bewezen in plaats van aangenomen. De Deno-regel uit OPS-09
+eist een expliciete `.ts` op elke relatieve *waarde*-import onder
+`src/domain/import/**`, maar `tsc` kán een ontbrekende extensie structureel
+niet zien: `allowImportingTsExtensions` maakt hem optioneel. De echte poort is
+de ESLint-regel. Wie daar een bestand toevoegt, test die poort apart — met een
+stdin-probe op een extensieloze import — in plaats van op een groene
+`check:functions` te vertrouwen.
 
 Draai ze alle vier na elke wijziging. `npm test` duurt ongeveer twintig
 seconden.
@@ -255,11 +282,88 @@ elke map die erover gaat. Reken dat vooraf uit bij het afbakenen.
 niet één. `LibrarySearchBar` had vijf ALL-CAPS eyebrows in de bron, niet
 de drie die STYLING-PLAN noteert. En Feather heeft 287 glyphs, niet de 286
 die WS4 telde — met nul keukenglyphs, wat bevestigt dat het icoonfont
-(GAP-19) echt de blokkade is en geen aanname.
+(GAP-19) echt de blokkade is en geen aanname. ⚠ **Die laatste conclusie is
+op 7 september onderuitgegaan, en dit is het leerzaamste voorbeeld in dit
+document.** De meting klopte tot op de glyph. De conclusie ging over
+"Feather" waar hij over "de families die we al hebben" had moeten gaan, en
+één van de veertien ongecontroleerde buren tekende alles. Een uitputtende
+meting van de verkeerde bron leest als bewijs en is het niet — zie punt 6.
 
 ---
 
-## De les die deze drie dagen opleverde
+## Wat er op 6 en 7 september gebeurde
+
+Elf agents over twee dagen. De vier grootste wijzigingen zijn alle vier door
+de eigenaar gevraagd, en drie ervan draaien een vastgelegde beslissing om.
+
+**Delen is de standaard geworden (PD-022).** `share_cooks_with_friends` stond
+op `default false` en `DESIGN-SOCIAL.md` §5 verdedigde dat uitvoerig. De
+default draait om, de weigering wordt een vinkje bij het koken. Wat de
+omkering overleeft is één regel, en die is de moeite van het onthouden waard:
+**geen enkele migratie zet delen namens iemand aan.** `0015` verandert een
+kolomdefault en **nul rijen**; een bestaand huishouden dat de vraag nooit
+beantwoordde blijft uit tot het gevraagd wordt, met het vakje voorgevinkt. Een
+default mag een eigenaar omkeren, toestemming mag geen DDL-statement leveren.
+
+**Het cijfer is ook een openbare stem geworden (PD-023).** En de reden dat
+Ranglijst leeg was bleek een andere dan iedereen dacht: `rateRecipe` had
+**nul aanroepers**. Geen beleid, een ontbrekende schrijver — en `DESIGN.md`
+§10 zei het al letterlijk ("a repository seam, `rateRecipe`, with no screen
+behind it") zonder dat iemand de conclusie trok. Eén ontbrekende aanroepplek
+hield PD-014, PD-017 én PD-018 tegelijk inert.
+
+**Kiezen en Mijn recepten zijn opnieuw ingedeeld.** Het REDEN-blok is weg;
+er staan nu een foto, één tot drie hoofdingrediënten en de tijd. De
+tijdblokjes zijn een klok met stappen van vijf minuten geworden, dezelfde
+control op beide schermen. De bibliotheek ging van **452pt chrome naar 262pt**
+— van 0,83 zichtbare tegelrijen naar 3,03 — omdat de chiprijen nu zijwaarts
+scrollen in plaats van te wrappen. Dat was WS2's redline, jaren geleden
+opgeschreven en nooit toegepast.
+
+**Drie Expo Go-waarschuwingen zijn opgelost, en één ervan was geen
+waarschuwing.** `warnOfExpoGoPushUsage` **gooit** op Android in plaats van te
+waarschuwen, en met `expo-notifications` op moduleniveau geïmporteerd gebeurde
+dat tijdens de evaluatie van `_layout.tsx` — **de app startte daar dus
+vermoedelijk niet**, over een push-functie die dit product bewust niet heeft.
+De import staat nu binnen de `try`. Vastgesteld uit de broncode plus de log
+van de eigenaar; op een Android-toestel nog onbevestigd.
+
+**En het patroon van deze twee dagen is scherper dan "documenten
+verouderen".** Vijf keer bleek een *comment die een regel beargumenteert* te
+argumenteren uit een premisse die nooit gecontroleerd was:
+
+- `_devScenarios.tsx` noemde het `_`-voorvoegsel "load-bearing" tegen
+  expo-router. Onwaar — `_ctx.js` sluit alleen `+api` en `+html` uit, en
+  alleen `_layout` is bijzonder. **Drie andere headers argumenteerden uit
+  diezelfde fout**, en negen bestanden stonden in de routemap op grond van een
+  regel die niet bestaat.
+- `urlParsing.ts:72` noemde zijn import-cyclus "deliberate" en onschadelijk.
+  Het tweede klopte — nagemeten, elke top-level binding is een letterlijke
+  waarde — maar onschadelijk is een eigenschap van waar de aanroepen toevallig
+  staan, niet van de cyclus.
+- `routeParams.ts` beriep zich op een conventie uit
+  `src/app/onboarding/routeParams.ts`. Dat bestand is in `e73d73f` verwijderd;
+  de zin wees nergens naar, en werd verderop nog eens herhaald.
+- `decisionNotificationCopy.ts:24` zei dat `warnOfExpoGoPushUsage` alleen de
+  remote-paden bewaakt. Letterlijk waar, en misleidend: het nodigt uit tot de
+  conclusie dat deze app hem dus nooit raakt, terwijl de log hem elke start
+  laat vuren.
+- Vijf plekken beweerden dat de kring-copy ongewijzigd was overgezet. `b9b0f59`
+  had twee strings herschreven — terecht, want WS3 haalde het woord *kring*
+  uit alles wat een gebruiker leest. **Hier had de code gelijk en het document
+  niet**, wat de omgekeerde richting is van de rest van deze lijst.
+
+**De agentronde zelf leverde twee dingen op.** Alle drie de worktrees kwamen
+binnen op `e73d73f`, honderd commits achter, zonder `docs/` en zonder
+`node_modules`; alle drie merkten het, bewezen de ancestor-relatie en spoelden
+zichzelf vooruit. Drie van de drie is geen toeval. En **een agent in een
+worktree kan niet in de hoofdboom werken** — de harness pint hem vast op zijn
+eigen map, dus "ga in main werken" is geen opdracht die een geïsoleerde agent
+kan opvolgen; breng het werk zelf over of isoleer hem niet.
+
+---
+
+## De les die deze vier dagen opleverde
 
 **Vertrouw geen document zonder het tegen de bron te houden.** De teller
 staat inmiddels op:
@@ -365,65 +469,237 @@ sessie.
 Op volgorde, en de eerste twee zijn van een andere soort dan de rest: die
 kosten geen code maar een handeling van de eigenaar.
 
-1. **`npx supabase db push` draaien.** Migratie `0014_photo_import.sql`
-   staat gecommit en is nog niet toegepast. Zonder die migratie faalt het
-   opslaan van een gefotografeerd recept op de CHECK-constraint die
-   `'photo'` moet toelaten. Eén commando, zie Conventies voor waarom er
-   `npx` voor moet.
+1. **De boom committen.** Twee dagen werk staat ongecommit, en negen
+   hernoemingen staan al in de index. Doe dit vóór de volgende agentronde:
+   een agent die op een vuile boom begint kan zijn eigen wijziging niet van
+   de jouwe onderscheiden. Voeg eerst `.claude/` aan `.gitignore` toe en
+   beslis of `research/` mee moet — die map is nu volledig untracked.
 
-2. **De app op een toestel doorlopen, en dit blijft punt één met stip.**
-   Alles wat op 4 en 5 september gebouwd is, is precies het soort dat geen
-   enkele test kan zien: een trilling, een groene haarlijn, een balk die
-   verschijnt, een blok dat niet meer flikkert, een melding om 16:00. Vier
-   checks groen betekent hier alleen dat niets kapot is.
+2. **`npx supabase db push` draaien.** `0015`, `0016` en `0017` staan lokaal
+   en niet remote. Twee ervan blokkeren het testen: `0016` maakt de view
+   `namable_recipe_votes` waar de vriendenkant van Trending op leest, en
+   `0017` de kolom voor het gerechttype. `0014` is wél toegepast — zie
+   *Wat er draait*.
 
-   Het scherpst is dat bij de **foto-import**: die is nooit end-to-end
-   gedraaid. Onbevestigd blijven dat `expo-image-picker` op een echt
-   toestel `base64` en `mimeType` levert zoals aangenomen, dat Gemini deze
-   `inlineData`-vorm accepteert, en dat drie segmenten op 320pt passen.
-   De Nederlandse permissieteksten verschijnen sowieso nog niet — die
-   vragen een native build, en er wordt in Expo Go getest.
+3. **De app op een toestel doorlopen, en dit blijft punt één met stip.**
+   Alles wat op 4 t/m 7 september gebouwd is, is precies het soort dat geen
+   enkele test kan zien. Vier checks groen betekent hier alleen dat niets
+   kapot is.
+
+   Wat het scherpst onbevestigd is, op volgorde:
+
+   - **Android.** `warnOfExpoGoPushUsage` gooit daar in plaats van te
+     waarschuwen, en dat gebeurde tot 7 september tijdens de evaluatie van
+     `_layout.tsx`. De conclusie dat de app er niet startte is uit broncode
+     afgeleid, niet op een toestel gezien. Dit is de goedkoopste meting met
+     het grootste gevolg.
+   - **Foto-import**, nooit end-to-end gedraaid: dat `expo-image-picker`
+     `base64` en `mimeType` levert zoals aangenomen, en dat Gemini deze
+     `inlineData`-vorm accepteert.
+   - **De embed-probe** (`exp://<lan-ip>:8081/--/dev-embed-probe`). TikTok en
+     YouTube staan voorgevuld; Instagram en Facebook moet de eigenaar zelf
+     plakken, want Meta publiceert geen voorbeeldpost. "Document geladen"
+     vuurt óók voor een foutpagina — dus tikken op play, kijken of het inline
+     blijft, en op een makersnaam tikken om te zien of die naar de browser
+     gaat in plaats van naar de TikTok-app.
+   - **De drie kolommen in de bibliotheek.** WS2 wees ze destijds op meting
+     af (een titel van vijf regels bedekt 85% van de foto); de eigenaar vroeg
+     er expliciet om en de titel is nu op twee regels gekapt. Dit is de plek
+     om te kijken of dat genoeg was.
+   - **200% tekstgrootte op Kiezen.** De foto heeft een vaste maat in punten
+     en schaalt dus niet mee; WS2 mat dat scherm vóór de foto al op 1011pt
+     tegen een scherm van 852.
 
    Doe ook de throttle-test (21 imports binnen tien minuten; de 21e hoort
    `import_throttled` te krijgen).
 
-3. **Save-intent weghalen en het receptoverzichtsscherm.** De laatste twee
-   punten van de tien die de eigenaar op 5 september gaf. Allebei
-   uitgewerkt gepland en nergens op wachtend; ze konden alleen niet mee in
-   de agentronde omdat ze allebei `recipes.tsx` raken en dat bestand toen
-   al door een derde agent bewerkt werd.
+4. **De filterbug is nog maar half weg.** De bibliotheek herberekent zijn
+   chips nu tegen wat de andere filters overlaten; **Kiezen doet dat niet.**
+   Kies daar twee chips die niet samen voorkomen en je krijgt nog steeds een
+   leeg resultaat. Het is geen overname van één functie: de bibliotheek werkt
+   met `LibrarySearchState`, Kiezen met `DecisionFilters`, en Kiezen berekent
+   zijn chips bij het laden in plaats van per render. `index.tsx:273` houdt
+   daarom nog een eigen kopie van `collectAvailableDishTags`.
 
-   Let bij save-intent op wat de analyse vond: het verwijdert de "wanneer?"
-   -vraag maar **niet** het weekplan — sinds LIB-04 maakt een lang indrukken
-   op een bibliotheektegel al een `this_week`-save, dus `deze-week.tsx`
-   houdt zijn bron. Wat je wél verliest is `'someday'` als bereikbare keuze,
-   en de aanbeveling is die als default te schrijven zodat PD-004a's belofte
-   overeind blijft. Dat verandert wél wat de engine voorstelt, en geen test
-   ziet dat.
+5. **Dislikes doen letterlijk niets, en dat is groter dan een filter.** Je
+   typt `paddenstoelen` — het voorbeeld dat de app zelf voorstelt — en het
+   sluit nooit iets uit, want dislikes worden vergeleken met
+   `Meal.ingredientTags`, dat alleen uit de EU-14 allergenenlijst gevuld
+   wordt. De kern eronder: **`MealIngredient.name` wordt door geen enkel
+   filter in de hele app gelezen**, alleen voor weergave. Er is dus geen
+   ingrediëntfilter; er is een allergenenfilter dat eruitziet als één.
 
-4. **Het icoonfont** (GAP-19). Ongeveer een dag, geen nieuwe dependency, en
-   het is nu goedkoper dan het was: de seam staat er (`iconFont.ts`,
-   `Icon.tsx`), dus als het font landt verandert er één bestand en gaan
-   twintig voorstellen tegelijk open. Alles in `STYLING-PLAN.md` dat om een
-   glyph vraagt wacht hierop en op niets anders. En sinds GAP-25 is het
-   staande bezwaar tegen tabbalk-iconen weg: het icoonvak wordt toch al
-   getekend, dus een echt icoon kost nul punten.
+6. **De iconen** (GAP-19) — ✅ **gebouwd op 7 september, en wat er nu nog
+   ligt is een oordeel en geen werk.** De seam draagt twee families, alle
+   zeventien mappings staan aan, en `isIconAvailable` is van vijftien van de
+   drieëndertig naar drieëndertig van de drieëndertig gegaan. Vier checks
+   groen, 3125 tests. Wat hieronder stond als opdracht staat er nu als
+   verantwoording; lees het door vóór je aan de mappings tornt.
 
-5. **Trending met gepubliceerde cijfers.** De eigenaar heeft besloten dat
-   het privé-cijfer publiek wordt en dat PD-019 daarmee vervalt. Voordat
-   daar een regel code voor geschreven wordt moeten de PD-wijzigingen er
-   staan — deze codebase draait beslissingen schriftelijk terug, en PD-015,
-   PD-017 en PD-019 breken alle drie.
+   **Wat er veranderde, en waar.** `iconFont.ts` geeft geen kale glyphnaam
+   meer terug maar `{ family, name }` — een discriminated union, zodat
+   `Icon.tsx` elke naam in de `name`-prop van *zijn eigen* familie legt en de
+   compiler hem daar tegen de echte glyphmap houdt. Een
+   `Record<IconFamily, Component>` was het afgewezen alternatief: dan typeert
+   elke glyphnaam als de unie van béide fonts, en `pot-mix` compileert als
+   Feather-glyph om vervolgens als leeg vierkantje te tekenen. Verder is er
+   niets aangeraakt: geen enkele aanroepplek weet welk font hij tekent, en
+   dat is precies de migratie die WS4 §1 op "no call-site change beyond the
+   import" begrootte.
 
-   Twee dingen die de analyse vond en die zwaarder wegen dan het werk:
-   `rateRecipe` heeft **nul aanroepers**, dus Trending is vandaag leeg om
-   een andere reden dan iedereen dacht — er ontbreekt een schrijver, geen
-   beleid. En een cijfer dat uit koken volgt omzeilt de drie poorten van
-   `shared_cooks`: `recipe_ratings` is leesbaar voor élke ingelogde
-   gebruiker, waar kookbewijs op wederzijdse vriendschap en twee
-   opt-ins gepoort is.
+   **De bundlekosten, gemeten in plaats van geschat:**
 
-6. **De mail naar Food Influencers United.** Het mandje vullen bij AH en
+   | | `.ttf` | glyphmap JSON |
+   |---|---|---|
+   | Feather | 54,3 KB | 6,0 KB |
+   | MaterialCommunityIcons | **1277,0 KB** | **212,4 KB** |
+
+   Dat is 1,25 MB fontasset plus 212 KB JSON die bij het starten in de
+   JS-bundle geparsed wordt, voor achttien glyphs van de 7448 — 0,24% van de
+   glyphs voor 100% van het gewicht. **Dit is de enige echte prijs van deze
+   route en hij is niet weggeschreven.** De goedkopere weg bestaat en is
+   bewust níét genomen: `createIconSet` neemt een eigen glyphmap, dus die
+   achttien codepoints kunnen tegen dezelfde `.ttf` die het pakket al
+   meelevert, en dan valt de 212 KB weg. Het kost de compilercontrole
+   hierboven — het enige dat elke naam in dat bestand gecontroleerd houdt in
+   plaats van onthouden — en het spijkert codepoints vast die het pakket mag
+   verplaatsen. Doe die ruil als de bundle pijn doet, niet eerder.
+
+   ⚠ **Drie van de zeventien zijn een gok, en dat staat nu bij de regel zelf
+   in `iconFont.ts`.** MaterialCommunityIcons heeft geen aardappel, geen
+   salade en niets veganistisch — gegrepen, niet aangenomen. Dus:
+   `aardappel → food-variant` is een afgedekte schaal en zegt "een gerecht",
+   niet "een aardappel"; `salade → leaf` is het dichtstbijzijnde ware ding;
+   en **het dieetpaar kruist**: Remy's `leaf` (vegetarisch) wordt getekend
+   door het font zijn `sprout`, en Remy's `sprout` (veganistisch) door
+   `leaf-circle`, omdat `leaf` al aan salade op was. Op het scherm leesbaar,
+   in de tabel verwarrend — daarom staat de waarschuwing erbij in plaats van
+   dat een volgende lezer het zelf moet ontdekken.
+
+   **`timer` heeft eindelijk een eigen glyph**, en niet de klok. Het was het
+   enige icoon waarvan de afwezigheid beargumenteerd was in plaats van
+   toevallig ("een polshorloge is geen kookwekker"); dat argument overleeft
+   de wijziging. Het is `timer-sand` geworden en niet MCI's eigen `timer`,
+   want die laatste is een wijzerplaat en botst op 16pt met `clock`, dat
+   elders al "hoeveel tijd heb ik" betekent.
+
+   **En de seam heeft er diezelfde dag een tweede klant bij gekregen, op
+   verzoek van de eigenaar (RCP-08):** een generiek icoon per
+   *ingrediëntcategorie*, "in plaats van een icoon voor een appel hebben en
+   een voor een banaan". Dat is de moeite van het opschrijven waard omdat het
+   een staande weigering omdraait. `dishTagIcons.ts` verbood precies dit met
+   drie argumenten — een open glyph-vocabulaire, een matcher tussen
+   Nederlandse woorden en tekeningen, en "welk ingrediënt is het
+   belangrijkste". Twee daarvan zijn eraf: een icoon per *categorie* is een
+   gesloten twaalf, en `mainIngredients.ts` beantwoordt die derde vraag
+   allang elders. De matcher blijft, en faalt eerlijk: een onbekend woord
+   levert géén icoon in plaats van een verkeerd icoon. Hele woorden, nooit
+   substrings — `boter` zit in `boterhamworst`, de les die
+   `mainIngredients.ts` al betaald had.
+
+   **Zuivel en peulvruchten waren niet te tekenen en zijn daarom zélf
+   getekend (RCP-09), ook op verzoek van de eigenaar.** Dat er nergens melk,
+   yoghurt, boter of een boon te vinden was, is deze keer over alle vijftien
+   families gemeten in plaats van over één — de enige treffer op "butter" is
+   `butterfly`. Anders dan bij `timer` vóór GAP-19 ging beter zoeken dat niet
+   oplossen.
+
+   **Een `.ttf` genereren is overwogen en afgewezen.** fontTools staat lokaal
+   en WS4 §1 had die route al uitgetekend, dus het kon. Het is afgewezen op
+   deze repo's eigen maatstaf: een `.ttf` is een binair blok dat niemand in
+   een diff leest of met de hand corrigeert, met een generatiescript dat moet
+   blijven werken en codepoints die stil kunnen verschuiven — en dan krijg je
+   een VERKEERDE TEKENING zonder foutmelding. Een SVG-pad is tekst in de bron.
+   **De prijs is één nieuwe dependency**, `react-native-svg`, gepind op
+   15.15.4 omdat dat de versie in Expo SDK 57's `bundledNativeModules.json`
+   is; in dat bestand staan is wat hem in Expo Go laat werken zonder
+   development build. ⚠ Dat is uit het SDK-manifest gelezen, niet op een
+   toestel gezien — eerste ding om te bevestigen.
+
+   **De seam kreeg er een derde familie bij** (`remy`) voor één unielid, één
+   constructor en één tak in `Icon.tsx`. Geen aanroepplek bewoog, voor de
+   tweede keer in twee dagen; dat is het sterkste bewijs dat de vorm van
+   gisteren klopte.
+
+   **Beide vormen zijn gerasterd en bekeken vóór ze bleven staan**, en dat was
+   geen formaliteit: de eerste melkverpakking las als een pot en is opnieuw
+   getekend, en een kale puntgevel las als een huis. ⚠ Wat dat níét
+   vaststelt: er is gerasterd met Pillow en niet met react-native-svg, en geen
+   toestel heeft ze getekend. De geometrie is dus geverifieerd, de rendering
+   niet. De erwten in de peul zijn zwak op 16 fysieke px en helder vanaf 24;
+   het oppervlak rendert op 16 punten, wat 32 of 48 px is op een 2x/3x-scherm.
+
+   **Wat er nog wel open ligt onder deze noemer:** de **21 empty-state
+   markeringen** uit WS4 §5.3-5.5, waarvan er nul geleverd zijn. Die waren
+   geblokkeerd op het font en zijn dat nu niet meer — het is gewoon werk. En
+   de zeventien chips zijn **nooit op een toestel gezien**: elke chip ging in
+   één commit van geen tekening naar een tekening, en de uitlijning van een
+   16pt-glyph naast `typeScale.body` is afgestemd op een rij die nooit een
+   glyph tekende.
+
+   **Hieronder staat waarom dit item van vorm veranderde. De premisse
+   eronder bleek te smal, en dat is de les die blijft.**
+
+   WS4 §1 koos een gegenereerde Phosphor-subset, op één waarneming die klopt:
+   *"Feather has zero kitchen glyphs — no pot, no bowl, no chef, no timer"*.
+   Nagemeten en waar. **Maar Feather is één van de vijftien families die
+   `@expo/vector-icons` al meelevert, en de andere veertien had niemand ooit
+   gecontroleerd.** MaterialCommunityIcons heeft er **7448**, met `pot`,
+   `pot-steam`, `pot-mix`, `bowl-mix`, `chef-hat`, `noodles`, `pasta`,
+   `mushroom`, `silverware`, `stove` en `carrot` — precies de vier die WS4 bij
+   naam mist, en meer.
+
+   **De beslissende meting: 17 van 17 `DISH_TAGS` zijn er vandaag mee te
+   tekenen**, zonder één nieuwe dependency, zonder een `.ttf` te genereren en
+   zonder buildstap:
+
+   ```
+   pasta → pasta          soep → bowl-mix        stamppot → pot-mix
+   rijst → rice           salade → leaf          kip → food-drumstick
+   aardappel → food-variant  ovenschotel → toaster-oven  rundvlees → cow
+   noedels → noodles      wok → pot-steam        varkensvlees → pig
+   brood → bread-slice    curry → bowl           visgerecht → fish
+   vegetarisch → sprout   veganistisch → leaf-circle
+   ```
+
+   **De conclusie van WS4 was juist voor de premisse die onderzocht was; de
+   premisse was alleen te smal.** Dat is dezelfde vorm als de rest van dit
+   document, één laag dieper: niet een document dat de code tegenspreekt,
+   maar een onderzoek dat één bron uitputtend nakeek en veertien buren
+   oversloeg.
+
+   **Wat het werk wás**, en wat er die dag ook van gemaakt is: `Icon.tsx` en
+   `iconFont.ts` meer dan één familie laten dragen, de zeventien mappings
+   erin, en de bundlekosten meten — `@expo/vector-icons` laadt per familie,
+   dus de vraag was of er één familie bij mag, niet of we van nul beginnen.
+   De seam was hier precies voor gebouwd, en de belofte is uitbetaald:
+   `iconFont.ts` zei zelf dat op de dag dat dit landt *"THIS FILE is the one
+   that changes… Nothing else moves"*, en behalve `Icon.tsx` — de
+   renderende helft van diezelfde seam — is er geen aanroepplek aangeraakt.
+
+   Drie oppervlakken wachtten hierop. Twee zijn af: de zeventien chips
+   tekenen nu, en de bibliotheekheader tekende al (die drie knoppen waren
+   Feather en dus nooit geblokkeerd — dat stond hier verkeerd). Wat blijft is
+   de derde: de 21 empty-state markeringen uit WS4, nog steeds nul geleverd.
+   En sinds GAP-25 is het staande bezwaar tegen tabbalk-iconen weg: het
+   icoonvak wordt toch al getekend, dus een echt icoon kost nul punten — met
+   twee families is er nu ook iets om erin te zetten.
+
+7. **`Bewaren` op de gedeelde receptpagina** (GAP-32). De Vrienden-tab is op
+   echte data grotendeels inert: bewijskaarten krijgen geen `onPress`,
+   `/friends/[feedItemId]` draait op fixtures — en op **elke** build, niet
+   alleen in dev, want dat scherm heeft geen `__DEV__`-poort — en de enige
+   handeling die een ontvanger heeft bestaat niet. Twee onafhankelijke
+   analyses wezen dit als nummer één aan, en de eigenaar bedacht het los
+   daarvan zelf als vervanger voor Strava's kudos. Het is volledig
+   gespecificeerd in `DESIGN-SOCIAL.md` §3.3 en §4.3.
+
+8. **`src/app/import/confirm.tsx` is 963 regels**, ver over het plafond van
+   800, en was op 892 vóór iemand hem deze week aanraakte. Eruit halen wat
+   eruit moet — `buildEditedRecipe`, `buildMealInput`, `persistImportedMeal`
+   naar `src/domain/import/**` — is een schone, afgebakende klus.
+
+9. **De mail naar Food Influencers United.** Het mandje vullen bij AH en
    Jumbo is gelicentieerd (`api.tobasket.com`, sinds oktober 2025), gratis
    te testen vóór betaling, en BSK-06 staat daarom open in plaats van dicht.
    De vraag die telt staat nergens publiek beantwoord: **krijgt een
@@ -431,16 +707,16 @@ kosten geen code maar een handeling van de eigenaar.
    (prijsvergelijking) legaal kan bestaan. Lange doorlooptijd, dus vroeg
    sturen.
 
-7. **Eigen SMTP**, waarna de zes-cijfer-route werkt en er testgebruikers
-   kunnen bestaan.
+10. **Eigen SMTP**, waarna de zes-cijfer-route werkt en er testgebruikers
+    kunnen bestaan.
 
-8. **IMP-05** — één secret, geen code: `GEMINI_MODEL` op een gedateerde
+11. **IMP-05** — één secret, geen code: `GEMINI_MODEL` op een gedateerde
    snapshot pinnen. Sinds de foto-import is dit dringender: een
    multimodale aanroep kost een veelvoud van een tekstaanroep, en een
    verschoven alias faalt als `llm_request_failed`, onzichtbaar in alles
    wat je kunt tellen.
 
-9. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
+12. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
    hebben? Het duurst betaalde openstaande punt.
 
 **Geblokkeerd op iets dat niet in code te betalen is:** ENT-01, de share

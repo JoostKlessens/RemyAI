@@ -186,10 +186,10 @@ const mealJob = (
 
 describe('mirroring a meal', () => {
   /**
-   * The column list, read from 0001 + 0003 + 0004 + 0006 + 0009 + 0010 and
-   * not from src/domain/types.ts. `recipe_id` is the one whose absence made
-   * cook proof unreachable; `visibility` is the one whose ABSENCE here is
-   * load-bearing (see mirrorWrites.ts's header).
+   * The column list, read from 0001 + 0003 + 0004 + 0006 + 0009 + 0010 +
+   * 0017 and not from src/domain/types.ts. `recipe_id` is the one whose
+   * absence made cook proof unreachable; `visibility` is the one whose
+   * ABSENCE here is load-bearing (see mirrorWrites.ts's header).
    */
   test('writes exactly the mirrored columns, and never visibility or metadata', async () => {
     const fake = makeClient();
@@ -202,6 +202,7 @@ describe('mirroring a meal', () => {
         'allergen_tag_status',
         'archived_at',
         'created_at',
+        'dish_course',
         'dish_moods',
         'dish_tags',
         'estimated_minutes',
@@ -227,7 +228,7 @@ describe('mirroring a meal', () => {
     expect(payload).not.toHaveProperty('updated_at');
   });
 
-  /** The four optional fields land as the column defaults the migrations declare, never as undefined. */
+  /** The five optional fields land as the column defaults the migrations declare, never as undefined. */
   test('an optional field absent on the local row lands as its column default', async () => {
     const fake = makeClient();
     await mirrorMeal(
@@ -237,6 +238,7 @@ describe('mirroring a meal', () => {
           allergenTagStatus: undefined,
           recipeId: undefined,
           dishMoods: undefined,
+          dishCourse: undefined,
           excludedFromCookProof: undefined,
         }),
       ),
@@ -246,6 +248,10 @@ describe('mirroring a meal', () => {
     expect(payload.allergen_tag_status).toBe('unknown');
     expect(payload.recipe_id).toBeNull();
     expect(payload.dish_moods).toEqual([]);
+    // "standaard is iets een hoofdgerecht", and the mirror is one of the
+    // two places that has to agree with 0017's column default rather than
+    // send `undefined` and let PostgREST decide what that means.
+    expect(payload.dish_course).toBe('hoofdgerecht');
     expect(payload.excluded_from_cook_proof).toBe(false);
   });
 

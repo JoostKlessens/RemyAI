@@ -2,15 +2,30 @@
  * FIXTURE DATA — NOT REAL. Stands in for the friend-sharing backend
  * (`src/domain/social/**` plus its Supabase tables, both owned by another
  * agent and landing separately) while the Vrienden tab has nothing live to
- * read from. Kept in its own file under src/app/friends/ rather than mixed
- * into the shared src/app/_fixtures.ts, for exactly the reason that file's
- * header gives: fixtures flow one direction, into a single screen family,
- * and never leak into src/domain or src/lib.
+ * read from. Kept in its own file rather than mixed into
+ * `decisionFixtures.ts` — see that file's header for why every fixture in
+ * this app now lives under src/fixtures/ instead of behind an underscore
+ * in a route folder, and for the one-direction rule this file obeys:
+ * src/domain never imports it, and in src/lib only `gekooktSource.ts` and
+ * `trendingSource.ts` do, because choosing between a fixture and a
+ * repository is their whole job.
  *
- * No `fetch`, no Supabase import, no I/O of any kind. Nothing here is
- * reachable from the two existing tabs.
+ * No `fetch`, no Supabase import, no I/O of any kind. The previous version
+ * of this line claimed nothing here was "reachable from the two existing
+ * tabs", which stopped being true the moment Vrienden shipped; here is
+ * what is actually reachable, counted rather than assumed. Vrienden and
+ * Trending's kring scope both read this only when the scenario row picks a
+ * source, and that row is behind `__DEV__ && DEV_SCENARIO_ROWS_VISIBLE`
+ * (src/lib/devFlags.ts) with `'live'` as the default — so on those two
+ * tabs nothing here renders in a production build. The friend recipe
+ * screen (src/app/friends/[feedItemId].tsx) is the exception and is not
+ * gated at all: that screen has no live read yet, so it is fixture-backed
+ * outright, as its own header says. That is a real gap in the product,
+ * not in this file, and it closes when `listMealsSentToMe` can serve that
+ * screen — until then, do not read the presence of a dev flag on this
+ * module's other callers as covering all three.
  *
- * HOW THIS STAYS HONEST — the same discipline src/app/import/_fixtures.ts
+ * HOW THIS STAYS HONEST — the same discipline `importFixtures.ts`
  * describes, applied to a different seam:
  *
  * - **Every shape is the real domain type.** `Creator`/`FeedItem` from
@@ -609,7 +624,7 @@ export type FriendFeedScenario = 'gedeeld' | 'zonder_allergie' | 'leeg';
 /**
  * The scenarios, in the order the `__DEV__` row offers them. Exported so
  * that row and `KNOWN_SCENARIOS` below read from one list — mirrors
- * `BOARD_SCENARIOS` in src/app/ranglijst/_fixtures.ts, so both list tabs
+ * `BOARD_SCENARIOS` in `boardFixtures.ts` beside it, so both list tabs
  * offer their demo sources the same way.
  */
 export const FRIEND_FEED_SCENARIOS: readonly FriendFeedScenario[] = ['gedeeld', 'zonder_allergie', 'leeg'];

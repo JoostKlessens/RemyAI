@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createInMemoryKeyValueStore, type KeyValueStore } from '@/lib/repository/keyValueStore';
+import { createTableAccessor } from '@/lib/repository/table';
 import { createLocalSocialRepository } from '@/lib/repository/social/localSocialRepository';
 import { SEND_NOTE_MAX_LENGTH, type RemySocialRepository } from '@/lib/repository/social/types';
 import { PROFILE_A, PROFILE_B, PROFILE_C } from '../social/fixtures';
@@ -453,5 +454,268 @@ describe('persistence', () => {
     const reopened = createLocalSocialRepository(store);
     expect((await reopened.getFriendshipBetween(PROFILE_A, PROFILE_B))?.status).toBe('pending');
     expect((await reopened.getProfile(PROFILE_A))?.handle).toBe('joost');
+  });
+});
+
+/**
+ * `listNamableRecipeVotes` — the in-memory half of the
+ * `namable_recipe_votes` view (0016), and the owner's rule in one
+ * sentence: hide the name, keep the number.
+ *
+ * WHY THIS NEEDS A TEST AT ALL, given the real filter runs in SQL. Because
+ * the two backends sign one contract, and this is the half a reader is
+ * most likely to assume is a stub. It is not: it implements BOTH of the
+ * view's grains — the per-dish exclusion and the household's global
+ * switch, each narrowed by `meals` — and the tests below are addressed to
+ * them one at a time.
+ *
+ * IT IS STILL BROADER THAN POSTGRES IN ONE RESPECT, and that is asserted
+ * rather than assumed so nobody later "fixes" it into failing open: the
+ * local store has no `household_members` table at all, so it cannot map a
+ * VOTER to a household and applies the withholding to every vote on an
+ * affected recipe. A local run therefore hides a vote the real backend
+ * would have named. The inverse would be the seam bug.
+ *
+ * The rows go straight into the tables `localRepository.ts` owns rather
+ * than through it, exactly as tests/repository/sentMeals.test.ts stages
+ * its own: what is under test is the flag, not a write path.
+ */
+describe('votes that may be shown with a name', () => {
+  beforeEach(async () => {
+    await seedProfiles();
+    // Stated rather than left absent. Every test in this block except the
+    // ones that say otherwise is about a household that DOES share, so
+    // the per-dish grain is the only thing that can withhold anything.
+    await seedHousehold(true);
+  });
+
+  async function seedHousehold(shareCooksWithFriends: boolean): Promise<void> {
+    await createTableAccessor<Record<string, unknown>>(store, 'remy:households').replaceAll([
+      {
+        id: 'household-1',
+        name: 'Mijn huishouden',
+        timezone: 'Europe/Amsterdam',
+        decisionPushTime: '16:00',
+        weeknightTimeBudgetMinutes: 30,
+        skillLevel: 'intermediate',
+        shareCooksWithFriends,
+        createdAt: '2026-08-01T09:00:00.000Z',
+      },
+    ]);
+  }
+
+  async function seedMeals(rows: readonly Record<string, unknown>[]): Promise<void> {
+    await createTableAccessor<Record<string, unknown>>(store, 'remy:meals').replaceAll(
+      rows.map((row) => ({
+        id: 'meal-1',
+        householdId: 'household-1',
+        title: 'Romige pasta pesto',
+        source: 'saved',
+        estimatedMinutes: 20,
+        skillLevel: 'beginner',
+        servings: 2,
+        ingredientTags: [],
+        dishTags: [],
+        recipeId: null,
+        excludedFromCookProof: false,
+        archivedAt: null,
+        createdAt: '2026-08-01T09:00:00.000Z',
+        updatedAt: '2026-08-01T09:00:00.000Z',
+        ...row,
+      })),
+    );
+  }
+
+  test('with nothing excluded it is every vote — the ordinary case', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1' }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    await repository.rateRecipe({ recipeId: 'recipe-2', raterProfileId: PROFILE_B, rating: 7 });
+    expect(await repository.listNamableRecipeVotes()).toHaveLength(2);
+  });
+
+  test('a dish marked "deel deze niet" drops its vote from the named list', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1', excludedFromCookProof: true }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    await repository.rateRecipe({ recipeId: 'recipe-2', raterProfileId: PROFILE_A, rating: 7 });
+    const namable = await repository.listNamableRecipeVotes();
+    expect(namable.map((vote) => vote.recipeId)).toEqual(['recipe-2']);
+  });
+
+  /**
+   * THE HALF THE OWNER ASKED FOR EXPLICITLY. The exclusion takes the NAME
+   * away and leaves the NUMBER, so the board's source is untouched — an
+   * anonymous average is not a disclosure about anybody.
+   */
+  test('the excluded vote still counts on the board, which names nobody', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1', excludedFromCookProof: true }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    expect(await repository.listAllRecipeRatings()).toHaveLength(1);
+    expect(await repository.listNamableRecipeVotes()).toHaveLength(0);
+  });
+
+  /**
+   * §3.5's "past included". The exclusion is applied at READ time, so a
+   * dish excluded after the vote was cast un-names it without anything
+   * being backfilled — which is the whole reason 0016 is a view and not a
+   * column somebody has to remember to update.
+   */
+  test('excluding a dish after the vote un-names it retroactively', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1' }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    expect(await repository.listNamableRecipeVotes()).toHaveLength(1);
+
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1', excludedFromCookProof: true }]);
+    expect(await repository.listNamableRecipeVotes()).toHaveLength(0);
+  });
+
+  test('a meal with no canonical recipe excludes nothing, because it names no shared object', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: null, excludedFromCookProof: true }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    expect(await repository.listNamableRecipeVotes()).toHaveLength(1);
+  });
+
+  test('a meal row that predates 0009 carries no flag, and absent is not excluded', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1', excludedFromCookProof: undefined }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    expect(await repository.listNamableRecipeVotes()).toHaveLength(1);
+  });
+
+  test('the result is always a subset of the board list, which callers may rely on', async () => {
+    await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1', excludedFromCookProof: true }]);
+    await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+    await repository.rateRecipe({ recipeId: 'recipe-2', raterProfileId: PROFILE_B, rating: 7 });
+    const all = new Set((await repository.listAllRecipeRatings()).map((vote) => vote.id));
+    for (const vote of await repository.listNamableRecipeVotes()) {
+      expect(all.has(vote.id)).toBe(true);
+    }
+  });
+
+  /**
+   * THE SECOND GRAIN: the household's global switch, narrowed by `meals`.
+   *
+   * The narrowing is the whole reason this grain is not simply "the
+   * household shares nothing, hide every vote it ever cast" — and the
+   * board-only case below is what that narrowing exists for. It is the
+   * one behaviour here a careless simplification would quietly destroy,
+   * because the wrong version passes every other test in this block.
+   */
+  describe('and the global switch, which is the second grain', () => {
+    test('turning sharing off withholds the name on a dish the household cooked', async () => {
+      await seedHousehold(false);
+      await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1' }]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      expect(await repository.listNamableRecipeVotes()).toHaveLength(0);
+    });
+
+    test('but a board-only vote stays namable — a switch about cooking hides no vote about a dish never cooked', async () => {
+      await seedHousehold(false);
+      // The household holds `recipe-1` and nothing else. `recipe-2` was
+      // voted on from Ranglijst by somebody who never cooked it, so there
+      // is no cook for the switch to be about.
+      await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1' }]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      await repository.rateRecipe({ recipeId: 'recipe-2', raterProfileId: PROFILE_B, rating: 7 });
+      const namable = await repository.listNamableRecipeVotes();
+      expect(namable.map((vote) => vote.recipeId)).toEqual(['recipe-2']);
+    });
+
+    test('a household with no meals at all withholds nothing, however the switch stands', async () => {
+      await seedHousehold(false);
+      await seedMeals([]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      expect(await repository.listNamableRecipeVotes()).toHaveLength(1);
+    });
+
+    /**
+     * `?? false` on the household flag, and it is the opposite default
+     * from the meal's. A row written before 0009 has no key, which means
+     * the household was never asked — and §5 is explicit that a household
+     * which never answered shares nothing. Fails CLOSED, deliberately.
+     */
+    test('a household row that predates 0009 carries no flag, and absent means shares nothing', async () => {
+      await seedHousehold(true);
+      await createTableAccessor<Record<string, unknown>>(store, 'remy:households').replaceAll([
+        {
+          id: 'household-1',
+          name: 'Mijn huishouden',
+          timezone: 'Europe/Amsterdam',
+          decisionPushTime: '16:00',
+          weeknightTimeBudgetMinutes: 30,
+          skillLevel: 'intermediate',
+          createdAt: '2026-08-01T09:00:00.000Z',
+        },
+      ]);
+      await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1' }]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      expect(await repository.listNamableRecipeVotes()).toHaveLength(0);
+    });
+
+    /**
+     * Two households in one store is not a state this device reaches
+     * today — `getCurrentHouseholdId` takes the first and says so. It is
+     * asserted anyway because the implementation evaluates the switch PER
+     * HOUSEHOLD off `meals.householdId` rather than collapsing onto "the
+     * one household", which is what keeps it a mirror of the view rather
+     * than a coincidence that happens to agree while there is only one row.
+     */
+    test('the switch is read per household, not collapsed onto the first one', async () => {
+      await createTableAccessor<Record<string, unknown>>(store, 'remy:households').replaceAll([
+        {
+          id: 'household-1',
+          name: 'Deelt niet',
+          timezone: 'Europe/Amsterdam',
+          decisionPushTime: '16:00',
+          weeknightTimeBudgetMinutes: 30,
+          skillLevel: 'intermediate',
+          shareCooksWithFriends: false,
+          createdAt: '2026-08-01T09:00:00.000Z',
+        },
+        {
+          id: 'household-2',
+          name: 'Deelt wel',
+          timezone: 'Europe/Amsterdam',
+          decisionPushTime: '16:00',
+          weeknightTimeBudgetMinutes: 30,
+          skillLevel: 'intermediate',
+          shareCooksWithFriends: true,
+          createdAt: '2026-08-01T09:00:00.000Z',
+        },
+      ]);
+      await seedMeals([
+        { id: 'meal-1', householdId: 'household-1', recipeId: 'recipe-1' },
+        { id: 'meal-2', householdId: 'household-2', recipeId: 'recipe-2' },
+      ]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      await repository.rateRecipe({ recipeId: 'recipe-2', raterProfileId: PROFILE_B, rating: 7 });
+      const namable = await repository.listNamableRecipeVotes();
+      expect(namable.map((vote) => vote.recipeId)).toEqual(['recipe-2']);
+    });
+
+    /**
+     * A CURATED MEAL WITHHOLDS NOTHING, IN EITHER GRAIN.
+     * `Meal.householdId` is null only for curated, household-agnostic
+     * rows, and both of 0016's anti-joins are INNER joins through
+     * `m.household_id = hm.household_id`, which a null never matches. The
+     * earlier draft of this method withheld on the exclusion flag
+     * regardless of household — stricter than the view, and therefore a
+     * disagreement between the two backends in the direction that is
+     * merely harmless rather than correct.
+     */
+    test('a curated meal belongs to no household, so neither grain reaches it', async () => {
+      await seedHousehold(false);
+      await seedMeals([{ id: 'meal-1', householdId: null, recipeId: 'recipe-1', excludedFromCookProof: true }]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      expect(await repository.listNamableRecipeVotes()).toHaveLength(1);
+    });
+
+    test('either grain alone is enough, and both together are not a double negative', async () => {
+      await seedHousehold(false);
+      await seedMeals([{ id: 'meal-1', recipeId: 'recipe-1', excludedFromCookProof: true }]);
+      await repository.rateRecipe({ recipeId: 'recipe-1', raterProfileId: PROFILE_A, rating: 8.5 });
+      expect(await repository.listNamableRecipeVotes()).toHaveLength(0);
+      // And the number is untouched on the board either way — the owner's
+      // rule, restated once per grain.
+      expect(await repository.listAllRecipeRatings()).toHaveLength(1);
+    });
   });
 });

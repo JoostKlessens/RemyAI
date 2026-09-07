@@ -50,4 +50,19 @@ describe('describeLibrarySearchEmpty', () => {
     expect(queryCopy.body).not.toMatch(/plak/i);
     expect(filterCopy.body).not.toMatch(/plak/i);
   });
+
+  test('describes a course-only search as a chip filter, not as an empty query', () => {
+    const copy = describeLibrarySearchEmpty(search({ anyDishCourses: ['toetje'] }));
+    expect(copy.body).toBe('Geen recepten voldoen aan deze filters.');
+  });
+
+  test('describes a plan-only search as a chip filter — the axis that has no predicate in the domain layer', () => {
+    const copy = describeLibrarySearchEmpty(search({ anySchedulingStates: ['al_gekookt'] }));
+    expect(copy.body).toBe('Geen recepten voldoen aan deze filters.');
+  });
+
+  test('a typed query plus one of the new axes still reads as one sentence, never as two states', () => {
+    const copy = describeLibrarySearchEmpty(search({ query: 'paella', anySchedulingStates: ['deze_week'] }));
+    expect(copy.body).toBe('Geen recepten met “paella” die aan je filters voldoen.');
+  });
 });

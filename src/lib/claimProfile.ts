@@ -67,5 +67,18 @@ export async function claimProfile(
     // that tells the app to look again.
     requestSessionRevalidation();
   }
+  if (result.kind === 'failed' && result.reason === 'profile_exists') {
+    // THE SECOND WAY TO LEARN THAT ONBOARDING IS ALREADY FINISHED, and the
+    // reason it is not folded into the branch above: nothing was written, so
+    // reporting `created` would be a lie — but the app's belief that a
+    // profile is missing has just been disproved by the database itself. An
+    // insert rejected on `profiles_pkey` is positive evidence that the row
+    // exists, which is exactly what a re-resolve needs to go and find.
+    //
+    // Without this the screen is a dead end rather than a detour: the read
+    // that put somebody here failed, and nothing else in the app has any
+    // reason to try it again.
+    requestSessionRevalidation();
+  }
   return result;
 }

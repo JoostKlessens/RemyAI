@@ -65,7 +65,33 @@
  */
 
 import type { UrlImportPlatform } from './types';
+import { isBlockedRedirectHost } from './privateNetworkHosts.ts';
 import { normalizeRecipeUrl } from './urlParsing.ts';
+
+/**
+ * RE-EXPORTED, NOT DEFINED HERE ANY MORE — privateNetworkHosts.ts owns the
+ * list now, and its header carries the whole account of why it moved. Two
+ * reasons this file still names it, rather than leaving every caller to
+ * find the new module:
+ *
+ * The redirect loop's toolkit is three things and they belong at one
+ * import site. supabase/functions/parse-recipe/fetchSourceText.ts takes
+ * `MAX_SHORT_LINK_REDIRECT_HOPS`, `resolveRedirectTarget` and
+ * `isBlockedRedirectHost` out of this module in a single statement,
+ * because those three ARE the bounded-redirect discipline this file exists
+ * to state. Splitting them across two imports would spread one idea over
+ * two lines and gain nothing.
+ *
+ * And that file is Deno code no typechecker in this repo compiles (see
+ * OPS-09): a broken specifier there fails the deploy and nothing earlier.
+ * A re-export costs one line and keeps this module's public surface
+ * exactly as it was, so the cycle removal is provably invisible outside
+ * src/domain/import/. The alternative — repointing that import at
+ * privateNetworkHosts.ts — is a fine follow-up and strictly more honest
+ * about where the code lives; it is just not worth paying for with an
+ * unverifiable edit in the same change that removes a cycle.
+ */
+export { isBlockedRedirectHost };
 
 /**
  * TikTok's own vm./vt. redirector is normally one hop (short host straight
@@ -99,68 +125,6 @@ export function resolveRedirectTarget(currentUrl: string, locationHeader: string
   } catch {
     return null;
   }
-}
-
-/**
- * Refuses a redirect target pointing at the machine this function runs on,
- * or at the private network around it.
- *
- * WHY THIS EXISTS EVEN THOUGH THE FINAL URL IS ALREADY VALIDATED.
- * `validateShortLinkTarget` gates the URL the chain ENDS on, which is the
- * only one ever handed to oEmbed. It does not gate the intermediate hops,
- * and those are fetched: the loop in index.ts issues a real HEAD request to
- * each `Location` before it knows where the chain finishes. So a chain that
- * redirected to `http://169.254.169.254/...` would have that request made,
- * and only then be rejected as a destination — the request having already
- * happened. On Deno Deploy, a link-local address is the cloud metadata
- * endpoint, which is the textbook SSRF target.
- *
- * What this is and is not worth. The exposure is narrow: only status and
- * `Location` are read, never a body, so nothing fetched here can be
- * returned to the caller — this is blind SSRF at most. And the chain always
- * starts at one of two hardcoded TikTok hosts, so reaching this state means
- * TikTok's own redirector sent us somewhere hostile, not that a user picked
- * the target. But the check is a dozen lines of pure string comparison
- * against a fixed list, it is unit-testable, and it costs one function call
- * per hop — far cheaper than the argument for leaving it out.
- *
- * DELIBERATELY NOT DNS RESOLUTION. A hostname that RESOLVES to a private
- * address still passes this (DNS rebinding); catching that needs a resolve
- * step plus a resolve-and-connect race this pure module cannot express, and
- * it is a much larger change than IMP-01's few-hop chain warrants. This
- * closes the literal-IP case, which is the one an open redirect actually
- * hands you. The rest is recorded here rather than silently skipped.
- */
-export function isBlockedRedirectHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.localhost')) {
-    return true;
-  }
-  // IPv6 loopback (::1), unspecified (::), unique-local (fc00::/7 — fc/fd)
-  // and link-local (fe80::/10). Prefix matching is enough: these ranges are
-  // defined by their leading hextets.
-  if (host === '::1' || host === '::' || /^f[cd][0-9a-f]{0,2}:/.test(host) || /^fe[89ab][0-9a-f]?:/.test(host)) {
-    return true;
-  }
-  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  if (ipv4 === null) {
-    return false;
-  }
-  const octets = ipv4.slice(1).map(Number);
-  const [a, b] = octets as [number, number, number, number];
-  if (octets.some((octet) => octet > 255)) {
-    // Not a valid dotted quad at all. Refuse rather than guess what a
-    // permissive resolver might make of it.
-    return true;
-  }
-  return (
-    a === 0 || // 0.0.0.0/8 — "this host"
-    a === 10 || // private
-    a === 127 || // loopback
-    (a === 169 && b === 254) || // link-local, incl. cloud metadata
-    (a === 172 && b >= 16 && b <= 31) || // private
-    (a === 192 && b === 168) // private
-  );
 }
 
 /**

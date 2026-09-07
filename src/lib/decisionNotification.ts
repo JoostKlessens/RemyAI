@@ -29,9 +29,81 @@
  * is not a worse version of this feature, it is the reason a person turns
  * notifications off for good. The fixed `DECISION_NOTIFICATION_IDENTIFIER`
  * is what makes the cancel possible.
+ *
+ * ---------------------------------------------------------------------
+ * WHY `expo-notifications` IS IMPORTED INSIDE THE FUNCTION AND NOT AT THE
+ * TOP OF THIS FILE. The owner's Expo Go log opened with two warnings, on
+ * every single launch, before anything had been scheduled:
+ *
+ *   WARN  expo-notifications: Android Push notifications (remote
+ *         notifications) functionality provided by expo-notifications was
+ *         removed from Expo Go with the release of SDK 53. …
+ *   WARN  `expo-notifications` functionality is not fully supported in
+ *         Expo Go: We recommend you instead use a development build …
+ *
+ * NEITHER OF THEM IS ABOUT ANYTHING THIS APP DOES. Both are side effects
+ * of *evaluating the package's entry module*, and were measured in
+ * `expo-notifications@57.0.16`'s own build output rather than guessed:
+ *
+ *  - The second is `build/index.js:5-9` — a bare
+ *    `if (isRunningInExpoGo()) console.warn(…)` in the module body,
+ *    reached by importing the package at all.
+ *  - The first is `warnOfExpoGoPushUsage()` (`build/warnOfExpoGoPushUsage.js:5`),
+ *    which is called from FOUR places and all four are remote-token
+ *    paths: `getDevicePushTokenAsync`, `addPushTokenListener`,
+ *    `subscribeToTopicAsync`, `unsubscribeFromTopicAsync`. This module
+ *    calls none of them. It fires anyway because `build/index.js`
+ *    re-exports `./DevicePushTokenAutoRegistration.fx`, whose module body
+ *    calls `addPushTokenListener` unconditionally at load.
+ *
+ * The ORDER in the owner's log is the proof, and it is the reason this is
+ * a measurement rather than a story: the push warning arrives BEFORE the
+ * "not fully supported" one, even though the latter sits above the export
+ * list in `index.js`. That inversion is only explicable by ESM hoisting —
+ * re-exported modules are evaluated before the importing module's body.
+ * Both warnings therefore live at package-evaluation time, and nothing in
+ * `app.json` produces either: a config plugin runs at prebuild against a
+ * native project and never runs in Expo Go's JS bundle at all.
+ *
+ * SO THE HONEST CLAIM, STATED AS TWO DIFFERENT CLAIMS. Moving the import
+ * in here REMOVES both warnings from any launch that never schedules —
+ * signed out, mid sign-in, no handle yet, no household row — because
+ * `armDecisionNotification` in `_layout.tsx` returns before calling this
+ * at all, and an unevaluated module warns about nothing. On a launch that
+ * DOES schedule the warnings still appear; they are DEFERRED, not
+ * removed, from before the splash screen to the moment the app genuinely
+ * reaches for the notification API. That is worth having — a warning next
+ * to the work it describes is information, the same warning before first
+ * paint is noise — but it is a smaller claim and must not be sold as the
+ * larger one.
+ *
+ * AND IT FIXES SOMETHING THAT IS NOT NOISE AT ALL. Read
+ * `warnOfExpoGoPushUsage.js:7-10` again: on `Platform.OS === 'android'`
+ * it THROWS instead of warning. With the import at module scope, that
+ * throw happened while `_layout.tsx`'s own module was being evaluated —
+ * so on Android in Expo Go this app failed to start, over a push feature
+ * it deliberately does not have. From inside the `try` below, the same
+ * throw is caught and returned as `{ kind: 'unavailable' }`, which
+ * `armDecisionNotification` already tolerates. The app starts.
+ *
+ * WHAT WAS REJECTED. (1) Deep-importing past the entry point —
+ * `expo-notifications/build/scheduleNotificationAsync` and four more —
+ * would remove both warnings outright, and is the wrong trade: it reaches
+ * into a dependency's compiled output, which no version promise covers,
+ * five separate times, to silence a warning that stays TRUE for whoever
+ * adds remote push later. (2) Dropping the `expo-notifications` entry
+ * from `app.json` — it is not a warning source, and it is what gives the
+ * Android local notification its icon and colour. (3) A LogBox filter or
+ * a patched dependency — a false silence, which is strictly worse than a
+ * true warning.
+ *
+ * The cost is one `await` on a module that Metro has already bundled
+ * (React Native does no code splitting, so nothing is fetched here and
+ * the bundle is not one byte smaller); what moves is evaluation, which is
+ * exactly where both warnings live.
  */
 
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsModule from 'expo-notifications';
 import { Platform } from 'react-native';
 import {
   DECISION_NOTIFICATION_BODY,
@@ -40,6 +112,24 @@ import {
   planDecisionNotification,
   type DecisionNotificationConditions,
 } from '@/domain/decisionNotificationCopy';
+
+/**
+ * The package's shape, named without pulling the package in.
+ *
+ * `import type` — not `typeof import(...)`, which reads more directly but
+ * which `@typescript-eslint/consistent-type-imports` forbids as a type
+ * annotation, and this repo's lint run is otherwise warning-free. Both
+ * forms are erased outright by the compiler, so this line adds no
+ * `require` to the bundle and nothing to evaluate at load; the ONE runtime
+ * import of this package is the `await import(...)` far below.
+ *
+ * It exists so `ensurePermission` can take the module as an argument and
+ * still be fully typed — the alternative, `any`, would have thrown away
+ * the compile-time check on the five call shapes below, which is the only
+ * thing standing between a renamed trigger field and a notification that
+ * silently never fires.
+ */
+type NotificationsApi = typeof NotificationsModule;
 
 export type DecisionNotificationResult =
   /** A daily notification is armed for this time. */
@@ -59,8 +149,13 @@ export type DecisionNotificationResult =
  * answer is already stored spends that one prompt on nothing. Somebody who
  * said no keeps saying no until they change it in Settings, which is the
  * right place for that decision to live — this module must never re-ask.
+ *
+ * TAKES THE MODULE RATHER THAN IMPORTING IT so that the whole file has
+ * exactly one line that can evaluate `expo-notifications`, and it is in
+ * the caller's `try`. A second import site here would quietly reopen the
+ * launch-time warning this file's header spends sixty lines closing.
  */
-async function ensurePermission(): Promise<boolean> {
+async function ensurePermission(Notifications: NotificationsApi): Promise<boolean> {
   const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) {
     return true;
@@ -90,7 +185,17 @@ export async function scheduleDecisionNotification(
   const plan = planDecisionNotification(conditions);
 
   try {
-    const granted = await ensurePermission();
+    // THE ONLY LINE IN THIS APP THAT EVALUATES `expo-notifications`, and
+    // it is deliberately inside the `try` rather than above it — see the
+    // header: in Expo Go on Android the package's own entry module throws
+    // on evaluation, and this is what turns that into a named outcome
+    // instead of an app that will not start. It sits after
+    // `planDecisionNotification` for a smaller reason: that call is pure,
+    // and there is no sense evaluating a native module to answer a
+    // question already answered.
+    const Notifications = await import('expo-notifications');
+
+    const granted = await ensurePermission(Notifications);
     if (!granted) {
       return { kind: 'permission_denied' };
     }

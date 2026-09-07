@@ -13,12 +13,22 @@
  * IT IS THE CONFIRMATION SCREEN'S EDITOR, DELIBERATELY NOT A SECOND ONE
  * ============================================================================
  *
- * Every control here is the component confirm.tsx already uses:
+ * Every control here that confirm.tsx also has is the same component:
  * `EditableTextListField` for both lists, `AllergenTaggingSection` for the
  * PD-006 tagging, `Button` for the footer. The ingredient round trip is
  * `formatIngredientLine` / `resolveEditedIngredients` from
  * src/domain/import/editedIngredients.ts — the same two functions, imported,
  * not reimplemented.
+ *
+ * THAT SENTENCE USED TO READ "every control here is the component confirm.tsx
+ * already uses", full stop, and it stopped being true rather than becoming
+ * wrong: `RecipeTaxonomyFields` has no counterpart on the confirmation
+ * screen, because until the owner asked ("Kan je de tags niet aanpassen
+ * handmatig?") nothing anywhere let a person touch a dish's categories. It
+ * is still built out of the primitives the filter bars use for the same
+ * vocabulary — `ChipGroup`, `Chip`, `IconChip`, `DISH_TAGS` — so the reuse
+ * this paragraph is really about is intact; what is new is a control, not a
+ * second idea of what a category is.
  *
  * That reuse is not tidiness, it is the whole reason this screen is safe to
  * add. editedIngredients.ts's rule — a line the user did NOT touch keeps its
@@ -79,14 +89,31 @@
  * moved underneath it.
  *
  * ============================================================================
- * NOTHING ELSE ABOUT THE DISH IS TOUCHED
+ * WHAT ELSE IT TOUCHES, AND WHAT IT STILL DOES NOT
  * ============================================================================
  *
- * No cook-proof exclusion, no dish moods, no canonical recipe link, no
- * thumbnail, no archive state, no cook history. The repository guarantees
- * that (see `updateMealRecipe` in src/lib/repository/types.ts) and this
- * screen offers no control that would ask for it — the long-press sheet this
- * screen opens FROM is where those live, and they stay there.
+ * It touches the two DESCRIPTIVE taxonomies: `dishTags` (categories) and
+ * `dishCourse` (voorgerecht / hoofdgerecht / bijgerecht / toetje). Both are
+ * things a person can read off the recipe in front of them and correct, and
+ * both are edited here for the same reason the ingredients are — the only
+ * previous writer was a model reading a caption, and until now it could not
+ * be overruled.
+ *
+ * It still touches NO cook-proof exclusion, NO dish moods, NO canonical
+ * recipe link, NO thumbnail, NO archive state and NO cook history. The
+ * repository guarantees that (see `updateMealRecipe` in
+ * src/lib/repository/types.ts) and this screen offers no control that would
+ * ask for it — the long-press sheet this screen opens FROM is where those
+ * live, and they stay there.
+ *
+ * THE LINE BETWEEN THE TWO LISTS IS NOT "descriptive versus not", it is
+ * WHOSE STATEMENT IT IS AND WHAT IT COSTS TO GET WRONG. A mood is somebody
+ * else's sentence about a dish they cooked, so an editor may not rewrite it.
+ * A cook-proof exclusion decides whether other people are told what this
+ * household ate, so it gets its own verb and its own screen. A category
+ * files a recipe in this household's own library; the worst a wrong one does
+ * is send somebody looking in the wrong place, in a library only they can
+ * see.
  *
  * ONE REPOSITORY, ONE SEAM. Everything here goes through `RemyRepository`
  * (@/lib/repository). Nothing on this screen is social, so
@@ -107,13 +134,15 @@ import {
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DEFAULT_DISH_COURSE, readMealDishCourse } from '@/domain/dishCourses';
 import { formatIngredientLine, resolveEditedIngredients } from '@/domain/import/editedIngredients';
 import type { ParsedIngredient } from '@/domain/import/types';
 import { NOT_RECHECKED, haveIngredientsChanged, recheckedAllergens } from '@/domain/mealAllergenReverification';
-import type { AllergenTagStatus, Meal, MealIngredient, MealStep } from '@/domain/types';
+import type { AllergenTagStatus, DishCourse, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { AllergenTaggingSection } from '@/components/AllergenTaggingSection';
 import { Button } from '@/components/Button';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
+import { RecipeTaxonomyFields } from '@/components/RecipeTaxonomyFields';
 import {
   RECIPE_EDIT_CANCEL_ACCESSIBILITY_LABEL,
   RECIPE_EDIT_CANCEL_LABEL,
@@ -215,6 +244,8 @@ interface EditedFields {
   readonly stepItems: readonly EditableTextListItem[];
   readonly allergenTags: readonly string[];
   readonly allergenStatus: AllergenTagStatus;
+  readonly dishTags: readonly string[];
+  readonly dishCourse: DishCourse;
 }
 
 /**
@@ -259,6 +290,17 @@ function buildUpdateInput(stored: readonly MealIngredient[], edited: EditedField
     // standing behind the list on screen; anyone else gets the fail-closed
     // default, and the repository decides whether the list actually moved.
     allergenCheck: edited.allergenStatus === 'verified' ? recheckedAllergens(edited.allergenTags) : NOT_RECHECKED,
+    // The two descriptive taxonomies, sent whole because the input requires
+    // them whole. A screen that could omit either would be a screen that
+    // could wipe one by forgetting it — see `UpdateMealRecipeInput`.
+    //
+    // NOT NARROWED HERE. The chip rows can only ever produce values out of
+    // `DISH_TAGS` and `DISH_COURSES`, and the repository narrows again at
+    // its own seam. A third `sanitize…` call in this file would be a third
+    // place the closed vocabulary is enforced and the first one anybody
+    // would delete as redundant.
+    dishTags: edited.dishTags,
+    dishCourse: edited.dishCourse,
   };
 }
 
@@ -283,6 +325,15 @@ export default function RecipeEditScreen(): JSX.Element {
   const [ingredients, setIngredients] = useState<readonly EditableTextListItem[]>([]);
   const [steps, setSteps] = useState<readonly EditableTextListItem[]>([]);
   const [allergenTags, setAllergenTags] = useState<readonly string[]>([]);
+  /**
+   * The two descriptive taxonomies. They are SEPARATE STATE and separate
+   * controls, not one control over one list, for the reason 0017 argues:
+   * a dish is made of several things and takes exactly one place in a meal,
+   * and a single row offering both would make `['toetje', 'pasta']`
+   * expressible with nothing to stop it.
+   */
+  const [dishTags, setDishTags] = useState<readonly string[]>([]);
+  const [dishCourse, setDishCourse] = useState<DishCourse>(DEFAULT_DISH_COURSE);
   /**
    * ALWAYS STARTS 'unknown', however the stored meal arrived — see the file
    * header. A confirmation is an act against the list on screen, and
@@ -331,6 +382,14 @@ export default function RecipeEditScreen(): JSX.Element {
         // pre-confirmed.
         setAllergenTags(meal.ingredientTags);
         setAllergenStatus('unknown');
+        // What the row already says, offered as the starting point for the
+        // correction — the same posture the allergen tags above take. The
+        // course is read through `readMealDishCourse` rather than off the
+        // field, because almost every stored row predates the column and an
+        // editor opening on `undefined` would show no selection at all for
+        // a dish the product considers a hoofdgerecht.
+        setDishTags(meal.dishTags);
+        setDishCourse(readMealDishCourse(meal));
         setLoadState('ready');
       })
       .catch(() => {
@@ -371,6 +430,23 @@ export default function RecipeEditScreen(): JSX.Element {
   const removeAllergenTag = (tag: string): void => {
     setAllergenTags((current) => current.filter((existing) => existing !== tag));
     setAllergenStatus('unknown');
+  };
+
+  /**
+   * Multi-select, immutable both ways — the caller holds the previous array
+   * and may still be rendering it, exactly as `DecisionFilterBar`'s own
+   * toggle notes.
+   *
+   * DELIBERATELY DOES NOT TOUCH `allergenStatus`, where `editIngredients`
+   * and the two allergen setters above all do. A dish category is
+   * descriptive and can never remove a meal from anybody's rotation
+   * (PD-006, dishTags.ts's header); retracting a human's allergen
+   * confirmation because they said the dish is a soup would be this
+   * screen's own warning crying wolf, and a warning that fires for
+   * harmless acts is one people learn to click past.
+   */
+  const toggleDishTag = (tag: string): void => {
+    setDishTags((current) => (current.includes(tag) ? current.filter((value) => value !== tag) : [...current, tag]));
   };
 
   const trimmedTitle = title.trim();
@@ -417,6 +493,8 @@ export default function RecipeEditScreen(): JSX.Element {
       stepItems: steps,
       allergenTags,
       allergenStatus,
+      dishTags,
+      dishCourse,
     });
 
     getAppRepository()
@@ -554,6 +632,21 @@ export default function RecipeEditScreen(): JSX.Element {
           placeholder={RECIPE_EDIT_STEP_PLACEHOLDER}
           multiline
           numbered
+        />
+
+        {/* The two descriptive taxonomies. They sit here — after the recipe
+            itself, before the allergen section — because that is their
+            weight: correcting a category is housekeeping, correcting an
+            ingredient is the reason somebody opened this screen, and the
+            allergen block has to stay last so it describes the ingredient
+            list as finally edited. Why they are two rows and not one, and
+            why the whole vocabulary is offered here where the filter bars
+            narrow it, is argued in the component. */}
+        <RecipeTaxonomyFields
+          dishTags={dishTags}
+          onToggleDishTag={toggleDishTag}
+          dishCourse={dishCourse}
+          onSelectDishCourse={setDishCourse}
         />
 
         {/* PD-006, said BEFORE the save rather than discovered after it.

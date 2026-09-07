@@ -38,6 +38,22 @@
  * here right after confirm.tsx's `router.replace('/recipes')` shows the
  * just-saved meal without needing a full app restart.
  *
+ * *TAPPING A TILE OPENS THE RECIPE* (src/app/recipe/[mealId].tsx), and that
+ * is a change from what docs/DESIGN.md §2 and `RecipeTile.tsx`'s own header
+ * both say ("Tap → Kookmodus directly (unchanged behavior)"). That sentence
+ * was written when there was nothing else a tile could open, so opening a
+ * recipe and cooking it were the same act. They are not any more: cook mode
+ * keeps the screen awake, counts steps and writes a cook event at its
+ * terminus, and making it the consequence of one tap on a thumbnail spends
+ * the library's cheapest gesture on the product's most committed surface.
+ * The recipe screen carries `Koken` as its primary control, so cooking is
+ * one tap further away and nothing else about the grid moved.
+ *
+ * `accessibilityHint` IS OVERRIDDEN ALONGSIDE `onPress`, because RecipeTile
+ * asks callers to do exactly that: the two together are what a tile
+ * promises, and changing one without the other leaves the tile telling
+ * screen-reader users it opens cook mode while it opens something else.
+ *
  * *Long-pressing a tile* opens `LibraryTileActionSheet` (DESIGN-SOCIAL.md
  * §3.1), which carries two rows: "Sturen", which opens
  * `SendRecipeSheet`, and "Deel deze niet", the per-meal cook-proof
@@ -87,23 +103,37 @@
  * identical screen. It becomes necessary the day a tile shows an
  * "uitgezonderd" mark, and belongs in that change.
  *
- * SEARCH AND FILTER (LIB-01/LIB-03) ADD NO REPOSITORY CALLS OF THEIR OWN.
- * `loadRows` above already fetches every meal the household owns and
+ * SEARCH AND FILTER (LIB-01/LIB-03/LIB-05) ADD NO REPOSITORY CALLS OF THEIR
+ * OWN. `loadRows` above already fetches every meal the household owns and
  * returns it fully sorted, "deze week" first; `search` state
  * (`LibrarySearchState`, src/domain/recipeSearch.ts) narrows that same
  * array client-side, in `useMemo`, after the fact. That ordering is what
  * keeps "deze week first" true of the visible rows without this screen
  * re-deriving or re-asserting it: filtering a sorted array never reorders
- * what survives it. ALL of the matching logic — the title match, and the
- * dishTags-AND / dishMoods-OR / time-cap semantics reused from the
- * decision engine's own `filterByDecisionFilters` — lives in
- * recipeSearch.ts; this screen only holds the `LibrarySearchState` and
- * calls `filterLibraryRows`. THE ZERO-RESULTS STATE IS NOT THE FIRST-RUN
- * EMPTY STATE ABOVE, on purpose: a household with forty recipes and a
- * mistyped search term is not a household that needs to be told to paste a
- * link, so a search producing nothing renders `LibrarySearchEmptyState`
- * with copy from librarySearchCopy.ts, gated on `rows.length > 0` — the
- * branch below it, never the one above.
+ * what survives it.
+ *
+ * FIVE AXES, IN TWO PLACES, AND ONE CALL. The title match and the
+ * dishTags-AND / dishMoods-OR / course-OR / time-cap semantics live in
+ * recipeSearch.ts, reusing the decision engine's own `filterByDecisionFilters`
+ * where they can. The SCHEDULING STATE cannot live there — it is derived per
+ * row rather than stored on `Meal`, and the domain layer refuses the
+ * component import that reaching for it would need — so
+ * src/components/libraryGridFilter.ts composes both halves and hands this
+ * screen one `filterLibraryGrid` call. That is also where the chip lists
+ * come from: which chips are worth offering depends on which are already
+ * selected, and computing it against the full library (as this screen used
+ * to) offers controls guaranteed to return zero.
+ *
+ * THE ZERO-RESULTS STATE IS NOT THE FIRST-RUN EMPTY STATE ABOVE, on purpose:
+ * a household with forty recipes and a mistyped search term is not a
+ * household that needs to be told to paste a link, so a search producing
+ * nothing renders `LibrarySearchEmptyState` with copy from
+ * librarySearchCopy.ts, gated on `rows.length > 0` — the branch below it,
+ * never the one above.
+ *
+ * THREE COLUMNS AT 4:5 (the owner: "3 recepten breed"), and the grid is
+ * MEASURED rather than flexed — libraryGridMetrics.ts owns every number and
+ * says why a `flex: 1` cell breaks a partial last row at three columns.
  *
  * THE SORT ROW (LIB-04) WAS REMOVED ON 2026-09-05 at the owner's request
  * ("sorteren kan voor nu weg"), taking with it the `sort` state, the
@@ -128,48 +158,31 @@
  * `LibraryTileActionSheet` §3.1 already uses, never a second modal.
  */
 
-import { useCallback, useMemo, useReducer, useRef, useState, type JSX } from 'react';
+import { useCallback, useMemo, useState, type JSX } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { AccessibilityInfo, FlatList, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { FlatList, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { collectAvailableDishMoods } from '@/domain/dishMoods';
-import {
-  NO_LIBRARY_SEARCH,
-  collectAvailableDishTags,
-  filterLibraryRows,
-  type LibrarySearchState,
-} from '@/domain/recipeSearch';
-import type { HouseholdId, Meal, MealId } from '@/domain/types';
+import { NO_LIBRARY_SEARCH, type LibrarySearchState } from '@/domain/recipeSearch';
+import type { HouseholdId, MealId } from '@/domain/types';
 import { Button } from '@/components/Button';
 import { describeEmptyLibrary } from '@/components/emptyLibraryCopy';
 import { LibraryHeader } from '@/components/LibraryHeader';
+import { filterLibraryGrid } from '@/components/libraryGridFilter';
+import {
+  LIBRARY_GRID_COLUMNS,
+  LIBRARY_GRID_GUTTER,
+  libraryTileHeight,
+  libraryTileWidth,
+} from '@/components/libraryGridMetrics';
 import { LibrarySearchBar } from '@/components/LibrarySearchBar';
 import { LibrarySearchEmptyState } from '@/components/LibrarySearchEmptyState';
 import { describeLibrarySearchEmpty } from '@/components/librarySearchCopy';
-import {
-  INITIAL_LIBRARY_REMOVAL,
-  LIBRARY_REMOVE_FAILED_ANNOUNCEMENT,
-  describeLibraryRemovedAnnouncement,
-  reduceLibraryRemoval,
-} from '@/components/libraryRemovalCopy';
-import {
-  INITIAL_LIBRARY_SCHEDULING,
-  LIBRARY_SCHEDULE_FAILED_NOTE,
-  LIBRARY_UNSCHEDULE_FAILED_NOTE,
-  describeLibraryScheduledAnnouncement,
-  describeLibraryUnscheduledAnnouncement,
-  reduceLibraryScheduling,
-} from '@/components/librarySchedulingCopy';
 import { LibraryTileActionSheet } from '@/components/LibraryTileActionSheet';
-import {
-  COOK_PROOF_WRITE_FAILED_ANNOUNCEMENT,
-  INITIAL_COOK_PROOF_EXCLUSION,
-  describeCookProofExclusionAnnouncement,
-  reduceCookProofExclusion,
-} from '@/components/libraryTileActionCopy';
+import { LIBRARY_TILE_OPEN_RECIPE_HINT } from '@/components/libraryTileActionCopy';
 import { RecipeTile } from '@/components/RecipeTile';
 import { sortMealsByScheduling, type ScheduledMealRow } from '@/components/recipeScheduling';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
+import { useLibraryTileActions } from '@/components/useLibraryTileActions';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useSession } from '@/hooks/useSession';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
@@ -178,8 +191,8 @@ import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
 
-const GRID_COLUMNS = 2;
-const LOADING_TILE_COUNT = 6;
+/** Three rows of placeholders at three columns — about one screenful, matching what the real grid shows. */
+const LOADING_TILE_COUNT = 9;
 
 /**
  * The first-run empty state's words (ENT-05), resolved once at module load
@@ -224,57 +237,38 @@ export default function RecipesScreen(): JSX.Element {
   const [phase, setPhase] = useState<ScreenPhase>('loading');
   const [rows, setRows] = useState<readonly ScheduledMealRow[]>([]);
 
-  // LIB-01/LIB-03. `rows` above stays the full, repository-fetched set —
-  // see this file's header for why filtering never touches it and instead
-  // derives a view. `availableDishTags`/`availableDishMoods` are computed
-  // from the FULL set, not `visibleRows`, so a chip a household has
-  // already selected never disappears out from under them just because
-  // their current query also narrowed the pool to nothing that carries it.
-  const [search, setSearch] = useState<LibrarySearchState>(NO_LIBRARY_SEARCH);
-  const availableDishTags = useMemo(() => collectAvailableDishTags(rows.map((row) => row.meal)), [rows]);
-  const availableDishMoods = useMemo(() => collectAvailableDishMoods(rows.map((row) => row.meal)), [rows]);
-  // The only transform between `rows` and what the grid draws. Filtering
-  // never reorders what survives it (this file's header), so "deze week
-  // eerst" reaches the screen intact without this line having to assert it.
-  const visibleRows = useMemo(() => filterLibraryRows(rows, search), [rows, search]);
-
-  const [actionSheetMeal, setActionSheetMeal] = useState<Meal | null>(null);
-  const [exclusion, dispatchExclusion] = useReducer(reduceCookProofExclusion, INITIAL_COOK_PROOF_EXCLUSION);
   /**
-   * The dish whose exclusion the reducer currently describes. Every async
-   * resolution below checks it before dispatching, because closing the
-   * sheet and long-pressing a different tile is one flick apart: without
-   * this, a slow read for the dish you just closed lands on the dish you
-   * just opened and tells you it is withheld when it is not. A `cancelled`
-   * boolean per call would cover the close but not the switch.
-   */
-  const exclusionMealRef = useRef<MealId | null>(null);
-
-  // LIB-04 — "Verwijderen". Same shape as `exclusion`/`exclusionMealRef`
-  // above, for the same reason: `openActionSheet` resets both to a fresh
-  // dish's starting state, and `removalMealRef` guards `commitRemoval`'s
-  // async resolution against landing on a dish the household has since
-  // closed or switched away from.
-  const [removal, dispatchRemoval] = useReducer(reduceLibraryRemoval, INITIAL_LIBRARY_REMOVAL);
-  const removalMealRef = useRef<MealId | null>(null);
-
-  /**
-   * "Deze week" / "Uit de week halen" — the library-side half of planning,
-   * which this app shipped without: `createSave` was reachable from the
-   * import confirmation screen and nowhere else, so a dish could only ever
-   * be planned at the moment it arrived. See librarySchedulingCopy.ts.
+   * LIB-01/LIB-03/LIB-05. `rows` above stays the full, repository-fetched
+   * set — see this file's header for why filtering never touches it and
+   * instead derives a view.
    *
-   * NO `loadScheduling` BESIDE `loadExclusion`, and the absence is the
-   * design. Whether this dish is in the week is already resolved for every
-   * tile in the grid by `resolveRecipeSchedulingState` — it is what draws
-   * the badge the user just long-pressed — so `openActionSheet` is handed
-   * that answer rather than reading it again. A second read would be a
-   * second definition of "deze week", which `listPendingSaves`' own doc
-   * comment warns against.
+   * ONE MEMO FOR ALL FIVE AXES, AND THE CHIPS COME OUT OF IT TOO. It used to
+   * be three: `filterLibraryRows` for the grid, and two `collect…` calls that
+   * asked the FULL library which chips to offer. That second half was wrong
+   * in a way nothing on screen admitted — `requiredDishTags` is ANDed, so
+   * after one chip was chosen every non-co-occurring chip was still offered
+   * and every one of them returned zero. libraryGridFilter.ts carries the
+   * whole argument, and the property the old comment was protecting ("a chip
+   * a household has already selected never disappears out from under them")
+   * is now guaranteed explicitly rather than as a side effect of not
+   * narrowing at all.
    */
-  const [scheduling, dispatchScheduling] = useReducer(reduceLibraryScheduling, INITIAL_LIBRARY_SCHEDULING);
-  const schedulingMealRef = useRef<MealId | null>(null);
+  const [search, setSearch] = useState<LibrarySearchState>(NO_LIBRARY_SEARCH);
+  const grid = useMemo(() => filterLibraryGrid(rows, search), [rows, search]);
+  const visibleRows = grid.rows;
 
+  /**
+   * The grid is measured rather than flexed, because at three columns a
+   * `flex: 1` cell stretches to fill a PARTIAL last row — a seventh recipe
+   * drawn triple width. `libraryGridMetrics.ts` owns the arithmetic and its
+   * test is WS-2 §5's density table.
+   *
+   * `useWindowDimensions` and not `Dimensions.get`: it re-renders on
+   * rotation and on a foldable's hinge, where the static read would leave
+   * every tile the width of the screen the app started on.
+   */
+  const { width: windowWidth } = useWindowDimensions();
+  const tileWidth = libraryTileWidth(windowWidth);
 
   const refresh = useCallback(() => {
     let cancelled = false;
@@ -301,50 +295,28 @@ export default function RecipesScreen(): JSX.Element {
 
   useFocusEffect(refresh);
 
-  const loadExclusion = useCallback((mealId: MealId): void => {
-    dispatchExclusion({ type: 'load-started' });
-    getAppRepository()
-      .getMealCookProofExclusion(mealId)
-      .then((excluded: boolean) => {
-        if (exclusionMealRef.current === mealId) {
-          dispatchExclusion({ type: 'load-succeeded', excluded });
-        }
-      })
-      .catch(() => {
-        if (exclusionMealRef.current === mealId) {
-          dispatchExclusion({ type: 'load-failed' });
-        }
-      });
-  }, []);
-
-  const openActionSheet = useCallback(
-    /**
-     * `isPlanned` is passed IN, from the row the user long-pressed, rather
-     * than read here — see the `scheduling` reducer above for why the sheet
-     * must not answer that question a second time.
-     */
-    (meal: Meal, isPlanned: boolean): void => {
-      exclusionMealRef.current = meal.id;
-      setActionSheetMeal(meal);
-      loadExclusion(meal.id);
-      // LIB-04: a freshly opened sheet always starts at "Verwijderen" idle
-      // — see libraryRemovalCopy.ts's header on why there is nothing to
-      // read here, unlike the exclusion above.
-      removalMealRef.current = meal.id;
-      dispatchRemoval({ type: 'reset' });
-      schedulingMealRef.current = meal.id;
-      dispatchScheduling({ type: 'opened', isPlanned });
-    },
-    [loadExclusion],
-  );
-
-  const closeActionSheet = useCallback((): void => {
-    exclusionMealRef.current = null;
-    setActionSheetMeal(null);
-    removalMealRef.current = null;
-    dispatchRemoval({ type: 'reset' });
-    schedulingMealRef.current = null;
-  }, []);
+  /**
+   * The long-press sheet's three writes and their state, in
+   * src/components/useLibraryTileActions.ts — see that module's header for
+   * why they left this file (the 800-line ceiling) and why its two callbacks
+   * are shaped the way they are.
+   *
+   * THE TWO CALLBACKS ARE OPPOSITE ON PURPOSE. A removal drops one row
+   * locally, because an archived meal would be excluded by the next
+   * `listHouseholdMeals` read regardless and a full reload would be a loading
+   * state over a grid that mostly did not change. A scheduling change
+   * refreshes, because a save changes what `resolveRecipeSchedulingState`
+   * computes and `sortMealsByScheduling` then reorders the grid around;
+   * reproducing that here would be a second implementation of the ordering
+   * rule.
+   */
+  const actions = useLibraryTileActions({
+    onRemoved: useCallback((mealId: MealId): void => {
+      setRows((current) => current.filter((row) => row.meal.id !== mealId));
+    }, []),
+    onSchedulingChanged: refresh,
+  });
+  const closeActions = actions.close;
 
   /**
    * RCP-03 — "Aanpassen" on the long-press sheet.
@@ -367,199 +339,15 @@ export default function RecipesScreen(): JSX.Element {
    * to get it.
    */
   const openRecipeEdit = useCallback(
-    (meal: Meal) => {
-      closeActionSheet();
-      router.push(`/recipe-edit/${meal.id}`);
+    (mealId: MealId) => {
+      closeActions();
+      router.push(`/recipe-edit/${mealId}`);
     },
-    [closeActionSheet, router],
+    // `actions.close` and not `actions`: the hook returns a fresh object every
+    // render, so depending on the whole thing would rebuild this callback on
+    // every keystroke in the search field.
+    [closeActions, router],
   );
-
-  /**
-   * Optimistic, then confirmed. The row flips the instant it is tapped
-   * (`write-started`), and one of exactly three things follows:
-   *
-   * - the write fails -> `write-failed` rolls the row back to where it was
-   *   and says so under it. Nothing was withheld and nothing pretends to
-   *   have been.
-   * - the write lands and the re-read agrees -> `write-succeeded` with the
-   *   repository's own answer, not the guess.
-   * - the write lands but the re-read fails -> `load-failed`. NOT
-   *   `write-failed`: the change may well have gone through, so claiming
-   *   "er is niets veranderd" would be the one wrong thing to say. The
-   *   sheet drops back to "we can't read this right now" with a retry.
-   */
-  const commitExclusion = useCallback(async (mealId: MealId, nextExcluded: boolean): Promise<void> => {
-    const repository = getAppRepository();
-    dispatchExclusion({ type: 'write-started' });
-
-    try {
-      await repository.setMealCookProofExclusion(mealId, nextExcluded);
-    } catch {
-      if (exclusionMealRef.current === mealId) {
-        dispatchExclusion({ type: 'write-failed' });
-        AccessibilityInfo.announceForAccessibility(COOK_PROOF_WRITE_FAILED_ANNOUNCEMENT);
-      }
-      return;
-    }
-
-    try {
-      const confirmed = await repository.getMealCookProofExclusion(mealId);
-      if (exclusionMealRef.current === mealId) {
-        dispatchExclusion({ type: 'write-succeeded', excluded: confirmed });
-        // The sheet morphs in place with no navigation — the same silent
-        // state change SaveIntentSheet and AllergenTaggingSection announce.
-        AccessibilityInfo.announceForAccessibility(describeCookProofExclusionAnnouncement(confirmed));
-      }
-    } catch {
-      if (exclusionMealRef.current === mealId) {
-        dispatchExclusion({ type: 'load-failed' });
-      }
-    }
-  }, []);
-
-  const handleCookProofRowPress = useCallback((): void => {
-    if (actionSheetMeal === null) {
-      return;
-    }
-    // In `unavailable` the row IS the retry — there is no value to toggle
-    // yet, and guessing one is exactly what the getter refuses to do.
-    if (exclusion.phase === 'unavailable') {
-      loadExclusion(actionSheetMeal.id);
-      return;
-    }
-    if (exclusion.phase !== 'ready' || exclusion.pending) {
-      return;
-    }
-    void commitExclusion(actionSheetMeal.id, !exclusion.excluded);
-  }, [actionSheetMeal, exclusion, loadExclusion, commitExclusion]);
-
-  // -------------------------------------------------------------------------
-  // Verwijderen (LIB-04) — the third thing the long-press sheet offers, and
-  // the only one that removes a dish from the grid rather than changing how
-  // it is shared. See libraryRemovalCopy.ts's header for why archiving
-  // (never a hard delete) and why a two-button in-place confirm.
-  // -------------------------------------------------------------------------
-
-  const handleRequestRemoval = useCallback((): void => {
-    dispatchRemoval({ type: 'request-removal' });
-  }, []);
-
-  const handleCancelRemoval = useCallback((): void => {
-    dispatchRemoval({ type: 'cancel-removal' });
-  }, []);
-
-  /**
-   * Unlike `commitExclusion`, there is no re-read after the write and no
-   * rollback on the row: `archiveMeal` either lands or throws, and a
-   * confirmed removal has nowhere to roll back TO — the sheet closes and
-   * the tile leaves the grid the moment the write succeeds. On failure the
-   * sheet stays open and the row itself becomes the retry (`failed` phase),
-   * matching `describeLibraryRemovalRow`'s contract.
-   */
-  const commitRemoval = useCallback(async (meal: Meal): Promise<void> => {
-    dispatchRemoval({ type: 'confirm-removal' });
-
-    try {
-      await getAppRepository().archiveMeal(meal.id);
-    } catch {
-      if (removalMealRef.current === meal.id) {
-        dispatchRemoval({ type: 'removal-failed' });
-        AccessibilityInfo.announceForAccessibility(LIBRARY_REMOVE_FAILED_ANNOUNCEMENT);
-      }
-      return;
-    }
-
-    if (removalMealRef.current !== meal.id) {
-      return;
-    }
-    // The tile leaves the grid immediately — an archived meal would be
-    // filtered out by the next `listHouseholdMeals` read regardless (this
-    // file's header: `archivedAt === null`), so updating `rows` locally
-    // rather than a full `refresh()` is the cheaper way to the same result,
-    // and it avoids a loading flash over a grid that mostly did not change.
-    setRows((current) => current.filter((row) => row.meal.id !== meal.id));
-    closeActionSheet();
-    AccessibilityInfo.announceForAccessibility(describeLibraryRemovedAnnouncement(meal.title));
-  }, [closeActionSheet]);
-
-  const handleConfirmRemoval = useCallback((): void => {
-    if (actionSheetMeal === null || removal.phase !== 'confirming') {
-      return;
-    }
-    void commitRemoval(actionSheetMeal);
-  }, [actionSheetMeal, removal, commitRemoval]);
-
-  /**
-   * The write behind the "Deze week" row, in whichever direction the row is
-   * currently pointing.
-   *
-   * IT DOES NOT CLOSE THE SHEET, unlike `commitRemoval`. Removal ends the
-   * dish's presence in this grid, so there is nothing left to be on screen;
-   * planning is reversible in one tap, and the row morphing in place is the
-   * confirmation (librarySchedulingCopy.ts). Closing would take that
-   * feedback away at the moment it is earned.
-   *
-   * IT REFRESHES RATHER THAN PATCHING `rows` LOCALLY, which is the opposite
-   * of what removal does and for a reason worth stating: a save changes the
-   * SCHEDULING of a meal, and `resolveRecipeSchedulingState` computes that
-   * from saves and cook events together, then `sortMealsByScheduling`
-   * reorders the grid around it. Reproducing that here would be a second
-   * implementation of the ordering rule; removal only had to drop a row,
-   * which is genuinely local.
-   *
-   * `memberId: null` — the same value the import confirmation screen
-   * writes. A save belongs to the household, and nothing in this app asks
-   * which member planned a dish.
-   */
-  const commitScheduling = useCallback(
-    async (meal: Meal, isPlanned: boolean): Promise<void> => {
-      dispatchScheduling({ type: 'toggle-started' });
-
-      try {
-        const repository = getAppRepository();
-        const householdId = await repository.getCurrentHouseholdId();
-        if (isPlanned) {
-          await repository.removeSaves(householdId, meal.id, 'this_week');
-        } else {
-          await repository.createSave({
-            householdId,
-            memberId: null,
-            mealId: meal.id,
-            intent: 'this_week',
-            sourceUrl: null,
-          });
-        }
-      } catch {
-        // The ref guard `commitRemoval` and `commitExclusion` both use: a
-        // slow write must not report its failure onto whichever dish the
-        // sheet has since been reopened on.
-        if (schedulingMealRef.current === meal.id) {
-          dispatchScheduling({ type: 'toggle-failed' });
-          AccessibilityInfo.announceForAccessibility(
-            isPlanned ? LIBRARY_UNSCHEDULE_FAILED_NOTE : LIBRARY_SCHEDULE_FAILED_NOTE,
-          );
-        }
-        return;
-      }
-
-      if (schedulingMealRef.current !== meal.id) {
-        return;
-      }
-      dispatchScheduling({ type: 'toggle-succeeded' });
-      AccessibilityInfo.announceForAccessibility(
-        isPlanned ? describeLibraryUnscheduledAnnouncement(meal.title) : describeLibraryScheduledAnnouncement(meal.title),
-      );
-      refresh();
-    },
-    [refresh],
-  );
-
-  const handleSchedulingRowPress = useCallback((): void => {
-    if (actionSheetMeal === null || scheduling.phase === 'pending') {
-      return;
-    }
-    void commitScheduling(actionSheetMeal, scheduling.isPlanned);
-  }, [actionSheetMeal, scheduling, commitScheduling]);
 
   /**
    * Sturen (DESIGN-SOCIAL.md §3.1 / §4.1) — the second thing the long-press
@@ -574,11 +362,19 @@ export default function RecipesScreen(): JSX.Element {
    */
   const send = useLibrarySendSheet({
     userId,
-    onBeforeOpen: useCallback((): void => {
-      exclusionMealRef.current = null;
-      setActionSheetMeal(null);
-    }, []),
+    // Two stacked modals over one dish means two scrims and a back gesture
+    // whose meaning depends on which is on top — and this screen is the only
+    // thing that can close the other one.
+    onBeforeOpen: closeActions,
   });
+
+  /**
+   * Bound to a local before the JSX so TypeScript's narrowing survives into
+   * the callbacks below. `actions.meal !== null` narrows a property read, but
+   * not one inside an arrow function that could run after the check — and the
+   * sheet's `onSturen`/`onAanpassen` are exactly that.
+   */
+  const actionSheetMeal = actions.meal;
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
@@ -630,8 +426,10 @@ export default function RecipesScreen(): JSX.Element {
       {phase === 'ready' && rows.length > 0 ? (
         <LibrarySearchBar
           search={search}
-          availableDishTags={availableDishTags}
-          availableDishMoods={availableDishMoods}
+          selectableDishTags={grid.selectableDishTags}
+          selectableDishMoods={grid.selectableDishMoods}
+          selectableDishCourses={grid.selectableDishCourses}
+          selectableSchedulingStates={grid.selectableSchedulingStates}
           onChange={setSearch}
         />
       ) : null}
@@ -644,14 +442,30 @@ export default function RecipesScreen(): JSX.Element {
         <FlatList
           data={visibleRows}
           keyExtractor={(row: ScheduledMealRow) => row.meal.id}
-          numColumns={GRID_COLUMNS}
+          numColumns={LIBRARY_GRID_COLUMNS}
           columnWrapperStyle={styles.gridRow}
           renderItem={({ item }: { item: ScheduledMealRow }) => (
-            <RecipeTile
-              meal={item.meal}
-              scheduling={item.scheduling}
-              onLongPress={() => openActionSheet(item.meal, item.scheduling.state === 'deze_week')}
-            />
+            // The exact width, not `flex: 1`: a flexed cell stretches to fill
+            // a PARTIAL last row, so at three columns a seventh recipe would
+            // be drawn triple width. See libraryGridMetrics.ts for why this
+            // is measured rather than expressed as a percentage, and why the
+            // placeholder-row alternative was rejected.
+            <View style={{ width: tileWidth }}>
+              <RecipeTile
+                meal={item.meal}
+                scheduling={item.scheduling}
+                // A TAP OPENS THE RECIPE, NOT COOK MODE — see this file's
+                // header for the argument, and RecipeTile's for why the prop
+                // exists. `accessibilityHint` moves with it, because that
+                // component's header asks any caller overriding `onPress` to
+                // override the hint too: a tile still promising cook mode
+                // while opening something else would lie to exactly the users
+                // who cannot see where they landed.
+                onPress={() => router.push(`/recipe/${item.meal.id}`)}
+                accessibilityHint={LIBRARY_TILE_OPEN_RECIPE_HINT}
+                onLongPress={() => actions.open(item.meal, item.scheduling.state === 'deze_week')}
+              />
+            </View>
           )}
           contentContainerStyle={styles.gridContent}
         />
@@ -663,17 +477,17 @@ export default function RecipesScreen(): JSX.Element {
         <LibraryTileActionSheet
           visible
           dishTitle={actionSheetMeal.title}
-          cookProofExclusion={exclusion}
-          onPressCookProofRow={handleCookProofRowPress}
+          cookProofExclusion={actions.exclusion}
+          onPressCookProofRow={actions.onPressCookProofRow}
           onSturen={() => send.open(actionSheetMeal)}
-          onAanpassen={() => openRecipeEdit(actionSheetMeal)}
-          scheduling={scheduling}
-          onPressSchedulingRow={handleSchedulingRowPress}
-          removal={removal}
-          onRequestRemoval={handleRequestRemoval}
-          onCancelRemoval={handleCancelRemoval}
-          onConfirmRemoval={handleConfirmRemoval}
-          onDismiss={closeActionSheet}
+          onAanpassen={() => openRecipeEdit(actionSheetMeal.id)}
+          scheduling={actions.scheduling}
+          onPressSchedulingRow={actions.onPressSchedulingRow}
+          removal={actions.removal}
+          onRequestRemoval={actions.onRequestRemoval}
+          onCancelRemoval={actions.onCancelRemoval}
+          onConfirmRemoval={actions.onConfirmRemoval}
+          onDismiss={actions.close}
           reduceMotionEnabled={reduceMotionEnabled}
         />
       ) : null}
@@ -698,16 +512,37 @@ export default function RecipesScreen(): JSX.Element {
   );
 }
 
-/** Loading state: a grid of flat surfaceSunken tiles, no shimmer — docs/DESIGN.md §2. */
+/**
+ * Loading state: a grid of flat surfaceSunken tiles, no shimmer —
+ * docs/DESIGN.md §2.
+ *
+ * IT DRAWS THE SAME RECTANGLE THE REAL GRID DOES, which it did not before:
+ * the placeholders were `width: '47%'` and `aspectRatio: 9 / 16` while the
+ * tile beside them was `flex: 1` at the same aspect — 48.4% in practice, so
+ * the stand-in was a different shape from the thing it stood in for and the
+ * grid visibly resettled when the data arrived. Both now come from
+ * libraryGridMetrics.ts, which is the whole reason that module exists.
+ */
 function LoadingGrid(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
+  const { width: windowWidth } = useWindowDimensions();
   const placeholders = Array.from({ length: LOADING_TILE_COUNT }, (_, index) => index);
 
   return (
     <View style={styles.loadingGrid} accessibilityLabel="Recepten laden" accessible>
       {placeholders.map((index) => (
-        <View key={index} style={[styles.loadingTile, { backgroundColor: colors.surfaceSunken }]} />
+        <View
+          key={index}
+          style={[
+            styles.loadingTile,
+            {
+              backgroundColor: colors.surfaceSunken,
+              width: libraryTileWidth(windowWidth),
+              height: libraryTileHeight(windowWidth),
+            },
+          ]}
+        />
       ))}
     </View>
   );
@@ -720,20 +555,19 @@ const styles = StyleSheet.create({
   gridContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
     paddingBottom: spacing.space10,
-    gap: spacing.space3,
+    gap: LIBRARY_GRID_GUTTER,
   },
   gridRow: {
-    gap: spacing.space3,
+    gap: LIBRARY_GRID_GUTTER,
   },
   loadingGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    gap: spacing.space3,
+    gap: LIBRARY_GRID_GUTTER,
   },
   loadingTile: {
-    width: '47%',
-    aspectRatio: 9 / 16,
+    // Width and height come from the props, not from here — see LoadingGrid.
     borderRadius: radii.radiusSm,
   },
   empty: {

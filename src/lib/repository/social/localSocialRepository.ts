@@ -41,7 +41,7 @@ import type {
   RecipeId,
   RecipeRating,
 } from '@/domain/social/types';
-import type { IsoDateTimeString, Meal, MealId, MealIngredient } from '@/domain/types';
+import type { Household, IsoDateTimeString, Meal, MealId, MealIngredient } from '@/domain/types';
 import { nowIso } from '../clock';
 import { generateLocalId } from '../id';
 import type { KeyValueStore } from '../keyValueStore';
@@ -83,28 +83,55 @@ interface SocialTables {
   readonly recipeRatings: TableAccessor<RecipeRating>;
   readonly recipeShares: TableAccessor<StoredRecipeShare>;
   /**
-   * READ-ONLY, AND OWNED BY THE OTHER REPOSITORY. These two are
+   * READ-ONLY, AND OWNED BY THE OTHER REPOSITORY. These three are
    * localRepository.ts's tables (src/lib/repository/local/tables.ts), and
    * nothing in this file ever writes to them.
    *
    * They are reachable at all because both repositories are built over the
    * same `KeyValueStore`, which is the local analogue of both backends
-   * living in one Postgres. `listMealsSentToMe` is the one method here
-   * that has to cross that line, for the reason its interface comment
-   * gives: the permission is a fact about a `recipe_shares` row, and this
-   * is the seam that owns `recipe_shares`. Postgres solves the identical
-   * problem the identical way — `meals` and `meal_ingredients` gain an
-   * ADDITIONAL select policy gated on `has_active_send_to_me` (0009)
-   * rather than the social tables growing a copy of the meal.
+   * living in one Postgres. `listMealsSentToMe` is one method here that
+   * has to cross that line, for the reason its interface comment gives:
+   * the permission is a fact about a `recipe_shares` row, and this is the
+   * seam that owns `recipe_shares`. Postgres solves the identical problem
+   * the identical way — `meals` and `meal_ingredients` gain an ADDITIONAL
+   * select policy gated on `has_active_send_to_me` (0009) rather than the
+   * social tables growing a copy of the meal.
    *
-   * KNOWN DUPLICATION, stated rather than hidden: the two key strings are
-   * spelled here and in local/tables.ts. Importing that module would drag
-   * a nine-table constructor and its whole type graph in to read two keys,
-   * so the smaller wrong is two string literals with this comment pointing
-   * at the other copy.
+   * `households` IS THE THIRD CROSSING, AND IT WAS WEIGHED RATHER THAN
+   * WAVED THROUGH. `listNamableRecipeVotes` mirrors the
+   * `namable_recipe_votes` view (0016), whose predicate has two grains:
+   * the per-dish exclusion, and the household's global
+   * `share_cooks_with_friends` narrowed by `meals`. Without this accessor
+   * the local twin can implement only the first, and would then NAME a
+   * vote the view withholds.
+   *
+   * That is exactly the direction `sendRecipe` below refuses in as many
+   * words — "leaving it out would let a local test pass a flow that RLS
+   * refuses in production, which is the precise seam bug having two
+   * backends is supposed to catch". The alternative was to keep the
+   * asymmetry and document it, the way `listFriendCookedRecipes` documents
+   * returning nothing. That is honest where the store genuinely CANNOT
+   * answer — there is no friend's kitchen on this device to read — but it
+   * is not honest here: the household row is sitting in the same store,
+   * and the view reads `households` too. Refusing would have been a
+   * privacy-relevant disagreement between the two backends, chosen for
+   * tidiness, with a comment apologising for it.
+   *
+   * It is the same CATEGORY as the two above rather than a new kind of
+   * reach: another table this file never writes, read to answer a question
+   * about PERMISSION rather than about content. What it is not is a
+   * licence for more — a fourth crossing needs its own paragraph here,
+   * naming the view or policy it mirrors.
+   *
+   * KNOWN DUPLICATION, stated rather than hidden: the three key strings
+   * are spelled here and in local/tables.ts. Importing that module would
+   * drag a nine-table constructor and its whole type graph in to read
+   * three keys, so the smaller wrong is three string literals with this
+   * comment pointing at the other copy.
    */
   readonly meals: TableAccessor<Meal>;
   readonly mealIngredients: TableAccessor<MealIngredient>;
+  readonly households: TableAccessor<Household>;
 }
 
 /** One key per table, named after 0007_social.sql and 0009_cook_proof_and_sends.sql, `remy:`-prefixed exactly like local/tables.ts. */
@@ -116,6 +143,7 @@ function createSocialTables(store: KeyValueStore): SocialTables {
     recipeShares: createTableAccessor<StoredRecipeShare>(store, 'remy:recipe_shares'),
     meals: createTableAccessor<Meal>(store, 'remy:meals'),
     mealIngredients: createTableAccessor<MealIngredient>(store, 'remy:meal_ingredients'),
+    households: createTableAccessor<Household>(store, 'remy:households'),
   };
 }
 
@@ -395,6 +423,94 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
       // fifty thousand ratings locally has a different problem than a
       // board that cannot be computed.
       return tables.recipeRatings.list();
+    },
+
+    /**
+     * The in-memory counterpart of the `namable_recipe_votes` view (0016).
+     *
+     * BOTH GRAINS, BECAUSE THE VIEW HAS BOTH. A vote is withheld when the
+     * voter's household has that recipe as a meal AND either that meal is
+     * marked "deel deze niet" (`excluded_from_cook_proof`) or the
+     * household has `share_cooks_with_friends` off. Same two anti-joins,
+     * same polarity, same order.
+     *
+     * THE `meals` NARROWING IS THE POINT OF THE SECOND GRAIN, not an
+     * optimisation, and it is the reason this is not simply "the household
+     * shares nothing, hide everything". A vote cast from the board by
+     * somebody who never cooked the dish is not a disclosure about
+     * cooking, so a switch about cooking must not hide it. Requiring a
+     * meal for that recipe is what keeps a board-only voter namable with
+     * the switch off — see 0016's header, and the test named for it.
+     *
+     * WHAT THIS STORE CAN AND CANNOT ESTABLISH, stated rather than papered
+     * over — the same accounting `sendRecipe` does below about which of
+     * 0009's three insert clauses it can honestly keep.
+     *
+     * It CAN read `households` now: see the third paragraph on
+     * `SocialTables` above for why that crossing was added rather than the
+     * disagreement being documented. Meals carry `householdId`, so the two
+     * grains are evaluated per household exactly as the view does, not
+     * collapsed onto "the one household this device has".
+     *
+     * It CANNOT map a VOTER to a household. That bridge is
+     * `household_members.auth_user_id`, and there is no such table in this
+     * store at all — not withheld from `SocialTables`, absent from the
+     * local model. So the withholding is applied to EVERY vote on an
+     * affected recipe rather than only to votes by that household's
+     * members, and the asymmetry is deliberately the safe one: a local run
+     * HIDES a vote the real backend would have named, which surfaces as a
+     * missing name in a test. The inverse — naming a vote Postgres
+     * withholds — is the seam bug having two backends exists to catch, and
+     * it is a privacy bug rather than a cosmetic one.
+     *
+     * `?? false` twice, and the two defaults mean opposite things on
+     * purpose, exactly as they do in local/meals.ts and local/household.ts.
+     * A meal row written before 0009 carries no exclusion key and absent
+     * means "nobody asked for this dish to be withheld" — fails open, and
+     * correctly. A household row written before 0009 carries no sharing
+     * key and absent means "never asked", which per §5 means shares
+     * nothing — fails closed, and also correctly. Reading either the other
+     * way round would be a consent inferred from a missing key.
+     */
+    async listNamableRecipeVotes(): Promise<readonly RecipeRating[]> {
+      const [ratings, meals, households] = await Promise.all([
+        tables.recipeRatings.list(),
+        tables.meals.list(),
+        tables.households.list(),
+      ]);
+      const nonSharingHouseholdIds = new Set(
+        households.filter((household) => !(household.shareCooksWithFriends ?? false)).map((household) => household.id),
+      );
+      const withheldRecipeIds = new Set<RecipeId>();
+      for (const meal of meals) {
+        const recipeId = meal.recipeId;
+        // A meal with no canonical recipe names no shared object, so there
+        // is nothing for a vote to be withheld FROM — the same reason
+        // `shared_cooks` filters on `m.recipe_id is not null`.
+        if (recipeId === null || recipeId === undefined) {
+          continue;
+        }
+        // A CURATED MEAL WITHHOLDS NOTHING, IN EITHER GRAIN, and this
+        // guard is what mirrors the view rather than merely passing the
+        // compiler. `Meal.householdId` is null "only for curated meals:
+        // household-agnostic, visible to every household", and both of
+        // 0016's anti-joins are INNER joins through
+        // `m.household_id = hm.household_id` — a null never matches one,
+        // so a curated row cannot withhold a vote there either.
+        //
+        // It is also the right answer on its own terms: a curated meal is
+        // nobody's disclosure. Its `excluded_from_cook_proof` flag, if one
+        // were ever set, would silence a dish for every household at once
+        // on the say-so of whoever set it.
+        const householdId = meal.householdId;
+        if (householdId === null) {
+          continue;
+        }
+        if ((meal.excludedFromCookProof ?? false) || nonSharingHouseholdIds.has(householdId)) {
+          withheldRecipeIds.add(recipeId);
+        }
+      }
+      return ratings.filter((rating) => !withheldRecipeIds.has(rating.recipeId));
     },
 
     async listFriendCookedRecipes(): Promise<readonly FriendCook[]> {

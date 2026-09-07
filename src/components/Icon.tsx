@@ -5,6 +5,20 @@
  * carries that whole argument, and this component is the half of the seam
  * that renders.
  *
+ * SINCE GAP-19 THERE ARE THREE FAMILIES BEHIND IT AND STILL ONE PROP.
+ * Feather draws the UI glyphs, MaterialCommunityIcons the kitchen ones, and
+ * `remy` the two this app draws itself because no font has milk or a bean.
+ * Which of the three a name belongs to is decided in iconFont.ts and known
+ * here only as a discriminant. No caller passes a family, and none ever did —
+ * that is the migration WS4 §1 priced at "no call-site change beyond the
+ * import", collected twice.
+ *
+ * THE THIRD BRANCH IS AN `Svg`, NOT AN ICON COMPONENT, and it is held to the
+ * same contract rather than allowed to be special: `size` drives width and
+ * height with the viewBox scaling into them, and `color` becomes the fill. A
+ * caller cannot tell a drawn glyph from a font one, which is what lets
+ * remyGlyphs.ts stay a last resort instead of a parallel system.
+ *
  * WHY IT RETURNS `null` FOR AN UNAVAILABLE NAME — NEVER A BOX, NEVER A
  * PLACEHOLDER GLYPH, NEVER A QUESTION MARK IN A SQUARE. This is not
  * defensive tidiness; it is the direct lesson of GAP-25. expo-router 57
@@ -45,8 +59,10 @@
  */
 
 import type { JSX } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { resolveInstalledGlyph, type IconName } from './iconFont';
+import { REMY_GLYPH_CENTRE, REMY_GLYPH_VIEW_BOX, resolveRemyGlyph } from './remyGlyphs';
 
 export interface IconProps {
   readonly name: IconName;
@@ -70,9 +86,56 @@ export function Icon(props: IconProps): JSX.Element | null {
   if (glyph === null) {
     return null;
   }
+  // Narrowing on `family` rather than looking the component up in a map, and
+  // that is the load-bearing choice in this file since GAP-19. A
+  // `Record<IconFamily, ComponentType>` would type every glyph name as the
+  // union of BOTH fonts' names, so `pot-mix` would typecheck as a Feather
+  // glyph and render as an empty box at runtime — exactly the class of
+  // failure iconFont.ts's header says the compiler is here to catch. Two
+  // branches keep each name inside its own font's `name` prop, whose type is
+  // that glyphmap's key set.
+  if (glyph.family === 'remy') {
+    // The one family that is not a font. It renders through the same `size`
+    // and `color` props as the other two — the viewBox scales to `size`, the
+    // fill takes `color` — so a caller cannot tell which of the three it got,
+    // which is the whole promise of this seam. See remyGlyphs.ts for why two
+    // glyphs are hand-drawn and why a generated `.ttf` was rejected.
+    const drawing = resolveRemyGlyph(glyph.name);
+    return (
+      <Svg
+        width={size}
+        height={size}
+        viewBox={REMY_GLYPH_VIEW_BOX}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      >
+        <Path
+          d={drawing.path}
+          fill={color}
+          fillRule={drawing.fillRule}
+          transform={
+            drawing.rotationDegrees === 0
+              ? undefined
+              : `rotate(${drawing.rotationDegrees} ${REMY_GLYPH_CENTRE} ${REMY_GLYPH_CENTRE})`
+          }
+        />
+      </Svg>
+    );
+  }
+  if (glyph.family === 'material-community') {
+    return (
+      <MaterialCommunityIcons
+        name={glyph.name}
+        size={size}
+        color={color}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
+    );
+  }
   return (
     <Feather
-      name={glyph}
+      name={glyph.name}
       size={size}
       color={color}
       accessibilityElementsHidden

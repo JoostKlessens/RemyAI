@@ -26,10 +26,25 @@
  * PD-019 splits the two rating instruments: `cook_events.rating` is the
  * household's PRIVATE grade and the decision engine's input, and
  * `recipe_ratings` is the PUBLIC vote. The rule that keeps the engine
- * honest is that the private grade never becomes socially visible,
+ * honest is that the private COLUMN never becomes socially visible,
  * because a grade the proud cook knows her friends can see is a grade
  * that gets inflated, and an inflated grade corrupts every later
  * suggestion.
+ *
+ * A CORRECTION WORTH MAKING PRECISELY, because that sentence used to read
+ * "the private GRADE never becomes socially visible" and that is now too
+ * strong to be useful. Since src/domain/social/publicVote.ts, one gesture
+ * on the outcome card writes BOTH instruments — the private column and a
+ * public vote carrying the same number — so the value a cook types is
+ * visible, in aggregate and without their name, on Ranglijst. What
+ * survives untouched is the guarantee that actually protects the engine:
+ * no cross-household path reads `cook_events.rating` itself
+ * (`shared_cooks` omits the column outright rather than filtering it),
+ * and the public vote is cast in the knowledge that it is public. The
+ * inflation argument is unaffected either way — it is about a number
+ * attached to YOUR NAME in front of people you know, which the board
+ * never shows and which de kring withholds for a dish its household
+ * excluded (`namable_recipe_votes`, 0016).
  *
  * A mood carries no number and there is no better or worse mood, so there
  * is nothing in it to inflate. "Ik vond dit soul-food" says nothing

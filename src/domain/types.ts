@@ -59,6 +59,26 @@ export type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 export type MealSource = 'seeded' | 'saved' | 'curated';
 
 /**
+ * Where a dish sits in a meal — the owner's "voorgerecht, bijgerecht of
+ * toetje, standaard is iets een hoofdgerecht".
+ *
+ * THE UNION LIVES HERE AND EVERYTHING ELSE ABOUT IT LIVES IN
+ * src/domain/dishCourses.ts — the default, the Dutch labels, the ordering,
+ * the membership check, the boundary sanitizer and the reader that absorbs
+ * an absent value. The split is not a preference: that module imports
+ * `Meal` (it has to, to read the field), and this file deliberately imports
+ * nothing at all, which is the property dishMoods.ts's header points at
+ * when it says "types.ts imports nothing, so there is no cycle to close".
+ * A union declared there and consumed here would close exactly that cycle.
+ * `SaveIntent` beside `src/domain/saveIntent.ts` is the same split for the
+ * same reason.
+ *
+ * Read the field through `readMealDishCourse`, never directly — see
+ * `Meal.dishCourse`.
+ */
+export type DishCourse = 'voorgerecht' | 'hoofdgerecht' | 'bijgerecht' | 'toetje';
+
+/**
  * What a household member asked to happen with something they saved from
  * the Feed (F). "none" means "just bookmark it, don't schedule anything."
  *
@@ -310,15 +330,24 @@ export interface Meal {
    * both `winters` and `soul-food` and no cook's honest description
    * should be able to delete the previous one's.
    *
-   * IT IS PUBLIC BY DESIGN, AND IT IS SAFE TO BE (PD-019). The mood is
-   * the socially visible half of that moment and `CookEvent.rating` is
-   * the private half; they are written to two different rows by two
-   * different calls, and neither is ever derived from the other. What
-   * makes publishing this one safe is that a mood carries NO NUMBER and
-   * no mood is better than another, so there is nothing in it to inflate
-   * — the exact pressure PD-019 protects the private grade from. Nothing
+   * IT IS PUBLIC BY DESIGN, AND IT IS SAFE TO BE (PD-019). What makes
+   * publishing this one safe is that a mood carries NO NUMBER and no mood
+   * is better than another, so there is nothing in it to inflate — the
+   * exact pressure PD-019 protects the private grade from. Nothing
    * anywhere may turn a mood into a score, rank moods, or count them into
    * one.
+   *
+   * IT IS NO LONGER THE ONLY PUBLIC HALF OF THAT MOMENT, and this
+   * paragraph used to say it was. The outcome moment now produces THREE
+   * writes rather than two: this mood on the `meals` row;
+   * `CookEvent.rating` on `cook_events`, still private and still the
+   * engine's input; and a `recipe_ratings` vote carrying the same number
+   * as that grade (src/domain/social/publicVote.ts) — "the rating should
+   * also be represented in the global ranking of a recipe". PD-019's
+   * actual rule is intact and is narrower than the old sentence implied:
+   * the private COLUMN never crosses a household boundary, and the public
+   * vote is a separate row cast in the knowledge that it is public. None
+   * of the three is ever derived from another.
    *
    * NEVER MERGED WITH `ingredientTags`, and never with `dishTags` either.
    * The first is allergen data driving the PD-006 exclusion gate; the
@@ -340,7 +369,83 @@ export interface Meal {
    * directly — that is where the `Array.isArray` repair lives.
    */
   readonly dishMoods?: readonly string[];
-  /** Creator video URL for Feed items (F) — resolved to an oEmbed player by the UI layer. */
+  /**
+   * Where this dish sits in a meal — the THIRD taxonomy on this row, and
+   * the first one that is not a set. The owner's words: "een voorgerecht,
+   * bijgerecht of toetje ... standaard is iets een hoofdgerecht".
+   *
+   * READ IT THROUGH `readMealDishCourse` (src/domain/dishCourses.ts),
+   * NEVER DIRECTLY, and this is the field where that instruction carries
+   * the most weight: absence is not missing data here, it is the answer.
+   * A meal that has never said anything IS a hoofdgerecht, so a call site
+   * that tests this field itself gets `undefined` and has to invent the
+   * default a second time — which is how two screens end up disagreeing
+   * about what an unclassified recipe is.
+   *
+   * WHY IT IS NOT A SET, WHERE `dishTags` AND `dishMoods` ABOVE ARE. A
+   * dish is made of several things and can feel like several things; it
+   * occupies exactly one place in a meal. A dish that is both a starter
+   * and a dessert is not one dish, it is two. As a member of `dishTags`
+   * this would have been storable as `['toetje', 'voorgerecht']`, and the
+   * AND filter would then offer a household a request that is empty by
+   * construction. dishCourses.ts's header carries the full comparison of
+   * the three.
+   *
+   * NEVER MERGED WITH `ingredientTags` — the allergen list driving the
+   * PD-006 exclusion gate — for the reason both fields above state, and
+   * the four vocabularies are asserted to share no value
+   * (tests/dishCourses.test.ts).
+   *
+   * IT IS NOT A FILTER AXIS, and nothing here makes it one.
+   * `DecisionFilters` gains no field: `DecisionFilterBar`'s restraint 3
+   * says a third row of chips over the dish name "should have to argue
+   * against restraint 2, not merely be useful", and this change does not
+   * make that argument. The course is a label a recipe carries, which a
+   * screen may show and sort by; turning it into a filter is a separate
+   * decision with that restraint to answer to.
+   *
+   * OPTIONAL, exactly like `dishMoods?` and `recipeId?` above and for the
+   * identical two reasons: the field arrived after ~68 `Meal` object
+   * literals already existed across the codebase, several in files other
+   * hands own right now; and a missing key is already one of its legal
+   * readings, so there is no fail-safe state to lose. Rows written from
+   * here on always carry the key explicitly (see `buildMealRow` in
+   * src/lib/repository/local/meals.ts), so the ambiguity does not grow.
+   */
+  readonly dishCourse?: DishCourse;
+  /**
+   * The address of the post this recipe was read from: a TikTok video, an
+   * Instagram reel, a YouTube page, an ordinary recipe page. Null for
+   * everything the user handed over directly - manual entry, pasted text,
+   * a photographed cookbook page - and that null is an ordinary reading
+   * ("this recipe came from nowhere on the internet"), not missing data.
+   *
+   * THE SENTENCE THAT USED TO STAND HERE WAS FALSE IN BOTH HALVES, and it
+   * is recorded rather than quietly swapped out because it is this
+   * project's signature defect: a comment that argues for behaviour
+   * nobody built, which reads like evidence somebody checked. It said:
+   * "Creator video URL for Feed items (F) - resolved to an oEmbed player
+   * by the UI layer."
+   *
+   * The Feed was removed, so there are no Feed items. And no oEmbed
+   * player has ever existed anywhere under src/ - grepping for one turns
+   * up the opposite claim, stated in as many words by
+   * src/app/friends/[feedItemId].tsx's own header: "The video is never
+   * re-hosted or embedded. What renders is text plus one remote thumbnail
+   * reference; playback happens on the creator's own platform, always."
+   * Two comments, one of them wrong, and nothing in between them to say
+   * which.
+   *
+   * WHAT IS TRUE AS OF THIS CHANGE, AND NO MORE THAN THIS.
+   * src/domain/embed/resolveEmbedUrl.ts turns this field plus a platform
+   * into an embed URL or a typed refusal, and
+   * src/components/SourceVideoPlayer.tsx can render one. NOTHING IN THE
+   * PRODUCT MOUNTS THAT COMPONENT. Its only caller is the development
+   * probe at src/app/dev-embed-probe.tsx, which exists precisely because
+   * whether those four players work on a real phone is not knowable from
+   * this repository. Read this as "a player exists and is being
+   * measured", never as "the UI shows one".
+   */
   readonly sourceUrl: string | null;
   readonly sourcePlatform: 'tiktok' | 'reels' | null;
   /**

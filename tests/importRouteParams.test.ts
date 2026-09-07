@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { decodeImportConfirmParams, encodeImportConfirmParams, type ImportConfirmParams } from '@/app/import/routeParams';
+import { decodeImportConfirmParams, encodeImportConfirmParams, type ImportConfirmParams } from '@/navigation/importRouteParams';
 
 const RECIPE_ID = '11111111-2222-3333-4444-555555555555';
 

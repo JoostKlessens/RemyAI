@@ -10,8 +10,16 @@
  * purpose sat behind a control most people would never tap; on Trending the
  * friends ranking answers the SAME question as the global one at a
  * different scope, which is what a switch is actually for. The kring moved
- * there whole — `rankKring`, `assembleKring`, `KringRow` and its copy are
- * all unchanged — and this screen went back to being what its name says.
+ * there whole — `rankKring`, `assembleKring` and `KringRow` went across
+ * untouched — and this screen went back to being what its name says.
+ *
+ * ITS COPY DID NOT GO ACROSS UNTOUCHED, and this comment claimed for a
+ * while that it had. `b9b0f59` rewrote `KRING_END_COPY` and
+ * `KRING_EMPTY_TITLE` to WS3's end-note family, dropping the word *kring*
+ * from anything a user reads. The ranking and the row really are unchanged;
+ * only that sentence was wrong, and it is recorded here rather than quietly
+ * deleted because four documents made the same claim and were corrected on
+ * 6 September 2026 — see kringPresentation.ts, which carries the argument.
  * The state that went with it is gone from this file too, which is its own
  * small win: the tab now has a name, one action and a list.
  *
@@ -62,7 +70,7 @@
  * no longer ahead of the screen.
  *
  * LIVE, WITH FIXTURES BEHIND A DEV SWITCH — the same shape Trending uses,
- * and the reads themselves live next door in `_gekooktSource.ts`. Its
+ * and the reads themselves live in `@/lib/gekooktSource`. Its
  * header carries the argument this one used to: which half of the list is
  * live today, what a live proof card cannot say yet, and why a live SEND
  * card is still one type change away. Read it before concluding that
@@ -96,14 +104,14 @@ import { hapticCompleted } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DEFAULT_FRIEND_FEED_SCENARIO, FRIEND_FEED_SCENARIOS, type FriendFeedScenario } from '@/app/friends/_fixtures';
+import { DEFAULT_FRIEND_FEED_SCENARIO, FRIEND_FEED_SCENARIOS, type FriendFeedScenario } from '@/fixtures/friendFeedFixtures';
 import {
   NO_FRIENDS_DATA,
   loadFixtureFriends,
   loadLiveFriends,
   markVisitSeen,
   type FriendsData,
-} from '@/app/friends/_gekooktSource';
+} from '@/lib/gekooktSource';
 import {
   ADD_FRIEND_ENTRY_ACCESSIBILITY_LABEL,
   ADD_FRIEND_ENTRY_LABEL,

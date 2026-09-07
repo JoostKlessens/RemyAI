@@ -1,6 +1,13 @@
 /**
  * De kring's presentation layer — the copy and view models for the
- * `Kring` mode of Vrienden (docs/DESIGN-SOCIAL.md §2.2, §4.2).
+ * friends scope of Trending (docs/DESIGN-SOCIAL.md §2.2, §4.2, as amended).
+ *
+ * IT IS NOT A MODE OF Vrienden, which is what §2.2 and §4.2 were written
+ * against. The owner moved this list to the ranking tab, where the friends
+ * scope answers the SAME question as the global one — `(tabs)/ranglijst.tsx`
+ * is the only consumer of this module. DESIGN.md §8 and PD-018 record the
+ * move; DESIGN-SOCIAL §7 asserted the ranking tab was untouched until that
+ * was corrected on 6 September 2026.
  *
  * WHY THIS IS NOT A MODE OF leaderboardPresentation.ts. The two lists
  * answer different questions and print different numbers: the board shows
@@ -48,10 +55,29 @@ const META_SEPARATOR = '  ·  ';
  */
 export const KRING_VOTER_NAME_LIMIT = 2;
 
-/** §2.2 pins this. The list ends, and says so, exactly as the board and the feed do. */
+/**
+ * The list ends, and says so, exactly as the board and the feed do.
+ *
+ * THIS STRING IS WS3'S, NOT §2.2'S, and that is worth a line because two
+ * documents claimed otherwise for a while. §2.2 and PD-018 both pinned
+ * `Dat is de hele kring.`; WS3 §7 replaced it as the third member of an
+ * end-note family (`Dat is alles.`, `Dat is de hele lijst.`, this one), on
+ * the ground that a reader who has never opened this repo does not know
+ * what his kring is — and a list that must teach a noun before it can end
+ * a sentence has two jobs. Both documents were corrected to the shipped
+ * strings on 6 September 2026. The code was right and the spec was stale,
+ * which is the opposite of the usual direction here and therefore the part
+ * worth writing down.
+ */
 export const KRING_END_COPY = 'Dat is alles van je vrienden.';
 
-/** §2.2's empty state. States a fact and promises nothing — never a zero, never a placeholder row. */
+/**
+ * The empty state. States a fact and promises nothing — never a zero,
+ * never a placeholder row. WS3 §6.9's wording, for the same reason as
+ * `KRING_END_COPY` above; §2.2 pinned `Nog geen cijfers uit je kring` and
+ * was corrected to this on 6 September 2026. Only `KRING_EMPTY_BODY`
+ * survives from §2.2 verbatim.
+ */
 export const KRING_EMPTY_TITLE = 'Nog geen cijfers van je vrienden';
 export const KRING_EMPTY_BODY = 'Geeft een vriend een recept een cijfer, dan staat het hier.';
 

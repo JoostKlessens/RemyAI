@@ -31,14 +31,24 @@
  * would be two more glyphs to draw, licence and ship for no visible
  * difference.
  *
- * NONE OF THESE GLYPHS EXISTS YET, and this module states that rather than
- * hiding it. Every name below is absent from `INSTALLED_GLYPH_BY_ICON`
- * because Feather has, in WS4 §1's measurement, "zero kitchen glyphs".
- * `IconChip` therefore renders every one of these chips as text-only today,
- * pixel-identical to the row that shipped before this file existed, and the
- * whole row gains its icons in one step when GAP-19's Phosphor subset
- * lands. Writing the mapping now is the point of the seam: the call site is
- * finished and correct, waiting on a font rather than on a decision.
+ * ALL SEVENTEEN GLYPHS DRAW AS OF 7 SEPTEMBER 2026, AND THIS TABLE DID NOT
+ * CHANGE FOR IT. Until that day none of them existed: every name below was
+ * absent from `INSTALLED_GLYPH_BY_ICON` because Feather has, in WS4 §1's
+ * measurement, "zero kitchen glyphs", so `IconChip` rendered each of these
+ * chips as text-only, pixel-identical to the row that shipped before this
+ * file existed. GAP-19 landed by adding MaterialCommunityIcons — a family
+ * `@expo/vector-icons` was already shipping — and the row became illustrated
+ * in one step, with no edit here and none at any call site. That is the
+ * seam's promise collected, and the reason to write a mapping before its
+ * font exists: the design decision was finished and correct, waiting on a
+ * font rather than on a decision.
+ *
+ * ⚠ WHICH DRAWING EACH TAG GOT IS STILL A DESIGN CHOICE. iconFont.ts's
+ * registry is where a tag's actual glyph is chosen, and three of the
+ * seventeen are stand-ins rather than drawings of the thing —
+ * MaterialCommunityIcons has no potato, no salad and nothing vegan-specific.
+ * The table below says WHICH ICON a tag means; that file says WHAT IT LOOKS
+ * LIKE, and the guesses are flagged there.
  */
 
 import { DISH_TAGS } from '@/domain/dishTags';

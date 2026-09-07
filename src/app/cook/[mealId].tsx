@@ -72,10 +72,14 @@ import { TimerDisplay } from '@/components/TimerDisplay';
 import { createCookTimer, type CookTimerState } from '@/domain/cookTimer';
 import { selectCookTimerBar } from '@/domain/cookTimerBar';
 import { scaleRecipe } from '@/domain/scaleRecipe';
+import { castPublicVote } from '@/domain/social/publicVote';
 import type { CookEventId, DecisionId, HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { useSession } from '@/hooks/useSession';
 import { hapticSmallCommit, hapticValueMoved } from '@/lib/haptics';
 import { ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
+import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { supabase } from '@/lib/supabase';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 
@@ -126,6 +130,26 @@ interface LoadedMealData {
   readonly householdSize: number;
   /** Set only when today's decision (if any) offers exactly this meal — links a cook event back to the decision that led to it. */
   readonly decisionId: DecisionId | null;
+  /**
+   * `households.share_cooks_with_friends` — whether the outcome card may
+   * offer "vrienden mogen zien dat ik dit heb gemaakt" at all.
+   *
+   * READ HERE BECAUSE `OutcomeCard` REFUSES TO. Its prop headers are
+   * explicit that the card has no business asking who your friends are or
+   * what your household consented to; those are repository reads, and
+   * every one of them lives with a screen in this app. The card is handed
+   * a handler or it is not.
+   *
+   * FALSE ON A FAILED READ, and that is the fail-closed direction rather
+   * than a shrug. `getHouseholdCookSharing` throws instead of answering
+   * `false` precisely because at a call site the two are
+   * indistinguishable — but the consequence is not symmetric here.
+   * Rendering the checkbox after a failed read offers "deel dit niet" to a
+   * household that may be sharing nothing, which implies there is
+   * something to withhold; omitting it merely leaves out one control on a
+   * card that is optional in every direction already.
+   */
+  readonly shareCooksWithFriends: boolean;
 }
 
 /**
@@ -148,14 +172,23 @@ async function loadMealData(mealId: string): Promise<LoadedMealData> {
     repository.getMealIngredients(mealId),
     repository.getCurrentHouseholdId(),
   ]);
-  // Both of these need `householdId`, so they wait for the batch above and
+  // All three need `householdId`, so they wait for the batch above and
   // then run together rather than one after the other.
-  const [todaysDecision, members] = await Promise.all([
+  //
+  // The cook-sharing read is the one that does NOT join the failure of the
+  // others, unlike the two RCP-01 reads above it. Losing the steps or the
+  // ingredients means a half-loaded recipe and the screen says so; losing
+  // the consent flag means one optional checkbox is not offered, which is
+  // indistinguishable from a household that never opted in — a state this
+  // screen has to render correctly anyway. Taking Cook Mode to its error
+  // page over it would trade a whole recipe for a tick box.
+  const [todaysDecision, members, shareCooksWithFriends] = await Promise.all([
     repository.getDecisionByDate(householdId, todayIso()),
     repository.listMembers(householdId),
+    repository.getHouseholdCookSharing(householdId).catch(() => false),
   ]);
   const decisionId = todaysDecision !== null && todaysDecision.mealId === mealId ? todaysDecision.id : null;
-  return { meal, steps, ingredients, householdId, householdSize: members.length, decisionId };
+  return { meal, steps, ingredients, householdId, householdSize: members.length, decisionId, shareCooksWithFriends };
 }
 
 export default function CookModeScreen(): JSX.Element {
@@ -165,6 +198,13 @@ export default function CookModeScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const reduceMotionEnabled = useReduceMotion();
+  /**
+   * The voter. `profiles.id` IS `auth.users.id`, so the session's user id
+   * is the profile id — the same identity `useOutcomeSend` uses one hook
+   * down. Null while the session resolves, which `planPublicVote` reads as
+   * "not yet" and answers by writing nothing.
+   */
+  const { userId } = useSession();
 
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [meal, setMeal] = useState<Meal | null>(null);
@@ -173,6 +213,8 @@ export default function CookModeScreen(): JSX.Element {
   const [householdSize, setHouseholdSize] = useState(0);
   const [householdId, setHouseholdId] = useState<HouseholdId | null>(null);
   const [decisionId, setDecisionId] = useState<DecisionId | null>(null);
+  /** Gates the outcome card's per-cook checkbox. Starts `false`, so the control never appears before the read that justifies it lands. */
+  const [shareCooksWithFriends, setShareCooksWithFriends] = useState(false);
   const [cookEventId, setCookEventId] = useState<CookEventId | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [phase, setPhase] = useState<CookPhase>('steps');
@@ -223,6 +265,7 @@ export default function CookModeScreen(): JSX.Element {
         setHouseholdSize(data.householdSize);
         setHouseholdId(data.householdId);
         setDecisionId(data.decisionId);
+        setShareCooksWithFriends(data.shareCooksWithFriends);
         setLoadState('ready');
       })
       .catch(() => {
@@ -352,26 +395,99 @@ export default function CookModeScreen(): JSX.Element {
   };
 
   /**
+   * ONE GESTURE, TWO WRITES, AND THEY ARE NOT THE SAME INSTRUMENT.
+   *
    * Fires only when a score was actually given — closing the card unrated
    * reports nothing, which is a legitimate end to the flow rather than an
    * abandoned one. The projection onto `wouldRepeat` happens inside the
    * repository, never here.
+   *
+   *   1. `cook_events.rating` — PRIVATE, the decision engine's input, and
+   *      untouched by everything below it. It is gated on `cookEventId`
+   *      because a rating with no cook event has nothing to attach to.
+   *   2. `recipe_ratings` — PUBLIC, one vote on the canonical recipe, and
+   *      the reason Ranglijst was empty: `rateRecipe` had zero callers,
+   *      so nothing had ever written a row into the table the whole board
+   *      reads. The owner's instruction, verbatim: "the rating should
+   *      also be represented in the global ranking of a recipe."
+   *
+   * THE TWO SCALES ARE THE SAME SCALE, checked rather than assumed —
+   * 0008 writes the identical `check (rating >= 1 and rating <= 10 and
+   * rating = round(rating, 1))` on both columns — so the value crosses
+   * unconverted and `publicVote.ts` validates it with the one function
+   * that owns the scale for both.
+   *
+   * THE SECOND WRITE IS GATED DIFFERENTLY FROM THE FIRST, deliberately.
+   * It needs a canonical recipe and a signed-in profile, and neither of
+   * those has anything to do with `cookEventId` — a meal typed in by hand
+   * has no shared object to be ranked, which is not an error and writes
+   * nothing. `planPublicVote` owns that decision so it can be tested;
+   * this line owns nothing but the wiring.
+   *
+   * A FAILED PUBLIC VOTE MUST NOT FAIL THE PRIVATE ONE. They are two
+   * awaits on two rows with no ordering between them, and `castPublicVote`
+   * never rejects — it RETURNS `'failed'`, which is received here rather
+   * than dropped into an empty `.catch`. Nothing is announced and nothing
+   * is shown: somebody has just said how dinner was, and a leaderboard
+   * that could not be updated is not their problem. What the outcome is
+   * for is a call site that can see it went wrong.
    */
   const handleRate = (rating: number): void => {
-    if (cookEventId === null) {
-      return;
+    if (cookEventId !== null) {
+      void getAppRepository().setCookEventRating(cookEventId, rating);
     }
-    void getAppRepository().setCookEventRating(cookEventId, rating);
+    void castPublicVote(createSupabaseSocialRepository(supabase), {
+      recipeId: meal?.recipeId ?? null,
+      raterProfileId: userId,
+      rating,
+    });
   };
 
   /**
-   * The public half of the same moment (`Meal.dishMoods`). Deliberately
-   * gated on the MEAL rather than on `cookEventId`, unlike `handleRate`
-   * directly above: a mood describes the dish, not this particular cook,
-   * so it stays recordable even when the cook-event write failed — and it
-   * lands on a different row, which is what keeps PD-019's two
-   * instruments structurally apart rather than merely separate by
-   * convention. Nothing here reads the grade.
+   * The owner's per-cook checkbox, inverted here and nowhere else.
+   *
+   * The card says "vrienden mogen zien dat ik dit heb gemaakt" and reports
+   * what the reader wants; the column says `excluded_from_cook_proof` and
+   * stores the opposite. One `!` at one seam, in the file that already
+   * knows the column exists — `OutcomeCard` deliberately does not.
+   *
+   * GATED ON THE MEAL, like `handleChooseMood` and unlike `handleRate`:
+   * this writes a `meals` row, so it stays recordable even when the
+   * cook-event write failed. A privacy choice must not be the thing that
+   * a failed unrelated write silently drops.
+   *
+   * The failure is swallowed with an argument rather than by omission: the
+   * repository call is local (AsyncStorage) and its own retry is the
+   * checkbox itself, which stays tappable for as long as the card is up
+   * and lives on in Bibliotheek's long-press afterwards. Surfacing an
+   * error on the card would put a failure notice on the one surface whose
+   * entire design is that it is cheap to walk away from.
+   */
+  const handleChangeCookProofSharing = (shareThisCook: boolean): void => {
+    if (meal === null) {
+      return;
+    }
+    getAppRepository()
+      .setMealCookProofExclusion(meal.id, !shareThisCook)
+      .catch(() => {
+        // See above: the control is its own retry while the card is up,
+        // and Bibliotheek's "Deel deze niet" owns the same flag after it.
+      });
+  };
+
+  /**
+   * The word half of the same moment (`Meal.dishMoods`). Deliberately
+   * gated on the MEAL rather than on `cookEventId`, unlike the private
+   * write in `handleRate` above: a mood describes the dish, not this
+   * particular cook, so it stays recordable even when the cook-event
+   * write failed — and it lands on a different row, which is what keeps
+   * PD-019's instruments structurally apart rather than merely separate
+   * by convention. Nothing here reads the grade.
+   *
+   * IT USED TO BE CALLED "the public half", and that was true until
+   * `handleRate` started casting a `recipe_ratings` vote from the same
+   * gesture. There are three writes in this moment now, on three tables,
+   * and the mood is the only one of them made of words.
    */
   const handleChooseMood = (mood: string): void => {
     if (meal === null) {
@@ -470,6 +586,12 @@ export default function CookModeScreen(): JSX.Element {
             onCooked={handleCooked}
             onRate={handleRate}
             onChooseMood={handleChooseMood}
+            // Handed over only when the household actually shares. An
+            // undefined handler removes the row entirely, which is what
+            // that prop asks for: offering "deel dit niet" to a household
+            // that shares nothing would claim there is something to
+            // withhold.
+            onChangeCookProofSharing={shareCooksWithFriends ? handleChangeCookProofSharing : undefined}
             onSendRecipe={outcomeSend.onSendRecipe}
             onDismiss={() => router.back()}
             reduceMotionEnabled={reduceMotionEnabled}

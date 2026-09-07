@@ -1,10 +1,56 @@
 /**
- * One tile in Bibliotheek's two-column thumbnail grid (docs/DESIGN.md §2).
- * Renamed from the old `RecipeListRow` (a single-column text row with no
- * thumbnail) — the library is now built around saved short-form video, so
- * this renders a portrait (9:16) still with a legibility scrim and a
- * scheduling badge, a genuinely different visual model, not just a
- * restyle.
+ * One tile in "Mijn recepten"'s THREE-column thumbnail grid. Renamed from the
+ * old `RecipeListRow` (a single-column text row with no thumbnail) — the
+ * library is now built around saved short-form video, so this renders a
+ * portrait still with a legibility scrim and a scheduling badge, a genuinely
+ * different visual model, not just a restyle.
+ *
+ * ===========================================================================
+ * THREE COLUMNS AT 4:5, AND THE TWO THINGS IT COST
+ * ===========================================================================
+ *
+ * THE OWNER'S INSTRUCTION, VERBATIM: "Bij mijn recepten zijn de filters, te
+ * groot en wil ik dat je 3 recepten breed hebt onderin het scherm om door je
+ * recepten heen te scrollen."
+ *
+ * The geometry lives in libraryGridMetrics.ts, which carries the whole
+ * argument for 4:5 over docs/DESIGN.md §2's 9:16 and for three columns over
+ * WS-2 §5.2's rejection of them. What matters HERE is the consequence: the
+ * tile is 109.7pt wide at 393pt where it used to be 170.5pt, and two things
+ * that fitted at that width do not fit at this one.
+ *
+ * 1. THE TITLE IS NOW CAPPED AT TWO LINES, WHICH REVERSES THIS FILE'S OWN A6
+ *    RULE. The old comment said, correctly: "no numberOfLines cap — a
+ *    truncated dish title is exactly the clipping docs/DESIGN.md asks screens
+ *    to avoid; the tile's own minHeight lets this grow instead."
+ *
+ *    That reasoning depended on a premise three columns removes. Growing is
+ *    only free while the scrim has somewhere to grow INTO, and WS-2 measured
+ *    what happens when it does not: at 109.7pt, "Traybake met kip, paprika en
+ *    citroen" at `bodySmall` wraps to five lines, a 116pt scrim on a 137pt
+ *    tile. The thumbnail — the thing docs/DESIGN.md §1.1 says the library is
+ *    FOR, "recognition at speed" — would be 85% covered by its own caption.
+ *    An uncapped title at this width does not avoid clipping, it hides the
+ *    image; the cap is the smaller loss, and it is visible and predictable
+ *    rather than silent.
+ *
+ *    WS-2's own remedy was to move the title BELOW the frame. That is the
+ *    honest alternative and it was rejected on arithmetic: it costs ~44pt of
+ *    row pitch, about a third of the density the owner asked for, to recover
+ *    the third line of a caption whose full text is already in the tile's
+ *    spoken label.
+ *
+ * 2. THE BADGE IS A GLYPH WHERE THERE IS AN HONEST ONE. "Nog geen planning"
+ *    drew 138.4pt inside a 170.5pt tile before this change; at 109.7pt it is
+ *    not close. libraryTileBadge.ts owns which state draws what and why two
+ *    of the four keep words — and, for `geen_planning`, why the honest badge
+ *    is none at all.
+ *
+ * NEITHER COSTS A SCREEN-READER USER ANYTHING. `accessibilityLabel` below is
+ * still "<title>, <scheduling state>" in full, on every tile, unchanged. Both
+ * losses are to chrome whose text is already spoken; WS-2 §3.2 makes exactly
+ * that argument for the badge, and it holds for the title for the same
+ * reason.
  *
  * No thumbnail (manual entries, or an import whose oEmbed response
  * genuinely had none — Instagram without credentials, a 404/region-locked
@@ -66,7 +112,10 @@ import type { JSX } from 'react';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Meal } from '@/domain/types';
+import { Icon } from './Icon';
+import { LIBRARY_TILE_ASPECT_RATIO } from './libraryGridMetrics';
 import { LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL, LIBRARY_TILE_ACTIONS_HINT } from './libraryTileActionCopy';
+import { describeLibraryTileBadge } from './libraryTileBadge';
 import { buildSchedulingLabel, type RecipeSchedulingInfo } from './recipeScheduling';
 import { useThumbnailFallback } from './useThumbnailFallback';
 import { type ColorTokens, fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
@@ -104,6 +153,7 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const badge = resolveBadgeStyle(scheduling.state, colors);
+  const badgeContent = describeLibraryTileBadge(scheduling.state);
   const monogram = meal.title.trim().charAt(0).toUpperCase() || '?';
   const thumbnail = useThumbnailFallback(meal.thumbnailUrl);
   const hasActions = onLongPress !== undefined;
@@ -150,15 +200,30 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
         )}
 
         <View style={[styles.scrim, { backgroundColor: colors.videoScrim }]} pointerEvents="none">
-          {/* A6: no numberOfLines cap — a truncated dish title is exactly
-              the clipping docs/DESIGN.md asks screens to avoid; the tile's
-              own minHeight lets this grow instead. */}
-          <Text style={[typeScale.bodySmall, { color: colors.onVideoScrim }]}>{meal.title}</Text>
+          {/* Two lines, which reverses this file's own A6 rule — see the
+              header for the measurement that broke its premise, and for why
+              the full title is still spoken. */}
+          <Text style={[typeScale.bodySmall, { color: colors.onVideoScrim }]} numberOfLines={TITLE_MAX_LINES}>
+            {meal.title}
+          </Text>
         </View>
 
-        <View style={[styles.badge, { backgroundColor: badge.backgroundColor }]} pointerEvents="none">
-          <Text style={[typeScale.caption, { color: badge.textColor }]}>{buildSchedulingLabel(scheduling.state)}</Text>
-        </View>
+        {/* `none` is a real answer, not a missing one: an unplanned recipe
+            wears no badge at all. libraryTileBadge.ts carries why. */}
+        {badgeContent.kind === 'none' ? null : (
+          <View style={[styles.badge, { backgroundColor: badge.backgroundColor }]} pointerEvents="none">
+            {badgeContent.kind === 'icon' ? (
+              <Icon name={badgeContent.icon} size={BADGE_GLYPH_SIZE} color={badge.textColor} />
+            ) : (
+              // WS-2 §3.2's redline, and it only bites when a font swap has
+              // taken a glyph away: one line, capped at 60% of the tile, so
+              // the clip is explicit instead of the frame's silent one.
+              <Text style={[typeScale.caption, styles.badgeLabel, { color: badge.textColor }]} numberOfLines={1}>
+                {badgeContent.label}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     </Pressable>
   );
@@ -195,17 +260,34 @@ function resolveBadgeStyle(state: RecipeSchedulingInfo['state'], colors: ColorTo
   }
 }
 
-// 9:16 portrait aspect ratio, docs/DESIGN.md §2.
-const TILE_ASPECT_RATIO = 9 / 16;
+/**
+ * Two lines of `bodySmall` (20pt each) plus the scrim's own padding is a 52pt
+ * caption on a 137pt tile — 38%, which is what docs/DESIGN.md §2 means by "a
+ * videoScrim wash across the bottom third" and the first geometry in which
+ * that phrase has been roughly true. Three lines would be 58%.
+ */
+const TITLE_MAX_LINES = 2;
+
+/**
+ * 14pt, deliberately under WS-4's 16-20pt UI band, for the reason the filter
+ * bar's own eyebrow glyph gives: this mark sits at `typeScale.caption`'s
+ * scale inside a 30pt pill, and a 16pt glyph there reads as an illustration
+ * that has wandered into a label rather than as the label itself.
+ */
+const BADGE_GLYPH_SIZE = 14;
 
 const styles = StyleSheet.create({
   tile: {
-    flex: 1,
+    // No `flex: 1`: the grid gives every cell an exact width
+    // (`libraryTileWidth`), because a flexed cell stretches to fill a partial
+    // last row — at three columns a seventh recipe would be drawn triple
+    // width. The tile fills whatever box it is put in.
+    width: '100%',
     minWidth: spacing.touchTargetMin,
   },
   frame: {
     width: '100%',
-    aspectRatio: TILE_ASPECT_RATIO,
+    aspectRatio: LIBRARY_TILE_ASPECT_RATIO,
     borderRadius: radii.radiusSm,
     overflow: 'hidden',
     justifyContent: 'flex-end',
@@ -220,7 +302,10 @@ const styles = StyleSheet.create({
   },
   scrim: {
     paddingHorizontal: spacing.space2,
-    paddingTop: spacing.space6,
+    // 24 -> 12. The wash's top padding was sized against a 303pt tile; on a
+    // 137pt one the same 24pt is 18% of the whole thumbnail spent on the
+    // space above a caption.
+    paddingTop: spacing.space3,
     paddingBottom: spacing.space2,
   },
   badge: {
@@ -230,5 +315,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.radiusSm,
     paddingHorizontal: spacing.space2,
     paddingVertical: spacing.space1,
+    // WS-2 §3.2. A glyph never reaches this; a fallback word does, and this
+    // is what makes its clip explicit rather than the frame's silent one.
+    maxWidth: '60%',
+  },
+  badgeLabel: {
+    flexShrink: 1,
   },
 });

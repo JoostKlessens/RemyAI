@@ -1,5 +1,54 @@
 /**
- * Feed's save micro-commitment sheet (PD-004): saving must immediately
+ * ============================================================================
+ * NOT MOUNTED ANYWHERE SINCE 2026-09-06. READ THIS BLOCK BEFORE ANY OTHER
+ * SENTENCE IN THIS FILE.
+ * ============================================================================
+ *
+ * The owner asked for the "wanneer wil je dit koken?" question to go, and
+ * `src/app/import/confirm.tsx` — the only screen that ever rendered this
+ * component — no longer does. That screen writes
+ * `IMPORT_DEFAULT_SAVE_INTENT` (src/domain/saveIntent.ts) on the press of
+ * its own button instead. Everything below still describes a correct sheet;
+ * none of it describes something a household can currently reach.
+ *
+ * WHY THE FILE STAYS, when the honest reflex is to delete it. Two reasons,
+ * and the second is the load-bearing one.
+ *
+ *   1. THE PRECEDENT IS THIS REPO'S OWN, ONE DAY OLD.
+ *      src/domain/librarySort.ts lost its caller on 2026-09-05 for the same
+ *      shape of reason ("sorteren kan voor nu weg") and was kept with a
+ *      header saying so, because what the owner removed was a control on a
+ *      screen and not a decision about what the code should mean.
+ *      `SaveIntent`'s `'none'` variant sits in src/domain/types.ts on the
+ *      identical footing.
+ *
+ *   2. NINE COMMENTS IN SIX FILES CITE THIS COMPONENT BY NAME AS THE ORIGIN
+ *      OF THE SHEET LANGUAGE, and not one of those files is inside the
+ *      change that unmounted it. SendRecipeSheet.tsx:11/19/124,
+ *      PortionScalingSheet.tsx:28/93 and LibraryTileActionSheet.tsx:55/62/67/112
+ *      all say "FOLLOWS SaveIntentSheet, DELIBERATELY" and pin their 400 pt
+ *      off-screen offset to this one; AllergenTaggingSection.tsx:72 and
+ *      useOpenExternalLink.ts:23 name it as the source of the
+ *      `announceForAccessibility` pattern; sendRecipeSheetCopy.ts:92 and
+ *      libraryTileActionCopy.ts:69 quote its "Sluit het bewaarmenu" as the
+ *      shape their own scrim labels follow. Deleting the file turns all of
+ *      those into references to nothing — which is exactly the defect this
+ *      project already recorded once, when Chip.tsx was found holding two
+ *      pointers at a removed `DeclineReasonRow`. A dangling citation is
+ *      worse than an unmounted file, because it reads as evidence that
+ *      somebody checked.
+ *
+ * SO: this is a reference implementation now, not a screen. Mounting the
+ * question again would be one `useState` and one JSX block in confirm.tsx,
+ * and PD-004a's two rows below are already correct. Deleting it instead
+ * means repairing those nine comments in the same commit — that is the real
+ * cost, and it is why it was not paid here.
+ *
+ * ============================================================================
+ * WHAT IT DOES, WHEN IT IS MOUNTED
+ * ============================================================================
+ *
+ * The save micro-commitment sheet (PD-004): saving must immediately
  * resolve into a commitment level so a save isn't a junk-drawer action.
  * Auto-dismisses the instant a row is picked — the choice *is* the
  * confirm. The tapped row flashes `positiveMuted` briefly first (a

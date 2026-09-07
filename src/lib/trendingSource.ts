@@ -1,6 +1,18 @@
 /**
  * Trending's data layer: the two lists behind the tab's two scopes.
  *
+ * WHERE IT LIVES, AND WHY THAT CHANGED. This was
+ * src/app/ranglijst/_trendingSource.ts. The leading underscore was
+ * believed to keep expo-router away from it and never did — the router's
+ * `require.context` (expo-router/_ctx.js, SDK 57) excludes only `+api` and
+ * `+html`, so this file was a route node with no default export and warned
+ * on every launch. It is in src/lib now for the reason `gekooktSource.ts`
+ * beside it spells out at length: this directory is the impure shell that
+ * fetches, and a module under src/app cannot be imported by any test in
+ * this repo. With its sibling `boardFixtures.ts` gone to `@/fixtures`, the
+ * `src/app/ranglijst/` directory held nothing and was removed — the route
+ * was always `(tabs)/ranglijst.tsx` and still is.
+ *
  * WHAT MOVED, AND WHY. Trending used to answer one question — "what is
  * highly rated, everywhere" — and a second list answering the same question
  * about your friends lived on Vrienden, behind a `Gekookt | Kring`
@@ -13,14 +25,14 @@
  * are reused exactly as they were, and this module is the read that
  * followed them across.
  *
- * The friends read below is `_gekooktSource.ts`'s kring half, carried over
+ * The friends read below is `gekooktSource.ts`'s kring half, carried over
  * with its comments intact — the same kind of carve that produced
- * `_gekooktSource.ts` itself. What is genuinely new is only the sharing:
+ * `gekooktSource.ts` itself. What is genuinely new is only the sharing:
  * both scopes now come out of ONE `listAllRecipeRatings`.
  *
  * THAT SHARING IS THE POINT, NOT AN OPTIMISATION. A global board means
  * fetching every rating row in the database in order to rank them —
- * `_fixtures.ts`'s header flags that as the thing to fix before this scales
+ * `boardFixtures.ts`'s header flags that as the thing to fix before this scales
  * — and doing it a second time on the same screen, to narrow the same rows
  * to a handful of friends, would be indefensible. One whole-table read, two
  * independent rankings over it. The single `listCanonicalRecipes` call
@@ -49,8 +61,8 @@
  * clothes.
  */
 
-import { getKringFixture, type FriendFeedScenario } from '@/app/friends/_fixtures';
-import { getBoardFixture, type BoardScenario } from '@/app/ranglijst/_fixtures';
+import { getKringFixture, type FriendFeedScenario } from '@/fixtures/friendFeedFixtures';
+import { getBoardFixture, type BoardScenario } from '@/fixtures/boardFixtures';
 import { assembleKring, type KringRecipe, type KringRowModel } from '@/components/kringPresentation';
 import {
   LEADERBOARD_MAX_ROWS,
@@ -136,8 +148,21 @@ function toKringRecipe(recipe: CanonicalRecipeSummary): KringRecipe {
  * not resolved yet, and reading without one would ask the database a
  * question with no `auth.uid()` behind it. No accepted friends short-
  * circuits for the ordinary reason: there is nothing to narrow to.
+ *
+ * IT READS ITS OWN VOTES, AND NOT THE BOARD'S. This used to be handed
+ * `allRatings` — the whole of `recipe_ratings` — and filter it down. The
+ * two scopes now need two different row sets, because de kring NAMES its
+ * voters and the board does not: a household that unticked "vrienden mogen
+ * zien dat ik dit heb gemaakt" on a cook keeps its grade in the board's
+ * anonymous average and loses its name from the kring row. That difference
+ * is `namable_recipe_votes` (0016), and it cannot be computed here — the
+ * predicate reads another household's `meals`, which RLS refuses to every
+ * reader, so a client attempt would see nothing excluded and fail open. It
+ * is therefore a second whole-relation read rather than a second filter,
+ * and the extra round trip is what buys a privacy filter that cannot be
+ * got wrong from this side.
  */
-async function readFriendVotes(profileId: ProfileId | null, allRatings: readonly RecipeRating[]): Promise<FriendVotes> {
+async function readFriendVotes(profileId: ProfileId | null): Promise<FriendVotes> {
   if (profileId === null) {
     return NO_FRIEND_VOTES;
   }
@@ -147,6 +172,9 @@ async function readFriendVotes(profileId: ProfileId | null, allRatings: readonly
   if (friendIds.size === 0) {
     return NO_FRIEND_VOTES;
   }
+  // After the friend check, not before: no accepted friends means no kring
+  // at all, and this is a whole-relation read worth not making.
+  const namableVotes = await repository.listNamableRecipeVotes();
 
   const friendProfiles = await Promise.all([...friendIds].map((friendId) => repository.getProfile(friendId)));
   // A friend whose profile row failed to load keeps their vote and loses
@@ -155,7 +183,7 @@ async function readFriendVotes(profileId: ProfileId | null, allRatings: readonly
   const voterNames = new Map(
     friendProfiles.flatMap((profile) => (profile === null ? [] : [[profile.id, profile.displayName] as const])),
   );
-  return { votes: allRatings.filter((rating) => friendIds.has(rating.raterProfileId)), voterNames };
+  return { votes: namableVotes.filter((rating) => friendIds.has(rating.raterProfileId)), voterNames };
 }
 
 /**
@@ -175,8 +203,15 @@ async function readFriendVotes(profileId: ProfileId | null, allRatings: readonly
  */
 export async function loadLiveTrending(profileId: ProfileId | null): Promise<TrendingData> {
   const repository = createSupabaseSocialRepository(supabase);
-  const allRatings = await repository.listAllRecipeRatings();
-  const { votes, voterNames } = await readFriendVotes(profileId, allRatings);
+  // Two reads, and they are not the same list: `allRatings` is every vote
+  // and feeds the board's anonymous average, while `readFriendVotes` reads
+  // `namable_recipe_votes` for the one surface that prints names. See that
+  // function's header. In parallel because neither needs the other, and the
+  // narrower one short-circuits on its own when there are no friends.
+  const [allRatings, { votes, voterNames }] = await Promise.all([
+    repository.listAllRecipeRatings(),
+    readFriendVotes(profileId),
+  ]);
 
   const rankedBoardIds = buildLeaderboard(allRatings)
     .slice(0, LEADERBOARD_MAX_ROWS)

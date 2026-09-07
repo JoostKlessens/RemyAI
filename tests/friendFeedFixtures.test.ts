@@ -1,5 +1,5 @@
 /**
- * Guards the two things about src/app/friends/_fixtures.ts that are not
+ * Guards the two things about src/fixtures/friendFeedFixtures.ts that are not
  * "just data": the boundary parser that turns an untrusted route param
  * into a scenario, and the invariants the fixture set exists to
  * demonstrate. Mirrors tests/importFixtures.test.ts, which covers the
@@ -23,7 +23,7 @@ import {
   getKringFixture,
   parseFriendFeedScenario,
   type FriendFeedScenario,
-} from '@/app/friends/_fixtures';
+} from '@/fixtures/friendFeedFixtures';
 import { assembleFriendFeed, type FriendRecipeCardModel } from '@/components/friendFeedPresentation';
 import { assembleKring, type KringRowModel } from '@/components/kringPresentation';
 

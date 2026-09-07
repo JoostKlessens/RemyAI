@@ -7,7 +7,7 @@
  * ratings, ranked — has moved to Trending, where it sits beside the global
  * ranking as a scope of the same question rather than as a second question
  * on this one. The read that fed it went with it, comments intact, to
- * `src/app/ranglijst/_trendingSource.ts`. Nothing was rewritten in the
+ * `src/lib/trendingSource.ts`. Nothing was rewritten in the
  * move: `rankKring`, `assembleKring` and `KringRow` are the same modules
  * they were. What is left here is the list this tab was always about —
  * what people you know actually cooked, and what they sent you.
@@ -18,11 +18,33 @@
  * screen renders, this reads. Everything below moved with its comments
  * intact and nothing changed behaviour.
  *
- * WHY IT LIVES BESIDE `_fixtures.ts` RATHER THAN IN src/components/. It
- * imports the `__DEV__` fixtures, and a component reaching up into
- * src/app/** would be a layering inversion. The `_` prefix is what keeps
- * expo-router from treating it as a route, exactly as it does for
- * `_fixtures.ts`.
+ * WHY IT LIVES IN src/lib/ AND NOT BESIDE THE SCREEN. It used to be
+ * src/app/friends/_gekooktSource.ts, and the header here argued that the
+ * `_` prefix "keeps expo-router from treating it as a route". It does
+ * not. expo-router's `require.context` (expo-router/_ctx.js, SDK 57)
+ * excludes `+api` and `+html` and nothing else, so this file was a route
+ * node with no default export and said so on every launch:
+ *
+ *     WARN  Route "./friends/_gekooktSource.ts" is missing the required
+ *           default export.
+ *
+ * src/lib is where it belonged all along, and the reason is the one
+ * friendProof.ts and sendRecipe.ts already give in their own headers: this
+ * directory is the impure shell — "a module that fetches, beside modules
+ * that decide" — and, decisively, **a route module cannot be imported in
+ * this test environment at all**, because expo-router and react-native
+ * internals fail to parse under Vite. Every line below was therefore
+ * unreachable by any test for as long as it lived under src/app. It is
+ * reachable now. That is not a side effect of the move; it is the best
+ * thing about it, and it is exactly the hole that let `FRIEND_PROOF_BOOST`
+ * sit unwired for three migrations with its own tests green.
+ *
+ * The old header's other worry — that a fixture-importing module in
+ * src/components would be "a layering inversion", reaching up into
+ * src/app/** — is simply gone: the fixtures are in `@/fixtures` now, and
+ * there is no route folder anywhere in this file's imports. src/components
+ * was still the wrong home, but for a different and simpler reason: this
+ * module renders nothing.
  *
  * LIVE, WITH FIXTURES BEHIND A DEV SWITCH — the same shape Trending uses.
  * The previous version of this header promised that a loading state and an
@@ -78,8 +100,8 @@ import {
   getFriendFeedFixture,
   getUnseenSendMealIds,
   type FriendFeedScenario,
-} from '@/app/friends/_fixtures';
-import { getProofFixture } from '@/app/friends/_proofFixtures';
+} from '@/fixtures/friendFeedFixtures';
+import { getProofFixture } from '@/fixtures/friendProofFixtures';
 import { assembleFriendFeed } from '@/components/friendFeedPresentation';
 import { assembleFriendProofCards, type ProofRecipe } from '@/components/friendProofPresentation';
 import { collectUnseenSendMealIds, orderGekooktList, type GekooktList } from '@/components/gekooktPresentation';

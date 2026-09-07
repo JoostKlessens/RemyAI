@@ -22,6 +22,7 @@ import type {
   CookEventId,
   Decision,
   DecisionId,
+  DishCourse,
   Household,
   HouseholdId,
   IsoDateString,
@@ -82,6 +83,31 @@ export interface CreateMealInput {
    */
   readonly dishTags?: readonly string[];
   /**
+   * Where this dish sits in a meal (src/domain/dishCourses.ts) —
+   * voorgerecht, hoofdgerecht, bijgerecht, toetje. A single value, never a
+   * set, and NEVER merged with `dishTags` above: that is a list of
+   * descriptive categories filtered with AND, and a course put in it could
+   * be stored alongside its own opposite.
+   *
+   * Optional here for a reason the two fields around it do NOT share, and
+   * it is worth stating precisely because it looks like the same
+   * optionality. `dishTags` and `recipeId` are optional because their
+   * absent state and their stored state coincide — a caller who omits them
+   * is saying "no categories" and "a copy of nothing", which is exactly
+   * what `[]` and `null` mean. There is no such thing as a meal with no
+   * course. This is optional because the ANSWER TO OMITTING IT IS ALREADY
+   * DECIDED: the owner said "standaard is iets een hoofdgerecht", so a
+   * caller who says nothing is not leaving a field blank, it is accepting
+   * a default that was chosen for it. `createMeal` substitutes
+   * `DEFAULT_DISH_COURSE`, never `undefined` (see local/meals.ts).
+   *
+   * Unlike a mood, this CAN be known at create time — a course is legible
+   * from the recipe itself, where a mood requires somebody to have eaten
+   * the food. That is why axis 2 has no counterpart field here and this
+   * one does.
+   */
+  readonly dishCourse?: DishCourse;
+  /**
    * The canonical `recipes` row this meal is this household's private copy
    * of (`meals.recipe_id`, 0006). It is what makes cook proof possible at
    * all: a friend's cook and this copy are two unrelated rows without it,
@@ -134,12 +160,21 @@ export interface CreateMealInput {
  * their own methods, kept apart for exactly the reason
  * `setHouseholdCookSharing` is kept out of `updateHouseholdSettings`: a
  * field reachable from a bulk save is a field a stale spread can flip.
- * `dishTags` are the extraction path's categories and no screen edits them
+ * THE `dishTags` SENTENCE THAT USED TO STAND HERE IS RECORDED RATHER THAN
+ * QUIETLY SWAPPED, because this file's own prediction came true. It read:
+ * "`dishTags` are the extraction path's categories and no screen edits them
  * today; adding them here is that screen's job, not a field left open in
- * advance. So this input names the five things the confirmation screen
- * already lets a person correct on the way IN — title, time, servings,
- * ingredients, steps — and NOTHING ELSE IS TOUCHED by the write. That is a
- * guarantee tests hold, not a convention.
+ * advance." Both halves were right, and the invitation was accepted — the
+ * owner asked for it ("Kan je de tags niet aanpassen handmatig?"), the
+ * screen exists (src/app/recipe-edit/[mealId].tsx), and `dishTags` and
+ * `dishCourse` are named fields below. What that sentence was protecting
+ * against was a field left open with no writer, which is this codebase's
+ * own recorded failure mode (`recipe_ratings`: four readers, zero writers,
+ * empty for months). Both fields arrive WITH their control.
+ *
+ * So this input names the seven things a person may correct — title, time,
+ * servings, ingredients, steps, categories, course — and NOTHING ELSE IS
+ * TOUCHED by the write. That is a guarantee tests hold, not a convention.
  *
  * THE CHILD LISTS ARE A REPLACE, NOT A DIFF, AND THE REASON IS THAT THERE IS
  * NO IDENTITY TO DIFF ON. The edit screen edits an ingredient as ONE
@@ -181,6 +216,66 @@ export interface UpdateMealRecipeInput {
   readonly servings: number | null;
   readonly ingredients: readonly MealIngredientInput[];
   readonly steps: readonly MealStepInput[];
+  /**
+   * Dish categories from the closed vocabulary (src/domain/dishTags.ts).
+   * The owner's "Kan je de tags niet aanpassen handmatig?".
+   *
+   * WHAT THIS FIXED, because the absence was not a gap but a defect.
+   * `dish_tags` had exactly one writer — the extraction model reading a
+   * caption at import — and manual entry wrote `[]`
+   * (src/app/import/confirm.tsx). So a recipe the model tagged wrongly,
+   * and every recipe anybody typed in by hand, was permanently invisible
+   * to the library's "Waarmee?" filter, with no way for any person to fix
+   * it. The most-used filter in the app was wrong about part of every
+   * library, and only a writer could repair it.
+   *
+   * REQUIRED, NOT OPTIONAL, and that is deliberate for the reason this
+   * input's own header gives about not being a `Partial<>`. An optional
+   * "leave it alone" field sitting in a save that replaces everything else
+   * is a different rule for one field, and a screen that forgets it wipes
+   * a value nobody was shown. Required forces the one caller to state its
+   * answer out loud — the same argument `DecisionRequest.filters` makes.
+   *
+   * NARROWED AT THE WRITE SEAM, never trusted. `updateMealRecipe` runs
+   * `sanitizeDishTags`, so a value outside the vocabulary is dropped
+   * rather than stored: the vocabulary is closed because an unknown value
+   * is unfilterable, and storing an unfilterable tag on the write path
+   * that exists to REPAIR the filter would be the joke of the change.
+   */
+  readonly dishTags: readonly string[];
+  /**
+   * Where this dish sits in a meal (src/domain/dishCourses.ts) — the
+   * owner's "ergens kunnen toevoegen dat een recept bijvoorbeeld een
+   * voorgerecht, bijgerecht of toetje is".
+   *
+   * IT SHARES THIS INPUT WITH `dishTags` AND NOT A CONTROL WITH IT. Both
+   * are descriptive taxonomy a person corrects in one sitting on one
+   * screen, so they travel in one write; they are two fields because they
+   * answer two questions with two cardinalities (many, ANDed, versus
+   * exactly one with a default), and a single control offering both would
+   * make `['toetje', 'pasta']` expressible — the conflation migration 0017
+   * exists to prevent.
+   *
+   * WHY THESE TWO ARE HERE AND `excludedFromCookProof` / `dishMoods` ARE
+   * NOT, since this input's header rules those out with a rule that sounds
+   * like it should catch these too ("a field reachable from a bulk save is
+   * a field a stale spread can flip"). That rule is about BLAST RADIUS. A
+   * stale spread flipping the cook-proof exclusion starts showing somebody's
+   * dinner to their friends; a stale spread flipping a mood publishes a
+   * sentence in a voice that is not the speaker's. A stale spread flipping
+   * a course files a recipe under the wrong heading in the household's own
+   * library. The first two need their own verb; the third needs an editor.
+   *
+   * REQUIRED for `dishTags`' reason, and given the default by the caller
+   * rather than by omission: the screen loads the meal, so it always knows
+   * the current answer, and `DEFAULT_DISH_COURSE` is what a meal that never
+   * said anything reads as.
+   *
+   * A value outside the vocabulary falls back to the default rather than
+   * failing the save — see `updateMealRecipe` in local/meals.ts for why
+   * this write forgives what `addMealDishMood` refuses.
+   */
+  readonly dishCourse: DishCourse;
   /**
    * PD-006. REQUIRED, and required for the same reason
    * `CreateMealInput.allergenTagStatus` is: its absent state is the
@@ -505,9 +600,15 @@ export interface RemyRepository {
    *
    * TOUCHES NOTHING ELSE ON THE MEAL, and the list of what it leaves alone
    * is the interesting half: `source`, `sourceUrl`, `sourcePlatform`,
-   * `thumbnailUrl`, `recipeId`, `dishTags`, `dishMoods`,
+   * `thumbnailUrl`, `recipeId`, `dishMoods`,
    * `excludedFromCookProof`, `archivedAt`, `createdAt`, `skillLevel` and
-   * `householdId` all survive an edit untouched. A household's copy stays
+   * `householdId` all survive an edit untouched. `dishTags` USED TO BE ON
+   * THAT LIST AND NO LONGER IS: the owner asked for editable categories,
+   * so they are now a field this input carries and this write replaces,
+   * alongside `dishCourse`. What replaces the old guarantee is narrower and
+   * still worth stating — a save that restates the same categories changes
+   * nothing, which is what opening an editor and closing it must do. A
+   * household's copy stays
    * pointed at the same canonical recipe, stays as private or as excluded
    * as they last left it, and keeps its cook history — none of which is
    * something a person fixing a typo asked to change.
@@ -530,7 +631,7 @@ export interface RemyRepository {
    * "Zomers", "soul-food", "high-protein": what a dish feels like, as
    * opposed to `Meal.dishTags`, which is what it is made of.
    *
-   * THE PUBLIC HALF OF THE OUTCOME MOMENT, and the private half —
+   * ONE OF THE OUTCOME MOMENT'S TWO PUBLIC WRITES, and the private one —
    * `setCookEventRating` below — is a DIFFERENT METHOD writing a
    * DIFFERENT TABLE. That separation is PD-019 made structural rather
    * than promised: there is no argument on this method that could carry a
@@ -539,6 +640,16 @@ export interface RemyRepository {
    * safe to publish at all is that a mood carries no number and no mood
    * outranks another — there is nothing in it to inflate, which is the
    * pressure PD-019 keeps the private grade away from.
+   *
+   * IT USED TO SAY "THE PUBLIC HALF", SINGULAR, and that stopped being
+   * true. The outcome card now also casts a `recipe_ratings` vote from
+   * the same gesture that grades a cook (src/domain/social/publicVote.ts
+   * — "the rating should also be represented in the global ranking of a
+   * recipe"). That vote goes through the SOCIAL repository rather than
+   * this one, which is why nothing on this interface changed; and the
+   * structural separation the paragraph above claims is if anything
+   * sharper for it — three writes, three tables, two repositories, and no
+   * argument anywhere that could carry a value from one into another.
    *
    * ADDITIVE, IDEMPOTENT, AND NEVER A REPLACE: a dish is cooked by more
    * than one person, and the meal accumulates the union of what they
@@ -557,6 +668,7 @@ export interface RemyRepository {
    * ever set by somebody who actually ate the food.
    */
   addMealDishMood(mealId: MealId, mood: string): Promise<Meal>;
+
 
   /**
    * Every save for this household, regardless of intent, whether its meal

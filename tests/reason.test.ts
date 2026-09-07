@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildReasonText, type ReasonContext } from '@/domain/reason';
+import { buildFriendProofLine, buildReasonText, type ReasonContext } from '@/domain/reason';
 
 const BASE_CONTEXT: ReasonContext = {
   friendProof: null,
@@ -147,3 +147,76 @@ describe('friend_proof — the social reason', () => {
     expect(buildReasonText('not_recent', BASE_CONTEXT).endsWith('.')).toBe(false);
   });
 });
+
+/**
+ * WHAT THE CARD STILL PRINTS, AND WHAT IT NO LONGER DOES.
+ *
+ * THE OWNER'S INSTRUCTION, VERBATIM: "De reden hierbij moet weg, dat is niet
+ * logisch, ik wil liever dat je de 1 tot max 3 hoofdingredienten er staan en
+ * hoe lang het duurt om te maken."
+ *
+ * The REDEN block is gone from `DecisionCard`, and six of the seven lines
+ * above went with it. The seventh is kept out by name, and the distinction
+ * is the owner's: `friend_proof` is not the app explaining its own choice,
+ * it is a fact about the DISH that appears on no other surface — who you
+ * know cooked it, and what they publicly gave it (PD-017).
+ *
+ * `buildReasonText` itself is untouched and every branch above still runs.
+ * `decide.ts` composes the sentence and index.tsx persists it on the
+ * decisions row (`createDecision` / `updateDecisionOffer`), which is where
+ * plan §8's record of what Remy offered lives. What changed is only which
+ * of them a SCREEN renders, and that is the whole of what this gate decides.
+ */
+describe('buildFriendProofLine — the one reason that survived on the card', () => {
+  test('passes a named friend sentence through unchanged', () => {
+    const named = buildReasonText('friend_proof', withNames(['Sanne'], 8.5));
+
+    expect(buildFriendProofLine('friend_proof', named)).toBe('Sanne heeft dit ook gemaakt en gaf het een 8,5.');
+  });
+
+  /** The grade-less variant is a real friend line, not a degraded one. */
+  test('keeps the sentence a friend earns without a public vote', () => {
+    const withoutGrade = buildReasonText('friend_proof', withNames(['Sanne', 'Joris'], null));
+
+    expect(buildFriendProofLine('friend_proof', withoutGrade)).toBe('Sanne en Joris hebben dit ook gemaakt.');
+  });
+
+  /**
+   * The six that go, asserted against whatever text each one actually
+   * produced rather than against a literal — the point is that NO reason
+   * but the social one reaches the card, not that these seven strings do
+   * not.
+   */
+  test.each(['saved_this_week', 'not_recent', 'fits_time', 'household_favourite', 'variety', 'requested_repeat', 'fallback'] as const)(
+    'refuses %s, whatever text it produced',
+    (reasonCode) => {
+      const text = buildReasonText(reasonCode, { ...BASE_CONTEXT, savedAt: '2026-08-18T10:00:00.000Z', estimatedMinutes: 20 });
+
+      expect(text.length).toBeGreaterThan(0);
+      expect(buildFriendProofLine(reasonCode, text)).toBeNull();
+    },
+  );
+
+  /**
+   * NEVER A PLACEHOLDER. `friendProofText`'s defensive branch names nobody,
+   * and an anonymous "someone you know" is exactly the stranger-aggregate
+   * DESIGN-SOCIAL.md §2.1 refuses — worse here than anywhere, because Kiezen
+   * is the surface PD-004 measures. The assertion runs against the
+   * PRODUCER's own output rather than a copied literal, so the sentence and
+   * the gate that refuses it cannot drift into a card naming no one.
+   */
+  test('refuses the anonymous fallback, which names nobody', () => {
+    const anonymous = buildReasonText('friend_proof', withNames([], null));
+
+    expect(anonymous).toBe('Iemand die je kent heeft dit ook gemaakt.');
+    expect(buildFriendProofLine('friend_proof', anonymous)).toBeNull();
+  });
+
+  test('refuses a friend_proof whose context was never assembled at all', () => {
+    expect(buildFriendProofLine('friend_proof', buildReasonText('friend_proof', BASE_CONTEXT))).toBeNull();
+  });
+});
+
+function withNames(friendNames: readonly string[], grade: number | null): ReasonContext {
+  return { ...BASE_CONTEXT, friendProof: { friendNames, grade } };
+}

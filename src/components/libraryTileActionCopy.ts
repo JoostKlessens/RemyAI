@@ -82,12 +82,36 @@ export const LIBRARY_TILE_SHEET_DISMISS_LABEL = 'Sluit de opties voor dit gerech
 export const LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL = 'Meer opties voor dit gerecht';
 
 /**
- * The tile's hint once it carries a long-press. It keeps the tile's
- * primary promise first — tapping still opens Cook Mode, unchanged — and
- * appends the gesture, because a gesture nobody is told about is a gesture
- * only the developer has.
+ * `RecipeTile`'s FALLBACK hint for a tile that carries a long-press and has
+ * not been given a hint of its own. It keeps that component's primary
+ * promise first — its default `onPress` opens Cook Mode — and appends the
+ * gesture, because a gesture nobody is told about is a gesture only the
+ * developer has.
+ *
+ * IT IS NO LONGER WHAT MIJN RECEPTEN USES, and the pair below explains why
+ * both strings exist. `RecipeTile.tsx`'s header asks any caller that
+ * overrides `onPress` to override `accessibilityHint` with it; the library
+ * grid now does exactly that, passing `LIBRARY_TILE_OPEN_RECIPE_HINT`. This
+ * constant stays unchanged rather than being rewritten, because it describes
+ * `RecipeTile`'s own untouched default and would become false the moment it
+ * was made to describe somebody's override.
  */
 export const LIBRARY_TILE_ACTIONS_HINT = 'Open kookmodus voor dit gerecht. Houd ingedrukt voor meer opties.';
+
+/**
+ * The hint Mijn recepten's tiles actually carry, since a tap opens the
+ * recipe screen (src/app/recipe/[mealId].tsx) rather than cook mode.
+ *
+ * SAME SHAPE AS THE CONSTANT ABOVE, DELIBERATELY: the destination first, the
+ * gesture second. A screen-reader user who learns one tile has learned them
+ * all, and the only thing that changed is the first clause — which is the
+ * only thing that changed about the tile.
+ *
+ * "Open dit recept" AND NOT "Bekijk dit recept". A hint says what the
+ * control DOES, and the screen it opens can be read, planned, edited, sent
+ * and cooked from; promising only a look would undersell it by four acts.
+ */
+export const LIBRARY_TILE_OPEN_RECIPE_HINT = 'Open dit recept. Houd ingedrukt voor meer opties.';
 
 // ---------------------------------------------------------------------------
 // "Sturen" — the row that opens the send sheet (W-10, §3.1)

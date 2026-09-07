@@ -594,6 +594,13 @@ user-facing.
 
 ## PD-015 — Sharing becomes two-tier: ambient cook proof, and the directed send
 
+> ⚠ **REVERSED IN PART on 6 September 2026 by the owner. See PD-022.** One sentence goes:
+> the household switch is no longer off by default, and the per-dish refusal stops being the
+> narrow case and becomes the ordinary gesture. Everything else below stands and is still cited
+> by the code — the two tiers, the projection's two columns, the absent rating, the leaving
+> story, the rejected alternatives. The text is kept whole because PD-022 reverses a default,
+> not an argument, and the argument is here.
+
 **The decision.** PD-010's user-facing sharing model is replaced. Sharing is no longer one act per
 meal; it is two tiers that do not resemble each other.
 
@@ -730,6 +737,12 @@ decision being retaken, not a tightening.
 
 ## PD-017 — The social reason on Kiezen, and a named friend-proof weight
 
+> ⚠ **REVERSED IN PART on 6 September 2026 by the owner. See PD-023.** "The grade is a public
+> vote and never a private one" survives as a statement about which column is read, and stops
+> being a statement about which number that is: after PD-023 the public vote and the
+> household's own grade are the same figure, entered once. The copy, the place in the reason
+> hierarchy and `FRIEND_PROOF_BOOST` are untouched.
+
 **An extension of PD-002's reason hierarchy, not an amendment to it.** A friend's cook becomes a
 stated reason on the decision surface, and the strongest concrete one this product can produce.
 Rule 2 of the three that override everything says every suggestion carries a stated reason; a named
@@ -830,11 +843,23 @@ behaving like the other.
 **The thin list is the honest list, and it will be thin for a long time.** A kring of two rows is
 the expected state for months, not a failure state to paper over, so it is designed as a small
 dinner table rather than an embarrassed leaderboard: rows render identically whether there are two
-or twenty, the list ends with its own end line ("Dat is de hele kring."), and it is **never
+or twenty, the list ends with its own end line (~~"Dat is de hele kring."~~), and it is **never
 padded** — no global rows blended in to make it look fuller, which would rebuild the refused
-*Ontdekken* surface out of spare parts, and no skeleton implying more is coming. Empty state: "Nog
-geen cijfers uit je kring" over "Geeft een vriend een recept een cijfer, dan staat het hier." Never
-a zero, never a placeholder row.
+*Ontdekken* surface out of spare parts, and no skeleton implying more is coming. Empty state:
+~~"Nog geen cijfers uit je kring" over "Geeft een vriend een recept een cijfer, dan staat het
+hier."~~ Never a zero, never a placeholder row.
+
+> **CORRECTED, 2026-09-06 — the three strings above are not what shipped, and the paragraph that
+> moved this decision to Trending says they were carried across 'without a line of it being
+> rewritten'. That is false and this is the correction.** `git log -p --follow --
+> src/components/kringPresentation.ts` puts the change in `b9b0f59`: `KRING_END_COPY` is
+> `'Dat is alles van je vrienden.'` (`kringPresentation.ts:52`) and `KRING_EMPTY_TITLE` is
+> `'Nog geen cijfers van je vrienden'` (`:55`). Only `KRING_EMPTY_BODY` survives verbatim (`:56`).
+> **The code is right and this entry was wrong.** The move to Trending retired the word "kring"
+> from user-facing copy — DESIGN-SOCIAL.md §2.4's own banner says so in as many words — and a
+> screen cannot end on "dat is de hele kring" when nothing in the product calls it that any more.
+> Everything else in this paragraph shipped exactly as written: the identical rows, the absent
+> skeleton, the refusal to pad. Only the two strings that spoke the retired word changed.
 
 **Why it is a scope of Trending and not a fifth tab.** DESIGN.md's rule is that a tab exists for a
 distinct *question a household asks*, never for a distinct kind of content. "Wat vindt mijn kring
@@ -861,6 +886,15 @@ cook for the number.
 ---
 
 ## PD-019 — Every socially visible number is a public vote; `cook_events.rating` never leaves the household
+
+> ⚠ **REVERSED on 6 September 2026 by the owner. See PD-023.** The central claim — that
+> `cook_events.rating` never crosses a household boundary — no longer holds: the grade a cook
+> gives her own cook is now also cast as a public vote on the canonical recipe. The text below
+> is kept in full because PD-023 **accepts** its inflation argument as a cost rather than
+> refuting it, and a cost whose argument has been deleted is a cost nobody can check later.
+> Two things here are not reversed and still govern: the last paragraph, "Precision follows the
+> instrument", and the requirement that a surface asking for a number says out loud that the
+> number travels.
 
 **Restated as a standing condition, because the two-tier social model makes it load-bearing on
 surfaces PD-008 never had to think about.** There are two rating instruments in this product and
@@ -1007,3 +1041,242 @@ closing the app is already the affordance, and building a destination for it was
 ACCEPTED decision with no recorded outcome, so an evening nobody answered never produces a
 "Gemaakt?". And `novelty.ts` already counted an offered dish as known regardless of status, so
 what the engine remembers about a refused evening is exactly what it remembered before.
+---
+
+## PD-022 — Reversed: sharing what you cook is the standard, and the refusal is a checkbox at the stove
+
+**Owner decision, 6 September 2026, in his own words:** *"I think a small checkbox that you can
+tap not to share you made a recipe would be a nice addittion but it should be standard that you
+share it with friends."*
+
+**What is reversed.** PD-015's first tier read "One household switch, *'Deel wat ik kook met
+vrienden'*, off by default", with `Deel deze niet` as a per-dish narrowing for the rare dish that
+says too much. The default flips. Sharing your cooking with the friends you have accepted is the
+standard state of this product, and the refusal moves to where cooking actually happens: **a small
+checkbox at the moment of cooking, checked by default, that you tap to keep one dish to
+yourself.** The rare case and the ordinary case swap places. Nothing else in PD-015 moves — the
+two tiers, the projection's two columns, the absent rating, the retroactive leave.
+
+**No migration ever starts sharing on somebody's behalf, and that is a decision rather than an
+implementation detail.** A household that comes into existence after this ships defaults to on. A
+household that already exists and never answered the question **stays off until it is asked**, with
+the box pre-checked. `0009_cook_proof_and_sends.sql:103` shipped
+`households.share_cooks_with_friends boolean not null default false`, so every household alive today
+carries a literal `false` that nobody chose; an `update households set share_cooks_with_friends =
+true` would be this app publishing somebody's cooking because a document changed while they were
+not looking. PD-010.3's sentence is amended in its first half and survives whole in its second:
+sharing is no longer never-a-default, but it is still never something that happens to you. The
+migration that ships this decision changes a column default and no rows.
+
+**The consent copy does not get quieter, and the ask does not get cheaper.** PD-005's discipline
+holds exactly as it did: the consequence is stated in full sentences *before* the control,
+unbundled, never behind a disclosure. `src/components/cookSharingCopy.ts` already carries that text
+as four ordered paragraphs — what becomes visible, what never does, the honest risk, and how to
+leave — and the reversal changes the default the control sits at, not one word of what the reader
+is told. Two sentences in the shipped copy assert the old default and are now false, and they move
+with the code rather than after it: `COOK_SHARING_CONSEQUENCE[2]` ends *"Daarom staat dit uit tot je
+het zelf aanzet"*, and `CookSharingAskSheet.tsx`'s header requires the control to be raised "visibly
+off and no pre-selection". A pre-checked box is still an unbundled ask; a pre-checked box beside a
+sentence claiming the box is unchecked is a lie, and that is the thing to avoid.
+
+**The honest risk does not go away. It gets larger, and this entry says so plainly rather than
+letting a later reader discover it.** DESIGN-SOCIAL.md §5 states it: a list of named cooks is a
+dietary pattern, and friends who see every dish you make can infer halal, vegan or an avoidance —
+Article-9-adjacent inference drawn from facts that are not themselves Article 9 data. §5 then names
+off-by-default as the **first** mitigation for exactly that inference. That mitigation is now spent.
+What remains, and it is the whole of what remains:
+
+1. **The audience is only ever mutually accepted friends.** Never public, never strangers. This is
+   structural rather than promised: `shared_cooks` ends its `where` clause on
+   `public.is_friend_of(hm.auth_user_id)` (`0009:154`), and `MealVisibility` has no `public` member.
+2. **The per-cook checkbox**, which is this decision's own addition and the gesture the owner asked
+   for.
+3. **The global switch**, in settings, revocable, and retroactive when revoked — proof is assembled
+   per read and stored nowhere on the receiving side.
+4. **Consent copy that names the inference out loud**, in the paragraph that exists for no other
+   purpose.
+
+Four mitigations where there were five, with the one that used to carry the most weight removed. The
+owner took this decision with that cost in view; it is recorded here as a trade he made and not as
+an objection to it.
+
+**`member_restrictions` is untouched and remains unreadable by any social path.** That is not part
+of this reversal and is not weakened by it. It is still the only Article 9 table in this schema, and
+the inference risk above is precisely the risk of somebody *deriving* what that table holds from
+facts that are not it.
+
+**Two instruments now suppress proof, and they are not the same instrument.** The per-cook checkbox
+governs **this cook**: you made this tonight and you would rather nobody knew. `Deel deze niet`
+governs **the dish**, past included, at the next read (`0009:118-121`), and it survives the global
+switch being toggled off and on. A household that decides a dish says too much wants its history
+gone, not tonight's row, so the exclusion is not made redundant by the checkbox and is not removed.
+Both must be honoured by the projection, and a cook suppressed by either is suppressed.
+
+**Rejected alternatives, recorded so they are not rebuilt.** *Flip existing households in the
+migration* — "they would have been asked eventually anyway" is the argument, and it is the argument
+every consent model rots on: the household that never answered is exactly the household with no
+evidence of what it wanted. *Leave the per-cook control unchecked* — a per-cook opt-in is the
+per-meal opt-in PD-015 already rejected on supply grounds, wearing a smaller hat; a control you must
+tick to share is a control almost nobody ticks, which makes the standard a formality. *Drop `Deel
+deze niet` now that there is a per-cook box* — answered above: different scope, different question.
+*Ask again at the next cook when somebody unchecks* — that is campaigning, which §5 refuses by name.
+
+**A consequence that needs an answer, stated here rather than left to be found.** The one contextual
+ask fires at exactly one accepted friendship: `shouldAskCookSharing` (`src/components/addFriendCopy.ts:601`)
+is `acceptedFriendCount === 1 && !alreadyAsked`, and `markHouseholdCookSharingAsked` deliberately has
+no un-ask counterpart. An existing household that already has two or more friends and never answered
+therefore **cannot be asked contextually at all** — settings is its only route. Under off-by-default
+that was a household quietly staying private, which was the safe direction. Under this decision it is
+a household that never receives the state the product now considers standard, and the sharp end of
+that is a friend who wonders why nothing she cooks ever shows up. Either a second asking moment
+exists or that silence is accepted; it is the owner's call, recorded as open question J in
+`OPEN-BESLISSINGEN.md`.
+
+---
+
+## PD-023 — Reversed: the grade you give your own cook is also cast as a public vote
+
+**Owner decision, 6 September 2026, in his own words:** *"Besides this, the rating should also be
+represented in the global ranking of a recipe."*
+
+**What is reversed.** PD-019 held that every socially visible number is a `recipe_ratings` vote and
+that `cook_events.rating` never crosses a household boundary, on the argument that a grade the cook
+knows her friends can see is a grade that gets inflated, and an inflated grade corrupts the decision
+engine that reads it. From here, the grade a household gives its own cook is **also** cast as a
+public vote on the canonical recipe, and counts toward the global board.
+
+**What is bought: Ranglijst finally has a writer, and the reason it was empty is not the reason
+anybody assumed.** `rateRecipe` has **zero callers**. Grepped on 6 September 2026 across the whole
+tree: two implementations (`src/lib/repository/social/localSocialRepository.ts:357` and
+`src/lib/repository/social/supabaseSocialRepository.ts:268`), one interface entry
+(`src/lib/repository/social/types.ts:398`), and every call site in the repository is a test
+(`tests/repository/localSocialRepository.test.ts`, `tests/repository/supabaseSocialRepository.test.ts`).
+Nothing under `src/app/**`, `src/components/**` or `src/domain/**` calls it. **The board is empty
+because nothing in this product has ever been able to cast a vote** — there is no writer, and there
+never was. That is a different diagnosis from the one the emptiness invited, which was that the
+policy split of PD-019 was starving the board of numbers it was otherwise entitled to. It was not a
+policy problem. docs/DESIGN.md §10 said so in as many words and nobody drew the conclusion: *"There
+is no public-vote control anywhere in the app yet ... it has a repository seam, `rateRecipe`, with
+no screen behind it."* This is the third instance of the pattern GAP-30 and `friendProof.ts` already
+recorded — a fully specified feature whose wiring was never laid, invisible to every test because
+there is nothing to test.
+
+**Nothing has to be converted, which is why this is a small change.** Both instruments already carry
+the identical scale: `cook_events.rating` and `recipe_ratings.rating` are each `numeric(4,2)` under
+`check (rating >= 1 and rating <= 10 and rating = round(rating, 1))` since
+`0008_report_card_scale.sql`, and `src/domain/rating.ts` owns the scale for both (PD-008a). A grade
+cast as a vote is the same number written to a second row.
+
+**What is spent: PD-019's inflation argument, accepted as a cost and not refuted.** PD-019 predicted
+something specific, and the prediction is worth restating precisely because this decision does not
+answer it: *"A grade the proud cook knows her friends can see is a grade that gets inflated, and an
+inflated grade feeding the engine would quietly corrupt every later suggestion."* That mechanism is
+not disputed here. It is priced. `HOUSEHOLD_FAVOURITE_BOOST` and `WOULD_NOT_REPEAT_PENALTY` read
+`cook_events.rating`, so if the prediction comes true the engine drifts toward whatever a household
+is willing to be seen endorsing.
+
+**The instrument that would detect it, named now so a later reader checks instead of re-arguing.**
+The distribution of `cook_events.rating` over time — its mean and its shape, read before and after
+this ships. It is measurable without new telemetry: the column is mirrored to Postgres and
+`src/lib/repository/mirror/rows.ts:51-60` says why (the decision engine reads cook history and
+`resolveRepeatSignal` needs it), so the rows are there to be counted. The signature to look for is a
+mean that climbs while the low tail thins — a household that stops recording the 4s rather than one
+that starts cooking better. What cannot be measured is the counterfactual, so the reading has to be
+against grades recorded before this change; that baseline exists only until the change lands, which
+is the one time-sensitive thing in this entry. **If the drift appears, the honest repair is to stop
+feeding the vote from the cook grade — not to reweight the engine around an input known to be
+corrupted.**
+
+**The boundary that holds: only a canonical recipe can be voted on.** `recipe_ratings.recipe_id`
+references `recipes` (`0007_social.sql:468`) and `Meal.recipeId` is optional, so a seeded, curated or
+hand-typed dish has nothing to vote on. `0007` already anticipated exactly this and said so at the
+table it created: such a meal *"can be rated in the first sense and has nothing to rate in the
+second"*. **A hand-typed meal ranks nothing**, and that is not a limitation to be engineered around
+— the board ranks shared objects, and a dish that exists in one kitchen is not one.
+
+**Three consequences of the vote's own shape, none of them bugs.**
+
+- **One vote per person per recipe.** `unique (recipe_id, rater_profile_id)` (`0007:488`) means that
+  cooking the same recipe a second time and grading it again **replaces** the earlier vote rather
+  than adding one. That is correct — a household that cooks a dish weekly is one voter, not fifty —
+  and it must not be rediscovered later as a lost write.
+- **A skipped grade casts nothing.** `cook_events.rating` is nullable because "asked and skipped" is
+  a first-class answer; `recipe_ratings.rating` is `not null` because a row exists only where
+  somebody voted. PD-008's "skipping costs exactly one tap" is intact, and skipping now also means
+  casting no vote.
+- **A withdrawn vote is a real delete** (`recipe_ratings_delete`, `0007:532`), so a household that
+  changes its mind about being counted leaves nothing behind. That instrument already exists and is
+  the honest one to point at when somebody asks how to take it back.
+
+**PD-022's checkbox suppresses your name, not the number.** The global board is an anonymous average
+— PD-014 prints a score and never a voter — so a dish you kept out of the Gekookt list still counts
+toward what the population thinks of the recipe. De kring names its voters. That is the shape the
+owner asked for.
+
+**And here is the part that has to be written down before it is discovered.** `recipe_ratings`
+carries `rater_profile_id`, and `recipe_ratings_select` is `using (auth.uid() is not null)`
+(`0007:516`) — **every signed-in user may read who voted for what.** `0007` states that trade in its
+own comment and under PD-019 it was sound: a vote was a separate, deliberate act cast in the
+knowledge that it was public. Under this decision the vote is a by-product of grading your own cook,
+so the (profile, recipe) link that cook proof publishes *under an opt-in* is also published by the
+vote, under no opt-in, past the checkbox. Two consequences, and the second one renders:
+
+1. Nothing in the app draws that row, but any client with a session can read it.
+2. **De kring draws it.** PD-018.4 names voters while they fit, and `buildKringMetaLine`
+   (`src/components/kringPresentation.ts:110-126`) prints "8,5 · Sanne en Joris" up to
+   `KRING_VOTER_NAME_LIMIT`. So a friend who unchecks the box to keep one dish to herself is still
+   named beside her grade on that dish's kring row, on the friend-scoped surface, by name.
+
+**This decision does not resolve that and must not be read as if it had.** Either the checkbox
+suppresses the vote as well as the name — which costs the board precisely the rows this decision was
+taken to get — or "keep this one to myself" means "keep it out of the Gekookt list" and the copy
+beside the checkbox must say only that and never more. It is the owner's call, recorded as open
+question I in `OPEN-BESLISSINGEN.md`. **Until it is answered, the checkbox's copy may not promise
+that a dish stays private**, because on today's code it does not.
+
+**What did NOT change, said out loud because it is the obvious misreading.** `shared_cooks` did
+not grow a column. It is still the view `0009:132-136` defines — `select distinct hm.auth_user_id
+as profile_id, m.recipe_id as recipe_id` — and the rating is absent from it rather than protected
+in it, which was PD-019's strongest structural claim and is the one clause of it this reversal
+leaves completely alone. "The private grade is now public" is true of a **second row in a second
+table written by a second call**; it is not true of the proof projection, which carries two
+columns today and must still carry two columns tomorrow. A reader who takes this decision as
+permission to widen that view has misread it.
+
+**One absent call site was holding three decisions inert, not one.** The empty board is the
+visible half. The other half: PD-017's reason on Kiezen is fully built and fully wired —
+`FRIEND_PROOF_BOOST = 20` (`src/domain/scoring.ts:68`) is read at `:326`, `friendProofText`
+(`src/domain/reason.ts:105-124`) writes the sentence, and `loadFriendProof` is live at
+`src/app/(tabs)/index.tsx:204`. The **boost** fires fine, because it reads `shared_cooks` and not
+votes. What can never fire is the number in the sentence: `friendProofText` branches on
+`proof.grade === null` and returns "Sanne heeft dit ook gemaakt.", so **PD-017's headline copy
+— "Sanne heeft dit ook gemaakt en gaf het een 8,5" — has been unreachable since the day it was
+written**, and nothing about that was visible: the fallback is a legitimate, specified variant,
+so the surface renders a correct sentence and no test can tell that the other branch is dead.
+De kring (PD-018) is empty for the same reason. One missing writer, three decisions quietly
+delivering less than they say.
+
+**PD-014.6 is not amended.** The board stays global and identical for every reader: no
+personalisation, no per-viewer ordering, one list. What changes is **who writes to it**, not who sees
+what. PD-018's kring is likewise not amended — same table, same friend filter, same arithmetic; it
+simply starts having rows.
+
+**PD-019's one surviving condition, which this reversal does not spend.** A surface that asks for a
+number must say out loud that the number travels. Under PD-019 that condition guarded a control that
+did not exist; under this decision it guards the outcome card, which does. The grade is now given on
+a screen whose whole framing is private — `OutcomeCard`'s own header calls it "the household's
+private engine input" — so the card must say, where the grade is given, that this also becomes a
+public vote on the recipe. Without that sentence the vote is cast without the consent that made a
+public vote safe in the first place, and PD-005's unbundled-consent discipline is not satisfied by a
+setting somewhere else.
+
+**Rejected alternatives, recorded so they are not rebuilt.** *Keep the two instruments apart and
+build a separate public-vote control* — honest, and exactly what DESIGN.md §10 anticipated. Rejected
+by the owner: a second rating gesture on a screen that already asks for a grade is asking the same
+question twice in a different costume, which is the thing PD-008 refused when it deleted "Nog een
+keer? Ja / Liever niet". *Publish the aggregate but not the row* — a household-anonymised second
+vote table. Rejected because it gives the board two definitions of one number, the failure
+`0007_social.sql:104` and PD-014 both already refused, and because the anonymity would be new
+plumbing rather than a policy. *Rank the board on `shared_cooks` counts instead of grades* — that is
+the global strangers aggregate PD-015 rejected by name, and a count of cooks is not a verdict on a
+recipe.

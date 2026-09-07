@@ -2,9 +2,18 @@
  * FIXTURE DATA — NOT REAL. Stands in for a real POST to the `parse-recipe`
  * Edge Function (supabase/functions/parse-recipe/index.ts) while there is
  * no live backend wired up (task requirement: "Fixtures only, no live
- * backend. Keep them clearly separated." — kept in its own file under
- * src/app/import/ rather than mixed into the shared src/app/_fixtures.ts
- * for exactly that reason).
+ * backend. Keep them clearly separated." — kept in its own file rather
+ * than mixed into `decisionFixtures.ts` for exactly that reason; see that
+ * file's header for why every fixture in this app now lives under
+ * src/fixtures/ instead of behind an underscore in a route folder).
+ *
+ * IT IS DELIBERATELY NOT IN src/domain/import/, WHICH IS THE OTHER PLACE
+ * IT COULD HAVE GONE. Eighteen modules in that directory are pulled into
+ * the Deno import graph of supabase/functions/parse-recipe (OPS-09,
+ * lint/eslint.flat.config.mjs). Putting the fixture that FAKES that
+ * function's response inside the function's own graph would be the wrong
+ * kind of close: it would make fake data deployable, and it would drag
+ * this file under the explicit-`.ts`-extension rule for no benefit.
  *
  * Every exported shape here is typed against the REAL
  * src/domain/import/types.ts `ImportResult`/`ParsedRecipe` (landed by the

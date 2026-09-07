@@ -94,6 +94,61 @@ const PAGE_SIZE = 1000;
 
 
 export function createSupabaseSocialRepository(client: SupabaseClient): RemySocialRepository {
+  /**
+   * A whole-relation read of rating rows, paged, shared by the board's
+   * `listAllRecipeRatings` and the kring's `listNamableRecipeVotes`.
+   *
+   * PAGED RATHER THAN ONE UNBOUNDED SELECT: PostgREST caps a single
+   * response well below `BOARD_RATING_ROW_CEILING`, and a silently
+   * truncated first page is exactly the partial read that would make a
+   * ranking present a subset as though it were the world.
+   *
+   * PARAMETERISED BY RELATION, not copied per caller. `namable_recipe_votes`
+   * is a view over `recipe_ratings` selecting the identical columns, so
+   * the two reads differ in nothing but which rows come back — and a
+   * second hand-written copy of this loop would be a second chance to get
+   * the termination condition wrong, on a read whose failure mode is
+   * invisible.
+   *
+   * `operation` is a parameter so the two callers fail with their own
+   * sentence. A shared "Reading ratings" would put the board's wording on
+   * the kring's failure, which is the sort of small lie that costs an hour
+   * of looking in the wrong screen.
+   */
+  async function readEveryRating(relation: string, operation: string): Promise<readonly RecipeRating[]> {
+    const rows: RecipeRatingRow[] = [];
+
+    for (let from = 0; from < BOARD_RATING_ROW_CEILING; from += PAGE_SIZE) {
+      const { data, error } = await client
+        .from(relation)
+        .select('*')
+        // Ordered by primary key so paging is stable. Without it two
+        // pages can overlap or skip rows as the relation changes
+        // underneath the reads, which would double-count a vote or lose
+        // one.
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        fail(operation, error);
+      }
+
+      const page = (data ?? []) as RecipeRatingRow[];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) {
+        return rows.map(toRecipeRating).filter((rating): rating is RecipeRating => rating !== null);
+      }
+    }
+
+    // See BOARD_RATING_ROW_CEILING: refusing loudly beats ranking a
+    // subset as though it were everything.
+    throw new Error(
+      `A ranking tried to read more than ${BOARD_RATING_ROW_CEILING} ratings from "${relation}". ` +
+        'Client-side aggregation has outgrown the data; move the per-recipe aggregate into SQL ' +
+        '(see the note on BOARD_RATING_ROW_CEILING in src/lib/repository/social/types.ts).',
+    );
+  }
+
   return {
     async getProfile(profileId: ProfileId): Promise<Profile | null> {
       const { data, error } = await client.from('profiles').select('*').eq('id', profileId).maybeSingle();
@@ -314,41 +369,37 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
       }
     },
 
+    /**
+     * Every vote, for the board's anonymous average.
+     *
+     * Complete on purpose, and it stays complete now that a vote can be
+     * cast by cooking: the board prints a number and never a name, so a
+     * dish its household asked to keep quiet is still evidence about the
+     * RECIPE. Hide the name, keep the number.
+     */
     async listAllRecipeRatings(): Promise<readonly RecipeRating[]> {
-      const rows: RecipeRatingRow[] = [];
+      return readEveryRating('recipe_ratings', 'Reading ratings for the board');
+    },
 
-      // Paged rather than one unbounded select: PostgREST caps a response
-      // well below the ceiling, and a silently truncated first page is
-      // exactly the partial read that would make the board rank a subset
-      // while presenting itself as the world.
-      for (let from = 0; from < BOARD_RATING_ROW_CEILING; from += PAGE_SIZE) {
-        const { data, error } = await client
-          .from('recipe_ratings')
-          .select('*')
-          // Ordered by primary key so paging is stable. Without it two
-          // pages can overlap or skip rows as the table changes underneath
-          // the reads, which would double-count a vote or lose one.
-          .order('id', { ascending: true })
-          .range(from, from + PAGE_SIZE - 1);
-
-        if (error) {
-          fail('Reading ratings for the board', error);
-        }
-
-        const page = (data ?? []) as RecipeRatingRow[];
-        rows.push(...page);
-        if (page.length < PAGE_SIZE) {
-          return rows.map(toRecipeRating).filter((rating): rating is RecipeRating => rating !== null);
-        }
-      }
-
-      // See BOARD_RATING_ROW_CEILING: refusing loudly beats ranking a
-      // subset as though it were everything.
-      throw new Error(
-        `The board tried to read more than ${BOARD_RATING_ROW_CEILING} ratings. ` +
-          'Client-side aggregation has outgrown the data; move the per-recipe aggregate into SQL ' +
-          '(see the note on BOARD_RATING_ROW_CEILING in src/lib/repository/social/types.ts).',
-      );
+    /**
+     * The kring's source: the same read, one relation over.
+     *
+     * `namable_recipe_votes` (0016) is a VIEW over `recipe_ratings` that
+     * drops every vote whose household marked that dish "deel deze niet",
+     * and it selects the identical five columns — so PostgREST cannot tell
+     * the difference, which is why this shares `readEveryRating` instead
+     * of growing a second paging loop. Two copies of that loop would be
+     * two chances to get the `page.length < PAGE_SIZE` termination wrong,
+     * on reads whose failure mode is a silently truncated ranking that
+     * still presents itself as complete.
+     *
+     * The ceiling applies here too, and that is not an oversight: this
+     * list is a subset of the board's, so anything that fits under the
+     * ceiling there fits here, and a view somehow returning more would be
+     * exactly the surprise worth throwing on.
+     */
+    async listNamableRecipeVotes(): Promise<readonly RecipeRating[]> {
+      return readEveryRating('namable_recipe_votes', 'Reading votes that may be named');
     },
 
     async listFriendCookedRecipes(): Promise<readonly FriendCook[]> {

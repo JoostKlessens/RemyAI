@@ -41,7 +41,9 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { readMealDishCourse } from '@/domain/dishCourses';
 import { NOT_RECHECKED, recheckedAllergens } from '@/domain/mealAllergenReverification';
+import type { Meal } from '@/domain/types';
 import { createInMemoryKeyValueStore, type KeyValueStore } from '@/lib/repository/keyValueStore';
 import { createLocalRepository, type MirrorJobSink } from '@/lib/repository/localRepository';
 import type { MirrorJob, MirrorMealJob } from '@/lib/repository/mirror/types';
@@ -96,6 +98,12 @@ function makeUpdateInput(overrides: Partial<UpdateMealRecipeInput> = {}): Update
       { stepNumber: 2, instruction: 'Pers de citroen.', durationMinutes: null },
     ],
     allergenCheck: NOT_RECHECKED,
+    // Both taxonomies are REQUIRED on this input, so every case below
+    // restates them — which is the point of requiring them. An optional
+    // "leave it alone" field on a save that replaces everything else is
+    // how a screen ends up wiping a value it never showed anybody.
+    dishTags: ['kip'],
+    dishCourse: 'hoofdgerecht',
     ...overrides,
   };
 }
@@ -235,7 +243,21 @@ describe('updateMealRecipe — what an edit must NOT touch', () => {
     repository = createLocalRepository(createInMemoryKeyValueStore());
   });
 
-  test('provenance, the canonical recipe link, categories and creation time all survive untouched', async () => {
+  /**
+   * THIS TEST USED TO INCLUDE `dishTags` IN THE LIST OF THINGS AN EDIT
+   * LEAVES ALONE, AND IT NO LONGER CAN. The owner asked for the opposite —
+   * "Kan je de tags niet aanpassen handmatig?" — so categories are now
+   * something this input carries and this write replaces. The guarantee
+   * that replaces "untouched" is the one below it: a save that restates
+   * the same categories changes nothing, which is what an editor opened
+   * and closed without edits must do.
+   *
+   * Everything still in this list is PROVENANCE: where the recipe came
+   * from, which canonical row it is a copy of, when it was saved. Those
+   * are facts about history rather than about the dish, and no editor may
+   * rewrite history.
+   */
+  test('provenance, the canonical recipe link and creation time all survive untouched', async () => {
     const created = await repository.createMeal(makeCreateMealInput());
 
     const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ title: 'Iets anders' }));
@@ -249,10 +271,18 @@ describe('updateMealRecipe — what an edit must NOT touch', () => {
     // that re-pointed it would silently move whose cooks this dish can be
     // joined to.
     expect(edited.recipeId).toBe('recipe-1');
-    expect(edited.dishTags).toEqual(['kip']);
     expect(edited.skillLevel).toBe('beginner');
     expect(edited.createdAt).toBe(created.createdAt);
     expect(edited.archivedAt).toBeNull();
+  });
+
+  test('opening the editor and saving without touching the categories changes neither of them', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: ['kip'] }));
+
+    const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ title: 'Iets anders' }));
+
+    expect(edited.dishTags).toEqual(['kip']);
+    expect(readMealDishCourse(edited)).toBe('hoofdgerecht');
   });
 
   test('a household that withheld this dish from cook proof still withholds it after correcting a typo', async () => {
@@ -289,6 +319,141 @@ describe('updateMealRecipe — what an edit must NOT touch', () => {
     const events = await repository.listCookEvents(HOUSEHOLD_ID);
     expect(events).toHaveLength(1);
     expect(events[0]?.mealId).toBe(created.id);
+  });
+});
+
+/**
+ * The owner's "Kan je de tags niet aanpassen handmatig?".
+ *
+ * WHAT WAS BROKEN, AND IT WAS NOT SMALL. `dish_tags` had exactly one
+ * writer — the extraction model at import — and manual entry wrote `[]`
+ * (confirm.tsx). So a recipe the model tagged wrongly, and every recipe
+ * anybody typed in by hand, was permanently invisible to the library's
+ * "Waarmee?" filter with no way for any person to fix it. That is the
+ * most-used filter in the app being wrong about part of every library,
+ * and no amount of work on the filter CONTROL repairs it; only a writer
+ * does.
+ *
+ * THE INVARIANT THESE CASES EXIST TO PROTECT: opening the vocabulary to a
+ * person must not open it to free text. `DISH_TAGS` is closed on purpose
+ * (a value outside it is unfilterable, so storing one stores something
+ * nobody can ever ask for again), and tests/dishTags.test.ts holds every
+ * value normalise-clean. An edit path that could introduce "italiaans"
+ * would break the very filter this change exists to fix, so the narrowing
+ * is asserted at the seam rather than trusted from the screen.
+ */
+describe('updateMealRecipe — the categories a person can now correct', () => {
+  let repository: RemyRepository;
+
+  beforeEach(() => {
+    repository = createLocalRepository(createInMemoryKeyValueStore());
+  });
+
+  test('replaces the dish tags with what the editor was showing', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: ['kip'] }));
+
+    const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ dishTags: ['pasta', 'vegetarisch'] }));
+
+    expect(edited.dishTags).toEqual(['pasta', 'vegetarisch']);
+    expect((await repository.getMeal(created.id))?.dishTags).toEqual(['pasta', 'vegetarisch']);
+  });
+
+  test('a recipe can be left with no categories at all — empty is a legal answer, not a refusal', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: ['kip'] }));
+
+    const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ dishTags: [] }));
+
+    expect(edited.dishTags).toEqual([]);
+  });
+
+  test('drops a value outside the closed vocabulary rather than storing something nobody can filter on', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const edited = await repository.updateMealRecipe(
+      created.id,
+      makeUpdateInput({ dishTags: ['pasta', 'italiaans', 'zelfgemaakt'] }),
+    );
+
+    expect(edited.dishTags).toEqual(['pasta']);
+  });
+
+  test('normalizes on the way in, so one category cannot exist under two spellings', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ dishTags: ['  Pasta ', 'PASTA'] }));
+
+    expect(edited.dishTags).toEqual(['pasta']);
+  });
+
+  /**
+   * PD-006's separation, held at the write seam rather than at the screen.
+   * `noten` is an EU allergen and drives the exclusion gate; it is not a
+   * dish category and must not become one through an editor. The two
+   * vocabularies are asserted to share no value (tests/dishTags.test.ts),
+   * so narrowing to `DISH_TAGS` is what makes that assertion true of the
+   * edit path as well as the import path.
+   */
+  test('an allergen offered as a category is dropped — the two vocabularies never meet', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ dishTags: ['noten', 'soep'] }));
+
+    expect(edited.dishTags).toEqual(['soep']);
+    expect(edited.ingredientTags).toEqual([]);
+  });
+
+  test('replaces the course, because a dish sits in exactly one place in a meal', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishCourse: 'voorgerecht' }));
+
+    const edited = await repository.updateMealRecipe(created.id, makeUpdateInput({ dishCourse: 'toetje' }));
+
+    expect(readMealDishCourse(edited)).toBe('toetje');
+    expect(readMealDishCourse((await repository.getMeal(created.id)) as Meal)).toBe('toetje');
+  });
+
+  /**
+   * A course that a cast smuggled past the type falls back to the default
+   * rather than failing the save. This write carries five other fields
+   * somebody just typed, and refusing all of them to protect a LABEL would
+   * lose real work — the opposite trade from `addMealDishMood`, which
+   * throws because it writes one field and there is nothing else to lose.
+   */
+  test('a course outside the vocabulary falls back to the default instead of failing the whole save', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const edited = await repository.updateMealRecipe(
+      created.id,
+      makeUpdateInput({ title: 'Nieuwe titel', dishCourse: 'nagerecht' as never }),
+    );
+
+    expect(readMealDishCourse(edited)).toBe('hoofdgerecht');
+    expect(edited.title).toBe('Nieuwe titel');
+  });
+
+  test('correcting the categories touches neither the moods nor the allergen tags', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+    await repository.addMealDishMood(created.id, 'soul-food');
+
+    const edited = await repository.updateMealRecipe(
+      created.id,
+      makeUpdateInput({ dishTags: ['soep'], dishCourse: 'voorgerecht' }),
+    );
+
+    expect(edited.dishMoods).toEqual(['soul-food']);
+    expect(edited.ingredientTags).toEqual([]);
+    expect(edited.recipeId).toBe('recipe-1');
+  });
+
+  test('the correction survives a fresh repository instance over the same store', async () => {
+    const store = createInMemoryKeyValueStore();
+    const first = createLocalRepository(store);
+    const created = await first.createMeal(makeCreateMealInput({ dishTags: ['kip'] }));
+    await first.updateMealRecipe(created.id, makeUpdateInput({ dishTags: ['soep'], dishCourse: 'voorgerecht' }));
+
+    const second = createLocalRepository(store);
+    const reloaded = (await second.getMeal(created.id)) as Meal;
+    expect(reloaded.dishTags).toEqual(['soep']);
+    expect(readMealDishCourse(reloaded)).toBe('voorgerecht');
   });
 });
 

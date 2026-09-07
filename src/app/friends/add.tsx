@@ -71,17 +71,30 @@
  * ---
  *
  * §5's ONE-TIME ASK IS MOUNTED HERE, AND THIS IS THE ONLY PLACE IT COULD
- * BE. The cook-proof opt-in is "offered once, contextually, when the
- * household's first friendship is accepted" — that moment happens on the
- * accept path below and nowhere else in the app. `CookSharingAskSheet`
- * owns the disclosure and the visibly-off control and deliberately tracks
- * nothing; its `visible` must already mean "first friendship AND never
- * asked", which `shouldAskCookSharing` decides from two independent facts:
+ * BE. The cook-proof opt-in is offered contextually, on an accepted
+ * friendship — that moment happens on the accept path below and nowhere
+ * else in the app. `CookSharingAskSheet` owns the disclosure and the
+ * control and deliberately tracks nothing; its `visible` must already mean
+ * "there is an accepted friendship AND we have never asked", which
+ * `shouldAskCookSharing` decides from two facts:
  *
  *   1. The accepted count RE-READ after the write, so it is the database's
- *      answer and not a number this screen carried forward.
+ *      answer and not a number this screen carried forward. It only has to
+ *      be at least one: zero means the accept did not actually take.
  *   2. `getHouseholdCookSharingAsked`, the durable household flag whose
- *      writer has no un-ask counterpart on purpose.
+ *      writer has no un-ask counterpart on purpose. This is the guard that
+ *      enforces "once".
+ *
+ * TWO CLAIMS HERE WENT STALE WITH THE OWNER'S REVERSAL, and both are
+ * corrected above rather than left for somebody to discover. The control
+ * is no longer "visibly off": migration 0015 made sharing the standard and
+ * the sheet now arrives PRE-CHECKED, committing on its own `Klaar`. And
+ * the trigger is no longer the household's FIRST friendship — under
+ * `=== 1` a household that already had friends could never be asked at
+ * all, which in an on-by-default product meant the households most likely
+ * to want it were the only ones never offered it. See
+ * `shouldAskCookSharing`'s own header for the full argument, including
+ * what the broadening gives up and what still covers it.
  *
  * THE SHEET CANNOT BE RAISED TWICE. `askRef` is set synchronously when the
  * sheet goes up and cleared synchronously in the first line of the answer

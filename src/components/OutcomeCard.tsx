@@ -52,17 +52,38 @@
  * same kind of thing:
  *
  *   the grade (`onRate`)       -> `cook_events.rating`, PRIVATE, a number
+ *                              -> AND one `recipe_ratings` vote, PUBLIC,
+ *                                 the same number without a name
  *   the mood  (`onChooseMood`) -> the meal's `dishMoods`, PUBLIC, a word
  *
- * PD-019 is why they are two callbacks writing two tables rather than one
- * richer answer. A grade whose author knows others can see it is a grade
- * that gets inflated, and an inflated grade feeding the decision engine
- * corrupts every later suggestion — so the number stays home. A mood
+ * PD-019 is why these are separate callbacks writing separate tables
+ * rather than one richer answer. A grade whose author knows others can
+ * see it BY NAME is a grade that gets inflated, and an inflated grade
+ * feeding the decision engine corrupts every later suggestion. A mood
  * carries no number and no mood outranks another, so there is nothing in
- * it to inflate: it is the half that can be published, and it can be
- * published from this exact moment without dragging the other half along.
- * Nothing here derives one from the other, and the two prop signatures
- * make that structural rather than a promise.
+ * it to inflate. Nothing here derives one value from another, and the
+ * separate prop signatures make that structural rather than a promise.
+ *
+ * THE SECOND ARROW ON `onRate` IS NEW, AND THIS BLOCK USED TO SAY THE
+ * NUMBER "STAYS HOME". It no longer does, and leaving that sentence in
+ * the file that COLLECTS the grade would be exactly the defect this
+ * codebase keeps finding — a comment arguing for a rule nobody built.
+ * The owner's instruction, verbatim: "the rating should also be
+ * represented in the global ranking of a recipe." The host now hands the
+ * same value to `castPublicVote` (src/domain/social/publicVote.ts), which
+ * writes one vote on the canonical recipe.
+ *
+ * Two things keep PD-019's argument standing rather than merely surviving
+ * it. The private COLUMN still never crosses a household boundary —
+ * `shared_cooks` omits it outright. And no surface that prints a NAME
+ * beside a number reads it either: Ranglijst averages anonymously, and de
+ * kring reads `namable_recipe_votes` (0016), which drops a vote whose
+ * dish was unticked on this very card.
+ *
+ * NONE OF WHICH IS THIS COMPONENT'S BUSINESS. It calls `onRate` once with
+ * one number, exactly as before. The second write lives with the host,
+ * because "does this meal have a canonical recipe" and "who is signed in"
+ * are repository reads, and this card refuses those.
  *
  * WHY IT DOES NOT BREAK "one tap either way". The rule this card is built
  * on is that skipping the grade must cost exactly what answering it
@@ -89,11 +110,16 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
-import { hapticCompleted, hapticRealCommit } from '@/lib/haptics';
+import { hapticCompleted, hapticRealCommit, hapticSmallCommit } from '@/lib/haptics';
 import { elevation, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';
 import { Chip } from './Chip';
 import { ChipGroup } from './ChipGroup';
+import { ConsentCheckboxRow } from './ConsentCheckboxRow';
+import {
+  COOK_SHARING_THIS_COOK_LABEL,
+  buildCookSharingThisCookAccessibilityLabel,
+} from './cookSharingCopy';
 import { RatingScale } from './RatingScale';
 import { RATING_QUESTION, RATING_SKIP_LABEL, describeRatingAnnouncement, formatGrade } from './ratingScaleCopy';
 import { OUTCOME_SEND_ACCESSIBILITY_LABEL, OUTCOME_SEND_LABEL } from './sendRecipeSheetCopy';
@@ -146,15 +172,58 @@ export interface OutcomeCardProps {
    * private engine input, which never leaves it — and the mood goes
    * through here to the meal, where it is meant to be seen. A mood
    * carries no number and no mood outranks another, so there is nothing
-   * in it to inflate; that is exactly what makes it the half that can
-   * safely be public. Nothing in this component may derive either value
+   * in it to inflate. Nothing in this component may derive either value
    * from the other.
+   *
+   * "THE HALF THAT CAN SAFELY BE PUBLIC" is what this used to call the
+   * mood, and that is no longer a distinction between the two. The host
+   * now also publishes the grade as an anonymous `recipe_ratings` vote
+   * (see the file header). What is still true, and is the sentence worth
+   * keeping, is that `cook_events.rating` itself never leaves the
+   * household — the public vote is a separate row carrying the same
+   * number, not that column being read by anybody.
    *
    * OPTIONAL, AND ITS ABSENCE REMOVES THE ROW, matching `onSendRecipe`
    * below: a host with no meal row to write to passes nothing and the
    * question is simply not asked.
    */
   readonly onChooseMood?: (mood: string) => void;
+  /**
+   * The owner's own request: "a small checkbox that you can tap not to
+   * share you made a recipe". DESIGN-SOCIAL.md §3.5's `Deel deze niet`,
+   * moved to the one moment the dish is actually in mind.
+   *
+   * CHECKED MEANS SHARED, so this fires `false` when the box is UNTICKED
+   * and the host writes `setMealCookProofExclusion(mealId, true)`. The
+   * inversion lives at the host rather than here because this card must
+   * not know the name of a column; what it knows is what the reader just
+   * said about their own dinner.
+   *
+   * FIRES THE INSTANT IT IS TAPPED, exactly like `onChooseMood` and for
+   * the identical reason: this card can close at any moment (a grade,
+   * "Klaar", the ×, the app being backgrounded) and a write that waits
+   * for the dismissal is a write that sometimes never happens. A privacy
+   * choice that only lands if you leave the card politely is worse than
+   * no control at all, because the person believes they made it.
+   *
+   * OPTIONAL, AND ITS ABSENCE REMOVES THE ROW, matching `onChooseMood`
+   * and `onSendRecipe` above it. The host passes a handler only when the
+   * household's cook sharing is actually ON — a question this card has no
+   * business asking, because it is a repository read and every one of
+   * those lives with a screen in this app. Offering "vrienden mogen dit
+   * zien" to a household that shares nothing would be a lie about what
+   * the product is doing, dressed as a courtesy: it implies there is
+   * something to withhold.
+   *
+   * NOT DISABLED BY `isCommitting`, the same call `onChooseMood` and
+   * `onSendRecipe` make. The scale and "Klaar" are frozen during the exit
+   * beat so it cannot record a second, different grade — a real hazard,
+   * because a grade is one value and the last write wins. This is not
+   * that: each tap writes the current state of one boolean on one meal
+   * row, so a tap during the hold records one more true thing about what
+   * the person wants rather than contradicting anything.
+   */
+  readonly onChangeCookProofSharing?: (shareThisCook: boolean) => void;
   readonly onSendRecipe?: () => void;
   readonly onDismiss: () => void;
   readonly errorMessage?: string | null;
@@ -188,8 +257,17 @@ const MOOD_QUESTION = 'Wat voor gerecht was dit?';
 const GEMAAKT_STROKE_HEIGHT = 2;
 
 export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
-  const { dishTitle, onCooked, onRate, onChooseMood, onSendRecipe, onDismiss, errorMessage, reduceMotionEnabled } =
-    props;
+  const {
+    dishTitle,
+    onCooked,
+    onRate,
+    onChooseMood,
+    onChangeCookProofSharing,
+    onSendRecipe,
+    onDismiss,
+    errorMessage,
+    reduceMotionEnabled,
+  } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const [phase, setPhase] = useState<Phase>('prompt');
@@ -202,6 +280,27 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
    * up. The card can close a beat later and the record stands regardless.
    */
   const [chosenMood, setChosenMood] = useState<string | null>(null);
+  /**
+   * Whether friends may see this cook. Starts `true` because the owner
+   * made sharing the standard ("it should be standard that you share it
+   * with friends"), and because the row only renders at all for a
+   * household whose global switch is already on — so the honest starting
+   * state is the one that household has already agreed to.
+   *
+   * NOT THE SOURCE OF TRUTH, exactly like `chosenMood` above it:
+   * `onChangeCookProofSharing` has already written by the time this is
+   * set, so this only keeps the tick in the right place while the card is
+   * still up. The card can close a beat later and the record stands.
+   *
+   * IT DOES NOT READ THE MEAL'S CURRENT EXCLUSION, and that is worth
+   * stating because it looks like an omission. A meal reaching this card
+   * has just been cooked; whether some earlier pass marked it excluded is
+   * a repository read, and this card refuses those on principle (see
+   * `onSendRecipe`). Seeding from `true` is also the only value that
+   * cannot mislead: a box drawn from a stale read would show a state the
+   * household may have changed on another screen since.
+   */
+  const [shareThisCook, setShareThisCook] = useState(true);
   /**
    * The grade the finger has moved to but nobody has recorded yet.
    *
@@ -283,13 +382,20 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
     setPhase('followUp');
     // A1: the card morphs in place (no new screen, no focus change a
     // screen reader would naturally pick up), so the follow-up phase
-    // needs its own explicit announcement — and it must name BOTH
-    // questions when both are on screen. Announcing only the grade would
-    // leave a screen-reader user to discover a whole chip row by swiping
-    // into it, which is how an optional control becomes an invisible one.
+    // needs its own explicit announcement — and it must name EVERY
+    // control that is on screen. Announcing only the grade would leave a
+    // screen-reader user to discover a whole chip row by swiping into it,
+    // which is how an optional control becomes an invisible one.
+    //
+    // The sharing row is announced FIRST and in the order it is rendered,
+    // and it is the one item here that is not a question. It arrives
+    // already ticked, so a reader who never hears it has consented by not
+    // being told — which is the failure mode a spoken announcement exists
+    // to prevent, and the reason this sentence leads rather than trails.
     const followUpQuestions =
       onChooseMood === undefined ? RATING_QUESTION : `${MOOD_QUESTION} ${RATING_QUESTION}`;
-    AccessibilityInfo.announceForAccessibility(`Gemaakt! ${followUpQuestions}`);
+    const sharingNotice = onChangeCookProofSharing === undefined ? '' : `${COOK_SHARING_THIS_COOK_LABEL} `;
+    AccessibilityInfo.announceForAccessibility(`Gemaakt! ${sharingNotice}${followUpQuestions}`);
   };
 
   /**
@@ -370,6 +476,39 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
     }
     setChosenMood(mood);
     onChooseMood(mood);
+  };
+
+  /**
+   * "Deel dit gerecht wel of niet", and it writes on the tap.
+   *
+   * THE NEXT VALUE IS COMPUTED BEFORE THE `setState`, NOT INSIDE ITS
+   * UPDATER, and neither is the haptic. React may run an updater more
+   * than once — StrictMode does it deliberately — so a write or a
+   * vibration in there is one tap that fires twice: two repository calls
+   * for one decision, and a buzz that sounds like a stutter. This is the
+   * rule `boodschappen.tsx` learned the same way, and the reason
+   * src/lib/haptics.ts's header says the de-duplication belongs at the
+   * call site.
+   *
+   * `hapticSmallCommit`, not `hapticRealCommit`. WS5 §3.1's rule 2 is
+   * that the style tracks the weight of the consequence: a real commit is
+   * `Ja` on Kiezen, a grade landing, allergens confirmed — the answers
+   * that change what the product does next. This changes who may see one
+   * dinner, it is reversible from Bibliotheek's long-press for as long as
+   * the meal exists, and it must not out-weigh the grade being given
+   * three controls below it.
+   */
+  const handleToggleCookProofSharing = (): void => {
+    if (onChangeCookProofSharing === undefined) {
+      return;
+    }
+    const next = !shareThisCook;
+    hapticSmallCommit();
+    setShareThisCook(next);
+    // Immediately, for the reason the prop's own comment gives: this card
+    // can close at any moment and a write that waits for the dismissal is
+    // a write that sometimes never happens.
+    onChangeCookProofSharing(next);
   };
 
   const scale = entrance.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
@@ -453,6 +592,40 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
               ]}
             />
           </View>
+          {/* "Vrienden mogen zien dat ik dit heb gemaakt." — the owner's
+              small checkbox, and it sits DIRECTLY UNDER "Gemaakt!" for two
+              reasons that point the same way.
+
+              It annotates the sentence the card has just made. "Gemaakt!"
+              is the claim; this row is who gets to hear it. Neither
+              question below is about the announcement — one is about what
+              kind of dish it was and one is about how good it was — so
+              putting the audience question between them would file it
+              under the wrong heading.
+
+              And it MUST be above `RatingScale` regardless, for the same
+              reason the mood row is: a grade is TERMINAL on this card, so
+              anything rendered below the scale is unreachable for
+              everybody who answers the question the card exists to ask.
+              A privacy control nobody who rates can reach is not a
+              control.
+
+              NO STATE LINE UNDER IT, unlike the settings section's "Staat
+              aan. / Staat uit." The box's own tick carries the state here
+              and `accessibilityState.checked` speaks it, and this card's
+              header treats height as a hard constraint — six mood chips, a
+              scale and two buttons already stack below this point at 200%
+              Dynamic Type, on a card neither host scrolls. */}
+          {onChangeCookProofSharing !== undefined ? (
+            <View style={styles.cookProofRow}>
+              <ConsentCheckboxRow
+                checked={shareThisCook}
+                label={COOK_SHARING_THIS_COOK_LABEL}
+                accessibilityLabel={buildCookSharingThisCookAccessibilityLabel(shareThisCook)}
+                onToggle={handleToggleCookProofSharing}
+              />
+            </View>
+          ) : null}
           {/* The mood row sits ABOVE the scale, and it has to. A grade is
               TERMINAL on this card — tapping one records and starts the
               exit beat — so anything rendered below `RatingScale` is
@@ -620,6 +793,15 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
     marginBottom: spacing.space2,
+  },
+  cookProofRow: {
+    width: '100%',
+    // Left-aligned inside a centred card, matching `moodPanel` below and
+    // for the same reason: a checkbox centred under a headline reads as
+    // decoration, where one hanging on the card's left margin reads as a
+    // control with a sentence beside it.
+    alignItems: 'flex-start',
+    marginBottom: spacing.space5,
   },
   moodPanel: {
     width: '100%',

@@ -7,6 +7,7 @@ import {
   resolveRepeatSignal,
   toRepeatSignal,
 } from '@/domain/rating';
+import { readMealDishCourse } from '@/domain/dishCourses';
 import { readMealDishMoods } from '@/domain/dishMoods';
 import { toMealDraft } from '@/domain/import/toMealDraft';
 import type { Meal } from '@/domain/types';
@@ -470,6 +471,81 @@ describe('localRepository — dish moods (the second axis, written at the outcom
 
   test('rejects an unknown meal id rather than silently doing nothing', async () => {
     await expect(repository.addMealDishMood('meal-that-does-not-exist', 'licht')).rejects.toThrow();
+  });
+});
+
+/**
+ * The third taxonomy at the CREATE seam only. Correcting a course
+ * afterwards goes through `updateMealRecipe`, and lives in
+ * tests/repository/mealRecipeEdit.test.ts beside the dish-tag edit it
+ * shares a screen with.
+ */
+describe('localRepository — dish course (the third taxonomy, single-valued and defaulted)', () => {
+  let repository: RemyRepository;
+  let store: KeyValueStore;
+
+  beforeEach(() => {
+    store = createInMemoryKeyValueStore();
+    repository = createLocalRepository(store);
+  });
+
+  /**
+   * "standaard is iets een hoofdgerecht" — held as behaviour at the write
+   * seam, not as an intention in a comment. Note what is asserted: the
+   * stored row STATES the default rather than leaving the key off, which
+   * is `buildMealRow`'s standing rule that every row this app creates
+   * answers for itself.
+   */
+  test('a meal created without a course is a hoofdgerecht, and the row says so', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput());
+
+    expect(meal.dishCourse).toBe('hoofdgerecht');
+    expect(readMealDishCourse(meal)).toBe('hoofdgerecht');
+  });
+
+  test('a meal created with a course keeps it', async () => {
+    const meal = await repository.createMeal(makeCreateMealInput({ dishCourse: 'toetje' }));
+
+    expect(readMealDishCourse(meal)).toBe('toetje');
+    expect(readMealDishCourse((await repository.getMeal(meal.id)) as Meal)).toBe('toetje');
+  });
+
+  test('a course survives an app restart', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishCourse: 'bijgerecht' }));
+
+    const restarted = createLocalRepository(store);
+    expect(readMealDishCourse((await restarted.getMeal(created.id)) as Meal)).toBe('bijgerecht');
+  });
+
+  /**
+   * Rows written before this field existed are already sitting in real
+   * installs' storage with no such key, and the owner has ruled on what
+   * they are. Reading one must not require repairing it first — which is
+   * what makes the whole feature need no backfill.
+   */
+  test('a meal row that predates the field reads as a hoofdgerecht', async () => {
+    const tables = createRepositoryTables(store);
+    const legacy = makeCuratedMeal({ id: 'legacy-course-meal', householdId: HOUSEHOLD_ID });
+    await tables.meals.replaceAll([...(await tables.meals.list()), legacy]);
+
+    expect(legacy.dishCourse).toBeUndefined();
+    expect(readMealDishCourse(legacy)).toBe('hoofdgerecht');
+    expect(readMealDishCourse((await repository.getMeal('legacy-course-meal')) as Meal)).toBe('hoofdgerecht');
+  });
+
+  /**
+   * The three taxonomies do not touch each other. Stated as behaviour
+   * because "separate columns" is only a guarantee while no write path
+   * reads across them.
+   */
+  test('a course sits beside the dish tags and the moods without disturbing either', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ dishTags: ['kip'], dishCourse: 'voorgerecht' }));
+
+    const updated = await repository.addMealDishMood(created.id, 'zomers');
+
+    expect(updated.dishTags).toEqual(['kip']);
+    expect(readMealDishMoods(updated)).toEqual(['zomers']);
+    expect(readMealDishCourse(updated)).toBe('voorgerecht');
   });
 });
 

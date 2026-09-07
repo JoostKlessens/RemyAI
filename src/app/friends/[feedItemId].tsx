@@ -46,7 +46,10 @@
  * all: a send without one is ordinary, and a proof card opening this same
  * screen never has one.
  *
- * FIXTURES ONLY (./_fixtures.ts) — no fetch, no repository, no Supabase.
+ * FIXTURES ONLY (`@/fixtures/friendFeedFixtures`) — no fetch, no
+ * repository, no Supabase. And, unlike Vrienden and Trending, NOT behind
+ * `DEV_SCENARIO_ROWS_VISIBLE`: this screen has no live read to fall back
+ * to, so the fixture is what ships until one exists.
  */
 
 import { useMemo, type JSX } from 'react';
@@ -54,7 +57,7 @@ import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FIXTURE_TARGET_DATE, getFriendFeedFixture, parseFriendFeedScenario } from './_fixtures';
+import { FIXTURE_TARGET_DATE, getFriendFeedFixture, parseFriendFeedScenario } from '@/fixtures/friendFeedFixtures';
 import { Button } from '@/components/Button';
 import { CreatorAttribution } from '@/components/CreatorAttribution';
 import {

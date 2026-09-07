@@ -14,9 +14,31 @@
  *
  * Two deliberate restraints keep it that way:
  *
- * 1. **Only categories the household actually has.** `availableDishTags`
- *    comes from the real candidate pool, so the chip row is short for a
- *    small library and never offers a filter guaranteed to return nothing.
+ * 1. **Only categories the household can actually be OFFERED.**
+ *    `availableDishTags` and `availableDishMoods` are collected from the
+ *    pool that survives `decide()`'s own first two passes — unarchived,
+ *    then restrictions and the household time budget — so the chip row is
+ *    short for a small library and never offers a narrowing that was
+ *    already empty before it was tapped.
+ *
+ *    THIS RESTRAINT USED TO CLAIM MORE THAN IT DELIVERED, and the claim is
+ *    recorded rather than quietly swapped out. It said the chips "come from
+ *    the real candidate pool" and that the row "never offers a filter
+ *    guaranteed to return nothing". `candidateMeals` is `listHouseholdMeals`
+ *    — the household's whole library — and `decide()` removes meals for
+ *    restrictions, for `weeknightTimeBudgetMinutes`, and, for a household
+ *    with any allergen restriction, every meal whose `allergenTagStatus` is
+ *    not `'verified'`, which is most of them because PD-006 fails safe to
+ *    `'unknown'`. `offerableMeals` in (tabs)/index.tsx now runs those passes
+ *    before the tags are collected; it carries the measurement.
+ *
+ *    WHAT IT STILL DOES NOT PROMISE, said plainly this time: a COMBINATION
+ *    can return nothing where no single part does — "pasta" AND
+ *    "vegetarisch", or any tag under a five-minute cap. Guaranteeing that
+ *    away would mean re-deriving every chip against every other chip and
+ *    against the cap on every tap, and `filtered_out` already names the
+ *    state while `Wissen` undoes it in one tap.
+ *
  *    Rendering all seventeen `DISH_TAGS` unconditionally would turn a
  *    control into a catalogue — several rows of chips above the dish name,
  *    squeezing the one thing this screen exists to show. The rejected
@@ -40,7 +62,7 @@
  *
  * WHAT THIS COSTS IN HEIGHT, STATED RATHER THAN DISCOVERED. Both chip
  * rows wrap, and on a narrow phone at large Dynamic Type each can take
- * two or three lines. That is why both are gated on the candidate pool
+ * two or three lines. That is why both are gated on the offerable pool
  * actually carrying the values (restraint 1) rather than rendering their
  * whole vocabulary: for a real library the tag row is short and the mood
  * row is usually shorter, and a brand-new library shows neither. The
@@ -50,11 +72,11 @@
  * restraint 1's rejected alternative).
  *
  * Visual language follows docs/DESIGN.md: mono `label` eyebrows in
- * `textMuted` ("timecode burned into the frame"), the same
- * `SegmentedControl` the household time budget uses, `Chip` in its default
- * multi-select checkbox role, and a hairline `border` rule separating the
- * bar from the hero below it. Every colour pairing used here is asserted
- * in tests/contrast.test.ts.
+ * `textMuted` ("timecode burned into the frame"), `TimeCapPicker` — the
+ * clock and five-minute ladder Mijn recepten uses for the same question —
+ * `Chip` in its default multi-select checkbox role, and a hairline `border`
+ * rule separating the bar from the hero below it. Every colour pairing used
+ * here is asserted in tests/contrast.test.ts.
  */
 
 import type { JSX } from 'react';
@@ -63,23 +85,26 @@ import { DISH_MOODS } from '@/domain/dishMoods';
 import { DISH_TAGS } from '@/domain/dishTags';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import { normalizeTag } from '@/domain/normalizeTag';
+import type { TimeCap } from '@/domain/timeCap';
 import type { DecisionFilters } from '@/domain/types';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 import { Chip } from './Chip';
 import { ChipGroup } from './ChipGroup';
-import { SegmentedControl, type SegmentedControlOption } from './SegmentedControl';
+import { TimeCapPicker } from './TimeCapPicker';
 
 export interface DecisionFilterBarProps {
   readonly filters: DecisionFilters;
   /**
-   * Dish tags present on at least one meal in the household's candidate
-   * pool. Order is ignored — the row always renders in `DISH_TAGS` order so
-   * the chips don't rearrange themselves as the library grows.
+   * Dish tags present on at least one meal in the OFFERABLE pool —
+   * `selectOfferableMeals` (src/domain/offerablePool.ts), not the raw
+   * library; see restraint 1 above for the claim that correction repairs.
+   * Order is ignored — the row always renders in `DISH_TAGS` order so the
+   * chips don't rearrange themselves as the library grows.
    */
   readonly availableDishTags: readonly string[];
   /**
    * The second axis (src/domain/dishMoods.ts): moods at least one meal in
-   * the candidate pool has actually been described with, from
+   * the offerable pool has actually been described with, from
    * `collectAvailableDishMoods`. Same narrowing rule as
    * `availableDishTags` above, and it matters more here, because this axis
    * starts EMPTY for every existing library — nobody has described
@@ -94,42 +119,42 @@ export interface DecisionFilterBarProps {
 }
 
 /**
- * The segmented control needs string values; the minute counts they stand
- * for live in one table right beside them so a label and its meaning
- * cannot drift apart.
+ * THE TIME CONTROL IS `TimeCapPicker`, AND WHAT IT REPLACED ARGUED FROM A
+ * FALSE PREMISE.
  *
- * The steps are 20/30/45 rather than mirroring Household setup's 15/30/45+:
- * "45+" is an open-ended *budget* ("long cooking is fine"), which is
- * meaningless as tonight's hard upper bound. 20 earns its slot because "ik
- * heb twintig minuten" is the request this whole feature exists for.
+ * THE OWNER'S INSTRUCTION, VERBATIM: "Ik zou ook willen dat je bovenin geen
+ * blokjes hebt voor hoe lang het mag duren maar een icoontje met een klokje
+ * en dan 5min interval scrollen van hoe lang het recept maximaal mag duren."
+ *
+ * What stood here was a four-segment `SegmentedControl` (Alles / 20 / 30 /
+ * 45), a table mapping each label to its minutes, and a `toTimeChoice` that
+ * fell back to "Alles" for any stored cap the row could not draw. Its own
+ * comment defended the steps: "The steps are 20/30/45 rather than mirroring
+ * Household setup's 15/30/45+: '45+' is an open-ended *budget* ('long
+ * cooking is fine'), which is meaningless as tonight's hard upper bound."
+ *
+ * THE PREMISE WAS WRONG, and it is written down rather than deleted with the
+ * code it justified. Nothing in this product has an open-ended time branch:
+ * `isWithinTimeBudget` (src/domain/exclusions.ts) is
+ * `meal.estimatedMinutes <= household.weeknightTimeBudgetMinutes`, so
+ * Household setup's "45+ min" is a hard 45-minute cap that drops a
+ * fifty-minute recipe. The LABEL is open-ended; the rule is not. The
+ * conclusion — that the two controls should not share a vocabulary —
+ * happened to be right, for a reason the comment did not give.
+ *
+ * It needs no repair here, because the ladder resolves it: `TimeCapPicker`
+ * ends in a "geen limiet" stop that is `null`, and `null` is the one value
+ * in this codebase that genuinely means no upper bound
+ * (`DecisionFilters.maxMinutes` — a null cap also keeps untimed meals in the
+ * pool, where any explicit cap drops them). The open end is a value now
+ * instead of a label. Household setup's own "45+" is not this file's to fix.
+ *
+ * NO VARIANT PROP, deliberately. `TimeCapPicker`'s author records that a
+ * prop restoring Kiezen's old wording is precisely what would turn one
+ * control into two, so the picker takes a value and a callback and nothing
+ * else. This screen keeps its own "HOEVEEL TIJD?" eyebrow above it, which is
+ * where the difference between two screens belongs.
  */
-type TimeChoice = 'alles' | 'kort' | 'gemiddeld' | 'ruim';
-
-const TIME_OPTIONS: readonly SegmentedControlOption<TimeChoice>[] = [
-  { value: 'alles', label: 'Alles' },
-  { value: 'kort', label: '20 min' },
-  { value: 'gemiddeld', label: '30 min' },
-  { value: 'ruim', label: '45 min' },
-];
-
-const TIME_CHOICE_MINUTES: Readonly<Record<TimeChoice, number | null>> = {
-  alles: null,
-  kort: 20,
-  gemiddeld: 30,
-  ruim: 45,
-};
-
-/**
- * Any `maxMinutes` this row cannot represent falls back to "Alles" rather
- * than inventing a selected segment. The value is still honoured by
- * `decide()` — the control just stops claiming to describe a state it does
- * not own, which is the honest rendering of it.
- */
-function toTimeChoice(maxMinutes: number | null): TimeChoice {
-  const match = TIME_OPTIONS.find((option) => TIME_CHOICE_MINUTES[option.value] === maxMinutes);
-  return match?.value ?? 'alles';
-}
-
 function hasAnyFilter(filters: DecisionFilters): boolean {
   return filters.maxMinutes !== null || filters.requiredDishTags.length > 0 || filters.anyDishMoods.length > 0;
 }
@@ -147,8 +172,12 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
   const selectedMoods = new Set(filters.anyDishMoods.map(normalizeTag));
   const isActive = hasAnyFilter(filters);
 
-  const handleTimeChange = (choice: TimeChoice): void => {
-    onChange({ ...filters, maxMinutes: TIME_CHOICE_MINUTES[choice] });
+  // `TimeCap` and `DecisionFilters.maxMinutes` are the same value — whole
+  // minutes or `null` for no cap — so nothing is translated here. That
+  // identity is the whole reason `filterByDecisionFilters` needed no change
+  // when the chips became a ladder (see src/domain/timeCap.ts's header).
+  const handleChangeTimeCap = (cap: TimeCap): void => {
+    onChange({ ...filters, maxMinutes: cap });
   };
 
   const handleToggleTag = (tag: string): void => {
@@ -190,12 +219,7 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
         ) : null}
       </View>
 
-      <SegmentedControl
-        options={TIME_OPTIONS}
-        value={toTimeChoice(filters.maxMinutes)}
-        onChange={handleTimeChange}
-        accessibilityLabel="Maximale kooktijd voor vanavond"
-      />
+      <TimeCapPicker value={filters.maxMinutes} onChange={handleChangeTimeCap} />
 
       {visibleTags.length > 0 ? (
         <>

@@ -2,18 +2,28 @@
  * The ambient cook-proof half of the `__DEV__` scenarios — the OTHER card
  * kind Gekookt holds (PD-015, docs/DESIGN.md §8).
  *
- * CARVED OUT OF `_fixtures.ts`, VERBATIM, when that file passed the
- * 800-line ceiling. It stayed a sibling rather than being folded into
- * `_gekooktSource.ts` because it is DATA, not a read, and because it
- * derives every value from `_fixtures.ts` — one demo describes one circle,
- * and the pesto must not end up called one thing in Gekookt and another in
- * Kring.
+ * CARVED OUT OF `friendFeedFixtures.ts`, VERBATIM, when that file passed
+ * the 800-line ceiling. It stayed a sibling rather than being folded into
+ * `gekooktSource.ts` because it is DATA, not a read, and because it
+ * derives every value from `friendFeedFixtures.ts` — one demo describes
+ * one circle, and the pesto must not end up called one thing in Gekookt
+ * and another in Kring.
  *
- * The dependency runs one way only: this file imports from `_fixtures.ts`
- * and `_fixtures.ts` knows nothing about it, so there is no cycle to
- * reason about. `_gekooktSource.ts` imports `getProofFixture` from here
- * directly for the same reason — a re-export through `_fixtures.ts` would
- * create one.
+ * BOTH SIBLINGS MOVED TOGETHER, AND THE SEAM BETWEEN THEM DID NOT CHANGE.
+ * They were src/app/friends/_proofFixtures.ts and _fixtures.ts, where
+ * expo-router counted both as routes with no default export and warned
+ * about both on every launch; they are now `@/fixtures/*` beside the
+ * other three. `gekooktSource.ts`, the reader that consumes them, went
+ * the other way — to src/lib, where the repository-calling shells live.
+ * That is the same split as before (data here, reads there), stated in
+ * two directories instead of one folder. See `decisionFixtures.ts`'s
+ * header for the whole argument.
+ *
+ * The dependency runs one way only: this file imports from
+ * `friendFeedFixtures.ts` and `friendFeedFixtures.ts` knows nothing about
+ * it, so there is no cycle to reason about. `src/lib/gekooktSource.ts`
+ * imports `getProofFixture` from here directly for the same reason — a
+ * re-export through `friendFeedFixtures.ts` would create one.
  */
 
 import {
@@ -22,7 +32,7 @@ import {
   FIXTURE_MEALS,
   FIXTURE_VOTER_NAMES,
   type FriendFeedScenario,
-} from './_fixtures';
+} from '@/fixtures/friendFeedFixtures';
 import type { FriendProofFeedRequest, ProofRecipe } from '@/components/friendProofPresentation';
 import type { CreatorPlatform } from '@/domain/feed/types';
 import type { FriendCookFact } from '@/domain/social/proof';

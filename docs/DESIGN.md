@@ -521,8 +521,19 @@ is why a send may never borrow the other's language.
 It briefly carried a `Gekookt` | `Kring` `SegmentedControl` (specced in
 docs/DESIGN-SOCIAL.md §4.2), with de kring's ranked list (PD-018) behind
 the second segment. **De kring now lives on Trending (§9)**, as the
-`Vrienden` scope of that tab beside the global one; the ranking, the
-copy and the row are unchanged, only its address is. The two modes here
+`Vrienden` scope of that tab beside the global one; the ranking and the
+row are unchanged, ~~the copy~~ and only its address is.
+
+**(CORRECTED, 2026-09-06: the copy is the one thing that did change, and
+saying otherwise here sent a reader looking for strings that no longer
+exist. `b9b0f59` rewrote two of the three: `KRING_END_COPY` is now
+`'Dat is alles van je vrienden.'` and `KRING_EMPTY_TITLE` is `'Nog geen
+cijfers van je vrienden'` (`src/components/kringPresentation.ts:52,55`);
+`KRING_EMPTY_BODY` is unchanged. The rewrite is correct — the same move
+that put this list on Trending retired the word "kring" from user-facing
+copy, and a screen may not end on a word the product no longer speaks.
+The ranking and the row genuinely are untouched. Also corrected in
+PD-018 and DESIGN-SOCIAL.md §2.2.)** The two modes here
 answered *different* questions, which is the wrong thing to hide behind a
 switch; the two scopes on Trending answer the *same* question, which is
 the right thing. What is left on this tab is the list this section always
@@ -889,8 +900,20 @@ only. There is no public-vote control anywhere in the app yet: the
 different act on a different object (PD-019), and it has a repository
 seam, `rateRecipe`, with no screen behind it. When it does get one it uses
 this same scale, because `rating.ts` owns the scale for both instruments —
-but nothing here should be reused as though a private grade and a public
-vote were one control.
+~~but nothing here should be reused as though a private grade and a public
+vote were one control.~~
+
+**(CORRECTED, 2026-09-06: the paragraph above is now wrong in its
+conclusion and right in its diagnosis. Right: `rateRecipe` genuinely had no
+screen behind it, and that — not a policy — is why the board has no rows;
+the grep is in PD-023. Wrong: this control is what gets reused. The owner
+reversed PD-019 on 6 September 2026, so the grade given here is also cast as
+a public vote on the canonical recipe when the meal is linked to one. There
+is one gesture and it writes two rows. The clause that survives is the
+reason the two were ever kept apart: this card must now say, where the grade
+is given, that the number travels — a grade asked for on a surface that
+presents itself as private, and then published, is a vote cast without the
+consent that made a public vote safe. Recorded in PD-023.)**
 
 ```
 ┌───────────────────────────────────┐

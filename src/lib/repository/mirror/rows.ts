@@ -13,7 +13,7 @@
  * data for three migrations. Sources, in order: 0001 (meals,
  * meal_ingredients, meal_steps, cook_events), 0003 (thumbnail_url), 0004
  * (dish_tags), 0005 + 0008 (rating), 0006 (recipe_id), 0009
- * (excluded_from_cook_proof), 0010 (dish_moods).
+ * (excluded_from_cook_proof), 0010 (dish_moods), 0017 (dish_course).
  *
  * TWO COLUMNS ARE OMITTED ON PURPOSE, AND THE OMISSION IS THE FEATURE.
  *
@@ -48,8 +48,16 @@
  * leaves room for a future 'log a cook manually' path"), so null here is a
  * legal, honest value rather than a hole.
  *
- * `cook_events.rating` IS THE PRIVATE HALF (PD-008, PD-019) AND MIRRORING
- * IT CANNOT PUBLISH IT. It is mirrored because the decision engine reads
+ * `cook_events.rating` IS THE PRIVATE COLUMN (PD-008, PD-019) AND
+ * MIRRORING IT CANNOT PUBLISH IT — a claim about THIS COLUMN, and worth
+ * reading as narrowly as it is written. Since src/domain/social/
+ * publicVote.ts, the outcome card also casts a `recipe_ratings` vote
+ * carrying the same number the cook typed, so the VALUE is visible in an
+ * anonymous aggregate on Ranglijst. That vote is a different row, written
+ * by a different repository, and nothing below can reach it; what follows
+ * is unaffected and is the guarantee that matters.
+ *
+ * It is mirrored because the decision engine reads
  * cook history and `resolveRepeatSignal` needs it; it stays private
  * because `shared_cooks` (0009) selects `hm.auth_user_id` and
  * `m.recipe_id` and nothing else, and 0009's own comment says a third
@@ -71,6 +79,7 @@
  */
 
 import { isValidRating } from '@/domain/rating';
+import { readMealDishCourse } from '@/domain/dishCourses';
 import { readMealDishMoods } from '@/domain/dishMoods';
 import type { CookEvent, Meal, MealIngredient, MealStep } from '@/domain/types';
 import type { MirrorFailure, MirrorHouseholdSettingsJob } from './types';
@@ -89,7 +98,7 @@ export interface MirrorHouseholdSettingsPatch {
   readonly share_cooks_with_friends: boolean;
 }
 
-/** `meals`, exactly as 0001 + 0003 + 0004 + 0006 + 0009 + 0010 declare the mirrored subset. */
+/** `meals`, exactly as 0001 + 0003 + 0004 + 0006 + 0009 + 0010 + 0017 declare the mirrored subset. */
 export interface MirrorMealRow {
   readonly id: string;
   readonly household_id: string;
@@ -102,6 +111,7 @@ export interface MirrorMealRow {
   readonly allergen_tag_status: string;
   readonly dish_tags: readonly string[];
   readonly dish_moods: readonly string[];
+  readonly dish_course: string;
   readonly recipe_id: string | null;
   readonly source_url: string | null;
   readonly source_platform: string | null;
@@ -214,6 +224,15 @@ export function toMealRow(meal: Meal): MirrorMealRow | MirrorFailure {
     // would arrive as a 23514 — a `rejected` failure, which is the right
     // answer for a value nobody could ever filter on again.
     dish_moods: readMealDishMoods(meal),
+    // Read through the domain for the reason `dish_moods` above is, plus
+    // one this field has and that one does not: the local row's absent
+    // state carries a MEANING here rather than an emptiness. Sending
+    // `undefined` would let PostgREST fall back to 0017's column default,
+    // which happens to be the same value — and that coincidence is exactly
+    // the kind a later edit silently breaks. `readMealDishCourse` states
+    // the answer instead of relying on two systems agreeing by luck, and
+    // it is the same function the app itself reads the field with.
+    dish_course: readMealDishCourse(meal),
     // The link cook proof is entirely made of. See the module header.
     recipe_id: meal.recipeId ?? null,
     source_url: meal.sourceUrl,

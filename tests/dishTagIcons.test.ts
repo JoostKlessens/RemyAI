@@ -50,11 +50,21 @@ describe('iconForDishTag', () => {
 });
 
 describe('what ships today', () => {
-  test('NOT ONE dish glyph is drawable yet, so every chip stays text-only until GAP-19 lands', () => {
-    const drawable = ALL_DISH_TAG_VALUES.filter((tag) => {
+  /**
+   * The inverse of what this block asserted until 7 September 2026, and the
+   * reason it is worth keeping rather than deleting. It read "NOT ONE dish
+   * glyph is drawable yet, so every chip stays text-only until GAP-19 lands"
+   * — true, and true only because the seam had one font in it. GAP-19 landed
+   * by adding MaterialCommunityIcons, which was already installed; the table
+   * in dishTagIcons.ts did not change at all. Turning the assertion around
+   * rather than removing it keeps the one measurement that says the owner's
+   * "een pasta-icoontje, dan het woord pasta" actually reaches a screen.
+   */
+  test('every one of the seventeen chips can draw its glyph — the row is illustrated, not text-only', () => {
+    const textOnly = ALL_DISH_TAG_VALUES.filter((tag) => {
       const icon = iconForDishTag(tag);
-      return icon !== null && isIconAvailable(icon);
+      return icon === null || !isIconAvailable(icon);
     });
-    expect(drawable).toEqual([]);
+    expect(textOnly).toEqual([]);
   });
 });

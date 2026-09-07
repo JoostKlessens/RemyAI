@@ -52,36 +52,122 @@ export interface ProfilePresence {
   readonly id: string;
 }
 
-export type SessionState = 'signed_out' | 'needs_profile' | 'ready';
+/**
+ * THE ANSWER TO "DOES THIS PERSON HAVE A PROFILE" HAS THREE VALUES, NOT TWO,
+ * and collapsing it to two put a signed-in owner into an inescapable loop on
+ * 6 September 2026.
+ *
+ * `readProfile` used to return `ProfilePresence | null`, and produced that
+ * `null` from `if (error !== null || data === null)` — one branch for two
+ * unrelated facts. "There is no row" is the ordinary state between verifying
+ * an email and claiming a handle. "I could not find out" is a dropped
+ * connection, an expired token, an RLS refusal, a PostgREST hiccup. Reported
+ * as the same value, the second becomes the first, and the app sends
+ * somebody who already has a profile to `claim-handle` — a full-screen modal
+ * with `gestureEnabled: false`, so there is no way back out of it.
+ *
+ * Naming the third case is the fix. A caller that must branch on it can no
+ * longer forget it exists, because there is no `null` left to fall into.
+ */
+export type ProfileLookup =
+  | { readonly kind: 'present'; readonly profile: ProfilePresence }
+  | { readonly kind: 'absent' }
+  | { readonly kind: 'unreadable' };
+
+export type SessionState = 'signed_out' | 'needs_profile' | 'profile_unreadable' | 'ready';
 
 export interface SessionCapability {
   readonly canUseApp: boolean;
   readonly needsSignIn: boolean;
   readonly needsHandle: boolean;
+  /**
+   * The state whose honest move is to look again rather than to route. No
+   * screen is correct for "I do not know who you are yet", so this is the
+   * one flag that asks its caller to leave the navigation stack alone.
+   */
+  readonly needsRetry: boolean;
 }
 
-export type ProfileCreationFailure = 'handle_taken' | 'invalid_handle' | 'unknown_error';
+export type ProfileCreationFailure =
+  | 'handle_taken'
+  | 'invalid_handle'
+  /**
+   * NOT AN ERROR THE PERSON CAUSED, AND NOT ONE THEY CAN FIX BY RENAMING.
+   * `profiles.id` is a primary key referencing `auth.users` (0007:127), so
+   * one account gets one profile. A second insert by somebody who already
+   * has one violates the PRIMARY KEY, not the handle's unique index — and
+   * both raise Postgres 23505. Classified on the code alone, that made every
+   * name this person tried report "die naam is al bezet", including names
+   * nobody holds.
+   *
+   * It means onboarding is already finished, so the repair is to look at
+   * `profiles` again rather than to show a message.
+   */
+  | 'profile_exists'
+  | 'unknown_error';
 
-/** Postgres unique violation — someone already holds this handle. */
+/** Postgres unique violation. WHICH unique constraint decides the meaning — see `classifyProfileCreationFailure`. */
 const UNIQUE_VIOLATION = '23505';
 /** Postgres check violation — the handle failed `^[a-z0-9_]{3,30}$` server-side. */
 const CHECK_VIOLATION = '23514';
 
 export interface ResolveSessionStateInput {
   readonly session: SessionSnapshot | null;
-  readonly profile: ProfilePresence | null;
+  readonly profile: ProfileLookup;
 }
 
 /**
  * A cached profile never outranks a missing session: without a token there
  * is no `auth.uid()`, so every read would come back empty anyway. Reporting
  * `ready` there would promise a capability the database will refuse.
+ *
+ * AN UNREADABLE PROFILE IS NOT AN ABSENT ONE. It gets its own state so the
+ * root layout can hold still instead of routing on a guess; `ProfileLookup`
+ * records what that guess cost.
  */
 export function resolveSessionState(input: ResolveSessionStateInput): SessionState {
   if (input.session === null) {
     return 'signed_out';
   }
-  return input.profile === null ? 'needs_profile' : 'ready';
+  switch (input.profile.kind) {
+    case 'present':
+      return 'ready';
+    case 'absent':
+      return 'needs_profile';
+    case 'unreadable':
+      return 'profile_unreadable';
+  }
+}
+
+/**
+ * A read that failed must not demote a profile we have already seen.
+ *
+ * WHY THIS IS A RULE AND NOT AN `??`. `resolveSessionState` is pure and gets
+ * one lookup at a time, so it cannot know that the previous answer was
+ * better than this one. Without this, a single failed re-read — the app
+ * coming back from the background onto a flaky connection is the ordinary
+ * way to get one — moves a finished account from `ready` to
+ * `profile_unreadable`, which unmounts whatever the person was doing.
+ *
+ * ONLY `present` SURVIVES, and the asymmetry is deliberate. A known profile
+ * is a fact that does not stop being true because the network dropped. A
+ * known ABSENCE is not: it is the state the person is actively trying to
+ * leave by claiming a handle, so holding on to it would keep somebody on
+ * the claim screen after the insert that took them off it. When we cannot
+ * read, "I do not know" is the honest answer everywhere except over a
+ * profile we have already held in our hands.
+ *
+ * The staleness this accepts, stated: a profile deleted server-side keeps
+ * reading as `present` until some later read succeeds and says `absent`.
+ * That is a rare administrative act, and its cost is one screen too many
+ * for a moment — against a trap with no way out, which is what the
+ * alternative shipped.
+ */
+export function preferReadableProfile<T extends ProfileLookup>(previous: T, next: T): T {
+  if (next.kind === 'unreadable' && previous.kind === 'present') {
+    return previous;
+  }
+  return next;
 }
 
 /**
@@ -95,15 +181,53 @@ export function describeSessionCapability(state: SessionState): SessionCapabilit
     canUseApp: state === 'ready',
     needsSignIn: state === 'signed_out',
     needsHandle: state === 'needs_profile',
+    needsRetry: state === 'profile_unreadable',
   };
 }
 
-function readErrorCode(error: unknown): string | null {
+function readErrorField(error: unknown, field: 'code' | 'message' | 'details'): string | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  const code = (error as { readonly code?: unknown }).code;
-  return typeof code === 'string' ? code : null;
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === 'string' ? value : null;
+}
+
+function readErrorCode(error: unknown): string | null {
+  return readErrorField(error, 'code');
+}
+
+/**
+ * WHICH unique constraint a 23505 came from, read out of the two places
+ * PostgREST puts it. Postgres writes the constraint name into `message`
+ * ("duplicate key value violates unique constraint \"profiles_pkey\"") and
+ * the offending column into `details` ("Key (handle)=(joost) already
+ * exists."). Both are matched, because either one alone is a single point
+ * of failure for a distinction that decides whether somebody is shown an
+ * error or quietly let into the app.
+ *
+ * `profiles` has exactly two unique constraints and they mean opposite
+ * things — the primary key on `id` means "you are already finished", the
+ * unique index on `handle` means "pick another name" — so the two are
+ * matched by name rather than inferred from each other.
+ */
+function classifyUniqueViolation(error: unknown): ProfileCreationFailure {
+  const haystack = `${readErrorField(error, 'message') ?? ''} ${readErrorField(error, 'details') ?? ''}`;
+  if (/profiles_pkey|key \(id\)=/i.test(haystack)) {
+    return 'profile_exists';
+  }
+  if (/profiles_handle_key|key \(handle\)=/i.test(haystack)) {
+    return 'handle_taken';
+  }
+  // DELIBERATELY NOT `handle_taken`, which is what this returned before and
+  // is the more tempting default because it is the common case. An
+  // unrecognised 23505 that is really a `profile_exists` becomes a trap: the
+  // person renames themselves forever and every name fails, because nothing
+  // they type can satisfy a primary key they already occupy. The same
+  // mistake in the other direction is escapable — somebody told "probeer het
+  // opnieuw" about a genuinely taken handle tries another name and gets in.
+  // Between two wrong answers, take the one with a way out.
+  return 'unknown_error';
 }
 
 /**
@@ -116,7 +240,7 @@ function readErrorCode(error: unknown): string | null {
 export function classifyProfileCreationFailure(error: unknown): ProfileCreationFailure {
   switch (readErrorCode(error)) {
     case UNIQUE_VIOLATION:
-      return 'handle_taken';
+      return classifyUniqueViolation(error);
     case CHECK_VIOLATION:
       return 'invalid_handle';
     default:

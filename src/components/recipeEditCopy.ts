@@ -103,12 +103,74 @@ export const RECIPE_EDIT_RETRY_ACCESSIBILITY_LABEL = 'Recept opnieuw laden';
  * The row that opens this screen from the Bibliotheek tile's long-press
  * sheet. Its label is a verb because every other row on that sheet is
  * (`Sturen`, `Deel deze niet`, `Verwijderen`), and the explainer names the
- * five fields so nobody has to open the screen to find out whether the thing
+ * fields so nobody has to open the screen to find out whether the thing
  * they want to fix is in there.
+ *
+ * THE EXPLAINER GREW WITH THE SCREEN, and it had to: it used to end at
+ * "tijd en porties", which stopped being the whole list the moment the
+ * editor learned to change categories. An explainer that under-reports what
+ * a screen can do is worse than none — the person looking for exactly that
+ * control reads the row and closes the sheet.
  */
 export const RECIPE_EDIT_ROW_LABEL = 'Aanpassen';
-export const RECIPE_EDIT_ROW_EXPLAINER = 'Titel, ingrediënten, bereiding, tijd en porties';
+export const RECIPE_EDIT_ROW_EXPLAINER = 'Titel, ingrediënten, bereiding, tijd, porties en categorieën';
 export const RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL = 'Dit recept aanpassen';
+
+// ---------------------------------------------------------------------------
+// The two descriptive taxonomies
+// ---------------------------------------------------------------------------
+
+/**
+ * "Categorieën" AND NOT "WAARMEE?", WHICH IS THE WORD THE FILTER ROWS USE
+ * FOR THE SAME VOCABULARY. Two words for one thing is normally the drift
+ * this codebase warns about, so the difference is argued rather than
+ * assumed: `DecisionFilterBar` and `LibrarySearchBar` are asking a QUESTION
+ * of a pool ("waarmee wil je koken?"), and every eyebrow on those rows is a
+ * question. This screen is LABELLING A FIELD, and every label around it is
+ * a noun — Titel, Ingrediënten, Bereiding, Minuten, Porties. A question
+ * mark in that column would read as the odd one out, and "Waarmee?" as a
+ * field label reads as a prompt somebody forgot to finish.
+ *
+ * The helper is what stops the two words from being two ideas: it names the
+ * screen the chips change, so a person who ticks one here knows what it is
+ * for. That connection is the whole reason this control was asked for — the
+ * owner's "Kan je de tags niet aanpassen handmatig?" was about a recipe he
+ * could not find again.
+ *
+ * "Ingrediënten" is NOT available as a name here for the reason
+ * libraryFilterCopy.ts gives at length, and it matters more on this screen
+ * than on that one: eight of the seventeen values are not ingredients, and
+ * this screen already has a section genuinely called Ingrediënten twenty
+ * lines further down.
+ */
+export const RECIPE_EDIT_CATEGORIES_LABEL = 'Categorieën';
+export const RECIPE_EDIT_CATEGORIES_HELPER = 'Kies waar dit gerecht bij hoort. Hierop filter je in Mijn recepten.';
+
+/**
+ * "Gang", not "Soort gerecht". The second is plainer and is already spoken
+ * for: libraryFilterCopy.ts records "Soort gerecht" as the name it would
+ * have given a SPLIT of the Waarmee?-row (the six values that are forms
+ * rather than ingredients), and using it here would put one phrase on two
+ * different vocabularies. "Gang" is what the four values actually are, and
+ * a household that knows the word "driegangenmenu" knows this one.
+ *
+ * THE HELPER STATES THE DEFAULT OUT LOUD, in the owner's own words. A
+ * control whose first option arrives already selected has to say whether
+ * that is an answer or a placeholder — and here it is an answer, for every
+ * recipe in the library, including the ones nobody will ever open this
+ * screen for.
+ */
+export const RECIPE_EDIT_COURSE_LABEL = 'Gang';
+export const RECIPE_EDIT_COURSE_HELPER = 'Standaard is iets een hoofdgerecht.';
+
+/**
+ * The course row is single-select over a closed set of four, so `ChipGroup`
+ * gets a real `radiogroup` label — the one case its own header permits (a
+ * bare `accessibilityLabel` on a role-less `View` is inert, so this string
+ * would be dead code anywhere else). The categories row above it is
+ * multi-select and deliberately gets no group label, for that same reason.
+ */
+export const RECIPE_EDIT_COURSE_GROUP_LABEL = 'Gang van dit gerecht';
 
 // ---------------------------------------------------------------------------
 // The allergen branch

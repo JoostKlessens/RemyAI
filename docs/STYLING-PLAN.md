@@ -30,11 +30,18 @@ les die dit document zelf opleverde.
 | De voortgangslijn springt | **Vult zich**, `scaleX` op de native driver | GAP-24, `ProgressRule.tsx` |
 | `typeScale.button` is monospace | **Van monospace af** | GAP-18, `tokens.ts` |
 
-**Wat níét veranderd is, en de rest van dit document dus onverkort blokkeert:
-er is nog steeds geen icoonfont.** Elke bevinding hieronder die om een glyph
-vraagt — het vinkje in de checkpoints, de `cooking-pot`, de 21 markeringen,
-de vervanging van `×`, `+`, `▶`, `❚❚` — wacht nog altijd op punt 4 van de
-volgorde. Dat is nu het eerstvolgende werk.
+⚠ **DE BLOKKADE DIE DIT HELE DOCUMENT DROEG IS OP 7 SEPTEMBER 2026 WEG, EN
+HIJ WAS ER NOOIT ZOALS HIJ HIER BESCHREVEN STAAT.** Overal hieronder staat
+"er is geen icoonfont" en dat klopte voor Feather — nul keukenglyphs,
+nagemeten. Maar `@expo/vector-icons` levert **vijftien** families mee, en de
+andere veertien had niemand gecontroleerd. MaterialCommunityIcons heeft er
+7448 en tekent alle zeventien `DISH_TAGS`. De seam draagt sinds die dag twee
+families en `isIconAvailable` staat op 33 van de 33. Elke bevinding hieronder
+die om een glyph vraagt — het vinkje in de checkpoints, de `cooking-pot`, de
+21 markeringen, de vervanging van `×`, `+`, `▶`, `❚❚` — **is dus niet meer
+geblokkeerd, alleen nog ongebouwd.** Punt 4 van de volgorde hieronder is
+vervallen; de 21 markeringen zijn nu gewoon werk. Zie GAP-19 in `LONGLIST.md`
+en punt 6 in `HANDOVER.md`.
 
 ---
 
@@ -68,12 +75,17 @@ waar ze die drie kruisten.
 omdat het argument eronder ergens moet blijven staan; de stand is de tabel
 hierboven.*
 
-**1. Er is geen icoonfont.** WS4 §1 koos een gegenereerde Phosphor-subset
-via `createIconSet` — MIT, ~8-14 KB, **geen nieuwe dependency**, "no native
+**1. ~~Er is geen icoonfont.~~ — OPGELOST OP 7 SEPTEMBER 2026, ANDERS DAN
+HIER VOORSPELD.** WS4 §1 koos een gegenereerde Phosphor-subset via
+`createIconSet` — MIT, ~8-14 KB, **geen nieuwe dependency**, "no native
 rebuild, no call-site change beyond the import", geschat op ongeveer een dag
-werk. Dat font bestaat niet in de repo. Ongeveer twintig icoonvoorstellen in
-dit document wachten er alle op. Dit is het enige item dat, als het landt, in
-één klap de helft van deze lijst mogelijk maakt.
+werk. Dat font is er nooit gekomen en hoefde ook niet: MaterialCommunityIcons
+zat al in `@expo/vector-icons` en tekent alles wat dit document vraagt. De
+belofte "no call-site change beyond the import" is wél uitbetaald — alleen
+`iconFont.ts` en `Icon.tsx` veranderden. De prijs is gemeten en staat in
+GAP-19: 1277 KB `.ttf` plus 212 KB glyphmap-JSON, tegen Feathers 54,3 en 6,0.
+Ongeveer twintig icoonvoorstellen in dit document zijn hiermee ontgrendeld en
+wachten nu op iemand die ze bouwt.
 
 **2. Haptics zijn vastgelegd en niet bedraad.** WS5 §3.2 heeft een tabel van
 vijftien gebeurtenissen. Drie zijn gebouwd. De rest zijn regels van één regel
@@ -341,9 +353,10 @@ uitvoerder aangaan:
 
 **Daarna — het fundament**
 
-4. Het Phosphor-subsetfont via `createIconSet`. Ongeveer een dag, geen nieuwe
-   dependency, en het deblokkeert twintig icoonvoorstellen tegelijk. **Dit is
-   nu het eerstvolgende punt.**
+4. ~~Het Phosphor-subsetfont via `createIconSet`.~~ **Vervallen op 7 september
+   2026** — de glyphs bleken al geïnstalleerd in een familie die niemand had
+   nagekeken (GAP-19). Er is geen font gegenereerd en er is er ook geen
+   nodig; de twintig icoonvoorstellen zijn ontgrendeld.
 5. `EmptyState`, `Thumbnail`, `Monogram`. Daarna zijn de 21 lege toestanden
    invulwerk in plaats van eenentwintig handgemaakte kopieën.
 6. ~~`typeScale.button` van monospace af~~ — gedaan, naar `sansMedium` met

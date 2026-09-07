@@ -406,8 +406,40 @@ export interface RemySocialRepository {
    * world — so the implementation reads to BOARD_RATING_ROW_CEILING and
    * throws beyond it rather than returning a subset it would then rank as
    * though it were everything.
+   *
+   * THIS IS THE ANONYMOUS ONE, AND IT STAYS COMPLETE. The board prints an
+   * average and never a name, so a vote from a cook whose household asked
+   * to keep that dish quiet still belongs in it — that is the owner's
+   * decision in one sentence: hide the name, keep the number. Anything
+   * that NAMES a voter reads `listNamableRecipeVotes` below instead.
    */
   listAllRecipeRatings(): Promise<readonly RecipeRating[]>;
+
+  /**
+   * The same votes, minus the ones whose voter may not be named — the
+   * `namable_recipe_votes` view (0016). De kring's source.
+   *
+   * WHY THERE ARE TWO WHOLE-TABLE READS AND NOT ONE FILTERED LATER. The
+   * difference between these two lists cannot be computed on this side of
+   * the wire: "did this voter's household mark that dish `deel deze
+   * niet`?" reads `meals`, and `meals_select` refuses another household's
+   * rows to every reader, correctly. So the narrowing is the database's or
+   * it does not exist — and a client that tried would get an empty answer
+   * and conclude nothing was excluded, which is the fail-OPEN direction on
+   * a privacy filter.
+   *
+   * ITS RESULT IS A SUBSET OF `listAllRecipeRatings`, ALWAYS, and callers
+   * may rely on that: the view selects from `recipe_ratings` and only ever
+   * removes rows. What it must NOT be used for is the global board — an
+   * average that quietly dropped the excluded votes would answer a
+   * different question from the one Ranglijst asks, and would move a
+   * number nobody asked to move.
+   *
+   * STILL NOT NARROWED TO FRIENDS. `rankKring`'s header insists that
+   * scoping is the caller's job, done where the friendship rows are; a
+   * second copy of it here is the copy that drifts.
+   */
+  listNamableRecipeVotes(): Promise<readonly RecipeRating[]>;
 
   /**
    * Every (friend, recipe) pair the `shared_cooks` view will show this

@@ -31,11 +31,25 @@ import { createProfile, type ProfileCreationResult } from '@/lib/auth';
 import { claimProfile } from '@/lib/claimProfile';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
-type ClaimPhase = 'idle' | 'saving' | 'handle_taken' | 'invalid_handle' | 'unknown_error';
+type ClaimPhase = 'idle' | 'saving' | 'handle_taken' | 'invalid_handle' | 'profile_exists' | 'unknown_error';
 
+/**
+ * `profile_exists` IS THE ONE LINE HERE THAT IS NOT ABOUT SOMETHING THE
+ * READER DID WRONG, and it is worded that way deliberately. It means the
+ * account is already finished and this screen should never have been shown:
+ * `claimProfile` has already asked the session to look again, so the honest
+ * thing to say is that we are fetching, not that something failed.
+ *
+ * It exists because the alternative shipped and trapped the owner on
+ * 6 September 2026. `profiles.id` is a primary key (0007:127), so a second
+ * insert by somebody who already has a profile raises the same Postgres
+ * 23505 as a taken handle — and every name he tried came back "al bezet",
+ * on a full-screen modal with `gestureEnabled: false`.
+ */
 const FAILURE_COPY: Readonly<Record<Exclude<ClaimPhase, 'idle' | 'saving'>, string>> = {
   handle_taken: 'Die naam is al bezet. Kies een andere.',
   invalid_handle: `Gebruik ${HANDLE_MIN_LENGTH} tot ${HANDLE_MAX_LENGTH} tekens: kleine letters, cijfers en _.`,
+  profile_exists: 'Je hebt al een naam gekozen. We halen je gegevens opnieuw op.',
   unknown_error: 'Opslaan lukte niet. Controleer je verbinding en probeer het opnieuw.',
 };
 

@@ -35,6 +35,7 @@ import {
   INITIAL_COOK_PROOF_EXCLUSION,
   LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL,
   LIBRARY_TILE_ACTIONS_HINT,
+  LIBRARY_TILE_OPEN_RECIPE_HINT,
   LIBRARY_TILE_SEND_ACCESSIBILITY_LABEL,
   LIBRARY_TILE_SEND_EXPLAINER,
   LIBRARY_TILE_SEND_LABEL,
@@ -304,6 +305,25 @@ describe('the tile affordance', () => {
   test('the hint keeps the tile primary promise and adds the gesture to it', () => {
     expect(LIBRARY_TILE_ACTIONS_HINT).toContain('kookmodus');
     expect(LIBRARY_TILE_ACTIONS_HINT).toContain('ingedrukt');
+  });
+
+  /**
+   * THE PAIR IS THE POINT, so both halves are asserted together.
+   * `RecipeTile` keeps cook mode as its own default `onPress` and the
+   * constant above as that default's hint; Mijn recepten overrides BOTH —
+   * its tap opens the recipe screen — and this is the string it overrides
+   * the hint with. A tile that changed one without the other would go on
+   * promising cook mode to exactly the users who cannot see where they
+   * landed, which is why this is one test and not two that could pass
+   * separately.
+   */
+  test('the library grid has its own hint, naming the recipe instead of cook mode', () => {
+    expect(LIBRARY_TILE_OPEN_RECIPE_HINT).toContain('recept');
+    expect(LIBRARY_TILE_OPEN_RECIPE_HINT).not.toContain('kookmodus');
+    // Same second clause, so a screen-reader user who learns one tile has
+    // learned them all.
+    expect(LIBRARY_TILE_OPEN_RECIPE_HINT).toContain('ingedrukt');
+    expect(LIBRARY_TILE_OPEN_RECIPE_HINT).not.toBe(LIBRARY_TILE_ACTIONS_HINT);
   });
 
   test('the sheet names the dish it is about', () => {

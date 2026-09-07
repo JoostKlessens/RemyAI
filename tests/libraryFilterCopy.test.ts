@@ -1,14 +1,18 @@
 import { describe, expect, test } from 'vitest';
 import {
+  LIBRARY_FILTER_COURSES_EYEBROW,
   LIBRARY_FILTER_MOODS_EYEBROW,
+  LIBRARY_FILTER_PLAN_EYEBROW,
   LIBRARY_FILTER_RESET_A11Y_LABEL,
   LIBRARY_FILTER_RESET_LABEL,
   LIBRARY_FILTER_TAGS_EYEBROW,
   LIBRARY_FILTER_TIME_EYEBROW,
   LIBRARY_SEARCH_PLACEHOLDER,
   LIBRARY_TIME_CAP_UNTIMED_NOTE,
+  describeDishCourseChip,
   describeDishMoodChip,
   describeDishTagChip,
+  describeSchedulingChip,
   describeTimeCapOption,
 } from '@/components/libraryFilterCopy';
 import { LIBRARY_TIME_CAP_OPTIONS } from '@/domain/recipeSearch';
@@ -95,5 +99,56 @@ describe('chip labels spell out AND vs OR', () => {
 
   test('the two are worded differently — a screen-reader user cannot see the difference in a result set', () => {
     expect(describeDishTagChip('Pasta')).not.toBe(describeDishMoodChip('Pasta'));
+  });
+
+  test('the course row says any one choice is enough — a dish has exactly one course', () => {
+    expect(describeDishCourseChip('Toetje')).toBe('Toetje. Filtert op gerechten met een van de gangen die je kiest.');
+  });
+
+  test('the plan row says the same, in the same grammar', () => {
+    expect(describeSchedulingChip('Deze week')).toBe(
+      'Deze week. Filtert op gerechten met een van de plannen die je kiest.',
+    );
+  });
+
+  test('all four rows announce their own semantics, so no chip leaves AND-vs-OR to be inferred', () => {
+    expect(describeDishTagChip('X')).toMatch(/alles wat je kiest/);
+    for (const or of [describeDishMoodChip('X'), describeDishCourseChip('X'), describeSchedulingChip('X')]) {
+      expect(or).toMatch(/een van de/);
+    }
+  });
+
+  test('the course label does not explain the migration default to somebody looking for a starter', () => {
+    // libraryFilterCopy.ts's own argument: it is true of one chip out of
+    // four, and it describes a column rather than a dish.
+    expect(describeDishCourseChip('Hoofdgerecht')).not.toMatch(/standaard|niemand|onbekend/i);
+  });
+});
+
+describe('the two new eyebrows', () => {
+  test('the plan axis asks when, which is the question the tile badge already answers', () => {
+    expect(LIBRARY_FILTER_PLAN_EYEBROW).toBe('Wanneer?');
+  });
+
+  test('the course axis asks which course, not "welk gerecht" — that is the screen\'s own subject', () => {
+    expect(LIBRARY_FILTER_COURSES_EYEBROW).toBe('Welke gang?');
+    expect(LIBRARY_FILTER_COURSES_EYEBROW).not.toMatch(/gerecht/i);
+  });
+
+  test('both are sentence case in source, like the three before them', () => {
+    for (const eyebrow of [LIBRARY_FILTER_PLAN_EYEBROW, LIBRARY_FILTER_COURSES_EYEBROW]) {
+      expect(eyebrow).not.toBe(eyebrow.toUpperCase());
+    }
+  });
+
+  test('all five are distinct — five rows that named one thing twice would be a control nobody can aim at', () => {
+    const eyebrows = [
+      LIBRARY_FILTER_TIME_EYEBROW,
+      LIBRARY_FILTER_TAGS_EYEBROW,
+      LIBRARY_FILTER_MOODS_EYEBROW,
+      LIBRARY_FILTER_PLAN_EYEBROW,
+      LIBRARY_FILTER_COURSES_EYEBROW,
+    ];
+    expect(new Set(eyebrows).size).toBe(eyebrows.length);
   });
 });

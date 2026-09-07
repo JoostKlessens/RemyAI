@@ -8,9 +8,27 @@
  * household's copy of the dish, and halving it or dropping the anchovies
  * is not a correction. Both routes therefore get the same editable screen
  * and DIFFERENT guidance copy, which is recipeProvenanceCopy.ts's job. Nothing is ever saved silently — the
- * only way off this screen that persists anything is the "Doorgaan" button,
- * which routes through `SaveIntentSheet` (PD-004's mandatory "when?"
- * prompt, reused verbatim, unmodified) before anything is written.
+ * only way off this screen that persists anything is the "Bewaren" button.
+ *
+ * THAT BUTTON USED TO OPEN A QUESTION, AND NO LONGER DOES. Until 2026-09-06
+ * it read "Doorgaan" and routed through `SaveIntentSheet` — PD-004's
+ * "wanneer wil je dit koken?" prompt — and only the sheet's answer reached
+ * `persistImportedMeal`. The owner asked for that question to go. The write
+ * now happens on the press, with `IMPORT_DEFAULT_SAVE_INTENT`
+ * (src/domain/saveIntent.ts), which is `'someday'`.
+ *
+ * PD-004a IS NOT WEAKENED BY THAT, and it is worth saying which half
+ * survives how. Its floor — everything saved must eventually be suggested —
+ * is kept BY the default rather than in spite of it: `'someday'` is a
+ * genuine rotation candidate carrying scoring.ts's `SOMEDAY_SAVE_*` aging
+ * boost, and `'none'`, the bookmark PD-004a calls a graveyard, is still
+ * unreachable from every surface. What is genuinely lost is the ability to
+ * say "deze week" AT IMPORT TIME. That sentence has somewhere else to be
+ * said since LIB-04: the tile's long-press sheet in Mijn recepten, and the
+ * recipe screen (src/app/recipe/[mealId].tsx), both write `'this_week'` on
+ * demand. `IMPORT_SAVE_DESTINATION_NOTE` under the button is what tells the
+ * household so, because a capability nobody is told about is one they have
+ * to rediscover.
  *
  * This is also where PD-006's `verified` allergen status is earned — see
  * AllergenTaggingSection's own file header for why that section shows the
@@ -65,14 +83,15 @@
 
 import { useEffect, useState, type JSX } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { decodeImportConfirmParams, type ImportConfirmParams } from './routeParams';
+import { decodeImportConfirmParams, type ImportConfirmParams } from '@/navigation/importRouteParams';
 import { findDuplicateImport } from '@/domain/import/duplicateImport';
 import { formatIngredientLine, resolveEditedIngredients } from '@/domain/import/editedIngredients';
 import { toMealDraft, type MealDraftInsert } from '@/domain/import/toMealDraft';
 import type { ParsedIngredient, ParsedRecipe } from '@/domain/import/types';
 import { buildReasonText } from '@/domain/reason';
+import { IMPORT_DEFAULT_SAVE_INTENT } from '@/domain/saveIntent';
 import type { AllergenTagStatus, HouseholdId, SaveIntent } from '@/domain/types';
 import { AllergenTaggingSection } from '@/components/AllergenTaggingSection';
 import { Button } from '@/components/Button';
@@ -82,9 +101,15 @@ import { RecipeProvenanceNote } from '@/components/RecipeProvenanceNote';
 import { buildImportConfirmGuidance } from '@/components/recipeProvenanceCopy';
 import { EditableTextListField, type EditableTextListItem } from '@/components/EditableTextListField';
 import { SourceTextPanel } from '@/components/SourceTextPanel';
-import { SaveIntentSheet } from '@/components/SaveIntentSheet';
+import {
+  IMPORT_SAVE_ACCESSIBILITY_LABEL,
+  IMPORT_SAVE_BLOCKED_HINT,
+  IMPORT_SAVE_DESTINATION_NOTE,
+  IMPORT_SAVE_LABEL,
+  describeImportSavedAnnouncement,
+} from '@/components/importSaveCopy';
 import { useHouseholdAllergenRestriction } from '@/hooks/useHouseholdAllergenRestriction';
-import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { hapticSmallCommit } from '@/lib/haptics';
 import { loadFriendProofForRecipes } from '@/lib/friendProof';
 import { getAppRepository, todayIso, type CreateMealInput, type RemyRepository } from '@/lib/repository';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
@@ -306,10 +331,18 @@ function buildMealInput(
 }
 
 /**
- * The actual write path PD-004's "when?" prompt exists to guard: a real
- * meal + ingredients + steps row, then a real save row carrying the
- * household's chosen SaveIntent (PD-004a: 'this_week' or 'someday', never
- * 'none' — see SaveIntentSheet's own file header).
+ * The write path: a real meal + ingredients + steps row, then a real save
+ * row carrying a `SaveIntent`.
+ *
+ * IT STILL TAKES THE INTENT AS A PARAMETER even though exactly one caller
+ * passes exactly one value (`IMPORT_DEFAULT_SAVE_INTENT`). Hardcoding it in
+ * here would move the product decision out of src/domain/saveIntent.ts,
+ * where it is documented and tested, into an unexported helper inside a
+ * route module no test can reach — which is the arrangement this whole
+ * change exists to undo. The parameter is the seam that keeps the decision
+ * somewhere it can be read.
+ *
+ * PD-004a: 'this_week' or 'someday', never 'none'.
  */
 /**
  * What a save attempt did. A duplicate is NOT an error and must not be
@@ -498,7 +531,6 @@ export default function ImportConfirmScreen(): JSX.Element {
   const router = useRouter();
   const scheme = useColorScheme();
   const colors = getColors(scheme);
-  const reduceMotionEnabled = useReduceMotion();
   /**
    * PRF-02. Decides whether the tagging step names what skipping COSTS or
    * merely what state it leaves behind — PD-006 point 2 keeps the stronger
@@ -542,13 +574,12 @@ export default function ImportConfirmScreen(): JSX.Element {
   const arrivedIngredients: readonly ParsedIngredient[] = recipe === null ? [] : recipe.ingredients;
   const [allergenTags, setAllergenTags] = useState<readonly string[]>([]);
   const [allergenStatus, setAllergenStatus] = useState<'unknown' | 'verified'>('unknown');
-  const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   /**
    * The title of the recipe this import turned out to be a second copy of,
    * or null. Held separately from `saveError` because a duplicate is not a
-   * failure — see the branch in `handleSelectIntent` and `ImportSaveResult`.
+   * failure — see the branch in `handleSave` and `ImportSaveResult`.
    */
   const [duplicateTitle, setDuplicateTitle] = useState<string | null>(null);
 
@@ -589,11 +620,26 @@ export default function ImportConfirmScreen(): JSX.Element {
     setAllergenStatus('unknown');
   };
 
-  const handleSelectIntent = (intent: SaveIntent): void => {
-    // The sheet has already run its own dismiss animation before calling
-    // this (see SaveIntentSheet's file header) — closing it here is just
-    // resetting our own visibility state, not racing that animation.
-    setShowSaveSheet(false);
+  /**
+   * The one act that persists anything on this screen.
+   *
+   * THE HAPTIC FIRES ON THE PRESS, NOT ON THE RESOLUTION, and that is
+   * inherited deliberately rather than left over: `SaveIntentSheet` fired
+   * `hapticSmallCommit` the instant a row was tapped, before its own write
+   * had gone anywhere, because the tap is what the thumb is asking about.
+   * WS5 §3.1 rule 5 wants a haptic to have a visual partner and it has one —
+   * the button drops into its `loading` state on the same frame. A buzz
+   * delayed until the repository answers would arrive after the household
+   * has already looked away, and would arrive twice as often on a slow
+   * connection as on a fast one.
+   *
+   * IT IS `hapticSmallCommit` AND NOT `hapticRealCommit`, which is the same
+   * weight the removed sheet chose for the same moment: a dish joins a list,
+   * and nothing about tonight is decided (src/lib/haptics.ts names these
+   * after the weight of the consequence, not after the API).
+   */
+  const handleSave = (): void => {
+    hapticSmallCommit();
     setSaveError(null);
     setIsSaving(true);
 
@@ -606,7 +652,14 @@ export default function ImportConfirmScreen(): JSX.Element {
       servingsText,
       carriedDishTags,
     );
-    persistImportedMeal(getAppRepository(), intent, editedRecipe, confirmParams, allergenTags, allergenStatus)
+    persistImportedMeal(
+      getAppRepository(),
+      IMPORT_DEFAULT_SAVE_INTENT,
+      editedRecipe,
+      confirmParams,
+      allergenTags,
+      allergenStatus,
+    )
       .then((result) => {
         if (result.kind === 'duplicate') {
           // Deliberately not `setSaveError`: that line is `danger` red, and
@@ -617,6 +670,12 @@ export default function ImportConfirmScreen(): JSX.Element {
           setDuplicateTitle(result.title);
           return;
         }
+        // A1, and it replaces one the removed sheet used to make ("Bewaard:
+        // Deze week"): this screen closes itself, which a screen-reader user
+        // would otherwise meet as silence followed by a grid of forty dishes
+        // with no word about which one just arrived. Announced BEFORE the
+        // navigation, the way recipe-edit does it.
+        AccessibilityInfo.announceForAccessibility(describeImportSavedAnnouncement(trimmedTitle));
         router.replace('/recipes');
       })
       .catch((error: unknown) => {
@@ -800,23 +859,31 @@ export default function ImportConfirmScreen(): JSX.Element {
           <Text style={[typeScale.bodySmall, styles.saveErrorText, { color: colors.danger }]}>{saveError}</Text>
         ) : null}
         <Button
-          label="Doorgaan"
+          label={IMPORT_SAVE_LABEL}
           variant="primary"
-          onPress={() => setShowSaveSheet(true)}
+          onPress={handleSave}
           disabled={!canSave || isSaving}
           loading={isSaving}
-          accessibilityLabel="Doorgaan naar opslaan"
-          accessibilityHint={canSave ? undefined : 'Vul een titel, minstens één ingrediënt en één stap in'}
+          accessibilityLabel={IMPORT_SAVE_ACCESSIBILITY_LABEL}
+          accessibilityHint={canSave ? undefined : IMPORT_SAVE_BLOCKED_HINT}
         />
-      </View>
+        {/* The half of the removed sheet that was never a question. It told
+            the household what each answer would DO; with the question gone,
+            that telling has to land somewhere or the flow ends in a screen
+            change nobody explained. Under the button rather than above it,
+            in `caption`/`textMuted`, so it reads as a consequence of the
+            control it sits beneath rather than as a second instruction
+            competing with `guidance.subtitle` at the top of the scroll.
 
-      <SaveIntentSheet
-        visible={showSaveSheet}
-        dishTitle={trimmedTitle.length > 0 ? trimmedTitle : 'Dit recept'}
-        onSelectIntent={handleSelectIntent}
-        onDismiss={() => setShowSaveSheet(false)}
-        reduceMotionEnabled={reduceMotionEnabled}
-      />
+            HIDDEN ONCE THE DUPLICATE NOTICE IS UP, because then it is
+            false: nothing was saved, so nothing is on its way round. That
+            branch already owns the footer and says what happened. */}
+        {duplicateTitle === null ? (
+          <Text style={[typeScale.caption, styles.destinationNote, { color: colors.textMuted }]}>
+            {IMPORT_SAVE_DESTINATION_NOTE}
+          </Text>
+        ) : null}
+      </View>
     </SafeAreaView>
   );
 }
@@ -884,6 +951,10 @@ const styles = StyleSheet.create({
   duplicateNotice: {
     gap: spacing.space3,
     marginTop: spacing.space4,
+  },
+  destinationNote: {
+    marginTop: spacing.space3,
+    textAlign: 'center',
   },
   saveErrorText: {
     marginBottom: spacing.space3,

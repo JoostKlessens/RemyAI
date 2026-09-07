@@ -21,6 +21,11 @@
 import { describe, expect, test } from 'vitest';
 import {
   RECIPE_EDIT_ALLERGEN_NOTES,
+  RECIPE_EDIT_CATEGORIES_HELPER,
+  RECIPE_EDIT_CATEGORIES_LABEL,
+  RECIPE_EDIT_COURSE_GROUP_LABEL,
+  RECIPE_EDIT_COURSE_HELPER,
+  RECIPE_EDIT_COURSE_LABEL,
   RECIPE_EDIT_HEADING,
   RECIPE_EDIT_ROW_EXPLAINER,
   RECIPE_EDIT_ROW_LABEL,
@@ -183,6 +188,11 @@ describe('the copy as a whole', () => {
       RECIPE_EDIT_SAVE_BLOCKED_HINT,
       RECIPE_EDIT_ROW_LABEL,
       RECIPE_EDIT_ROW_EXPLAINER,
+      RECIPE_EDIT_CATEGORIES_LABEL,
+      RECIPE_EDIT_CATEGORIES_HELPER,
+      RECIPE_EDIT_COURSE_LABEL,
+      RECIPE_EDIT_COURSE_HELPER,
+      RECIPE_EDIT_COURSE_GROUP_LABEL,
       ...RECIPE_EDIT_ALLERGEN_NOTES.map((note) => note.text),
     ];
 
@@ -193,5 +203,38 @@ describe('the copy as a whole', () => {
 
   test('the sheet row is a verb, matching Sturen / Verwijderen beside it', () => {
     expect(RECIPE_EDIT_ROW_LABEL).toBe('Aanpassen');
+  });
+
+  /**
+   * The sheet row's explainer is what somebody reads INSTEAD of opening the
+   * screen, so a field the editor gained but the explainer never mentioned
+   * is a control nobody finds. Asserted rather than remembered.
+   */
+  test('the sheet row explainer mentions the categories the editor can now change', () => {
+    expect(RECIPE_EDIT_ROW_EXPLAINER.toLowerCase()).toContain('categorie');
+  });
+
+  /**
+   * A pre-selected first option has to say whether it is an answer or a
+   * placeholder. Here it is an answer — the owner's: "standaard is iets een
+   * hoofdgerecht" — and the helper is the only place a person is told.
+   */
+  test('the course helper states the default out loud', () => {
+    expect(RECIPE_EDIT_COURSE_HELPER.toLowerCase()).toContain('hoofdgerecht');
+  });
+
+  /**
+   * Two words for one vocabulary is only safe while the second one points
+   * at the first. "Categorieën" is this screen's noun for what the filter
+   * rows call "Waarmee?", and the helper is what ties them together.
+   */
+  test('the categories helper names the screen those chips actually change', () => {
+    expect(RECIPE_EDIT_CATEGORIES_HELPER).toContain('Mijn recepten');
+  });
+
+  /** Field labels on this screen are nouns, never questions — see the module header. */
+  test('the two new field labels are nouns rather than questions', () => {
+    expect(RECIPE_EDIT_CATEGORIES_LABEL).not.toContain('?');
+    expect(RECIPE_EDIT_COURSE_LABEL).not.toContain('?');
   });
 });

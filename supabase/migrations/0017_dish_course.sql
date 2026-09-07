@@ -1,0 +1,142 @@
+-- Remy — where a dish sits in a meal (additive only; touches no existing
+-- column, no existing policy, and no existing row)
+--
+-- The owner's instruction, verbatim: "Ook wil ik ergens kunnen toevoegen
+-- dat een recept bijvoorbeeld een voorgerecht, bijgerecht of toetje is,
+-- standaard is iets een hoofdgerecht."
+--
+-- ===========================================================================
+-- WHY A COLUMN OF ITS OWN, AND NOT FOUR MORE VALUES IN `dish_tags`
+-- ===========================================================================
+--
+-- `dish_tags` (0004) is the obvious home and it is the wrong one, for a
+-- reason that is structural rather than tidy-minded: it is a `text[]`.
+-- Storing a course there makes `['voorgerecht', 'toetje']` a representable
+-- row with nothing anywhere to stop it, and a dish that is both a starter
+-- and a dessert is not a dish, it is two. The filter semantics finish the
+-- argument. Chosen `dish_tags` are ANDed (src/domain/exclusions.ts), so a
+-- household picking two courses would be asking for something that is
+-- empty by construction — the exact failure `dish_moods` (0010) got its own
+-- column to avoid, one axis over.
+--
+-- `dish_moods` is the wrong home for the mirror-image reason. That column
+-- accumulates the UNION of what several cooks said about a dish over time,
+-- because each of those descriptions stays true. A course is not a
+-- description that accumulates; it is one fact that can be corrected.
+--
+-- So: three taxonomies on `meals`, three cardinalities, three write
+-- moments. `dish_tags` is a SET written once at import by a model reading a
+-- caption. `dish_moods` is a SET written by a person after cooking, one per
+-- rating. `dish_course` is ONE value, knowable from the recipe itself and
+-- editable afterwards. The vocabularies are asserted to share no value with
+-- each other or with the EU allergen list (tests/dishCourses.test.ts),
+-- which is 0004's PD-006 boundary extended one vocabulary further.
+--
+-- ===========================================================================
+-- `not null default 'hoofdgerecht'`, AND WHAT THAT DOES TO EXISTING ROWS
+-- ===========================================================================
+--
+-- Every `meals` row in every install predates this column, and the owner
+-- has already said what those rows are: a recipe nobody has classified IS a
+-- hoofdgerecht. So the default is not a placeholder standing in for a real
+-- answer that has yet to arrive — it IS the answer, for the past as much as
+-- for the future, and the column can be `not null` from its first day.
+--
+-- REJECTED: `text null`, with null meaning "not yet classified". It reads
+-- more careful and is less honest. It invents a third state the product
+-- does not have, forces every reader to decide what a null means (and two
+-- of them to decide differently), and would need a backfill or a coalesce
+-- at every call site to say the thing this default says once.
+--
+-- No table rewrite: since Postgres 11 an `add column ... not null default`
+-- stores the default in the catalog and existing rows read it without being
+-- touched. So this statement writes no row, on a table that can be large.
+--
+-- ===========================================================================
+-- WHY THIS DEFAULT MAY REACH EXISTING ROWS WHERE 0015's MAY NOT
+-- ===========================================================================
+--
+-- Two migrations back, `0015_cook_sharing_on_by_default.sql` changed a
+-- default and deliberately contained no `update`, on the grounds that
+-- "consent cannot be supplied retroactively by a DDL statement run at
+-- midnight". This migration's default DOES reach every existing row, and
+-- the distinction has to be stated or the next author will read one of the
+-- two files as precedent for the wrong thing.
+--
+-- 0015's column is `share_cooks_with_friends`. Its value decides whether
+-- other people are told what a household ate. A default flipped underneath
+-- an existing household would start naming their dinners to their friends
+-- while they were not looking, with no event and no screen to tell them.
+--
+-- `dish_course` tells nobody anything. It has no blast radius: it does not
+-- gate a read, does not appear in `shared_cooks` or any other cross-
+-- household projection, does not exclude a meal from anyone's rotation, and
+-- carries no health, consent or identity meaning. The worst case for a
+-- wrong value is a recipe filed under the wrong heading in the household's
+-- own library, correctable in one tap by the household that owns it. And it
+-- is not a value invented here: it is the owner's stated reading of exactly
+-- these rows.
+--
+-- The rule 0015 defends is intact — a migration may not act on somebody's
+-- behalf where acting requires their permission. Recording that an
+-- unlabelled recipe is a main course requires nobody's permission.
+--
+-- ===========================================================================
+-- A CHECK, NOT AN ENUM; NO INDEX
+-- ===========================================================================
+--
+-- Stated as a CHECK for 0010's reason restated: the vocabulary's home is
+-- the TypeScript module (src/domain/dishCourses.ts), this is a mirror of
+-- it, and a mirror editable in one statement is easier to keep honest than
+-- a type with dependent columns. Adding a course is therefore an edit in
+-- two places, on purpose.
+--
+-- This is the third guard, not the first. `sanitizeDishCourse` narrows
+-- untrusted input at the app's boundary and `setMealDishCourse` refuses an
+-- unknown value at the repository's write seam. This one is the only guard
+-- that survives a client which skips the other two — a future sync job, a
+-- manual fix-up, a second app. A value outside this list is unlabelled and
+-- unfilterable by construction, so storing one means storing something no
+-- screen can ever render and no query can ever ask for; failing the write
+-- is strictly cheaper than discovering that later.
+--
+-- Deliberately NO index, for 0004's and 0010's reason: nothing queries this
+-- column in SQL. The library reads it off an already-fetched row
+-- (src/domain/dishCourses.ts's `readMealDishCourse`), so an index here
+-- would be write cost for no read benefit. Add
+-- `create index ... on meals (dish_course)` in the same migration as the
+-- first query that needs it.
+--
+-- ===========================================================================
+-- WHAT IS DELIBERATELY NOT IN THIS MIGRATION
+-- ===========================================================================
+--
+-- A `recipes.course` on the canonical row (0006). A course is a fact about
+-- the recipe rather than about one household's copy of it, so on the face
+-- of it that is where it belongs — and it is not here for 0010's own
+-- standing lesson: `recipe_ratings` shipped in 0007 with four readers and
+-- ZERO writers and has stayed empty ever since. Nothing extracts a course
+-- today: `buildExtractionRequest.ts` constrains the model to `dishTags` and
+-- says nothing about courses, and `canonicalRecipe.ts` has no such field.
+-- A column shipped ahead of its writer would repeat that exactly. When the
+-- extraction path learns to read a course, the column lands in the SAME
+-- migration as the code that writes it.
+--
+-- A FILTER AXIS. `DecisionFilters` gains nothing from this column and
+-- neither does `LibrarySearchState`. DecisionFilterBar's restraint 3 says a
+-- third row of chips over the dish name "should have to argue against
+-- restraint 2, not merely be useful", and this change does not make that
+-- argument. The course is a label a recipe carries; turning it into a
+-- filter is a separate decision with that restraint to answer to.
+
+alter table meals
+  add column dish_course text not null default 'hoofdgerecht';
+
+-- The closed vocabulary, enforced at the last possible boundary — see the
+-- header on why this is the third guard rather than the first.
+alter table meals
+  add constraint meals_dish_course_closed_vocabulary
+  check (dish_course in ('voorgerecht', 'hoofdgerecht', 'bijgerecht', 'toetje'));
+
+comment on column meals.dish_course is
+  'Where this dish sits in a meal (src/domain/dishCourses.ts): voorgerecht, hoofdgerecht, bijgerecht, toetje. Exactly ONE value per meal, unlike dish_tags (what a dish is made of, a set, ANDed, written at import) and dish_moods (what it feels like, a set, ORed, written by a person after cooking). Defaults to hoofdgerecht because a recipe nobody has classified IS a main course — the absence of a statement is not missing data here, it is the answer. NEVER merged with ingredient_tags, which is allergen data driving the PD-006 exclusion gate. Carries no number, no ranking and no consent meaning: it gates no read and appears in no cross-household projection.';

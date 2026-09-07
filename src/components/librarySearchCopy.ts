@@ -51,8 +51,30 @@ export interface LibrarySearchEmptyCopy {
 const LIBRARY_SEARCH_EMPTY_TITLE = 'Niets gevonden';
 const LIBRARY_SEARCH_EMPTY_ACTION_LABEL = 'Wis zoekopdracht';
 
+/**
+ * Every axis that is not the typed query. It has to name ALL of them, and
+ * the failure mode when it does not is quiet rather than loud: a search with
+ * only a course or only a scheduling state selected would reach
+ * `describeEmptyBody` as "no query, no filters", fall through to the
+ * chip-only sentence anyway, and be right by accident — until somebody adds
+ * a fourth branch, at which point it is wrong with no test having moved.
+ *
+ * It is deliberately NOT `isLibrarySearchActive` (src/domain/recipeSearch.ts)
+ * with the query subtracted. That function answers "would this narrow
+ * anything", which is the question the SCREEN asks to decide whether this
+ * state applies at all; this one answers "was anything other than typing
+ * involved", which is a question about the sentence. They agree today and
+ * they are not the same question, and collapsing them would make the copy
+ * depend on a predicate that exists to gate a control.
+ */
 function hasChipFilters(search: LibrarySearchState): boolean {
-  return search.requiredDishTags.length > 0 || search.anyDishMoods.length > 0 || search.maxMinutes !== null;
+  return (
+    search.requiredDishTags.length > 0 ||
+    search.anyDishMoods.length > 0 ||
+    search.maxMinutes !== null ||
+    search.anyDishCourses.length > 0 ||
+    search.anySchedulingStates.length > 0
+  );
 }
 
 /**

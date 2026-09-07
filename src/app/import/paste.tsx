@@ -135,8 +135,9 @@
  * A `__DEV__`-only scenario row (mirroring the one on Kiezen) lets every
  * `ImportResult` kind be exercised on device without a backend; it never
  * renders in production builds. It stays LINK-SHAPED: every fixture in
- * ./_fixtures.ts is keyed on a link platform (`FixtureLinkPlatform` is now
- * `UrlImportPlatform`, which excludes `'text'` and `'photo'` deliberately),
+ * `@/fixtures/importFixtures` is keyed on a link platform
+ * (`FixtureLinkPlatform` is now `UrlImportPlatform`, which excludes
+ * `'text'` and `'photo'` deliberately),
  * so demoing either hand-over route would mean inventing a fixture that does
  * not exist rather than exercising one that does.
  *
@@ -162,8 +163,8 @@ import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DevScenarioRow, buildDevScenarioDemo, type DevScenarioValue } from './_devScenarios';
-import { encodeImportConfirmParams } from './routeParams';
+import { ImportDevScenarioRow, buildDevScenarioDemo, type DevScenarioValue } from '@/components/ImportDevScenarioRow';
+import { encodeImportConfirmParams } from '@/navigation/importRouteParams';
 import { readPastedText } from '@/domain/import/pastedTextLimits';
 import { IMPORT_PHOTO_CAPTURE_QUALITY, readImportPhoto } from '@/domain/import/photoImportLimits';
 import {
@@ -1034,7 +1035,7 @@ export default function ImportPasteScreen(): JSX.Element {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
-      {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow onSelect={applyDevScenario} /> : null}
+      {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <ImportDevScenarioRow onSelect={applyDevScenario} /> : null}
 
       <View style={styles.header}>
         <Pressable

@@ -1,8 +1,20 @@
 /**
  * Fixture data for Trending's global scope (PD-014, docs/DESIGN.md §9).
- * The tab read "Ranglijst" when this was written; only the label changed,
- * and the route segment is still `ranglijst`, so this file's name and
- * location are correct as they stand.
+ *
+ * IT IS NO LONGER NAMED AFTER THE ROUTE, AND THAT IS THE CORRECTION. This
+ * was src/app/ranglijst/_fixtures.ts, and its header argued that "the
+ * route segment is still `ranglijst`, so this file's name and location are
+ * correct as they stand". The location was not correct: expo-router scans
+ * every `.ts`/`.tsx` file under src/app, underscore or not, so this file
+ * was a route node with no default export and said so on every launch.
+ * The `src/app/ranglijst/` directory held nothing else and is gone; the
+ * route itself was never there — it is `(tabs)/ranglijst.tsx`, and always
+ * was. See `decisionFixtures.ts`'s header for the full argument and for
+ * the one-direction rule this file obeys.
+ *
+ * The name now says what the data IS (a board) rather than which URL
+ * happened to display it, which also survives the tab being relabelled a
+ * second time.
  *
  * WHY THIS SURFACE SHIPS ON FIXTURES, AND WHAT IS ACTUALLY MISSING.
  * The board is the first surface in the app that needs data no client can
@@ -17,7 +29,8 @@
  * cross-household, so it cannot be served from a device-local store.
  *
  * This is the same staging Fase 5b used for Vrienden
- * (src/app/friends/_fixtures.ts) and it is deliberate: the screen, the
+ * (`friendFeedFixtures.ts`, beside this file) and it is deliberate: the
+ * screen, the
  * copy and the ranking are finished and provable now, and the day
  * `supabaseSocialRepository.ts` lands, this file is the only thing that
  * gets deleted. Nothing downstream of it knows the data was fake.

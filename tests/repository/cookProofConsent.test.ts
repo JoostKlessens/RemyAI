@@ -239,6 +239,11 @@ describe('createMeal writes the whole meal row', () => {
         // a meal is never born with a mood (see `Meal.dishMoods`). Its
         // presence here is what proves the row states that explicitly
         // rather than leaving the key absent for a reader to interpret.
+        // Written as `DEFAULT_DISH_COURSE` by `buildMealRow` when the
+        // input says nothing — "standaard is iets een hoofdgerecht". Its
+        // presence here proves the row STATES the default rather than
+        // leaving the key absent and relying on every reader to supply it.
+        'dishCourse',
         'dishMoods',
         'dishTags',
         'estimatedMinutes',

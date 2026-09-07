@@ -355,9 +355,12 @@ describe('normalizeRecipeUrl — web (an ordinary recipe page)', () => {
 
   /**
    * The pure half of SSRF defence: `normalizeWebUrl` reuses
-   * `isBlockedRedirectHost` from resolveShortLinkTarget.ts rather than
+   * `isBlockedRedirectHost` from privateNetworkHosts.ts rather than
    * keeping a second, weaker copy, so a pasted URL and a redirect target
-   * are held to one blocklist.
+   * are held to one blocklist. It said resolveShortLinkTarget.ts until the
+   * require cycle between that module and urlParsing.ts came out; the
+   * property under test is unchanged, and privateNetworkHosts.test.ts now
+   * pins the shared list from the other side.
    */
   test('rejects a host pointing at this machine or the private network around it', () => {
     for (const url of [

@@ -577,27 +577,46 @@ export interface CookSharingAskInput {
  * until the person goes to settings themselves — the question is asked
  * once, not campaigned."
  *
- * TWO GUARDS, AND THEY ARE INDEPENDENT ON PURPOSE. `alreadyAsked` is the
- * durable one and the one that survives an app restart; it is what
- * `markHouseholdCookSharingAsked` writes, and that method has no un-ask
- * counterpart precisely so this can never be reopened. The count is the one
- * that holds INSIDE a single session, in the window where the mark write is
- * still in flight or has failed: the second accept is not a first
- * friendship, so it cannot re-raise the sheet even if the flag never
- * landed. Either guard alone would leave a hole; together the question
- * cannot be put twice.
+ * `alreadyAsked` IS THE GUARD THAT ENFORCES "ONCE". It is the durable one,
+ * it survives an app restart, it is what `markHouseholdCookSharingAsked`
+ * writes, and that method has no un-ask counterpart precisely so this can
+ * never be reopened.
  *
- * IT IS `=== 1`, NOT `<= 1`. Zero means the accept did not actually take —
- * a race, a rejected write — and asking a household to disclose their
- * cooking on the strength of a friendship that does not exist is exactly
- * the consent-by-accident PD-005 exists to prevent.
+ * IT IS `>= 1`, AND IT USED TO BE `=== 1`. That is the one thing here the
+ * owner's reversal changed, and it closes a hole that only became visible
+ * once sharing became the standard.
+ *
+ * Under `=== 1`, a household that ALREADY had two or more accepted friends
+ * could never be asked contextually at all — their first friendship was in
+ * the past, and nothing would ever raise the sheet again, so Instellingen
+ * was their only route. While sharing was off by default that was the safe
+ * direction and cost them nothing they had asked for. With sharing
+ * standard (migration 0015) it inverts: the households most likely to want
+ * it are exactly the ones who already have friends, and they would be the
+ * only ones never offered the state the product now calls normal.
+ *
+ * WHAT BROADENING IT GIVES UP, stated rather than glossed: the SECOND,
+ * belt-and-braces guard, which used to cover the window where the mark
+ * write is in flight or has failed. Two things still cover that window.
+ * `add.tsx`'s `askRef` is set synchronously when the sheet goes up and
+ * cleared synchronously in the first line of the answer handler, which no
+ * React batching can defeat — so the sheet cannot be raised twice in one
+ * session. And across sessions, the only case that re-asks is one where
+ * the answer was never recorded at all, which is a question that genuinely
+ * was not answered rather than a campaign.
+ *
+ * ZERO STILL ASKS NOTHING, which is why this is `>= 1` and not "any
+ * number". Zero means the accept did not actually take — a race, a
+ * rejected write — and asking a household to disclose their cooking on the
+ * strength of a friendship that does not exist is exactly the
+ * consent-by-accident PD-005 exists to prevent.
  *
  * THE COUNT IS READ BACK, NOT INCREMENTED. The screen re-reads
  * `listFriendships` after the accept (it has to, to redraw the rows) and
  * counts the accepted ones from that. A count carried forward from the
- * snapshot the screen was holding would be one stale read away from calling
- * somebody's fourth friendship their first.
+ * snapshot the screen was holding would be one stale read away from
+ * claiming a friendship that never landed.
  */
 export function shouldAskCookSharing(input: CookSharingAskInput): boolean {
-  return input.acceptedFriendCount === 1 && !input.alreadyAsked;
+  return input.acceptedFriendCount >= 1 && !input.alreadyAsked;
 }

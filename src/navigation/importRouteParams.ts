@@ -2,9 +2,45 @@
  * expo-router search params are strings only, never structured data. The
  * import flow needs to carry a parsed recipe (or manual-entry context: a
  * source URL/platform/author with no recipe at all) from the paste screen
- * to the confirmation screen — this is the same JSON-encode convention
- * src/app/onboarding/routeParams.ts already established for exactly this
- * kind of cross-screen data, applied to this flow's own shape.
+ * to the confirmation screen, and this is the JSON-encode convention that
+ * does it.
+ *
+ * ABOUT ROUTING, BUT NOT A ROUTE — WHICH IS WHY IT IS NOT UNDER src/app.
+ * It was src/app/import/routeParams.ts, where expo-router counted it as a
+ * route and warned on every single launch that it had no default export:
+ *
+ *     WARN  Route "./import/routeParams.ts" is missing the required
+ *           default export.
+ *
+ * The router's `require.context` (expo-router/_ctx.js, SDK 57) excludes
+ * `+api` and `+html` and nothing else, so no naming trick keeps a
+ * non-screen out of the route table; only leaving the directory does. Note
+ * that this file had no underscore to begin with — it was a plain module
+ * sitting in a routes folder, warning about it since the day it landed.
+ *
+ * WHY src/navigation/ AND NOT ONE OF THE FOUR EXISTING HOMES. It is not
+ * domain — src/domain/import/** is the Deno-reachable graph of
+ * supabase/functions/parse-recipe (OPS-09), and an edge function has no
+ * router, no screens and no search params; filing a URL codec there would
+ * put UI navigation inside a deploy artifact. It is not src/lib, which is
+ * this repo's impure shell ("a module that fetches, beside modules that
+ * decide" — friendProof.ts, sendRecipe.ts), and this module fetches
+ * nothing. It is not src/components, which renders. What is left is the
+ * concern it actually is: the contract by which structured data crosses a
+ * route boundary. src/theme is the precedent for a one-file top-level
+ * directory that names a concern precisely, and the second file here is
+ * already foreseeable — the flow-prefixed name leaves room for it.
+ *
+ * ON THE PRECEDENT THIS HEADER USED TO CITE. It said this was "the same
+ * JSON-encode convention src/app/onboarding/routeParams.ts already
+ * established". That file was real (added in 52b45d0) and was deleted in
+ * e73d73f, so the sentence had been pointing at nothing for some time —
+ * and it was itself a non-route module under src/app, i.e. the same
+ * defect, one directory over. The convention it established is genuine and
+ * is restated here rather than referred to: encode the whole payload as
+ * one JSON string, decode defensively, and never throw at the boundary —
+ * see `decodeImportConfirmParams` below, which returns a manual-mode
+ * payload rather than raising on anything it cannot read.
  */
 
 import type { ImportPlatform, ParsedRecipe, RecipeProvenance } from '@/domain/import/types';
@@ -214,8 +250,9 @@ function readProvenance(value: unknown): RecipeProvenance | null {
  * Never throws: this is UI-internal navigation state produced by this same
  * flow one screen earlier, but malformed or missing input still decodes to
  * a safe, empty manual-entry shape rather than crashing the confirmation
- * screen — matching onboarding/routeParams.ts's own "never throws"
- * convention for router params.
+ * screen. "Never throws" is the convention for every router-param
+ * decoder in this app; the now-deleted onboarding decoder set it, and the
+ * header above restates it rather than pointing at a file that is gone.
  */
 export function decodeImportConfirmParams(raw: string | undefined): ImportConfirmParams {
   const empty: ImportConfirmParams = {

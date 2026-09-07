@@ -1,0 +1,108 @@
+-- Remy — cook sharing becomes the default for households created from here
+-- on, and for nobody else.
+--
+-- The owner's instruction, verbatim: "it should be standard that you share
+-- it with friends."
+--
+-- 0009 shipped `households.share_cooks_with_friends` with `default false`
+-- and spent a paragraph arguing that the default WAS the consent model.
+-- That argument is now half wrong and half more important than it was, and
+-- this file is only allowed to move the half the owner moved.
+--
+-- ===========================================================================
+-- WHAT THIS CHANGES: THE DEFAULT. WHAT IT DOES NOT CHANGE: ANY ROW.
+-- ===========================================================================
+--
+-- `alter column ... set default` in Postgres rewrites the catalog entry
+-- that supplies a value when an INSERT omits the column. It does not touch
+-- a single existing row, and there is deliberately no `update households
+-- set share_cooks_with_friends = true` anywhere below.
+--
+-- That absence is the whole file. 0009's header says "NOTHING IS SHARED BY
+-- THIS MIGRATION", and DESIGN-SOCIAL.md §5 ends its rejected-alternatives
+-- paragraph on "nothing is shared by a migration, ever". Reversing the
+-- default does not touch either sentence, because the thing they forbid is
+-- not a default — it is a migration that starts naming somebody's dinners
+-- to their friends while they were not looking. There is no product
+-- decision, from any owner, that makes that acceptable: a household that
+-- has never been asked has not consented, and consent cannot be supplied
+-- retroactively by a DDL statement run at midnight. An UPDATE here would
+-- also be silent in the one way that matters — the affected households
+-- would have no event, no screen and no notification telling them their
+-- cooking became visible.
+--
+-- So the reversal reaches existing households the only way it legitimately
+-- can: they are ASKED. src/components/CookSharingAskSheet.tsx already owns
+-- that one-time contextual question (§5: offered once, when the first
+-- friendship is accepted, "asked once, not campaigned"), and it now arrives
+-- with its box PRE-CHECKED instead of visibly off. That is the honest
+-- expression of "sharing is standard" — the standard answer is offered,
+-- the consequence is still stated in full sentences above it, and one tap
+-- still takes it away.
+--
+-- ===========================================================================
+-- WHY THIS CANNOT BE MADE CONDITIONAL, AND WHY IT DOES NOT NEED TO BE
+-- ===========================================================================
+--
+-- The obvious refinement is to flip only the households that were never
+-- asked, leaving a deliberate "no" alone — and `cook_sharing_asked_at` is
+-- exactly the field that would distinguish the two.
+--
+-- IT DOES NOT EXIST AS A COLUMN. It is a local-store-only field on
+-- `LocallyStoredHousehold` (src/lib/repository/local/household.ts), whose
+-- own comment says so plainly and describes the migration that would add it
+-- "when sync arrives". Verified against every file in this directory: no
+-- migration mentions it. So there is nothing here to branch on even if
+-- branching were the right idea — and it is not, because "never asked"
+-- still is not consent. The distinction would only ever let a migration
+-- share on behalf of the people who had said the least about it.
+--
+-- ===========================================================================
+-- THE ONE PATH WHERE A NEW DEFAULT REACHES AN OLD HOUSEHOLD
+-- ===========================================================================
+--
+-- `ensureRemoteHousehold` (src/lib/ensureRemoteHousehold.ts:212) inserts
+-- `{ id, name }` and nothing else, so the row it creates takes whatever
+-- default this column carries. For a household that exists locally, has
+-- never been asked, and reaches Postgres for the first time after this
+-- migration, that insert lands `true` while the device holds `false`.
+--
+-- It closes itself, and the ordering that closes it is already written down
+-- and already load-bearing. `backfillMirrorOutbox` enqueues each
+-- household's `share_cooks_with_friends` exactly as the device holds it,
+-- and `flushMirrorOutbox` (src/lib/repository/mirror/index.ts:174-183)
+-- flushes consent jobs AS A CATEGORY BEFORE meals and before cook events —
+-- "a revoke is a promise already made to the user". So the local `false`
+-- overwrites the default before any `cook_events` row can exist remotely,
+-- and `shared_cooks` needs a cook event, a meal with a `recipe_id` and a
+-- mutually accepted friend before it can return anything at all. A
+-- household reaching Postgres for the first time has none of the three.
+--
+-- Written down rather than fixed here because fixing it means naming the
+-- column in that insert, which is a change to a file this change does not
+-- own. If the mirror's consent-first ordering is ever relaxed, this is the
+-- second thing that breaks.
+--
+-- ===========================================================================
+-- WHAT IS NOT REVERSED
+-- ===========================================================================
+--
+-- The per-dish exclusion `meals.excluded_from_cook_proof` keeps its
+-- `default false`, and it is untouched below. Its default means "not
+-- withheld", which is the opposite polarity from the column above — the two
+-- columns both defaulted to `false` in 0009 and meant opposite things, and
+-- only one of them is being turned around. Flipping both to `true` because
+-- they are neighbours would silence every dish in the product.
+--
+-- PD-005's unbundled-consent discipline is not reversed either: the
+-- consequence is still four paragraphs of full sentences above the control
+-- on both surfaces (src/components/cookSharingCopy.ts), and neither
+-- surface has gained a tooltip or a "meer info". What changed is the
+-- default, not the honesty of the ask.
+-- ---------------------------------------------------------------------------
+
+alter table households
+  alter column share_cooks_with_friends set default true;
+
+comment on column households.share_cooks_with_friends is
+  'PD-010 / PD-015 / DESIGN-SOCIAL.md §5. When true, this household''s cook events become "Sanne maakte dit" proof to mutually accepted friends, via the shared_cooks view. ON BY DEFAULT since migration 0015 ("it should be standard that you share it with friends") — for households created after it, and only those: 0015 alters the default and updates no row, so a household that existed before it keeps exactly the value it had and is reached through the one-time contextual ask instead, which now presents the choice pre-checked. Revocable at any time; turning it off removes all past proof at the friend''s next read, because proof is assembled per read and never stored on the other side. Exposes the link between a member''s display name and a canonical recipe id, and nothing else — never restrictions, never members, never cook_events.rating.';

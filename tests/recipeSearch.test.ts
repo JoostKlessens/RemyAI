@@ -2,7 +2,11 @@ import { describe, expect, test } from 'vitest';
 import {
   LIBRARY_TIME_CAP_OPTIONS,
   NO_LIBRARY_SEARCH,
+  collectAvailableDishCourses,
   collectAvailableDishTags,
+  collectSelectableDishCourses,
+  collectSelectableDishMoods,
+  collectSelectableDishTags,
   filterLibraryMeals,
   filterLibraryRows,
   isLibrarySearchActive,
@@ -230,5 +234,186 @@ describe('collectAvailableDishTags', () => {
 
   test('is empty for a library with no categorized meals', () => {
     expect(collectAvailableDishTags([makeMeal(), makeMeal({ id: 'm-2' })])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The course axis (LIB-05). `dishCourse` landed with migration 0017 and had
+// no reader in the library; these tests pin the one property that makes it
+// safe to filter on a column almost every stored row is missing.
+// ---------------------------------------------------------------------------
+
+describe('filterLibraryMeals — anyDishCourses', () => {
+  test('is OR, not AND — a dish has exactly one course, so AND would be empty by construction', () => {
+    const meals = [
+      makeMeal({ id: 'm-voor', dishCourse: 'voorgerecht' }),
+      makeMeal({ id: 'm-toetje', dishCourse: 'toetje' }),
+      makeMeal({ id: 'm-bij', dishCourse: 'bijgerecht' }),
+    ];
+    const result = filterLibraryMeals(meals, search({ anyDishCourses: ['voorgerecht', 'toetje'] }));
+    expect(result.map((meal) => meal.id)).toEqual(['m-voor', 'm-toetje']);
+  });
+
+  test('a meal that never stated a course IS a hoofdgerecht and survives that filter', () => {
+    // The owner's rule, via `readMealDishCourse`: "standaard is iets een
+    // hoofdgerecht". Every row written before 0017 is in this shape, so a
+    // course filter that dropped them would empty the library for the one
+    // value a household is most likely to pick first.
+    const meals = [makeMeal({ id: 'm-untagged', dishCourse: undefined })];
+    expect(filterLibraryMeals(meals, search({ anyDishCourses: ['hoofdgerecht'] })).map((meal) => meal.id)).toEqual([
+      'm-untagged',
+    ]);
+  });
+
+  test('a meal that never stated a course is NOT a toetje', () => {
+    const meals = [makeMeal({ id: 'm-untagged', dishCourse: undefined })];
+    expect(filterLibraryMeals(meals, search({ anyDishCourses: ['toetje'] }))).toEqual([]);
+  });
+
+  test('an unrecognised stored course reads as the default rather than vanishing from every filter', () => {
+    const meals = [makeMeal({ id: 'm-broken', dishCourse: 'amuse' as never })];
+    expect(filterLibraryMeals(meals, search({ anyDishCourses: ['hoofdgerecht'] })).map((meal) => meal.id)).toEqual([
+      'm-broken',
+    ]);
+  });
+
+  test('an empty course selection narrows nothing', () => {
+    const meals = [makeMeal({ id: 'm-1', dishCourse: 'toetje' }), makeMeal({ id: 'm-2' })];
+    expect(filterLibraryMeals(meals, search({ anyDishCourses: [] })).length).toBe(2);
+  });
+});
+
+describe('collectAvailableDishCourses', () => {
+  test('reads an absent course as the default, so an untagged library still offers "hoofdgerecht"', () => {
+    expect(collectAvailableDishCourses([makeMeal({ id: 'm-1', dishCourse: undefined })])).toEqual(['hoofdgerecht']);
+  });
+
+  test('unions and de-duplicates across the pool', () => {
+    const meals = [
+      makeMeal({ id: 'm-1', dishCourse: 'toetje' }),
+      makeMeal({ id: 'm-2', dishCourse: 'toetje' }),
+      makeMeal({ id: 'm-3', dishCourse: 'voorgerecht' }),
+    ];
+    expect([...collectAvailableDishCourses(meals)].sort()).toEqual(['toetje', 'voorgerecht']);
+  });
+
+  test('is empty for an empty pool — the one case where no course is offered at all', () => {
+    expect(collectAvailableDishCourses([])).toEqual([]);
+  });
+});
+
+describe('isLibrarySearchActive — the two axes added with the 3-across grid', () => {
+  test('is true when only a course is selected', () => {
+    expect(isLibrarySearchActive(search({ anyDishCourses: ['toetje'] }))).toBe(true);
+  });
+
+  test('is true when only a scheduling state is selected', () => {
+    expect(isLibrarySearchActive(search({ anySchedulingStates: ['deze_week'] }))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chip availability recomputed against the CURRENT selection — the defect
+// this pass exists to close. `requiredDishTags` is ANDed, so a chip offered
+// off the full pool is a control that returns zero the moment a first chip
+// is chosen. Availability now runs against the rows that survive the other
+// active filters.
+// ---------------------------------------------------------------------------
+
+describe('collectSelectableDishTags', () => {
+  test('offers every tag in the library when nothing is selected', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-1', dishTags: ['pasta', 'vegetarisch'] }) },
+      { meal: makeMeal({ id: 'm-2', dishTags: ['soep'] }) },
+    ];
+    expect([...collectSelectableDishTags(rows, NO_LIBRARY_SEARCH)].sort()).toEqual(['pasta', 'soep', 'vegetarisch']);
+  });
+
+  test('drops a tag that co-occurs with nothing currently selected — the AND dead end', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-pasta-veg', dishTags: ['pasta', 'vegetarisch'] }) },
+      { meal: makeMeal({ id: 'm-soep', dishTags: ['soep'] }) },
+    ];
+    // With "pasta" chosen, "soep" would return zero rows: no meal carries both.
+    expect([...collectSelectableDishTags(rows, search({ requiredDishTags: ['pasta'] }))].sort()).toEqual([
+      'pasta',
+      'vegetarisch',
+    ]);
+  });
+
+  test('keeps a selected tag on offer even when it survives on no row at all', () => {
+    // Nothing is both pasta and soep, so the grid is empty — and the two
+    // chips a household would tap to escape must still be there to tap.
+    const rows = [{ meal: makeMeal({ id: 'm-pasta', dishTags: ['pasta'] }) }];
+    expect([...collectSelectableDishTags(rows, search({ requiredDishTags: ['pasta', 'soep'] }))].sort()).toEqual([
+      'pasta',
+      'soep',
+    ]);
+  });
+
+  test('narrows against the OTHER axes too — a typed query removes tags it excluded', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-1', title: 'Pastasalade', dishTags: ['pasta'] }) },
+      { meal: makeMeal({ id: 'm-2', title: 'Kippensoep', dishTags: ['soep'] }) },
+    ];
+    expect(collectSelectableDishTags(rows, search({ query: 'salade' }))).toEqual(['pasta']);
+  });
+
+  test('narrows against the time cap, which is the axis that hides most of a library at once', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-quick', dishTags: ['pasta'], estimatedMinutes: 15 }) },
+      { meal: makeMeal({ id: 'm-slow', dishTags: ['stamppot'], estimatedMinutes: 90 }) },
+    ];
+    expect(collectSelectableDishTags(rows, search({ maxMinutes: 20 }))).toEqual(['pasta']);
+  });
+});
+
+describe('collectSelectableDishMoods', () => {
+  test('ignores its OWN selection, because moods are ORed and each extra chip widens the pool', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-zomers', dishMoods: ['zomers'] }) },
+      { meal: makeMeal({ id: 'm-winters', dishMoods: ['winters'] }) },
+    ];
+    // With "zomers" chosen, "winters" still returns rows — it adds them.
+    expect([...collectSelectableDishMoods(rows, search({ anyDishMoods: ['zomers'] }))].sort()).toEqual([
+      'winters',
+      'zomers',
+    ]);
+  });
+
+  test('still narrows against the other axes', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-1', dishTags: ['pasta'], dishMoods: ['zomers'] }) },
+      { meal: makeMeal({ id: 'm-2', dishTags: ['soep'], dishMoods: ['winters'] }) },
+    ];
+    expect(collectSelectableDishMoods(rows, search({ requiredDishTags: ['pasta'] }))).toEqual(['zomers']);
+  });
+
+  test('keeps a selected mood on offer even when the other axes leave it standing on nothing', () => {
+    const rows = [{ meal: makeMeal({ id: 'm-1', dishTags: ['pasta'], dishMoods: ['zomers'] }) }];
+    expect([...collectSelectableDishMoods(rows, search({ requiredDishTags: ['soep'], anyDishMoods: ['winters'] }))]).toEqual(
+      ['winters'],
+    );
+  });
+});
+
+describe('collectSelectableDishCourses', () => {
+  test('ignores its own selection, for the mood row\'s reason — the axis is ORed', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-1', dishCourse: 'toetje' }) },
+      { meal: makeMeal({ id: 'm-2', dishCourse: 'voorgerecht' }) },
+    ];
+    expect([...collectSelectableDishCourses(rows, search({ anyDishCourses: ['toetje'] }))].sort()).toEqual([
+      'toetje',
+      'voorgerecht',
+    ]);
+  });
+
+  test('narrows against the other axes', () => {
+    const rows = [
+      { meal: makeMeal({ id: 'm-1', dishTags: ['pasta'], dishCourse: 'hoofdgerecht' }) },
+      { meal: makeMeal({ id: 'm-2', dishTags: ['soep'], dishCourse: 'voorgerecht' }) },
+    ];
+    expect(collectSelectableDishCourses(rows, search({ requiredDishTags: ['soep'] }))).toEqual(['voorgerecht']);
   });
 });

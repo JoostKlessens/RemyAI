@@ -57,10 +57,37 @@
  * repair for `dishTags` is just a read for this, and it lives in
  * `readMealDishMoods` (src/domain/dishMoods.ts) so that the domain's
  * filter and this file's setter agree by construction.
+ *
+ * `dishCourse` (supabase/migrations/0017_dish_course.sql's
+ * `meals.dish_course`) is the third and last of these, and it is the only
+ * one that is NOT a list. It takes a posture none of the other four
+ * share, because it is the only field on this row with a DEFAULT that
+ * means something: `buildMealRow` writes `DEFAULT_DISH_COURSE` when the
+ * caller says nothing, and `readMealDishCourse`
+ * (src/domain/dishCourses.ts) reads an absent OR an unrecognised value as
+ * that same default. Both halves are needed and neither is redundant —
+ * the write keeps new rows self-describing, the read covers every row
+ * written before the field existed, which is all of them. `dishTags`'
+ * repaired-on-read posture is the closest precedent; the difference is
+ * that a repaired `dishTags` is `[]` ("nobody has said"), while a
+ * defaulted course is a positive claim the owner authorised: "standaard
+ * is iets een hoofdgerecht".
+ *
+ * BOTH DESCRIPTIVE TAXONOMIES ARE NOW WRITTEN TWICE: once at create, and
+ * once by `updateMealRecipe`, which is the editor. That is new for
+ * `dishTags`, and it closed a real defect rather than adding a feature —
+ * until the owner asked ("Kan je de tags niet aanpassen handmatig?") the
+ * column's only writer was the extraction model, so a mis-tagged import
+ * and every hand-typed recipe were permanently invisible to the library's
+ * "Waarmee?" filter. Both are narrowed at that seam by the domain's own
+ * `sanitize…` functions; see `updateMealRecipe` for why one drops what it
+ * cannot place and the other falls back.
  */
 
 import type { CreateMealInput, MealIngredientInput, MealStepInput, UpdateMealRecipeInput } from '../types';
+import { DEFAULT_DISH_COURSE, sanitizeDishCourse } from '@/domain/dishCourses';
 import { isDishMood, readMealDishMoods } from '@/domain/dishMoods';
+import { sanitizeDishTags } from '@/domain/dishTags';
 import { resolveAllergenStateAfterEdit } from '@/domain/mealAllergenReverification';
 import { normalizeTag } from '@/domain/normalizeTag';
 import type { Meal, MealId, MealIngredient, MealStep } from '@/domain/types';
@@ -171,6 +198,17 @@ function buildMealRow(input: CreateMealInput): Meal {
     // `excludedFromCookProof` are: every row this app creates states its
     // own answer rather than leaving a reader to infer one from silence.
     dishMoods: [],
+    // "standaard is iets een hoofdgerecht" — the owner's answer, applied
+    // at the one seam that creates rows so no screen has to remember it.
+    //
+    // WRITTEN EXPLICITLY EVEN THOUGH ABSENCE ALREADY READS AS THE DEFAULT
+    // (`readMealDishCourse`), for `recipeId`'s and `excludedFromCookProof`'s
+    // reason: every row this app creates states its own answer rather than
+    // leaving a reader to infer one from silence. The reader still exists
+    // and still has work to do — every row written before this field did
+    // has no such key — but nothing this app writes from here on adds to
+    // that pile.
+    dishCourse: input.dishCourse ?? DEFAULT_DISH_COURSE,
     thumbnailUrl: input.thumbnailUrl,
     // Hard-coded rather than taken from the input, and `CreateMealInput`
     // deliberately has no counterpart field: a meal is never born
@@ -252,18 +290,27 @@ export async function archiveMeal(tables: RepositoryTables, mealId: MealId): Pro
 }
 
 /**
- * The outcome moment's public half — one person's mood for one dish, from
- * dishMoods.ts's closed vocabulary.
+ * One of the outcome moment's public writes — one person's mood for one
+ * dish, from dishMoods.ts's closed vocabulary.
  *
  * WHAT IT DOES NOT TOUCH, AND THAT IS THE POINT (PD-019). This writes one
  * `meals` row. It never reads, copies or derives anything from
  * `cook_events.rating` — the private grade given in the same breath — so
  * there is no path by which the household's engine input becomes visible
- * to anybody. The two answers travel to two tables through two calls, and
- * this one is the only one that was ever meant to be public. Publishing it
- * is safe because a mood carries no number and no mood outranks another:
- * there is nothing here to inflate, which is the exact pressure PD-019
- * protects the grade from.
+ * to anybody. Publishing a mood is safe because it carries no number and
+ * no mood outranks another: there is nothing here to inflate, which is
+ * the exact pressure PD-019 protects the grade from.
+ *
+ * IT IS NOT "THE ONLY ONE THAT WAS EVER MEANT TO BE PUBLIC", WHICH IS
+ * WHAT THIS COMMENT USED TO SAY. That was true of the code as it stood,
+ * and stopped being true when the outcome card began casting a
+ * `recipe_ratings` vote from the grade as well (src/domain/social/
+ * publicVote.ts — "the rating should also be represented in the global
+ * ranking of a recipe"). The claim above survives that untouched and is
+ * the one worth keeping: this function still writes nothing but a `meals`
+ * row, and the public vote is written through an entirely different
+ * repository from a value the caller hands to both, never derived here
+ * from anything.
  *
  * ADDITIVE AND IDEMPOTENT, never a replace. A dish is cooked more than
  * once and by more than one person, and one mood per rating is the
@@ -400,6 +447,32 @@ export async function updateMealRecipe(
     servings: input.servings,
     ingredientTags: allergens.ingredientTags,
     allergenTagStatus: allergens.allergenTagStatus,
+    // THE TWO DESCRIPTIVE TAXONOMIES, NARROWED HERE RATHER THAN TRUSTED
+    // FROM THE SCREEN — and narrowed differently, on purpose.
+    //
+    // `sanitizeDishTags` DROPS what it does not recognise. That is safe
+    // and right for a list: dropping leaves a shorter list, and a shorter
+    // list is a legal state ("this recipe has no recognised category").
+    // It is also the whole point of opening this field to a person. The
+    // vocabulary is closed because a value outside it is UNFILTERABLE, and
+    // this write path exists precisely to repair the filter — storing
+    // "italiaans" here would break the thing the change was made to fix.
+    dishTags: sanitizeDishTags(input.dishTags, normalizeTag),
+    // `sanitizeDishCourse` FALLS BACK to the default instead. There is no
+    // shorter list to fall back to for a single value, and the fallback is
+    // not this layer's invention — "standaard is iets een hoofdgerecht" is
+    // the owner's own reading of a dish nobody has classified.
+    //
+    // NEITHER OF THESE THROWS, WHERE `addMealDishMood` DOES, and the
+    // difference is what a refusal would cost. That function writes ONE
+    // field, so refusing loses nothing but the bad value. This call
+    // carries a title, a time, servings, an ingredient list and a set of
+    // steps somebody just typed; failing all of it because a cast
+    // produced an odd LABEL would lose real work to protect something
+    // with no blast radius. The database still has the last word either
+    // way — 0004's and 0017's CHECKs would refuse what got past here, and
+    // nothing can now get past here.
+    dishCourse: sanitizeDishCourse(input.dishCourse, normalizeTag),
   }));
 }
 

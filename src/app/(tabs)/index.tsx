@@ -1,7 +1,18 @@
 /**
- * Kiezen — the hero screen. One dish, one stated reason, two actions.
- * No list, no scroll, no browse affordance: this is the entire product
- * thesis. See docs/DESIGN.md §1 and docs/PRODUCT-DECISIONS.md.
+ * Kiezen — the hero screen. One dish, two actions. No list, no scroll, no
+ * browse affordance: this is the entire product thesis. See docs/DESIGN.md
+ * §1 and docs/PRODUCT-DECISIONS.md.
+ *
+ * IT WAS "ONE DISH, ONE STATED REASON" UNTIL 6 SEPTEMBER 2026. The owner
+ * removed the REDEN block — "De reden hierbij moet weg, dat is niet logisch,
+ * ik wil liever dat je de 1 tot max 3 hoofdingredienten er staan en hoe lang
+ * het duurt om te maken" — and asked for the dish's photo with it. What the
+ * card carries now is the still, one to three hoofdingrediënten, the cook
+ * time, and, only when a friend really cooked this dish, PD-017's sentence.
+ * `DecisionCard`'s header holds the full argument, including the one it
+ * overturns about photos on this screen. The reason itself did not die: it
+ * is still composed by `decide()` and still written to the decisions row
+ * below, which is what plan §8 reads.
  *
  * IT WAS THREE ACTIONS UNTIL "Niet koken" WAS REMOVED, and nothing
  * replaced it. The reason menu behind it (PD-002's optional afhalen /
@@ -26,7 +37,9 @@
  *
  * PD-009 adds one thing above the hero: `DecisionFilterBar`, where the
  * household can say "ik heb 20 minuten" or "iets met pasta" *before* Remy
- * picks. That is still one dish, one reason — it narrows the question
+ * picks — since 6 September through `TimeCapPicker`'s clock and five-minute
+ * ladder rather than four chips, the second half of the owner's instruction.
+ * That is still one dish — it narrows the question
  * rather than handing it back, which is why it doesn't breach rule 1 (see
  * that component's header for the full argument). Its state lives here and
  * nowhere else: filters are never persisted, never written to the
@@ -43,12 +56,13 @@
  * pasted a single link yet reaches this branch honestly, not as an edge
  * case — see NoCandidateState's own header.
  *
- * A small `__DEV__`-only scenario row at the top lets every state
- * (normal swap flow, each `no_candidate` reason, network error) be
- * exercised on device without needing a real seeded household — it never
- * renders in production builds and does not affect the centered hero
- * layout below it. Only `devScenario === 'normal'` drives the real
- * pipeline below; every other scenario still renders from fixture data.
+ * A small `__DEV__`-only scenario row at the top
+ * (src/components/DevScenarioRow.tsx, which also owns the `DevScenario`
+ * union) lets every state — normal swap flow, each `no_candidate` reason,
+ * network error — be exercised on device without needing a real seeded
+ * household. It never renders in production builds and does not affect the
+ * centered hero layout below it. Only `devScenario === 'normal'` drives the
+ * real pipeline below; every other scenario still renders from fixture data.
  *
  * The "normal" path: load this household's real data through
  * `RemyRepository`, call the pure `decide()` engine (src/domain/decide.ts)
@@ -67,9 +81,11 @@
  * sentence naming the friend — and it is the only new input this screen
  * supplies. It cannot fail loudly: see that module's header for why
  * silence is the correct degradation, and for why it will stay silent
- * until auth, real cook events and imported `recipeId`s all exist. Nothing
- * about the layout changes; the reason block renders whatever `decide()`
- * put in `reasonText`, exactly as it always has.
+ * until auth, real cook events and imported `recipeId`s all exist. It is
+ * now the ONLY reason copy that can reach the screen at all: everything
+ * `decide()` puts in `reasonText` goes to the decisions row, and only a
+ * `friend_proof` naming a real person passes `buildFriendProofLine` onto the
+ * card.
  *
  * The outcome overlay makes a SECOND non-local read, only while it is up:
  * DESIGN-SOCIAL.md §3.1's first Sturen entry point must know whether any
@@ -92,7 +108,7 @@
 import type { JSX } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Modal, StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   fixtureDecisionSession,
@@ -100,10 +116,11 @@ import {
   fixtureNoCandidateEmptyRotation,
   fixtureNoCandidateFilteredOut,
   fixtureNoCandidateSwapsExhausted,
-} from '@/app/_fixtures';
-import { Button } from '@/components/Button';
+} from '@/fixtures/decisionFixtures';
 import { DecisionCard } from '@/components/DecisionCard';
 import { DecisionFilterBar } from '@/components/DecisionFilterBar';
+import { DecisionErrorState, DecisionLoadingSkeleton } from '@/components/DecisionScreenStates';
+import { DevScenarioRow, type DevScenario } from '@/components/DevScenarioRow';
 import { NoCandidateState } from '@/components/NoCandidateState';
 import { OutcomeCard } from '@/components/OutcomeCard';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
@@ -111,6 +128,9 @@ import { VanavondActionRow } from '@/components/VanavondActionRow';
 import { decide, type DecisionRequestWithProof } from '@/domain/decide';
 import { collectAvailableDishMoods } from '@/domain/dishMoods';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
+import { selectMainIngredients } from '@/domain/mainIngredients';
+import { selectOfferableMeals } from '@/domain/offerablePool';
+import { buildFriendProofLine } from '@/domain/reason';
 import type {
   CookEventId,
   Decision,
@@ -127,11 +147,10 @@ import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repo
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import { supabase } from '@/lib/supabase';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
-import { getColors, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { getColors, resolveDuration, spacing } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
-type DevScenario = 'normal' | 'empty_rotation' | 'all_excluded' | 'filtered_out' | 'swaps_exhausted' | 'error';
 
 /** How far back "recent" decisions/cook history reach for novelty-tier classification — see novelty.ts. */
 const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
@@ -152,6 +171,17 @@ const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
  * merely sooner.
  */
 const ACCEPT_STROKE_HOLD_MS = 180;
+
+/**
+ * Whose ingredients these are, carried WITH them. A bare `readonly string[]`
+ * in state would be indistinguishable from the previous dish's answer for
+ * the frame between a swap and its read resolving — see the block that reads
+ * this for why that is the failure worth spending a field on.
+ */
+interface MealMainIngredients {
+  readonly mealId: MealId;
+  readonly names: readonly string[];
+}
 
 interface LiveSession {
   readonly householdId: HouseholdId;
@@ -222,13 +252,20 @@ async function loadLiveSession(): Promise<LiveSession> {
   const existingDecision = await repository.getDecisionByDate(householdId, targetDate);
   const decisionRow = existingDecision ?? (await createTodayDecisionIfSuggested(repository, requestBase, householdId));
 
+  // PD-009. The chips describe the meals that survive the household's
+  // STANDING gates, not the whole library — `selectOfferableMeals` carries
+  // the measurement and the claim it corrects. One pass, read by both rows:
+  // two calls would run the same three filters twice over the whole library
+  // for an answer that cannot differ.
+  const offerable = selectOfferableMeals(candidateMeals, household, members, restrictions);
+
   return {
     householdId,
     requestBase,
     decisionRow,
     mealById: new Map(candidateMeals.map((meal) => [meal.id, meal])),
-    availableDishTags: collectAvailableDishTags(candidateMeals),
-    availableDishMoods: collectAvailableDishMoods(candidateMeals),
+    availableDishTags: collectAvailableDishTags(offerable),
+    availableDishMoods: collectAvailableDishMoods(offerable),
   };
 }
 
@@ -386,6 +423,62 @@ export default function VanavondScreen(): JSX.Element {
   const effectivePhase: ScreenPhase = devScenario === 'error' ? 'error' : phase;
   const isEmptyRotation = currentResult.kind === 'no_candidate' && currentResult.reason === 'empty_rotation';
   const showFilterBar = effectivePhase === 'ready' && !isEmptyRotation;
+  const suggestedMealId = currentResult.kind === 'suggestion' ? currentResult.mealId : null;
+
+  /**
+   * The one to three hoofdingrediënten under the dish name, read for the
+   * dish actually on screen and for no other.
+   *
+   * WHY A LAZY READ AND NOT PART OF `loadLiveSession`. `Meal` carries no
+   * ingredients (src/domain/types.ts); they live in their own table, and
+   * local/meals.ts's `getMealIngredients` lists that whole table and filters
+   * it. backfillMirrorOutbox.ts's header already measured what doing that
+   * per meal costs — "a two-hundred-meal store would parse the ingredients
+   * table four hundred times" — and loading every candidate's ingredients at
+   * session start, on the app's launch tab, to print three names for one of
+   * them would be exactly that. At most three dishes are offered in an
+   * evening, so at most three reads happen.
+   *
+   * THE ANSWER IS KEYED BY MEAL ID AND CHECKED AGAINST THE CURRENT ONE
+   * rather than merely cancelled on unmount. "Iets anders" changes the dish
+   * while a read is in flight; `useThumbnailFallback` already records the
+   * shape of this bug for images ("a card must never inherit the previous
+   * one's failure") and ingredients are the worse half of it — a stale
+   * image is visibly wrong, three plausible ingredients under the wrong dish
+   * name are not.
+   *
+   * A FAILED READ IS AN EMPTY LINE AND NEVER AN ERROR. The card already
+   * draws nothing for a recipe whose ingredients were never parsed, which is
+   * a real and common state, so there is no new rendering to invent — and a
+   * screen that says "kon ingrediënten niet laden" over tonight's dinner has
+   * promoted a local-storage hiccup to the thing you look at.
+   */
+  const [readIngredients, setReadIngredients] = useState<MealMainIngredients | null>(null);
+
+  useEffect(() => {
+    if (suggestedMealId === null) {
+      setReadIngredients(null);
+      return;
+    }
+    let cancelled = false;
+    getAppRepository()
+      .getMealIngredients(suggestedMealId)
+      .then((ingredients) => {
+        if (!cancelled) {
+          setReadIngredients({ mealId: suggestedMealId, names: selectMainIngredients(ingredients) });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReadIngredients({ mealId: suggestedMealId, names: [] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [suggestedMealId]);
+
+  const mainIngredients = readIngredients?.mealId === suggestedMealId ? readIngredients.names : [];
 
   const getMealById = (mealId: MealId): Meal | undefined => session?.mealById.get(mealId);
 
@@ -542,14 +635,15 @@ export default function VanavondScreen(): JSX.Element {
       ) : null}
 
       <View style={styles.content}>
-        {effectivePhase === 'loading' ? <LoadingSkeleton /> : null}
-        {effectivePhase === 'error' ? <ErrorView onRetry={handleRetry} /> : null}
+        {effectivePhase === 'loading' ? <DecisionLoadingSkeleton /> : null}
+        {effectivePhase === 'error' ? <DecisionErrorState onRetry={handleRetry} /> : null}
 
         {effectivePhase === 'ready' ? (
           currentResult.kind === 'suggestion' ? (
             <SuggestionView
               result={currentResult}
               meal={getMealById(currentResult.mealId)}
+              mainIngredients={mainIngredients}
               reduceMotionEnabled={reduceMotionEnabled}
               bottomInset={insets.bottom}
               accepted={isAccepting}
@@ -617,6 +711,8 @@ export default function VanavondScreen(): JSX.Element {
 interface SuggestionViewProps {
   readonly result: Extract<DecisionResult, { kind: 'suggestion' }>;
   readonly meal: Meal | undefined;
+  /** Already selected and already matched to `meal` — see the read that produces it. */
+  readonly mainIngredients: readonly string[];
   readonly reduceMotionEnabled: boolean;
   readonly bottomInset: number;
   /** True the instant "Ja" is tapped, until navigation to Kookmodus — drives DecisionCard's accept stroke (docs/DESIGN.md §1). */
@@ -627,7 +723,8 @@ interface SuggestionViewProps {
 }
 
 function SuggestionView(props: SuggestionViewProps): JSX.Element {
-  const { result, meal, reduceMotionEnabled, bottomInset, accepted, onAccept, onRequestAlternative, onChooseSelf } = props;
+  const { result, meal, mainIngredients, reduceMotionEnabled, bottomInset, accepted, onAccept, onRequestAlternative, onChooseSelf } =
+    props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -636,9 +733,14 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
       <View style={styles.heroBlock}>
         <DecisionCard
           dishTitle={meal?.title ?? 'Onbekend gerecht'}
-          reasonText={result.reasonText}
+          thumbnailUrl={meal?.thumbnailUrl ?? null}
+          mainIngredients={mainIngredients}
+          /* The REDEN block is gone (see DecisionCard's header). `reasonText`
+             is still composed by `decide()` and still persisted on the
+             decisions row above; what reaches the card is only the friend
+             sentence, and only when a real friend cooked this dish. */
+          friendLine={buildFriendProofLine(result.reasonCode, result.reasonText)}
           estimatedMinutes={meal?.estimatedMinutes ?? null}
-          servings={meal?.servings ?? null}
           reduceMotionEnabled={reduceMotionEnabled}
           accepted={accepted}
         />
@@ -655,74 +757,6 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
   );
 }
 
-function LoadingSkeleton(): JSX.Element {
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.heroBlock}>
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>KIEZEN</Text>
-      <View style={[styles.skeletonBar, { backgroundColor: colors.surfaceSunken }]} />
-    </View>
-  );
-}
-
-function ErrorView(props: { readonly onRetry: () => void }): JSX.Element {
-  const { onRetry } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.heroBlock}>
-      <Text style={[typeScale.title2, styles.centeredTitle, { color: colors.textPrimary }]}>
-        Kon geen suggestie ophalen
-      </Text>
-      <Text style={[typeScale.bodySmall, styles.centeredBody, { color: colors.textMuted }]}>
-        Controleer je verbinding en probeer het opnieuw.
-      </Text>
-      <Button label="Opnieuw" variant="secondary" onPress={onRetry} accessibilityLabel="Probeer opnieuw een suggestie op te halen" />
-    </View>
-  );
-}
-
-interface DevScenarioRowProps {
-  readonly active: DevScenario;
-  readonly onSelect: (scenario: DevScenario) => void;
-}
-
-const DEV_SCENARIOS: ReadonlyArray<{ value: DevScenario; label: string }> = [
-  { value: 'normal', label: 'Normaal' },
-  { value: 'empty_rotation', label: 'Lege rotatie' },
-  { value: 'all_excluded', label: 'Alles uitgesloten' },
-  { value: 'filtered_out', label: 'Weggefilterd' },
-  { value: 'swaps_exhausted', label: 'Wissels op' },
-  { value: 'error', label: 'Fout' },
-];
-
-function DevScenarioRow(props: DevScenarioRowProps): JSX.Element {
-  const { active, onSelect } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.devRow} accessibilityLabel="Ontwikkelaarsmodus: demoscenario kiezen">
-      {DEV_SCENARIOS.map((scenario) => (
-        <Pressable
-          key={scenario.value}
-          onPress={() => onSelect(scenario.value)}
-          style={styles.devButton}
-          accessibilityRole="button"
-          accessibilityLabel={`Demoscenario: ${scenario.label}`}
-        >
-          <Text style={[typeScale.caption, { color: active === scenario.value ? colors.accent : colors.textMuted }]}>
-            {scenario.label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -735,25 +769,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  eyebrow: {
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginBottom: spacing.space3,
-  },
-  skeletonBar: {
-    alignSelf: 'center',
-    width: '70%',
-    height: typeScale.display.lineHeight,
-    borderRadius: radii.radiusSm,
-  },
-  centeredTitle: {
-    textAlign: 'center',
-    marginBottom: spacing.space2,
-  },
-  centeredBody: {
-    textAlign: 'center',
-    marginBottom: spacing.space6,
-  },
   actionZone: {
     borderTopWidth: 1,
     paddingHorizontal: spacing.screenPaddingHorizontal,
@@ -765,16 +780,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.screenPaddingHorizontal,
-  },
-  devRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
-    gap: spacing.space3,
-  },
-  devButton: {
-    minHeight: spacing.touchTargetMin,
-    justifyContent: 'center',
   },
 });

@@ -303,6 +303,66 @@ De tussenweg (BSK-01, lijst zonder prijzen) is al gebouwd. Onbeantwoord.
 Copy zit hardcoded Nederlands in tientallen `*Copy.ts`-modules; er is geen
 i18n-laag. Onbeantwoord.
 
+### I. Onderdrukt het kookvinkje ook de openbare stem? (GAP-31, PRF-05)
+
+**Nieuw op 6 september 2026, opgeworpen door PD-022 en PD-023 samen.** Los
+van elkaar kloppen ze allebei; naast elkaar laten ze een gat open dat de
+eigenaar moet dichten.
+
+PD-022 geeft je een vinkje bij het koken waarmee je één gerecht voor jezelf
+houdt. PD-023 laat het cijfer dat je datzelfde moment geeft ook als openbare
+stem op het canonieke recept uitbrengen. Het vinkje bestuurt `shared_cooks`,
+het kookbewijs. Het bestuurt `recipe_ratings` niet.
+
+**Waarom dat meer is dan een detail, nagemeten in plaats van aangenomen.**
+`recipe_ratings` draagt `rater_profile_id`, en `recipe_ratings_select` is
+`using (auth.uid() is not null)` (`0007_social.sql:516`) — elke ingelogde
+gebruiker mag lezen wie wat gestemd heeft. Onder PD-019 was dat verdedigbaar:
+een stem was een aparte, bewuste handeling die je uitbracht in de wetenschap
+dat hij openbaar was. Onder PD-023 valt de stem uit koken, dus dezelfde
+(profiel, recept)-koppeling die kookbewijs alleen ná een opt-in publiceert,
+wordt door de stem gepubliceerd zonder opt-in en langs het vinkje heen.
+
+En één van de twee gevolgen is niet theoretisch maar staat op het scherm:
+**de kring noemt zijn stemmers bij naam.** `buildKringMetaLine`
+(`src/components/kringPresentation.ts:110-126`) tekent "8,5 · Sanne en Joris"
+tot aan `KRING_VOTER_NAME_LIMIT`, precies zoals PD-018.4 het vastlegde. Een
+vriendin die het vakje uitzet om één gerecht voor zichzelf te houden, staat
+dus alsnog met haar naam naast haar cijfer op de kringregel van dat gerecht.
+
+**De keuze, en er is geen derde deur.** Of het vinkje onderdrukt ook de stem
+— dan kost het de ranglijst precies de rijen waarvoor PD-023 genomen is, en
+de belofte "dit gerecht houd ik voor mezelf" is waar. Of "voor mezelf houden"
+betekent alleen "uit de Gekookt-lijst", en dan moet de tekst naast het vakje
+dat zeggen en niets meer. **Tot dit beantwoord is mag die copy niet beloven
+dat een gerecht privé blijft**, want op de code van vandaag blijft het dat
+niet. Onbeantwoord.
+
+### J. Hoe vraag je het aan een huishouden dat al vrienden heeft? (PRF-05)
+
+**Nieuw op 6 september 2026, opgeworpen door PD-022.** De omkering zegt dat
+geen enkele migratie delen namens iemand aanzet: een bestaand huishouden dat
+de vraag nooit beantwoord heeft blijft uit tot het gevraagd wordt, met het
+vakje voorgevinkt. Dat is de goede regel. Het probleem is dat er vandaag maar
+één moment bestaat waarop die vraag gesteld wordt, en dat moment is al voorbij
+voor precies de huishoudens die het betreft.
+
+`shouldAskCookSharing` (`src/components/addFriendCopy.ts:601`) is
+`acceptedFriendCount === 1 && !alreadyAsked`, en de twee wachters zijn expres
+onafhankelijk: `markHouseholdCookSharingAsked` heeft bewust géén tegenhanger,
+zodat de vraag nooit heropend kan worden. Gevolg: een huishouden met twee of
+meer geaccepteerde vrienden krijgt de contextuele vraag nooit meer, en
+instellingen is de enige weg naar binnen.
+
+Onder de oude default was dat de veilige kant — zo'n huishouden bleef stil
+privé. Onder PD-022 is het een huishouden dat de stand die het product als
+standaard beschouwt nooit aangeboden krijgt, en het scherpst voelbaar bij de
+vriendin die zich afvraagt waarom er nooit iets van jou verschijnt. Er zijn
+drie eerlijke antwoorden: een tweede vraagmoment (welk?), een eenmalige vraag
+bij het openen van Vrienden, of de stilte accepteren en het in instellingen
+laten. Wat het niet mag worden is campagne voeren — `DESIGN-SOCIAL.md` §5
+verbiedt dat bij naam, en die regel is niet omgekeerd. Onbeantwoord.
+
 ---
 
 ## Beantwoord op 2 september, met bewijs

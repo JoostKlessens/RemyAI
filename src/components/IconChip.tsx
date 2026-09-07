@@ -3,17 +3,22 @@
  * library's "Waarmee?" row, in his words "een pasta-icoontje, en dan het
  * woord pasta ernaast".
  *
- * IT DEGRADES TO TEXT-ONLY, AND TODAY THAT IS EVERY CHIP IT DRAWS. Not one
- * dish glyph exists: Feather has, in WS4 §1's measurement, "zero kitchen
- * glyphs", and dishTagIcons.ts maps all seventeen tags onto names that
- * `isIconAvailable` answers `false` for until GAP-19's Phosphor subset
- * lands. So the row this component renders in the shipped app is
- * PIXEL-IDENTICAL to the plain `Chip` row that preceded it — same element,
- * same box, same padding, no wrapper — and it becomes the illustrated row
- * the owner asked for on the day the font arrives, with no further change
- * here or at the call site. That is the point of writing it now rather than
- * waiting: the design decision is finished and recorded, and only the font
- * is outstanding.
+ * IT DEGRADES TO TEXT-ONLY, AND UNTIL 7 SEPTEMBER 2026 THAT WAS EVERY CHIP
+ * IT DREW. No dish glyph existed: Feather has, in WS4 §1's measurement,
+ * "zero kitchen glyphs", and dishTagIcons.ts mapped all seventeen tags onto
+ * names `isIconAvailable` answered `false` for, so the row this component
+ * rendered was PIXEL-IDENTICAL to the plain `Chip` row that preceded it —
+ * same element, same box, same padding, no wrapper. GAP-19 landed and it
+ * became the illustrated row the owner asked for, with no change here and
+ * none at the call site. That was the point of writing it before the font
+ * existed, and it is why the degrade path stays now that nothing takes it:
+ * the next icon the design asks for will arrive before its glyph does, the
+ * way `cooking-pot` and `timer` both did.
+ *
+ * ⚠ THE GLYPH IS UNTESTED ON A DEVICE. Every chip in this row went from no
+ * drawing to a drawing in one commit, and the spacing below was tuned
+ * against a row that never rendered one. Optical alignment at 16 pt beside
+ * `typeScale.body` is the first thing to look at on a phone.
  *
  * WHY IT ASKS `isIconAvailable` INSTEAD OF JUST RENDERING AN `Icon`. `Icon`
  * already returns `null` for a name the font cannot draw, so a naive
@@ -56,9 +61,11 @@ import { isIconAvailable, type IconName } from './iconFont';
 export interface IconChipProps extends ChipProps {
   /**
    * `null` means "this chip has no icon at all" — a different statement
-   * from "this chip's icon has no glyph yet", which is an `IconName` the
-   * font cannot draw. Both render the same bare `Chip` today; they are kept
-   * apart because only the second one changes when GAP-19 lands.
+   * from "this chip's icon has no glyph yet", which is an `IconName` no
+   * installed font can draw. Both render the same bare `Chip`; keeping them
+   * apart is what let GAP-19 turn the second group into drawings without
+   * touching the first, and it will do the same for the next glyph the
+   * design asks for before a font has it.
    */
   readonly icon: IconName | null;
 }

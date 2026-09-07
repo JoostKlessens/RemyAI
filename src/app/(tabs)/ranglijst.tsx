@@ -53,7 +53,7 @@
  * friends list of twenty.
  *
  * WHY SWITCHING SCOPE NEVER FETCHES. Both lists come from one read
- * (`_trendingSource.ts`), keyed on the source and not on the scope, so
+ * (`@/lib/trendingSource`), keyed on the source and not on the scope, so
  * tapping a segment is pure and instant. A segmented control that produced
  * a spinner would read as navigation rather than as a view switch.
  *
@@ -79,19 +79,19 @@
  * LIVE, WITH FIXTURES BEHIND A DEV SWITCH. In a production build "live" is
  * the only source there is; the scenario row exists only under `__DEV__`,
  * so design work has something to look at while the real tables are still
- * empty. One switch moves both scopes — see `_trendingSource.ts`.
+ * empty. One switch moves both scopes — see `@/lib/trendingSource`.
  */
 
 import { useCallback, useEffect, useState, type JSX } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BOARD_SCENARIOS, type BoardScenario } from '@/app/ranglijst/_fixtures';
+import { BOARD_SCENARIOS, type BoardScenario } from '@/fixtures/boardFixtures';
 import {
   NO_TRENDING_DATA,
   loadFixtureTrending,
   loadLiveTrending,
   type TrendingData,
-} from '@/app/ranglijst/_trendingSource';
+} from '@/lib/trendingSource';
 import { KringRow } from '@/components/KringRow';
 import {
   KRING_EMPTY_BODY,
@@ -172,7 +172,7 @@ export default function TrendingScreen(): JSX.Element {
       try {
         // The global half needs no identity; the friends half short-circuits
         // to an empty list without one, and this effect re-runs the moment
-        // the id lands. See `_trendingSource.ts` on why that is not a
+        // the id lands. See `@/lib/trendingSource` on why that is not a
         // signed-out branch.
         const data = await loadLiveTrending(profileId);
         if (isCurrent()) {
