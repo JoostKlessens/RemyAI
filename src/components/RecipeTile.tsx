@@ -40,30 +40,30 @@
  *    the third line of a caption whose full text is already in the tile's
  *    spoken label.
  *
- * 2. THE BADGE IS A GLYPH WHERE THERE IS AN HONEST ONE. "Nog geen planning"
+ * 2. THE BADGE IS A GLYPH OR A NUMBER, NEVER A SENTENCE. "Nog geen planning"
  *    drew 138.4pt inside a 170.5pt tile before this change; at 109.7pt it is
- *    not close. libraryTileBadge.ts owns which state draws what: a calendar
- *    for `deze_week`, the WORD "Ooit" for `ooit` (the one badge deliberately
- *    kept as text), a chef's hat for `al_gekookt`, and nothing at all for
- *    `geen_planning`.
+ *    not close. libraryTileBadge.ts owns what the corner draws. What the
+ *    corner ANSWERS is one question — have I made this dish? — and that
+ *    module's header is the argument for why it is that question and no
+ *    longer the plan it used to show.
  *
- *    THAT HAT USED TO BE A CHECK MARK, AND THE OWNER READ IT BACKWARDS on a
- *    device — a check beside a calendar is to-do-list vocabulary, so "al
- *    gekookt" came across as "dit wil ik nog koken". The fix is a glyph swap
- *    and nothing more, because the four scheduling states already partition
- *    the owner's own question: `al_gekookt` means at least one cook event and
- *    the other three mean none, which recipeScheduling.ts:45-63 guarantees by
- *    checking cook events before it ever looks at a save. ONE badge is
- *    therefore all the data supports; the marks were made to differ in KIND
- *    (a kitchen object versus a planning object) rather than a second chip
- *    being added that would have had nothing to say. libraryTileBadge.ts
- *    carries that measurement and the rejected two-mark design in full.
+ *    THE SHORT VERSION OF HOW IT GOT HERE. The mark was a check; the owner
+ *    read it backwards on a device ("dit wil ik nog koken" for a dish he had
+ *    already cooked); it became a chef's hat. Then the hat turned out to be
+ *    half an answer, because it appeared on cooked recipes and NOTHING
+ *    appeared on the rest — and an empty corner cannot say "nog niet
+ *    gemaakt". So the corner now carries both directions: the GRADE for a
+ *    recipe that was cooked and scored, the hat for one that was not, and
+ *    `resolveBadgeStyle` below is what tells them apart — green for made, the
+ *    neutral surface for not made.
  *
- * NEITHER COSTS A SCREEN-READER USER ANYTHING. `accessibilityLabel` below is
- * still "<title>, <scheduling state>" in full, on every tile, unchanged. Both
- * losses are to chrome whose text is already spoken; WS-2 §3.2 makes exactly
- * that argument for the badge, and it holds for the title for the same
- * reason.
+ * THE TITLE STILL COSTS A SCREEN-READER USER NOTHING; THE BADGE NOW WOULD,
+ * WHICH IS WHY THE SPOKEN LABEL GREW. Every badge this tile has ever drawn
+ * was chrome whose words it already spoke — WS-2 §3.2's argument, and what
+ * made shortening it free. A grade is not: it appears nowhere else on the
+ * tile. So `accessibilityLabel` goes through `buildLibraryTileSpokenState`,
+ * which appends the grade and its scale when there is one. The two-line title
+ * cap is still free for the original reason: the full title is still spoken.
  *
  * No thumbnail (manual entries, or an import whose oEmbed response
  * genuinely had none — Instagram without credentials, a 404/region-locked
@@ -128,8 +128,8 @@ import type { Meal } from '@/domain/types';
 import { Icon } from './Icon';
 import { LIBRARY_TILE_ASPECT_RATIO } from './libraryGridMetrics';
 import { LIBRARY_TILE_ACTIONS_ACCESSIBILITY_LABEL, LIBRARY_TILE_ACTIONS_HINT } from './libraryTileActionCopy';
-import { describeLibraryTileBadge } from './libraryTileBadge';
-import { buildSchedulingLabel, type RecipeSchedulingInfo } from './recipeScheduling';
+import { buildLibraryTileSpokenState, describeLibraryTileBadge } from './libraryTileBadge';
+import type { RecipeSchedulingInfo } from './recipeScheduling';
 import { useThumbnailFallback } from './useThumbnailFallback';
 import { type ColorTokens, fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
@@ -166,7 +166,8 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const badge = resolveBadgeStyle(scheduling.state, colors);
-  const badgeContent = describeLibraryTileBadge(scheduling.state);
+  // The whole row, not just its state: the grade lives on it too.
+  const badgeContent = describeLibraryTileBadge(scheduling);
   const monogram = meal.title.trim().charAt(0).toUpperCase() || '?';
   const thumbnail = useThumbnailFallback(meal.thumbnailUrl);
   const hasActions = onLongPress !== undefined;
@@ -176,7 +177,10 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
       onPress={onPress ?? (() => router.push(`/cook/${meal.id}`))}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${meal.title}, ${buildSchedulingLabel(scheduling.state)}`}
+      // Still the state in full, plus the grade when the badge draws one —
+      // the first thing this corner has ever shown that is not repeated
+      // elsewhere on the tile. libraryTileBadge.ts carries why.
+      accessibilityLabel={`${meal.title}, ${buildLibraryTileSpokenState(scheduling)}`}
       // An explicit override still wins: a caller that repointed `onPress`
       // knows what its tile does better than this default can.
       accessibilityHint={accessibilityHint ?? (hasActions ? LIBRARY_TILE_ACTIONS_HINT : DEFAULT_ACCESSIBILITY_HINT)}
@@ -221,22 +225,22 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
           </Text>
         </View>
 
-        {/* `none` is a real answer, not a missing one: an unplanned recipe
-            wears no badge at all. libraryTileBadge.ts carries why. */}
-        {badgeContent.kind === 'none' ? null : (
-          <View style={[styles.badge, { backgroundColor: badge.backgroundColor }]} pointerEvents="none">
-            {badgeContent.kind === 'icon' ? (
-              <Icon name={badgeContent.icon} size={BADGE_GLYPH_SIZE} color={badge.textColor} />
-            ) : (
-              // WS-2 §3.2's redline, and it only bites when a font swap has
-              // taken a glyph away: one line, capped at 60% of the tile, so
-              // the clip is explicit instead of the frame's silent one.
-              <Text style={[typeScale.caption, styles.badgeLabel, { color: badge.textColor }]} numberOfLines={1}>
-                {badgeContent.label}
-              </Text>
-            )}
-          </View>
-        )}
+        {/* EVERY tile wears one, which is the point of the redesign: a
+            corner that is sometimes empty cannot say "dit heb je nog niet
+            gemaakt". libraryTileBadge.ts carries what it draws and why. */}
+        <View style={[styles.badge, { backgroundColor: badge.backgroundColor }]} pointerEvents="none">
+          {badgeContent.kind === 'icon' ? (
+            <Icon name={badgeContent.icon} size={BADGE_GLYPH_SIZE} color={badge.textColor} />
+          ) : (
+            // A grade lands here by design; a scheduling word only when a
+            // font swap has taken the hat away. WS-2 §3.2's redline covers
+            // both: one line, capped at 60% of the tile, so a clip is
+            // explicit instead of the frame's silent one.
+            <Text style={[typeScale.caption, styles.badgeLabel, { color: badge.textColor }]} numberOfLines={1}>
+              {badgeContent.label}
+            </Text>
+          )}
+        </View>
       </View>
     </Pressable>
   );
@@ -248,36 +252,81 @@ interface BadgeStyle {
 }
 
 /**
- * Colour hierarchy matches docs/DESIGN.md's rationing rule: `positive` for
- * the completed state (`al_gekookt`), `accentMuted` for the
- * decision-relevant "this could be tonight's dish" state (`deze_week`,
- * the same fill selected chips use), a neutral surface for `ooit`, and a
- * translucent scrim-toned chip for `geen_planning` — the least-resolved
- * state gets the least visual weight, not a warning colour (this is a
- * scheduling gap, not an error).
+ * WHAT THE COLOUR SAYS, NOW THAT THE DRAWING SAYS ONLY ONE THING.
  *
- * UNCHANGED BY THE BADGE REDESIGN, ON PURPOSE. When `al_gekookt` stopped
- * being a check mark and became a chef's hat, the obvious follow-on was to
- * re-tone it too — green-on-green is "success" vocabulary and a cooked dish
- * is history, not an achievement. It was left alone because this exact
- * pairing is load-bearing outside this file: tests/contrast.test.ts asserts
- * it, and ShoppingListRow.tsx's header cites it by name ("the 'gemaakt' chip
- * in RecipeTile.tsx uses the same `positive`-on- ..."). Re-toning would
- * falsify a comment in a file this change does not own, to fix a thing
- * nobody reported. What the owner misread was the GLYPH; the colour never
- * came up. Anyone who does want to revisit it should move all three call
- * sites together.
+ * The corner draws the same chef's hat for a recipe that has not been made
+ * and for one that WAS made without a grade (libraryTileBadge.ts carries why
+ * the ungraded case cannot honestly borrow either of the other two answers).
+ * One drawing in two meanings only works if something else separates them,
+ * and this is that something:
+ *
+ *   al_gekookt                       -> `positiveMuted` fill, `positive` ink.
+ *                                       Green is docs/DESIGN.md's completion
+ *                                       colour, "reserved exclusively for
+ *                                       completion", and this is the one
+ *                                       completed state.
+ *
+ *   deze_week / ooit / geen_planning -> `surface` fill, `textSecondary` ink.
+ *                                       THE OWNER ASKED FOR "witte
+ *                                       achtergrond in plaats van groen", and
+ *                                       `surface` is what that sentence means
+ *                                       here: the app's own neutral surface,
+ *                                       white-ish in the light scheme and the
+ *                                       matching dark neutral in the dark
+ *                                       one. A literal '#FFFFFF' would be a
+ *                                       white card burning a hole in a dark
+ *                                       library at night.
+ *
+ * "BUT A GRADE IS AN OPINION, NOT A COMPLETION" — docs/DESIGN.md's "Card
+ * colour discipline" says exactly that ("A friend's 8,5/10 is an opinion, not
+ * a completion, so it sets as a plain mono numeral beside the cook time"), so
+ * it is worth being explicit about why a green chip with a number in it does
+ * not break that rule. The rule sits under §8, "Vrienden", and governs THAT
+ * surface: there the whole card is about somebody else's opinion and green
+ * would claim a completion nobody on this device performed — "no `positive`
+ * anywhere", "nothing on this screen is the moment a choice gets made". Here
+ * the chip means "YOU made this", and it is
+ * green because of the cook event, never because of the score: an ungraded
+ * cooked meal wears the identical green chip (libraryTileBadge.ts's third
+ * state). The grade is written INSIDE a completion mark, not turned into one.
+ * If that ever stops being true — if a low grade were to tint this chip, say
+ * — the discipline really would be broken, and this is the paragraph to
+ * reread first.
+ *
+ * NEITHER PAIRING IS NEW OR UNVERIFIED, which is the whole reason these two
+ * were reachable without touching the palette. tests/contrast.test.ts asserts
+ * `positive` on `positiveMuted`, and asserts `textSecondary` against every
+ * neutral surface — its `NEUTRAL_SURFACES` list includes `surface` — at
+ * 4.5:1 in both schemes. So this introduces no colour combination that file
+ * does not already guard.
+ *
+ * THE GREEN PAIRING IS ALSO LOAD-BEARING OUTSIDE THIS FILE, and is kept for
+ * that reason as much as for its own: ShoppingListRow.tsx's header cites it
+ * by name ("the 'gemaakt' chip in RecipeTile.tsx uses the same `positive`-on-
+ * `positiveMuted` pairing"). Re-toning it would falsify a comment in a file
+ * this change does not own.
+ *
+ * WHAT WENT, AND WHERE IT WENT TO: `accentMuted`/`accentOnMuted` for
+ * `deze_week`, and the translucent `videoScrim` chip for `geen_planning`.
+ * Both belonged to the PLAN axis this corner no longer answers. The plan is
+ * still on this very screen — LibrarySearchBar draws a filter chip per state
+ * via `buildSchedulingLabel`, `sortMealsByScheduling` still puts "deze week"
+ * first, and src/app/deze-week.tsx is a screen of its own — and it is still
+ * in every tile's spoken label. It is out of the corner, not out of the app.
+ *
+ * THE SWITCH STAYS EXHAUSTIVE rather than collapsing to a `state ===
+ * 'al_gekookt'` ternary. Three cases sharing one return still force a fifth
+ * state, if one is ever added, to declare which side of "made" it belongs on
+ * — where a ternary would silently file it under "not made".
  */
 function resolveBadgeStyle(state: RecipeSchedulingInfo['state'], colors: ColorTokens): BadgeStyle {
   switch (state) {
-    case 'deze_week':
-      return { backgroundColor: colors.accentMuted, textColor: colors.accentOnMuted };
     case 'al_gekookt':
       return { backgroundColor: colors.positiveMuted, textColor: colors.positive };
+    case 'deze_week':
     case 'ooit':
-      return { backgroundColor: colors.surfaceSunken, textColor: colors.textSecondary };
     case 'geen_planning':
-      return { backgroundColor: colors.videoScrim, textColor: colors.onVideoScrim };
+      return { backgroundColor: colors.surface, textColor: colors.textSecondary };
     default: {
       const exhaustiveCheck: never = state;
       throw new Error(`Unhandled RecipeSchedulingState: ${String(exhaustiveCheck)}`);

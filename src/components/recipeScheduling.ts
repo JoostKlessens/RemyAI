@@ -7,6 +7,7 @@
  * vitest's `node` environment — see tests/recipeScheduling.test.ts.
  */
 
+import { isValidRating } from '@/domain/rating';
 import type { CookEvent, Meal, Save } from '@/domain/types';
 
 export type RecipeSchedulingState = 'deze_week' | 'ooit' | 'al_gekookt' | 'geen_planning';
@@ -15,6 +16,44 @@ export interface RecipeSchedulingInfo {
   readonly state: RecipeSchedulingState;
   /** IsoDateString, set only for `al_gekookt`. */
   readonly lastCookedOn: string | null;
+  /**
+   * The grade the cook gave the most recent cook event, or null when there is
+   * none to show: the meal was never cooked, the question was skipped, or the
+   * stored number is off the scale rating.ts currently defines.
+   *
+   * WHY THE TILE NEEDED THIS. THE OWNER, VERBATIM: "Om duidelijk te maken dat
+   * je het recept nog niet hebt gemaakt is het misschien beter om het cijfer
+   * dat je het recept gaf weer te geven, als het niet zo is kan je een
+   * chefsmuts laten zien ... maar dan met witte achtergrond in plaats van
+   * groen." libraryTileBadge.ts turns that into a badge; this field is the
+   * one fact it was missing.
+   *
+   * IT IS LIFTED HERE RATHER THAN FETCHED THERE because this resolver already
+   * holds the whole `CookEvent` — `findLatestCookEvent` below returns it — and
+   * the library screen holds only the resolved row. The alternative, a new
+   * prop threaded from src/app/(tabs)/recipes.tsx into RecipeTile, would mean
+   * two definitions of "the latest cook event", one of which could disagree
+   * with the badge sitting on top of it. That is the same argument
+   * librarySchedulingCopy.ts already makes for reading nothing of its own.
+   *
+   * OPTIONAL, NOT REQUIRED, AND THAT IS A DELIBERATE COST. Fixtures build
+   * `RecipeSchedulingInfo` literals by hand (tests/libraryGridFilter.test.ts)
+   * and predate this field, so requiring it would edit files this change does
+   * not own. It is the same accommodation `CookEvent.rating?` and
+   * `Meal.allergenTagStatus?` already make in src/domain/types.ts, for
+   * exactly this reason. The failure mode is bounded: a row built without it
+   * draws the chef's hat, which is TRUE of any cooked meal — the badge loses
+   * information, it never gains a falsehood.
+   *
+   * ⚠ READ THIS ONLY TO SHOW THE NUMBER. src/domain/types.ts forbids reading
+   * `CookEvent.rating` to decide whether a household LIKED a meal, and that
+   * still stands: `resolveRepeatSignal` answers that question. Showing what
+   * the cook wrote is a different question, and `resolveRepeatSignal` would
+   * answer it wrongly — it projects onto a boolean and returns null across
+   * rating.ts's whole middle band, so a 6,0 somebody actually gave would
+   * vanish from the tile.
+   */
+  readonly lastRating?: number | null;
 }
 
 function findLatestCookEvent(mealId: string, cookEvents: readonly CookEvent[]): CookEvent | null {
@@ -35,6 +74,31 @@ function findMostRecentActiveSave(mealId: string, saves: readonly Save[]): Save 
 }
 
 /**
+ * The grade to SHOW for one cook event, which is not the question
+ * `resolveRepeatSignal` answers — see the ⚠ on `lastRating` above.
+ *
+ * OFF-SCALE VALUES ARE DROPPED RATHER THAN CLAMPED, the stance rating.ts
+ * already takes for the same field: "stored data can be older than the
+ * current scale, and silently clamping it would invent an opinion nobody
+ * expressed." A tile badge is the one place that invention would look
+ * entirely convincing — four monospace characters in a chip, with nothing
+ * beside it to contradict them. Dropping it costs the tile a chef's hat
+ * instead of a numeral, which is the smaller loss by a wide margin.
+ *
+ * VALIDATING HERE, AND ONLY HERE, is what makes `lastRating` a field a reader
+ * can trust: everyone who gets one gets a grade on the current scale or null,
+ * and nobody downstream has to remember to re-check. libraryTileBadge.ts
+ * therefore formats without re-validating, on purpose.
+ */
+function resolveDisplayableRating(event: CookEvent): number | null {
+  const rating = event.rating;
+  if (rating === undefined || rating === null || !isValidRating(rating)) {
+    return null;
+  }
+  return rating;
+}
+
+/**
  * Precedence: cooked beats an active save (once it's been made, "when will
  * I make it" is moot), "this_week" beats "someday". A meal with neither is
  * `geen_planning` — present in the rotation but nothing has scheduled it.
@@ -49,17 +113,24 @@ export function resolveRecipeSchedulingState(
 ): RecipeSchedulingInfo {
   const latestCookEvent = findLatestCookEvent(mealId, cookEvents);
   if (latestCookEvent !== null) {
-    return { state: 'al_gekookt', lastCookedOn: latestCookEvent.cookedOn };
+    // The grade comes off the SAME event as `lastCookedOn`, which is what
+    // keeps a tile's number and its date describing one evening rather than
+    // two.
+    return {
+      state: 'al_gekookt',
+      lastCookedOn: latestCookEvent.cookedOn,
+      lastRating: resolveDisplayableRating(latestCookEvent),
+    };
   }
 
   const activeSave = findMostRecentActiveSave(mealId, saves);
   if (activeSave?.intent === 'this_week') {
-    return { state: 'deze_week', lastCookedOn: null };
+    return { state: 'deze_week', lastCookedOn: null, lastRating: null };
   }
   if (activeSave?.intent === 'someday') {
-    return { state: 'ooit', lastCookedOn: null };
+    return { state: 'ooit', lastCookedOn: null, lastRating: null };
   }
-  return { state: 'geen_planning', lastCookedOn: null };
+  return { state: 'geen_planning', lastCookedOn: null, lastRating: null };
 }
 
 const STATE_SORT_ORDER: Readonly<Record<RecipeSchedulingState, number>> = {
