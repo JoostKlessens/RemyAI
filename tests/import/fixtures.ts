@@ -12,6 +12,14 @@ export function makeParsedIngredient(overrides: Partial<ParsedIngredient> = {}):
     name: 'Kipfilet',
     quantity: '300',
     unit: 'g',
+    // STATED, and `null` rather than a heading. `dishTags` below defaults to a
+    // non-empty value precisely so a regression that drops it still fails an
+    // assertion; this one defaults the opposite way for the opposite reason.
+    // A sub-recipe heading is the field a model is tempted to INVENT
+    // (buildExtractionRequest.ts's header argues it), so the fixture's normal
+    // state has to be the normal recipe: no heading anywhere. Tests about
+    // headings state one explicitly.
+    section: null,
     ...overrides,
   };
 }

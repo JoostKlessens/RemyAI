@@ -1,4 +1,33 @@
 /**
+ * ⚠ ZERO PRODUCTION CALLERS SINCE 7 SEPTEMBER 2026. READ THIS FIRST.
+ *
+ * `categorizeIngredient` had exactly one call site — the ingredient list on
+ * src/app/recipe/[mealId].tsx — and the owner asked for the glyphs there to
+ * go: "in het recept zelf (en met name de ingredientenlijst) [moeten] de
+ * icoontjes niet komen te staan maar gewoon een duidelijke, overzichtelijke
+ * opsomming van ingredienten". The list is now
+ * src/components/RecipeIngredientList.tsx and draws no icons at all.
+ *
+ * THE ONE REMAINING IMPORT IN src/ IS NOT A CALLER. `ingredientCategoryIcons.ts`
+ * still does `import type { IngredientCategory }` from here — a type-only
+ * import, erased at build time — and that module has zero production callers
+ * of its own for the same reason. So the two now reference only each other.
+ * `tests/ingredientCategories.test.ts` still exercises both, and still passes.
+ *
+ * IT WAS KEPT DELIBERATELY RATHER THAN DELETED. It was built the day before,
+ * at the owner's own request (RCP-08/RCP-09), and it is fully tested; whether
+ * a working, argued module leaves the codebase is a decision about the
+ * product, not a side effect of one screen changing its mind. That is the
+ * same treatment mainIngredients.ts got here for the same reason. Deleting it
+ * is the owner's call to make, and a future surface that wants a food glyph
+ * — a shopping list, a tile, a filter row — finds it here rather than
+ * rebuilding it.
+ *
+ * DO NOT read the paragraphs below as a description of live behaviour. Every
+ * argument in them is still true about what this code DOES; none of it is
+ * currently reaching a screen.
+ */
+/**
  * What KIND of thing an ingredient is — groente, fruit, kaas, vlees — and
  * nothing finer.
  *

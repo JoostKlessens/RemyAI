@@ -48,6 +48,13 @@ export interface MealIngredientInput {
   readonly quantity: string | null;
   readonly unit: string | null;
   readonly sortOrder: number;
+  /**
+   * `meal_ingredients.section` (0018) — the heading the source printed this
+   * ingredient under. Optional for the recipe editor's sake rather than
+   * because omitting is honest; `updateMealRecipe` (local/meals.ts) resolves
+   * an omission, and `MealIngredient.section` carries the whole argument.
+   */
+  readonly section?: string | null;
 }
 
 export interface MealStepInput {
@@ -225,7 +232,7 @@ export interface UpdateMealRecipeInput {
    * caption at import — and manual entry wrote `[]`
    * (src/app/import/confirm.tsx). So a recipe the model tagged wrongly,
    * and every recipe anybody typed in by hand, was permanently invisible
-   * to the library's "Waarmee?" filter, with no way for any person to fix
+   * to the library's dish-category filter, with no way for any person to fix
    * it. The most-used filter in the app was wrong about part of every
    * library, and only a writer could repair it.
    *

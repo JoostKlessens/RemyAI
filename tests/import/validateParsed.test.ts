@@ -4,8 +4,13 @@ import { validateParsedRecipe } from '@/domain/import/validateParsed';
 const VALID_RAW = {
   title: 'Traybake met kip en citroen',
   ingredients: [
-    { name: 'Kipfilet', quantity: '300', unit: 'g' },
-    { name: 'Citroen', quantity: '1', unit: null },
+    // `section: null` is stated here because it is stated on every ingredient
+    // this validator PRODUCES — see `validateIngredient` on why "the source
+    // printed no heading" is written down rather than left off. Keeping the
+    // fixture in that shape is what lets the round-trip assertion below stay
+    // an exact equality rather than a partial match.
+    { name: 'Kipfilet', quantity: '300', unit: 'g', section: null },
+    { name: 'Citroen', quantity: '1', unit: null, section: null },
   ],
   steps: ['Oven voorverwarmen op 200 graden.', 'Alles 25 minuten roosteren.'],
   estimatedMinutes: 25,
@@ -23,20 +28,20 @@ describe('validateParsedRecipe — valid shapes', () => {
     expect(result?.title).toBe('Traybake');
   });
 
-  test('treats a missing quantity/unit key on an ingredient as null', () => {
+  test('treats a missing quantity/unit/section key on an ingredient as null', () => {
     const result = validateParsedRecipe({
       ...VALID_RAW,
       ingredients: [{ name: 'Zout' }],
     });
-    expect(result?.ingredients).toEqual([{ name: 'Zout', quantity: null, unit: null }]);
+    expect(result?.ingredients).toEqual([{ name: 'Zout', quantity: null, unit: null, section: null }]);
   });
 
-  test('treats explicit null quantity/unit as null', () => {
+  test('treats explicit null quantity/unit/section as null', () => {
     const result = validateParsedRecipe({
       ...VALID_RAW,
-      ingredients: [{ name: 'Zout', quantity: null, unit: null }],
+      ingredients: [{ name: 'Zout', quantity: null, unit: null, section: null }],
     });
-    expect(result?.ingredients).toEqual([{ name: 'Zout', quantity: null, unit: null }]);
+    expect(result?.ingredients).toEqual([{ name: 'Zout', quantity: null, unit: null, section: null }]);
   });
 
   test('treats missing estimatedMinutes/servings keys as null', () => {
@@ -49,6 +54,47 @@ describe('validateParsedRecipe — valid shapes', () => {
   test('ignores unknown extra fields on the raw object', () => {
     const result = validateParsedRecipe({ ...VALID_RAW, extraField: 'should be ignored', confidence: 0.9 });
     expect(result).toEqual(VALID_RAW);
+  });
+});
+
+/**
+ * Sub-recipe headings (`ParsedIngredient.section`), which arrive from the
+ * model as free text rather than from a closed vocabulary — so unlike
+ * `dishTags` below there is nothing here to recognise as wrong-but-harmless,
+ * and this field takes `quantity`'s strict treatment instead.
+ */
+describe('validateParsedRecipe — section (the sub-recipe heading)', () => {
+  test('keeps a stated heading, trimmed and word for word', () => {
+    const result = validateParsedRecipe({
+      ...VALID_RAW,
+      ingredients: [{ name: 'Bloem', quantity: '300', unit: 'g', section: '  Voor het beslag  ' }],
+    });
+    expect(result?.ingredients[0]?.section).toBe('Voor het beslag');
+  });
+
+  test('never translates or rewords a heading — a Danish cake keeps its Danish', () => {
+    const result = validateParsedRecipe({
+      ...VALID_RAW,
+      ingredients: [{ name: 'Hvedemel', quantity: '300', unit: 'g', section: 'Til dejen' }],
+    });
+    expect(result?.ingredients[0]?.section).toBe('Til dejen');
+  });
+
+  test('reads a blank heading as no heading rather than as an empty one', () => {
+    const result = validateParsedRecipe({
+      ...VALID_RAW,
+      ingredients: [{ name: 'Zout', quantity: null, unit: null, section: '   ' }],
+    });
+    expect(result?.ingredients[0]?.section).toBeNull();
+  });
+
+  test('rejects the whole recipe when a heading is present but not a string', () => {
+    expect(
+      validateParsedRecipe({
+        ...VALID_RAW,
+        ingredients: [{ name: 'Zout', quantity: null, unit: null, section: 3 }],
+      }),
+    ).toBeNull();
   });
 });
 

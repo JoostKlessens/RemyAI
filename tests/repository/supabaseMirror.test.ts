@@ -294,6 +294,40 @@ describe('mirroring a meal', () => {
     expect(ingredientLog).toContain('not(id,in,(ing-1,ing-2))');
   });
 
+  /**
+   * `meal_ingredients.section` (0018), asserted here rather than only in the
+   * local repository, because a heading that reaches the device and not the
+   * server is the "every layer had the value and every layer left it out"
+   * failure this file's mirror tests exist to catch.
+   *
+   * BOTH DIRECTIONS MATTER AND THE SECOND ONE IS THE EASY ONE TO MISS. A
+   * stated heading has to arrive as itself; an ABSENT one has to arrive as
+   * `null` rather than as `undefined`, because a key PostgREST never receives
+   * and a key it receives as null are different upserts — the first leaves
+   * whatever the row already held, which on a re-mirror of an edited recipe
+   * is a heading the household has since removed.
+   */
+  test('an ingredient carries its sub-recipe heading to the server, and an absent one lands as null', async () => {
+    const fake = makeClient();
+    await mirrorMeal(
+      fake.client,
+      mealJob(meal(), [
+        ingredient({ section: 'Voor het beslag' }),
+        ingredient({ id: 'ing-2', sortOrder: 1, section: undefined }),
+      ]),
+    );
+
+    const entry = fake.log.find((line) => line.startsWith('upsert(') && line.includes('"sort_order"'));
+    const rows = JSON.parse(entry?.slice('upsert('.length, entry.lastIndexOf(',{')) ?? '[]') as readonly Record<
+      string,
+      unknown
+    >[];
+
+    expect(rows[0]?.section).toBe('Voor het beslag');
+    expect(rows[1]?.section).toBeNull();
+    expect(rows[1]).toHaveProperty('section');
+  });
+
   /** PostgREST rejects an empty `in` list, so "no ingredients" is a plain delete-by-meal. */
   test('a meal with no ingredients deletes them all without an empty in-list', async () => {
     const fake = makeClient();

@@ -79,7 +79,7 @@
  * until the owner asked ("Kan je de tags niet aanpassen handmatig?") the
  * column's only writer was the extraction model, so a mis-tagged import
  * and every hand-typed recipe were permanently invisible to the library's
- * "Waarmee?" filter. Both are narrowed at that seam by the domain's own
+ * dish-category filter. Both are narrowed at that seam by the domain's own
  * `sanitize…` functions; see `updateMealRecipe` for why one drops what it
  * cannot place and the other falls back.
  */
@@ -88,7 +88,7 @@ import type { CreateMealInput, MealIngredientInput, MealStepInput, UpdateMealRec
 import { DEFAULT_DISH_COURSE, sanitizeDishCourse } from '@/domain/dishCourses';
 import { isDishMood, readMealDishMoods } from '@/domain/dishMoods';
 import { sanitizeDishTags } from '@/domain/dishTags';
-import { resolveAllergenStateAfterEdit } from '@/domain/mealAllergenReverification';
+import { haveIngredientsChanged, resolveAllergenStateAfterEdit } from '@/domain/mealAllergenReverification';
 import { normalizeTag } from '@/domain/normalizeTag';
 import type { Meal, MealId, MealIngredient, MealStep } from '@/domain/types';
 import { generateLocalId } from '../id';
@@ -141,8 +141,29 @@ export async function getMealSteps(tables: RepositoryTables, mealId: MealId): Pr
   return steps.filter((step) => step.mealId === mealId).sort((a, b) => a.stepNumber - b.stepNumber);
 }
 
-function buildIngredientRows(mealId: MealId, ingredients: readonly MealIngredientInput[]): readonly MealIngredient[] {
-  return ingredients.map((ingredient) => ({
+/**
+ * `preservedSections` IS FOR ONE CALLER AND ITS DEFAULT IS THE HONEST ONE.
+ *
+ * `createMeal` passes nothing: an import states every heading it has
+ * (`MealIngredientDraft.section` is required so it cannot be forgotten), and
+ * a manual entry has none, so there is nothing to fall back to. Only
+ * `updateMealRecipe` supplies a list, and only when it has established that
+ * the stored headings still describe the list being written — see its own
+ * comment for why that is a narrow condition rather than a merge.
+ *
+ * `undefined` AND `null` ARE READ DIFFERENTLY HERE, which is the one place in
+ * this file that distinction earns its keep. A caller that STATES
+ * `section: null` is saying "this ingredient belongs to no sub-recipe" and is
+ * obeyed; a caller that omits the field is saying nothing, and gets whatever
+ * was preserved for that position. Collapsing the two with `??` would let a
+ * deliberate "no heading" be silently overruled by a stale stored one.
+ */
+function buildIngredientRows(
+  mealId: MealId,
+  ingredients: readonly MealIngredientInput[],
+  preservedSections: readonly (string | null)[] = [],
+): readonly MealIngredient[] {
+  return ingredients.map((ingredient, index) => ({
     id: generateLocalId('meal-ingredient'),
     mealId,
     name: ingredient.name,
@@ -150,6 +171,7 @@ function buildIngredientRows(mealId: MealId, ingredients: readonly MealIngredien
     unit: ingredient.unit,
     allergenTags: [],
     sortOrder: ingredient.sortOrder,
+    section: ingredient.section !== undefined ? ingredient.section : (preservedSections[index] ?? null),
   }));
 }
 
@@ -425,6 +447,8 @@ export async function updateMealRecipe(
     throw new Error(`No meal found with id "${mealId}".`);
   }
 
+  const storedIngredients = await getMealIngredients(tables, mealId);
+
   const allergens = resolveAllergenStateAfterEdit({
     stored: {
       ingredientTags: stored.ingredientTags,
@@ -433,12 +457,45 @@ export async function updateMealRecipe(
       // never has to invent one.
       allergenTagStatus: stored.allergenTagStatus ?? 'unknown',
     },
-    storedIngredients: await getMealIngredients(tables, mealId),
+    storedIngredients,
     editedIngredients: input.ingredients,
     check: input.allergenCheck,
   });
 
-  await replaceMealChildren(tables, mealId, input.ingredients, input.steps);
+  // SUB-RECIPE HEADINGS SURVIVE AN EDIT THAT DID NOT TOUCH THE INGREDIENTS,
+  // AND ONLY THAT EDIT (`meal_ingredients.section`, migration 0018).
+  //
+  // WHY THIS IS NEEDED AT ALL. `UpdateMealRecipeInput` carries no section,
+  // because src/app/recipe-edit/[mealId].tsx edits an ingredient as ONE
+  // free-text line and has no control for a heading. Without this, the
+  // replace below would write every row back with no section, so opening the
+  // editor and pressing save — to fix a typo in the TITLE — would delete
+  // every heading in the recipe. That is precisely the failure
+  // editedIngredients.ts exists to end, one field over: "opening the screen
+  // and pressing Doorgaan was enough to destroy amounts the source had
+  // actually given us".
+  //
+  // WHY THE CONDITION IS `haveIngredientsChanged` AND NOT A COMPARISON OF ITS
+  // OWN. That predicate already decides whether a stored allergen check still
+  // stands, three lines up, and it asks exactly the question that matters
+  // here too: is this still the list that was stored? A second definition of
+  // "unchanged" in this function would be a second answer to one question,
+  // and the two would drift the first time either was tightened.
+  //
+  // WHY ALL-OR-NOTHING, AND NOT PER LINE. Keeping the heading for the lines
+  // that did not change would mean deciding that "position 2 of the edited
+  // list is position 2 of the stored list" — the row identity
+  // src/lib/repository/types.ts refuses to invent for quantity and unit,
+  // and it is not more available here. A user who deletes the first
+  // ingredient would shift every remaining line one heading up, silently, in
+  // stored data. Dropping the headings when the list moves is visible on the
+  // very next read, and it is honest: nobody restated them, and this layer
+  // does not invent food.
+  const preservedSections = haveIngredientsChanged(storedIngredients, input.ingredients)
+    ? []
+    : storedIngredients.map((ingredient) => ingredient.section ?? null);
+
+  await replaceMealChildren(tables, mealId, input.ingredients, input.steps, preservedSections);
 
   return updateMeal(tables, mealId, (meal) => ({
     ...meal,
@@ -493,6 +550,8 @@ async function replaceMealChildren(
   mealId: MealId,
   ingredients: readonly MealIngredientInput[],
   steps: readonly MealStepInput[],
+  /** Positional fallback headings from the rows being replaced — see `updateMealRecipe`, this function's only caller. */
+  preservedSections: readonly (string | null)[],
 ): Promise<void> {
   const [existingIngredients, existingSteps] = await Promise.all([
     tables.mealIngredients.list(),
@@ -502,7 +561,7 @@ async function replaceMealChildren(
   await Promise.all([
     tables.mealIngredients.replaceAll([
       ...existingIngredients.filter((ingredient) => ingredient.mealId !== mealId),
-      ...buildIngredientRows(mealId, ingredients),
+      ...buildIngredientRows(mealId, ingredients, preservedSections),
     ]),
     tables.mealSteps.replaceAll([
       ...existingSteps.filter((step) => step.mealId !== mealId),

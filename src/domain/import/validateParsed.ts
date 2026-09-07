@@ -82,16 +82,51 @@ function readOptionalPositiveInt(value: unknown): OptionalPositiveIntResult {
   return { ok: true, value };
 }
 
+/**
+ * `section` IS READ WITH THE SAME `readOptionalString` AS `quantity` AND
+ * `unit`, AND FAILS THE SAME WAY, which is the whole reason it is not read
+ * with a lenient reader of its own.
+ *
+ * A missing key, an explicit null and a blank string all mean "this
+ * ingredient belongs to no sub-recipe", which is the ordinary answer: most
+ * recipes print no headings at all. A value present but not a string is a
+ * malformed shape and fails the ingredient, and therefore the recipe —
+ * exactly what a non-string `quantity` does one line up.
+ *
+ * THAT IS DELIBERATELY THE STRICT TREATMENT AND NOT `dishTags`' LENIENT ONE.
+ * `readDishTags` below drops a word it does not recognise and lets the recipe
+ * through, because the vocabulary is closed and a wrong WORD there is
+ * cosmetic. There is no vocabulary here — a heading is free text in the
+ * source's own language — so there is no such thing as a value this function
+ * could recognise as wrong-but-harmless. The only thing left to check is the
+ * shape, and a model that answers with a number where the schema says
+ * `{ type: 'STRING', nullable: true }` has not made a typo in a category, it
+ * has returned something this pipeline does not understand.
+ *
+ * The trimming matters downstream and is not tidiness: `groupIngredientsBySection`
+ * keys its groups on the label, so a heading arriving once as "Beslag" and
+ * once as "Beslag " would otherwise be two headings if that function trusted
+ * this one. It does not — it trims again, for rows written by builds that
+ * predate this validator — but the two agreeing here is what keeps a fresh
+ * import correct on the first read.
+ */
 function validateIngredient(raw: unknown): ParsedIngredient | null {
   if (!isRecord(raw) || !isNonEmptyString(raw.name)) {
     return null;
   }
   const quantity = readOptionalString(raw.quantity);
   const unit = readOptionalString(raw.unit);
-  if (!quantity.ok || !unit.ok) {
+  const section = readOptionalString(raw.section);
+  if (!quantity.ok || !unit.ok || !section.ok) {
     return null;
   }
-  return { name: raw.name.trim(), quantity: quantity.value, unit: unit.value };
+  // `section` is STATED on every ingredient this function produces, never
+  // omitted, even though the field is optional on `ParsedIngredient`. The
+  // optionality exists for two hand-written literals in screens outside this
+  // module (see that field's own comment); nothing the server produces should
+  // rely on it, because "the model said no heading" and "this code forgot to
+  // mention headings" must not be the same object.
+  return { name: raw.name.trim(), quantity: quantity.value, unit: unit.value, section: section.value };
 }
 
 function validateIngredients(raw: unknown): readonly ParsedIngredient[] | null {

@@ -193,7 +193,7 @@ describe('parseStoredRecipe — a cache hit is indistinguishable from a fresh im
       kind: 'parsed',
       recipe: {
         title: 'Traybake met kip en citroen',
-        ingredients: [{ name: 'Kipfilet', quantity: '300', unit: 'g' }],
+        ingredients: [{ name: 'Kipfilet', quantity: '300', unit: 'g', section: null }],
         steps: ['Oven voorverwarmen op 200 graden.', 'Kip en groenten 25 minuten roosteren.'],
         estimatedMinutes: 25,
         servings: 4,
@@ -502,6 +502,63 @@ describe('canonicalRecipe — the write and read halves agree', () => {
     expect(roundTripped?.kind === 'parsed' && roundTripped.sourceUrl).toBe(CONTEXT.normalizedUrl);
     expect(roundTripped?.kind === 'parsed' && roundTripped.attribution).toEqual(ATTRIBUTION);
     expect(roundTripped?.kind === 'parsed' && roundTripped.recipeId).toBe(RECIPE_ID);
+  });
+
+  /**
+   * The sub-recipe headings survive the cache (`recipe_ingredients.section`,
+   * migration 0018), which is the half of this feature nobody would notice
+   * was missing.
+   *
+   * The first household to import a cake gets its two sections from the
+   * model. Every LATER household imports the same URL, hits this cache, and
+   * never calls the model again — so a heading that is written to
+   * `meal_ingredients` but not to `recipe_ingredients` produces a feature
+   * that works exactly once per URL, in the whole world, and silently
+   * flattens for everybody after that. There is no repair path either: a
+   * stored canonical row is never re-extracted.
+   */
+  test('carries a sub-recipe heading through the write and back out of the cache', () => {
+    const recipe = makeParsedRecipe({
+      title: 'Wortelcake',
+      ingredients: [
+        makeParsedIngredient({ name: 'Bloem', quantity: '300', unit: 'g', section: 'Voor het beslag' }),
+        makeParsedIngredient({ name: 'Roomkaas', quantity: '200', unit: 'g', section: 'Voor de frosting' }),
+      ],
+      steps: ['Meng het beslag.', 'Klop de frosting.'],
+    });
+
+    const ingredients = buildRecipeIngredientRows(RECIPE_ID, recipe);
+
+    expect(ingredients.map((row) => row.section)).toEqual(['Voor het beslag', 'Voor de frosting']);
+
+    const roundTripped = parseStoredRecipe({
+      id: RECIPE_ID,
+      ...buildRecipeRowInsert(recipe, CONTEXT),
+      recipe_ingredients: ingredients.map(({ recipe_id: _recipeId, ...rest }) => rest),
+      recipe_steps: buildRecipeStepRows(RECIPE_ID, recipe).map(({ recipe_id: _recipeId, ...rest }) => rest),
+    });
+
+    expect(roundTripped?.kind === 'parsed' && roundTripped.recipe.ingredients.map((one) => one.section)).toEqual([
+      'Voor het beslag',
+      'Voor de frosting',
+    ]);
+  });
+
+  /**
+   * A row written before 0018 has no `section` key at all, and the cache has
+   * to keep serving it. `readOptionalString` inside `validateParsedRecipe`
+   * already reads a missing key as "not stated", so this is an assertion
+   * about the two halves agreeing rather than about new code — which is
+   * exactly the kind of agreement that stops being true silently.
+   */
+  test('serves a pre-0018 row, whose ingredients carry no section key, as a sectionless recipe', () => {
+    const roundTripped = parseStoredRecipe(
+      makeStoredRow({
+        recipe_ingredients: [{ name: 'Kipfilet', quantity: '300', unit: 'g', sort_order: 0 }],
+      }),
+    );
+
+    expect(roundTripped?.kind === 'parsed' && roundTripped.recipe.ingredients[0]?.section).toBeNull();
   });
 });
 

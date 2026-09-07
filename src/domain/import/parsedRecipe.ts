@@ -38,6 +38,50 @@ export interface ParsedIngredient {
   readonly quantity: string | null;
   /** e.g. "el" (eetlepel), "g", "blikjes" — whatever unit the caption itself used, or null. */
   readonly unit: string | null;
+  /**
+   * The sub-recipe heading the source printed this ingredient under — "Voor
+   * het beslag", "Voor de frosting", "Per la crema" — copied verbatim and in
+   * the source's own language, or null when the source prints no headings at
+   * all, which is most recipes.
+   *
+   * IT IS THE SAME PROMISE EVERY OTHER FIELD HERE MAKES, applied one field
+   * further: a stated heading is transcribed, an unstated one is null, and
+   * nothing anywhere derives one. The extraction schema constrains the model
+   * with the sentence in as many words ("Never invent a heading ... use null
+   * unless the source itself prints one" — buildExtractionRequest.ts), the
+   * validator trims it and reads blank as null, and no reader guesses a
+   * heading from an ingredient's name, its position or its unit. A recipe
+   * whose headings were invented would send somebody to the shop for
+   * frosting butter that was always meant for the batter.
+   *
+   * OPTIONAL, AND THIS FILE'S HEADER SAYS TO READ THE `dishTags` ARGUMENT
+   * BEFORE MAKING ANYTHING HERE OPTIONAL — so here is that reading, honestly.
+   * `dishTags` was made REQUIRED because a hand-written literal
+   * (`buildEditedRecipe` in src/app/import/confirm.tsx) silently omitted it
+   * and destroyed a household's categories on every edit. The same two
+   * literals exist for this field: that one, and `toParsedIngredients` in
+   * src/app/recipe-edit/[mealId].tsx. Required is therefore the shape this
+   * field WANTS, and it is not the shape it has, because both of those live
+   * in screens outside this change and a compile error in them would leave a
+   * shared working tree red rather than a feature safe.
+   *
+   * SO THE GUARANTEE IS HELD ELSEWHERE, IN TWO PLACES, AND BOTH ARE TESTED.
+   * `resolveEditedIngredients` (editedIngredients.ts) returns the ARRIVING
+   * object for a line nobody edited, so a section survives the confirmation
+   * screen without that screen mentioning it. And `updateMealRecipe`
+   * (src/lib/repository/local/meals.ts) keeps the stored sections when the
+   * edited ingredient list is still the stored list, so a section survives
+   * the recipe editor without that screen mentioning it either. What neither
+   * covers is an ingredient somebody actually retyped: that line loses its
+   * heading, exactly as it already loses its quantity and unit, and for the
+   * same stated reason — we know what the person typed and not how they
+   * meant it to decompose.
+   *
+   * MAKE IT REQUIRED THE DAY A SCREEN CAN EDIT A HEADING. At that point both
+   * literals have a real value to state, and the type should stop letting
+   * them forget it.
+   */
+  readonly section?: string | null;
 }
 
 export interface ParsedRecipe {

@@ -183,7 +183,14 @@ const STORED_RECIPE_SELECT = [
   'author_name',
   'author_url',
   'dish_tags',
-  'recipe_ingredients(name,quantity,unit,sort_order)',
+  // `section` (0018) is asked for by name like every other column here:
+  // PostgREST returns exactly what this list names, so a heading left out
+  // of it would reach `parseStoredRecipe` as a missing key and be read as
+  // "this recipe has no sub-recipes" — a cache hit quietly flattening a
+  // cake that the first importer saw in two sections, with nothing
+  // anywhere reporting a problem. Same failure shape the `id` note above
+  // describes, one column over.
+  'recipe_ingredients(name,quantity,unit,sort_order,section)',
   'recipe_steps(step_number,instruction)',
 ].join(',');
 

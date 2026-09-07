@@ -144,6 +144,24 @@ export interface RecipeIngredientRowInsert {
   readonly quantity: string | null;
   readonly unit: string | null;
   readonly sort_order: number;
+  /**
+   * `recipe_ingredients.section` (migration 0018) — the sub-recipe heading
+   * the publisher printed this ingredient under.
+   *
+   * ON THE CANONICAL ROW AND NOT ONLY ON THE HOUSEHOLD'S COPY, because a
+   * heading is a fact about the RECIPE rather than about one household's
+   * reading of it: every importer of that URL is looking at the same printed
+   * page. Leaving it off here would have meant the first importer getting a
+   * cake in two sections and the second — served from this cache — getting a
+   * flat list, permanently, since a stored row is never re-extracted.
+   *
+   * NOT A CRACK IN PD-006, and 0018's own header states the boundary: this
+   * column carries no safety, consent or identity meaning, which is precisely
+   * why `recipe_ingredients` still has no `allergen_tags` column and never
+   * will. A wrong value here costs a heading; a wrong allergen tag inherited
+   * from a stranger costs a reaction.
+   */
+  readonly section: string | null;
 }
 
 export interface RecipeStepRowInsert {
@@ -338,6 +356,13 @@ export function buildRecipeIngredientRows(
     quantity: ingredient.quantity,
     unit: ingredient.unit,
     sort_order: index,
+    // `?? null` for `toIngredientDrafts`' reason, restated because this is
+    // the OTHER write path out of the same `ParsedRecipe`: the field is
+    // optional on `ParsedIngredient`, an arriving ingredient may not mention
+    // it, and "nobody mentioned a heading" is what null means. Never a
+    // substituted heading — this row is shared with every household that
+    // imports the URL, so a value invented here is invented for all of them.
+    section: ingredient.section ?? null,
   }));
 }
 
@@ -656,6 +681,14 @@ export function parseStoredRecipe(raw: unknown): ImportResult | null {
     name: row.name,
     quantity: row.quantity,
     unit: row.unit,
+    // Read back off the stored row and handed, unnarrowed, to
+    // `validateParsedRecipe` below — the same treatment `name`, `quantity`
+    // and `unit` get, and for this function's standing reason: one validator
+    // guards the model path and the cache path, so the two cannot disagree
+    // about what a valid recipe is. A row written before 0018 has no such
+    // key, and `readOptionalString` in that validator already reads a missing
+    // key as "no heading", which is exactly what those rows mean.
+    section: row.section,
   }));
   const steps = readSortedChildren(raw.recipe_steps, 'step_number', (row) => row.instruction);
   if (ingredients === null || steps === null) {

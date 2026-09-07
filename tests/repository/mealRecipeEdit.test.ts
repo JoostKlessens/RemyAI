@@ -329,7 +329,7 @@ describe('updateMealRecipe — what an edit must NOT touch', () => {
  * writer — the extraction model at import — and manual entry wrote `[]`
  * (confirm.tsx). So a recipe the model tagged wrongly, and every recipe
  * anybody typed in by hand, was permanently invisible to the library's
- * "Waarmee?" filter with no way for any person to fix it. That is the
+ * dish-category filter with no way for any person to fix it. That is the
  * most-used filter in the app being wrong about part of every library,
  * and no amount of work on the filter CONTROL repairs it; only a writer
  * does.
@@ -670,5 +670,132 @@ describe('updateMealRecipe — the edit reaches the mirror', () => {
 
     expect(edited.title).toBe('Kip met limoen');
     expect((await repository.getMeal(created.id))?.title).toBe('Kip met limoen');
+  });
+});
+
+/**
+ * Sub-recipe headings (`meal_ingredients.section`, migration 0018) across a
+ * create and an edit.
+ *
+ * THE EDIT IS THE INTERESTING HALF, AND THE REASON IS A GAP RATHER THAN A
+ * FEATURE. `UpdateMealRecipeInput` carries no section, because
+ * src/app/recipe-edit/[mealId].tsx edits an ingredient as ONE free-text line
+ * and has no control for a heading. So the naive write — replace the child
+ * rows with what the caller sent — deletes every heading in the recipe the
+ * moment anybody opens the editor and presses save, which is exactly the
+ * shape of the bug editedIngredients.ts was written to end ("opening the
+ * screen and pressing Doorgaan was enough to destroy amounts the source had
+ * actually given us").
+ *
+ * The rule these tests pin is deliberately all-or-nothing: if the edited list
+ * is still the list that was stored, the stored headings still describe it
+ * and are kept; if any line moved, was retyped, added or removed, they are
+ * dropped. The middle option — keeping a heading for the lines that did not
+ * change and dropping it for the ones that did — is refused, because
+ * "position 3 is still position 3" is exactly the row identity
+ * src/lib/repository/types.ts already refuses to invent for quantity and
+ * unit.
+ */
+describe('updateMealRecipe — sub-recipe headings', () => {
+  let repository: RemyRepository;
+
+  beforeEach(() => {
+    repository = createLocalRepository(createInMemoryKeyValueStore());
+  });
+
+  /** Two headings and one loose ingredient — the cake case the owner described. */
+  const SECTIONED_INGREDIENTS: CreateMealInput['ingredients'] = [
+    { name: 'bloem', quantity: '300', unit: 'g', sortOrder: 0, section: 'Voor het beslag' },
+    { name: 'suiker', quantity: '200', unit: 'g', sortOrder: 1, section: 'Voor het beslag' },
+    { name: 'roomkaas', quantity: '200', unit: 'g', sortOrder: 2, section: 'Voor de frosting' },
+  ];
+
+  test('createMeal stores the heading the import gave each ingredient', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ ingredients: SECTIONED_INGREDIENTS }));
+
+    const stored = await repository.getMealIngredients(created.id);
+
+    expect(stored.map((ingredient) => ingredient.section)).toEqual([
+      'Voor het beslag',
+      'Voor het beslag',
+      'Voor de frosting',
+    ]);
+  });
+
+  test('createMeal stores null for a caller that states no heading — the ordinary recipe', async () => {
+    const created = await repository.createMeal(makeCreateMealInput());
+
+    const stored = await repository.getMealIngredients(created.id);
+
+    expect(stored.map((ingredient) => ingredient.section)).toEqual([null, null]);
+  });
+
+  test('keeps the stored headings when the edit leaves the ingredient list untouched', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ ingredients: SECTIONED_INGREDIENTS }));
+
+    // What the recipe editor sends after somebody corrected only the title:
+    // the same three lines, restated, with no heading anywhere in the input.
+    await repository.updateMealRecipe(
+      created.id,
+      makeUpdateInput({
+        title: 'Wortelcake',
+        ingredients: SECTIONED_INGREDIENTS.map(({ name, quantity, unit, sortOrder }) => ({
+          name,
+          quantity,
+          unit,
+          sortOrder,
+        })),
+      }),
+    );
+
+    const stored = await repository.getMealIngredients(created.id);
+
+    expect(stored.map((ingredient) => ingredient.section)).toEqual([
+      'Voor het beslag',
+      'Voor het beslag',
+      'Voor de frosting',
+    ]);
+  });
+
+  test('drops the headings when the ingredient list itself changed, rather than guessing which line kept which', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ ingredients: SECTIONED_INGREDIENTS }));
+
+    await repository.updateMealRecipe(
+      created.id,
+      makeUpdateInput({
+        ingredients: [
+          { name: 'volkorenbloem', quantity: '300', unit: 'g', sortOrder: 0 },
+          { name: 'suiker', quantity: '200', unit: 'g', sortOrder: 1 },
+          { name: 'roomkaas', quantity: '200', unit: 'g', sortOrder: 2 },
+        ],
+      }),
+    );
+
+    const stored = await repository.getMealIngredients(created.id);
+
+    expect(stored.map((ingredient) => ingredient.section)).toEqual([null, null, null]);
+  });
+
+  test('a caller that DOES state headings wins over the stored ones, unchanged list or not', async () => {
+    const created = await repository.createMeal(makeCreateMealInput({ ingredients: SECTIONED_INGREDIENTS }));
+
+    await repository.updateMealRecipe(
+      created.id,
+      makeUpdateInput({
+        ingredients: [
+          { name: 'bloem', quantity: '300', unit: 'g', sortOrder: 0, section: 'Voor de bodem' },
+          { name: 'suiker', quantity: '200', unit: 'g', sortOrder: 1, section: 'Voor de bodem' },
+          { name: 'roomkaas', quantity: '200', unit: 'g', sortOrder: 2, section: 'Voor de vulling' },
+        ],
+      }),
+    );
+
+    const stored = await repository.getMealIngredients(created.id);
+
+    expect(stored.map((ingredient) => ingredient.section)).toEqual([
+      'Voor de bodem',
+      'Voor de bodem',
+      'Voor de vulling',
+    ]);
   });
 });

@@ -1,0 +1,162 @@
+-- Remy — the sub-recipe an ingredient belongs to (additive only; touches no
+-- existing column, no existing policy, and no existing row)
+--
+-- The owner's instruction, verbatim: "als het recept de ingredienten
+-- verdeelt per categorie, bijvoorbeeld in 'beslag' en 'frosting' dan moet
+-- het ook duidelijk zijn welke ingredienten er per subonderdeel nodig zijn."
+--
+-- ===========================================================================
+-- WHY A COLUMN AND NOT A DERIVED READING OF THE NAME
+-- ===========================================================================
+--
+-- The cheap version of this feature reads a heading out of the ingredient
+-- text: a line ending in a colon and holding no quantity ("Voor het
+-- beslag:") becomes a heading, everything under it inherits it. It needs no
+-- migration, no extraction change and no storage.
+--
+-- REJECTED, because it is a parser inventing structure nobody typed, which
+-- is the one thing this pipeline has ruled out repeatedly and in writing.
+-- src/domain/import/editedIngredients.ts refuses to split an edited line
+-- back into quantity and unit for exactly this reason ("THERE IS NO
+-- RE-PARSER HERE, AND THERE MUST NEVER BE ONE ... the cases it gets wrong
+-- are silent, and they are stored"), and src/domain/import/toMealDraft.ts
+-- refuses to guess a dish category from a title. A heuristic here fails the
+-- same way and in the same silence: "Zout: naar smaak" becomes a heading,
+-- and every ingredient after it is filed under a sub-recipe that does not
+-- exist.
+--
+-- So the heading is transcribed rather than deduced. The extraction schema
+-- asks the model for it per ingredient, copied verbatim from the source and
+-- null when the source prints no heading
+-- (src/domain/import/buildExtractionRequest.ts), and this column is where
+-- that answer lands.
+--
+-- ===========================================================================
+-- `text null`, WITH NO DEFAULT AND NO CHECK — THE OPPOSITE OF 0017
+-- ===========================================================================
+--
+-- 0017 gave `meals.dish_course` a CHECK and `not null default
+-- 'hoofdgerecht'`, and its header argues both at length. Neither is right
+-- here, and the differences are worth stating because the two migrations sit
+-- next to each other and look like the same kind of change.
+--
+-- NO DEFAULT. 0017's default is a positive claim the owner authorised — "een
+-- recept dat niemand geclassificeerd heeft IS een hoofdgerecht". There is no
+-- equivalent sentence for this column. An ingredient nobody filed under a
+-- heading belongs to no sub-recipe, and `null` says precisely that; any
+-- string put here by default would be a heading the recipe never printed.
+-- `null` is therefore the answer for every existing row and for the great
+-- majority of future ones — most recipes are one list — and adding a
+-- nullable column with no default writes nothing to any row, on two tables
+-- that can both be large.
+--
+-- NO CHECK, AND NO VOCABULARY ANYWHERE. Every other taxonomy this codebase
+-- stores is a closed list mirrored from a TypeScript module — `dish_tags`
+-- (0004), `dish_moods` (0010), `dish_course` (0017) — because each of them
+-- is FILTERED on, and a value outside the list is unfilterable by
+-- construction, which is what makes storing one worth refusing. Nothing
+-- filters, searches, sorts or aggregates across recipes by this column. It
+-- is one recipe's own internal heading, read back only by the household that
+-- stored it, so a closed vocabulary would buy nothing — and it would cost
+-- the thing that matters most here. Both extraction prompts end with
+-- "preserve the source's own language (do not translate)", so a Dutch word
+-- list would force a Danish cake's headings into words its recipe never
+-- used. See src/domain/ingredientSections.ts for the display side of the
+-- same argument.
+--
+-- NO LENGTH CAP EITHER, for the reason `name`, `quantity` and `unit` beside
+-- it have none: they are all free text copied from a source, they are all
+-- narrowed at the app boundary by the same validator
+-- (src/domain/import/validateParsed.ts's `readOptionalString`, which trims
+-- and reads blank as null), and a `varchar(n)` here would be one arbitrary
+-- number enforced in exactly one of the places a heading can arrive.
+--
+-- DELIBERATELY NO INDEX, for 0004's, 0010's and 0017's reason: nothing
+-- queries this column in SQL. Both readers have the whole child list in hand
+-- already — the app groups an ALREADY-FETCHED array
+-- (`groupIngredientsBySection`), and the canonical cache selects a recipe's
+-- ingredients by `recipe_id`, which is already indexed. An index here would
+-- be write cost on every import for no read benefit. Add one in the same
+-- migration as the first query that needs it.
+--
+-- ===========================================================================
+-- WHY BOTH TABLES, IN ONE MIGRATION
+-- ===========================================================================
+--
+-- `meal_ingredients` (0001) is the household's own copy and is what the
+-- recipe screen renders. `recipe_ingredients` (0006) is the shared canonical
+-- row the import cache serves to the SECOND household that imports the same
+-- URL. Adding the column to only the first would ship a feature that
+-- silently degrades for everyone but the first importer: household A imports
+-- a cake and gets its two sections, household B imports the identical URL,
+-- hits the cache, and gets a flat list — with nothing anywhere reporting a
+-- problem, and no way back, because a stored canonical row is never
+-- re-extracted. That is this repo's own recorded failure shape ("every layer
+-- had the value, and every layer left it out"), so both columns land
+-- together, with both their writers and both their readers in the same
+-- change.
+--
+-- THIS IS NOT A PD-006 PRECEDENT, and the distinction has to be stated
+-- because 0006's header spends a page on it. `recipe_ingredients`
+-- deliberately has NO `allergen_tags` column even though `meal_ingredients`
+-- does, because allergen tagging is a per-household human act and shared
+-- canonical data must offer nothing for a household to inherit. A section is
+-- the opposite kind of fact: it is a property of the RECIPE, printed by its
+-- publisher, identical for everyone who imports it, and it carries no
+-- safety, consent or identity meaning whatsoever. The worst case for a wrong
+-- value is a cake laid out under the wrong heading in a household's own
+-- library. It gates no read, appears in no cross-household projection of a
+-- household's behaviour, and nobody's allergy depends on it.
+--
+-- ===========================================================================
+-- RLS: NOTHING TO DO, STATED SO NOBODY GOES LOOKING
+-- ===========================================================================
+--
+-- Postgres RLS is row-level, not column-level. `meal_ingredients`' policies
+-- (0001) and `meal_ingredients_select_sent_to_me` (0009) all gate on the
+-- parent meal and cover every column the row has, this one included.
+-- `recipe_ingredients` has one select policy (0006, `can_read_recipe`) and no
+-- write policy at all — service role only, which is still the only writer.
+-- So no policy is created, altered or dropped here.
+--
+-- ===========================================================================
+-- WHAT IS DELIBERATELY NOT IN THIS MIGRATION
+-- ===========================================================================
+--
+-- A `section_order` COLUMN. A recipe lists its sub-recipes in an order, and
+-- `sort_order` already expresses that order completely: the ingredients of
+-- one heading occupy a contiguous run of positions, so the headings inherit
+-- their sequence from the ingredients. A second ordering column would be a
+-- second answer to a settled question, and the two would disagree the first
+-- time somebody edited one of them.
+--
+-- A `meal_ingredient_sections` TABLE, with the headings as rows and a
+-- foreign key from each ingredient. It is the more normalised shape and it
+-- buys nothing this product uses: no screen lists headings without their
+-- ingredients, no query counts them, and nothing renames one in place. What
+-- it would cost is a third child table on the import write path and on the
+-- mirror's delete-then-upsert, for a string that is written once and read
+-- back beside the row that carries it.
+--
+-- AN EDITOR. src/app/recipe-edit/[mealId].tsx edits an ingredient as ONE
+-- free-text line and has no control for a heading, so nothing in this change
+-- lets a person add, rename or move a section by hand. That is a screen's
+-- job and it is not this migration's. What the write path does today is
+-- stated where it happens (`updateMealRecipe` in
+-- src/lib/repository/local/meals.ts): an edit that leaves the ingredient
+-- list untouched keeps the stored sections, and an edit that changes the
+-- list drops them, because recovering them would mean matching an edited
+-- line to the row it came from — the identity that file already refuses to
+-- invent for quantity and unit.
+
+alter table meal_ingredients
+  add column section text;
+
+comment on column meal_ingredients.section is
+  'The sub-recipe heading this ingredient was printed under ("Voor het beslag", "Voor de frosting"), copied verbatim from the source in the source''s own language — never inferred from the ingredient name, and never translated. NULL means this ingredient belongs to no sub-recipe, which is the ordinary case: most recipes are one list, and every row written before this column existed reads that way. Free text on purpose, unlike meals.dish_tags / dish_moods / dish_course, which are closed vocabularies because they are filtered on; nothing filters or aggregates on this. Read by src/domain/ingredientSections.ts, which groups an already-fetched list; there is no ordering column beside it because sort_order already carries the order.';
+
+alter table recipe_ingredients
+  add column section text;
+
+comment on column recipe_ingredients.section is
+  'The canonical twin of meal_ingredients.section, so a household that gets a cache hit on a URL (0006) sees the same sub-recipe headings as the household that first imported it. Same meaning, same NULL reading, same free-text rule. NOT a precedent for allergen data: this column is a property of the published recipe and carries no safety, consent or identity meaning, which is exactly why 0006 refuses an allergen_tags column here and this one is fine.';

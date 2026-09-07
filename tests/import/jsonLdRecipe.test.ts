@@ -217,19 +217,31 @@ describe('parseJsonLdRecipe — ingredients: field name and shape', () => {
       recipeIngredient: ['2 el <strong>olijfolie</strong>', '1/2 ui &amp; wat zout'],
     });
     expect(result?.ingredients).toEqual([
-      { name: 'olijfolie', quantity: '2', unit: 'el' },
-      { name: 'ui & wat zout', quantity: '1/2', unit: null },
+      { name: 'olijfolie', quantity: '2', unit: 'el', section: null },
+      { name: 'ui & wat zout', quantity: '1/2', unit: null, section: null },
     ]);
   });
 });
 
+/**
+ * `section: null` ON EVERY EXPECTATION BELOW IS NOT NOISE, IT IS THE WEB
+ * ROUTE'S ANSWER. schema.org's `recipeIngredient` is a flat array of strings
+ * with nowhere to put a sub-recipe heading — `HowToSection` exists for
+ * INSTRUCTIONS only, which is why the steps tests further down talk about
+ * flattening sections and these do not. So a page-scraped recipe genuinely
+ * has no headings to carry, and `validateParsedRecipe` states that as `null`
+ * on every ingredient rather than leaving the key off. A web import
+ * therefore always renders as one flat list, correctly; only the routes that
+ * go through the model (caption, photo, pasted text) can ever report a
+ * heading, because only they are looking at a source that prints one.
+ */
 describe('parseJsonLdRecipe — ingredient quantity/unit splitting (conservative: never guess)', () => {
   function firstIngredient(line: string) {
     return parseJsonLdRecipe({ ...SIMPLE_RECIPE, recipeIngredient: [line] })?.ingredients[0];
   }
 
   test('splits an integer quantity and a known Dutch unit ("2 el olijfolie")', () => {
-    expect(firstIngredient('2 el olijfolie')).toEqual({ name: 'olijfolie', quantity: '2', unit: 'el' });
+    expect(firstIngredient('2 el olijfolie')).toEqual({ name: 'olijfolie', quantity: '2', unit: 'el', section: null });
   });
 
   test('splits a fraction quantity with no recognized unit, keeping the unit word in the name ("1/2 ui, fijngesneden")', () => {
@@ -237,27 +249,28 @@ describe('parseJsonLdRecipe — ingredient quantity/unit splitting (conservative
       name: 'ui, fijngesneden',
       quantity: '1/2',
       unit: null,
+      section: null,
     });
   });
 
   test('splits an integer quantity and a known metric unit ("300 g kipfilet")', () => {
-    expect(firstIngredient('300 g kipfilet')).toEqual({ name: 'kipfilet', quantity: '300', unit: 'g' });
+    expect(firstIngredient('300 g kipfilet')).toEqual({ name: 'kipfilet', quantity: '300', unit: 'g', section: null });
   });
 
   test('splits a mixed-number quantity and a known English unit ("1 1/2 cup flour")', () => {
-    expect(firstIngredient('1 1/2 cup flour')).toEqual({ name: 'flour', quantity: '1 1/2', unit: 'cup' });
+    expect(firstIngredient('1 1/2 cup flour')).toEqual({ name: 'flour', quantity: '1 1/2', unit: 'cup', section: null });
   });
 
   test('splits a comma-decimal quantity ("2,5 dl melk")', () => {
-    expect(firstIngredient('2,5 dl melk')).toEqual({ name: 'melk', quantity: '2,5', unit: 'dl' });
+    expect(firstIngredient('2,5 dl melk')).toEqual({ name: 'melk', quantity: '2,5', unit: 'dl', section: null });
   });
 
   test('keeps a hyphenated range verbatim as the quantity string rather than resolving it ("2-3 el suiker")', () => {
-    expect(firstIngredient('2-3 el suiker')).toEqual({ name: 'suiker', quantity: '2-3', unit: 'el' });
+    expect(firstIngredient('2-3 el suiker')).toEqual({ name: 'suiker', quantity: '2-3', unit: 'el', section: null });
   });
 
   test('recognizes a Unicode vulgar fraction as a quantity ("½ ui")', () => {
-    expect(firstIngredient('½ ui')).toEqual({ name: 'ui', quantity: '½', unit: null });
+    expect(firstIngredient('½ ui')).toEqual({ name: 'ui', quantity: '½', unit: null, section: null });
   });
 
   test('puts the whole line in name when there is no leading quantity at all ("Zout en peper naar smaak")', () => {
@@ -265,11 +278,12 @@ describe('parseJsonLdRecipe — ingredient quantity/unit splitting (conservative
       name: 'Zout en peper naar smaak',
       quantity: null,
       unit: null,
+      section: null,
     });
   });
 
   test('falls back to the whole line when a quantity+unit match would leave nothing for the name ("2 el")', () => {
-    expect(firstIngredient('2 el')).toEqual({ name: '2 el', quantity: null, unit: null });
+    expect(firstIngredient('2 el')).toEqual({ name: '2 el', quantity: null, unit: null, section: null });
   });
 
   test('never lets a near-miss word be mistaken for a unit ("2 eliksirs" does not match unit "el")', () => {
@@ -277,6 +291,7 @@ describe('parseJsonLdRecipe — ingredient quantity/unit splitting (conservative
       name: 'eliksirs magische drank',
       quantity: '2',
       unit: null,
+      section: null,
     });
   });
 });
@@ -489,8 +504,8 @@ describe('parseJsonLdRecipe — full realistic pages, end to end', () => {
     expect(result).toEqual({
       title: 'Pasta pesto',
       ingredients: [
-        { name: 'pasta', quantity: '400', unit: 'g' },
-        { name: 'basilicumpesto', quantity: '200', unit: 'g' },
+        { name: 'pasta', quantity: '400', unit: 'g', section: null },
+        { name: 'basilicumpesto', quantity: '200', unit: 'g', section: null },
       ],
       steps: ['Kook de pasta volgens de verpakking.', 'Meng de pasta met de pesto.'],
       estimatedMinutes: 20,
@@ -504,9 +519,9 @@ describe('parseJsonLdRecipe — full realistic pages, end to end', () => {
     expect(result).toEqual({
       title: 'Chocolate Chip Cookies',
       ingredients: [
-        { name: 'flour', quantity: '2', unit: 'cups' },
-        { name: 'sugar', quantity: '1', unit: 'cup' },
-        { name: 'eggs', quantity: '2', unit: null },
+        { name: 'flour', quantity: '2', unit: 'cups', section: null },
+        { name: 'sugar', quantity: '1', unit: 'cup', section: null },
+        { name: 'eggs', quantity: '2', unit: null, section: null },
       ],
       steps: [
         'Mix the dry ingredients.',

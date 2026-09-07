@@ -419,6 +419,17 @@ function parseIngredientLine(line: string): ParsedIngredient {
   if (name.length === 0) {
     return { name: line, quantity: null, unit: null };
   }
+  // NO `section` HERE, AND ITS ABSENCE IS THE WEB ROUTE'S HONEST ANSWER
+  // rather than an omission. schema.org gives a recipe's ingredients as
+  // `recipeIngredient`: a flat array of strings with nowhere to put a
+  // sub-recipe heading. (`HowToSection` exists, but it nests INSTRUCTIONS —
+  // which is why this file flattens sections for steps and has nothing to
+  // flatten for ingredients.) Deriving a heading from the text would be the
+  // parser this module already refuses to be for quantity and unit, so a
+  // page-scraped recipe reports no headings at all and
+  // `validateParsedRecipe` states that as `null`. Only the routes that read
+  // a source through the model — caption, photo, pasted text — can ever
+  // report one, because only they are looking at something that prints one.
   return { name, quantity, unit };
 }
 

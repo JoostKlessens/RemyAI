@@ -137,6 +137,20 @@ export interface MealIngredientDraft {
   readonly quantity: string | null;
   readonly unit: string | null;
   readonly sortOrder: number;
+  /**
+   * The sub-recipe heading this ingredient was printed under, carried
+   * straight through from `ParsedIngredient.section` — never re-derived, and
+   * never inferred from the name or the position. Null for the great
+   * majority of recipes, which print no headings at all.
+   *
+   * REQUIRED HERE WHILE `ParsedIngredient.section` IS OPTIONAL, which is the
+   * same asymmetry `recipeId` above carries and rests on the same argument: a
+   * draft is the shape that actually gets WRITTEN, and a write path allowed
+   * to leave this out is how a column ships with a reader and no writer.
+   * Stating it always, even as `null`, makes dropping it a compile error here
+   * instead of a heading that silently never reaches storage.
+   */
+  readonly section: string | null;
 }
 
 export interface MealStepDraft {
@@ -267,6 +281,14 @@ function toIngredientDrafts(recipe: ParsedRecipe): readonly MealIngredientDraft[
     quantity: ingredient.quantity,
     unit: ingredient.unit,
     sortOrder: index,
+    // `?? null` and NOT a fallback heading. The field is optional on
+    // `ParsedIngredient` for two hand-written literals in screens this change
+    // does not reach (see its own comment there), so an arriving ingredient
+    // may genuinely not mention it — and "nobody mentioned a heading" is
+    // exactly what `null` means here. Anything else would be this layer
+    // inventing a sub-recipe, which is the one thing the extraction prompt
+    // spends a paragraph forbidding the model to do.
+    section: ingredient.section ?? null,
   }));
 }
 

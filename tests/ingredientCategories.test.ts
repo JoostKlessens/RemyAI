@@ -1,3 +1,19 @@
+/**
+ * ⚠ THE TWO MODULES UNDER TEST HAVE ZERO PRODUCTION CALLERS SINCE
+ * 7 SEPTEMBER 2026, and these tests are deliberately still here.
+ *
+ * Their one call site was the ingredient list on the recipe screen, and the
+ * owner asked for the glyphs there to go — see both modules' own header
+ * notes, and src/components/RecipeIngredientList.tsx for what replaced them.
+ * Neither module was deleted, because that is a decision about the product
+ * rather than a consequence of one screen changing its mind, and a module
+ * kept without its tests is a module nobody can safely bring back.
+ *
+ * So read every assertion below as "this is what this code does", not as
+ * "this is what a household sees". If the owner decides the modules go, this
+ * file goes with them, in the same change.
+ */
+
 import { describe, expect, test } from 'vitest';
 import {
   CATEGORIZED_PHRASES,

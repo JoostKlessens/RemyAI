@@ -120,20 +120,55 @@
  * anywhere in this screen renders a literal `×`, `▶` or `+` in place of a
  * glyph.
  *
- * THE INGREDIENT LIST DRAWS A CATEGORY, NOT A THING — a fruit glyph for both
- * the apple and the banana, at the owner's request. `IngredientLine` below
- * carries that argument and ingredientCategories.ts carries the harder half:
- * why deriving a drawing from free text is affordable now when this very
- * file's dish-mood row still says, correctly, that it was not.
+ * THE INGREDIENT LIST HAS NO GLYPHS AT ALL, AND THAT IS A REVERSAL. It drew a
+ * category ahead of every line it could place — a fruit glyph for both the
+ * apple and the banana — for one day, at the owner's request, and the owner
+ * then asked for the opposite in as many words: "in het recept zelf (en met
+ * name de ingredientenlijst) [moeten] de icoontjes niet komen te staan maar
+ * gewoon een duidelijke, overzichtelijke opsomming van ingredienten". The
+ * argument the old code made for itself was never wrong about the glyphs; it
+ * was wrong about the surface. A tile in a grid is skimmed and a mark helps;
+ * a shopping list is READ, top to bottom, and forty small pictures down the
+ * left margin are forty things to look past.
+ *
+ * That reversal and its consequences — including why
+ * `ingredientCategoryIcons.ts` and `ingredientCategories.ts` were kept rather
+ * than deleted with their last caller — are argued in full in
+ * `RecipeIngredientList`, which is where the list now lives.
  *
  * ============================================================================
- * WHY TWO COMPONENTS AND NOT TWO LOCAL FUNCTIONS
+ * INGREDIENTS ARE GROUPED BY SUB-RECIPE WHEN THE SOURCE NAMED ONE
  * ============================================================================
  *
- * They started here and were lifted out at 782 lines, eighteen short of this
- * repo's 800-line ceiling. Both are purely presentational and neither reads
- * a repository, so the split costs nothing and it is what keeps the next
- * edit to this screen from having to do a refactor before it starts.
+ * The second half of the same instruction: "als het recept de ingredienten
+ * verdeelt per categorie, bijvoorbeeld in 'beslag' en 'frosting' dan moet het
+ * ook duidelijk zijn welke ingredienten er per subonderdeel nodig zijn". The
+ * heading comes off the row (`MealIngredient.section`, migration 0018), was
+ * transcribed from the source at import and is rendered in the source's own
+ * words; this screen neither derives, translates nor prefixes one.
+ *
+ * NONE OF IT IS DECIDED HERE, WHICH IS THE POINT OF THE TWO SEAMS.
+ * `groupIngredientsBySection` (src/domain/ingredientSections.ts) owns every
+ * ruling about what a group IS — the same heading twice, unlabelled
+ * ingredients, two spellings of one word — because those are decisions with
+ * tests, not layout. `RecipeIngredientList` owns how one is drawn. This
+ * screen hands over an array and keeps exactly one thing: the sentence for a
+ * recipe with no ingredients at all, which has to agree in tone with the one
+ * for a recipe with no steps directly below it.
+ *
+ * ============================================================================
+ * WHY THREE COMPONENTS AND NOT THREE LOCAL FUNCTIONS
+ * ============================================================================
+ *
+ * The first two started here and were lifted out at 782 lines, eighteen short
+ * of this repo's 800-line ceiling. `RecipeIngredientList` went the same way
+ * for the same reason and with the reason proved rather than predicted: with
+ * the sections drawn inline this file measured 806 lines, over the ceiling,
+ * and the recorded answer to that here is to find the seam a file already
+ * argues for rather than to shorten its arguments. All three are purely
+ * presentational and none reads a repository, so the splits cost nothing and
+ * they are what keeps the next edit to this screen from having to do a
+ * refactor before it starts.
  */
 
 import { useCallback, useReducer, useState, type JSX } from 'react';
@@ -143,11 +178,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { readMealDishMoods } from '@/domain/dishMoods';
 import type { HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { Button } from '@/components/Button';
-import { formatIngredientLine } from '@/components/friendCardVocabulary';
-import { Icon } from '@/components/Icon';
-import { isIconAvailable } from '@/components/iconFont';
-import { iconForIngredientCategory } from '@/components/ingredientCategoryIcons';
-import { categorizeIngredient } from '@/domain/ingredientCategories';
+import { RecipeIngredientList } from '@/components/RecipeIngredientList';
 import { iconForDishTag } from '@/components/dishTagIcons';
 import {
   INITIAL_LIBRARY_SCHEDULING,
@@ -189,63 +220,6 @@ import { useSession } from '@/hooks/useSession';
 import { getAppRepository } from '@/lib/repository';
 import { useLibrarySendSheet } from '@/lib/useLibrarySendSheet';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
-
-/**
- * One ingredient line, with a category glyph ahead of it when there is one.
- *
- * THE OWNER ASKED FOR THE GENERIC KIND, NOT THE THING: "in plaats van een
- * icoon voor een appel hebben en een voor een banaan, dat dit een generiek
- * fruit icoontje krijgt, idem voor groente, zuivel, kaas, etc". So the glyph
- * says fruit, not apple. ingredientCategories.ts carries the argument for why
- * that is the version this codebase can actually maintain.
- *
- * A LINE WITH NO GLYPH IS ORDINARY AND THAT IS THE DESIGN. All twelve
- * categories can be drawn — the two no font had, `zuivel` and
- * `peulvruchten`, are drawn by the app itself — so the only reason a line
- * goes without is an ingredient whose word the table has not been taught,
- * which returns nothing rather than guessing. It lands on the same bare line
- * the screen rendered before any of this existed.
- *
- * IT ASKS `isIconAvailable` FIRST rather than rendering an `Icon` and hoping,
- * the contract iconFont.ts states and every other call site follows. Without
- * it the row keeps its `gap` around a glyph that renders nothing, which is a
- * visible indent on some lines and not others — worse than no icons at all.
- *
- * THE TEXT IS UNCHANGED, deliberately. `formatIngredientLine` still produces
- * the whole line and the glyph is decorative: `Icon` marks every glyph as
- * not-an-accessibility-element, so a screen reader hears exactly what it
- * heard before. An icon that also spoke would be a second place an
- * ingredient's meaning is written down, and the two would drift.
- */
-function IngredientLine(props: {
-  readonly ingredient: MealIngredient;
-  readonly colors: ReturnType<typeof getColors>;
-}): JSX.Element {
-  const { ingredient, colors } = props;
-  const category = categorizeIngredient(ingredient.name);
-  const icon = category === null ? null : iconForIngredientCategory(category);
-  const line = (
-    <Text style={[typeScale.body, { color: colors.textSecondary }]}>{formatIngredientLine(ingredient)}</Text>
-  );
-  if (icon === null || !isIconAvailable(icon)) {
-    return <View style={styles.listLine}>{line}</View>;
-  }
-  return (
-    <View style={[styles.listLine, styles.ingredientLine]}>
-      <Icon name={icon} size={INGREDIENT_GLYPH_SIZE} color={colors.textMuted} />
-      {line}
-    </View>
-  );
-}
-
-/**
- * 16 pt, the small end of WS4's 16-20 pt UI band and the same size
- * `Chip` uses inside its pill beside a `typeScale.body` label. A glyph at the
- * top of that
- * band beside an ingredient name reads as an illustration competing with the
- * word rather than a mark introducing it.
- */
-const INGREDIENT_GLYPH_SIZE = 16;
 
 type LoadState = 'loading' | 'ready' | 'error';
 
@@ -535,9 +509,7 @@ export default function RecipeOverviewScreen(): JSX.Element {
           {RECIPE_OVERVIEW_INGREDIENTS_HEADING}
         </Text>
         {ingredients.length > 0 ? (
-          ingredients.map((ingredient) => (
-            <IngredientLine key={ingredient.id} ingredient={ingredient} colors={colors} />
-          ))
+          <RecipeIngredientList ingredients={ingredients} />
         ) : (
           <Text style={[typeScale.bodySmall, styles.emptySection, { color: colors.textMuted }]}>
             {RECIPE_OVERVIEW_NO_INGREDIENTS}
@@ -690,15 +662,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.space6,
     marginBottom: spacing.space2,
   },
+  // The step list only, now that the ingredient list draws its own — see
+  // RecipeIngredientList's `line`, which deliberately carries the same value
+  // so two lists under two sibling headings share one rhythm.
   listLine: {
     marginBottom: spacing.space2,
-  },
-  // Only the illustrated lines become rows. A line without a glyph stays the
-  // plain block it always was, so an unknown ingredient costs no layout.
-  ingredientLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space2,
   },
   emptySection: {
     marginBottom: spacing.space2,

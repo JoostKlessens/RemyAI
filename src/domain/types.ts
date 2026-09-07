@@ -511,6 +511,54 @@ export interface MealIngredient {
   readonly unit: string | null;
   readonly allergenTags: readonly string[];
   readonly sortOrder: number;
+  /**
+   * The sub-recipe heading this ingredient was printed under
+   * (`meal_ingredients.section`, migration 0018) — "Voor het beslag", "Voor
+   * de frosting", "Per la crema". The owner's ask: "als het recept de
+   * ingredienten verdeelt per categorie ... dan moet het ook duidelijk zijn
+   * welke ingredienten er per subonderdeel nodig zijn".
+   *
+   * FREE TEXT, IN THE SOURCE'S OWN LANGUAGE, AND DELIBERATELY NOT A CLOSED
+   * VOCABULARY. Every other taxonomy on a recipe in this codebase is a fixed
+   * list — `dishTags`, `dishMoods`, `dishCourse` — because each of them is
+   * something the app FILTERS on, and a value outside the list is
+   * unfilterable by construction. Nothing filters, searches or groups
+   * anything across recipes by this field; it is one recipe's own internal
+   * heading, rendered back to the household that imported it. A vocabulary
+   * would therefore buy nothing and would cost the thing that matters most
+   * here: the extraction prompt's standing rule is "preserve the source's own
+   * language, do not translate", and a closed Dutch list would force a Danish
+   * cake's headings into words its recipe never used.
+   *
+   * NEVER INFERRED, ONLY TRANSCRIBED. `ingredientCategories.ts` derives a
+   * drawable category from an ingredient's text and argues at length for what
+   * that costs; this field is the opposite kind of thing. The extraction
+   * schema asks the model to copy a heading the source actually printed and
+   * forbids inventing one (buildExtractionRequest.ts), and nothing downstream
+   * guesses a heading from a name, a position or a unit.
+   *
+   * `null` MEANS "BELONGS TO NO SUB-RECIPE", WHICH IS THE ORDINARY ANSWER,
+   * not a gap waiting to be filled. Most recipes are one list, and a
+   * one-list recipe renders exactly as it always did — see
+   * `groupIngredientsBySection` (src/domain/ingredientSections.ts), which is
+   * the only reader.
+   *
+   * OPTIONAL for the same stored/absent equivalence `recipeId?` and
+   * `excludedFromCookProof?` above rest on: the column arrived after this
+   * type, so every ingredient row in every install is missing the key, and a
+   * missing key already means what `null` means. Required would additionally
+   * force a value into every `MealIngredient` literal across the codebase —
+   * the fixtures, the repository tests, the friend-feed fixtures — several of
+   * them in files this change deliberately does not reach.
+   *
+   * WHAT AN EDIT DOES TO IT, STATED HERE BECAUSE IT IS NOT OBVIOUS FROM THE
+   * TYPE. The recipe editor edits an ingredient as one free-text line and has
+   * no control for a heading, so `UpdateMealRecipeInput` carries none.
+   * `updateMealRecipe` therefore keeps the stored sections when the edited
+   * list is still the list that was stored, and drops them when it is not —
+   * see its own comment for why preserving-by-position would be a guess.
+   */
+  readonly section?: string | null;
 }
 
 export interface MealStep {

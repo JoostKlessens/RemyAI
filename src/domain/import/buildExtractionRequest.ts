@@ -28,6 +28,24 @@
  * has to be regex-scraped, and a schema that has no honest way to say
  * "I don't know."
  *
+ * THE `section` FIELD IS THE ONE PLACE THAT MECHANISM HAD TO BE POINTED THE
+ * OTHER WAY, and it is worth naming because everything above defends against
+ * a model that answers too little. A sub-recipe heading ("Voor het beslag")
+ * is the field a model is most tempted to answer too MUCH: shown a flat list
+ * of twelve ingredients it will cheerfully invent "Voor de saus" and "Voor de
+ * rest", because grouping reads like a better answer than not grouping. The
+ * result passes every validator — it is a well-formed string in a nullable
+ * string field — and it is a lie a household then shops from.
+ *
+ * There is no schema constraint that can catch that, the way `enum` catches
+ * an invented dish tag: a heading is free text in the source's own language
+ * precisely so a Danish cake keeps its Danish words. So the defence is stated
+ * three times instead, in the two system prompts and in the field's own
+ * description, and it is always the same sentence — use null unless the
+ * source itself prints a heading above this ingredient. Null is the expected
+ * answer for most recipes, not a fallback, which is why `section` is
+ * `nullable: true` and stays out of `required`.
+ *
  * NOTE ON THE SCHEMA DIALECT. Gemini's `parameters` is an OpenAPI 3.0
  * Schema subset, not JSON Schema. Two differences bite here, and they are
  * why this file cannot be a copy of a JSON-Schema tool definition: a
@@ -190,6 +208,8 @@ Your ONLY source of information is the caption text you are given below. You hav
 
 If the caption states an ingredient or a step, extract it using report_recipe. Copy quantities and units exactly as written; use null for a quantity or unit the caption doesn't state — never invent a plausible-looking number.
 
+Some recipes divide their ingredients under sub-recipe headings ("Voor het beslag", "Voor de frosting", "For the sauce"). When the caption prints such a heading, put it word for word in the section field of every ingredient listed under it, in the caption's own language. When the caption simply lists ingredients — which is the usual case — use null for section on all of them. Never invent a heading, never translate one, and never split a plain list into groups you thought up: a made-up heading sends someone to the shop for the wrong half of the recipe.
+
 If the caption does NOT contain the actual ingredients and steps needed to cook something — for example, it only shows off a finished dish, is a caption about something unrelated to cooking, or is vague ("the best pasta you'll ever have") without concrete ingredients or instructions — you MUST call report_no_recipe instead. This is the correct, expected answer for most captions, not a failure. Do not call report_recipe with an invented, guessed, or "typical for this dish" recipe just because the video is probably about food: a wrong recipe someone actually cooks from is worse than honestly finding nothing.
 
 Preserve the caption's own language in the output (do not translate). Only set estimatedMinutes or servings when the caption explicitly states them — never estimate.
@@ -251,6 +271,8 @@ Your ONLY source of information is the image you are given. Read what is actuall
 
 Transcribe, do not complete. If a quantity or a unit is smudged, cut off, folded, or otherwise unreadable, use null for it rather than guessing the most likely number — a wrong quantity someone actually cooks from is worse than a missing one. Never round, convert, or tidy up a number: copy what is written.
 
+Printed recipes often divide their ingredients under sub-recipe headings ("Voor het beslag", "Voor de frosting", "For the sauce"). When the page prints such a heading above a block of ingredients, put it word for word in the section field of every ingredient in that block, in the language it is written in. When the page simply lists ingredients, use null for section on all of them. Never invent a heading, never translate one, and never divide a plain list into groups of your own — and if the layout leaves you unsure which heading an ingredient sits under, use null rather than choosing one.
+
 If the photo shows more than one recipe — an open book usually shows two pages — extract only the one recipe the photo is plainly centred on, and never mix ingredients from one page into the steps of another. If it is genuinely unclear which recipe the photo is of, call report_no_recipe.
 
 If the image does NOT contain the actual ingredients and steps needed to cook something — for example a photo of a finished dish, a menu, a shopping list, a page of prose about food, or a page of a recipe that does not include its ingredients or its method — you MUST call report_no_recipe instead. This is the correct, expected answer, not a failure.
@@ -305,6 +327,26 @@ function buildReportRecipeFunction(source: ExtractionSourceNoun): GeminiFunction
               type: 'STRING',
               nullable: true,
               description: `Copied verbatim from the ${source}, or null if not stated.`,
+            },
+            /**
+             * The sub-recipe heading this ingredient is printed under, and the
+             * one field in this schema whose main risk is INVENTION rather
+             * than omission. A model shown a flat list will happily group it
+             * into "Voor de saus" and "Voor de rest" because that reads like a
+             * better answer, and the result is structurally perfect and
+             * completely made up — the failure mode nothing downstream can
+             * detect. So the description spends its whole length on the
+             * refusal, and the system prompts say it again in their own words.
+             *
+             * `nullable: true` and absent from `required` below, like
+             * `quantity` and `unit`: null is not a fallback here, it is the
+             * expected answer for the great majority of recipes, which print
+             * no headings at all.
+             */
+            section: {
+              type: 'STRING',
+              nullable: true,
+              description: `The sub-recipe heading this ingredient is listed under in the ${source} ("Voor het beslag", "For the frosting"), copied word for word in the ${source}'s own language. Use null unless the ${source} itself prints a heading above this ingredient — never invent one, never translate one, and never divide a plain list into sections of your own.`,
             },
           },
           required: ['name'],

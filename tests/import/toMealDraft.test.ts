@@ -127,8 +127,8 @@ describe('toMealDraft — field mapping', () => {
     });
     const draft = toMealDraft(recipe, TIKTOK_CONTEXT);
     expect(draft.ingredients).toEqual([
-      { name: 'Kip', quantity: '300', unit: 'g', sortOrder: 0 },
-      { name: 'Citroen', quantity: '1', unit: null, sortOrder: 1 },
+      { name: 'Kip', quantity: '300', unit: 'g', sortOrder: 0, section: null },
+      { name: 'Citroen', quantity: '1', unit: null, sortOrder: 1, section: null },
     ]);
   });
 

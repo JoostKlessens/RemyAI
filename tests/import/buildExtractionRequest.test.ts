@@ -209,6 +209,7 @@ describe('buildExtractionRequest — Gemini schema dialect', () => {
     ).items?.properties;
     expect(ingredientProperties?.quantity).toMatchObject({ type: 'STRING', nullable: true });
     expect(ingredientProperties?.unit).toMatchObject({ type: 'STRING', nullable: true });
+    expect(ingredientProperties?.section).toMatchObject({ type: 'STRING', nullable: true });
   });
 
   test('declares every type with the canonical uppercase Type enum', () => {
@@ -218,6 +219,62 @@ describe('buildExtractionRequest — Gemini schema dialect', () => {
     for (const declaredType of declaredTypes) {
       expect(declaredType).toBe(declaredType.toUpperCase());
     }
+  });
+});
+
+/**
+ * The sub-recipe heading (`section`), which is the one field in this schema
+ * whose failure mode runs the OTHER WAY from everything else here.
+ *
+ * The rest of this file's defences are against a model that answers too
+ * little: `report_no_recipe` exists so "I found nothing" is sayable, and
+ * `quantity`/`unit` are nullable so an unstated amount does not have to be
+ * invented. A heading is what a model over-answers. Shown a flat list it will
+ * happily group it into "Voor de saus" and "Voor de rest", because grouping
+ * reads like a better answer — and the result is a well-formed string in a
+ * nullable string field, so nothing downstream can tell.
+ *
+ * There is no schema constraint that catches that, the way `enum` catches an
+ * invented dish tag: a heading is free text in the source's own language, on
+ * purpose. So what is pinned here is the only defence there is — the refusal,
+ * stated in the field's own description and in BOTH system prompts, and the
+ * fact that `section` is never made required.
+ */
+describe('buildExtractionRequest — section (the sub-recipe heading)', () => {
+  function ingredientSectionSchema(): { readonly description?: unknown } {
+    const reportRecipe = functionDeclarations().find((declaration) => declaration.name === 'report_recipe');
+    const properties = (reportRecipe?.parameters.properties ?? {}) as Record<string, unknown>;
+    const items = (properties.ingredients as { items?: { properties?: Record<string, unknown> } }).items;
+    return (items?.properties?.section ?? {}) as { description?: unknown };
+  }
+
+  test("tells the model in the field's own description never to invent a heading", () => {
+    const description = String(ingredientSectionSchema().description ?? '').toLowerCase();
+    expect(description).toContain('never invent');
+    expect(description).toContain('null');
+  });
+
+  test('leaves section out of `required` — most recipes print no headings at all', () => {
+    const reportRecipe = functionDeclarations().find((declaration) => declaration.name === 'report_recipe');
+    expect(reportRecipe?.parameters.required).not.toContain('section');
+  });
+
+  test('repeats the refusal in the caption system prompt, where prose is the only place it can live', () => {
+    const prompt = (
+      buildExtractionRequest({ caption: CAPTION, authorName: null }).systemInstruction.parts[0]?.text ?? ''
+    ).toLowerCase();
+    expect(prompt).toContain('section');
+    expect(prompt).toContain('never invent a heading');
+  });
+
+  test('repeats it in the photo system prompt too, so the two routes cannot drift apart', () => {
+    // The photo input is declared inside the SRC-07 describe above and is not
+    // in scope here; a two-field literal is cheaper than hoisting it.
+    const prompt = (
+      buildPhotoExtractionRequest({ mimeType: 'image/jpeg', base64: 'QUJD' }).systemInstruction.parts[0]?.text ?? ''
+    ).toLowerCase();
+    expect(prompt).toContain('section');
+    expect(prompt).toContain('never invent a heading');
   });
 });
 

@@ -121,7 +121,7 @@ export interface MirrorMealRow {
   readonly created_at: string;
 }
 
-/** `meal_ingredients` (0001). No timestamps and no visibility analogue — the row is the whole ingredient. */
+/** `meal_ingredients` (0001 + 0018). No timestamps and no visibility analogue — the row is the whole ingredient. */
 export interface MirrorMealIngredientRow {
   readonly id: string;
   readonly meal_id: string;
@@ -130,6 +130,21 @@ export interface MirrorMealIngredientRow {
   readonly unit: string | null;
   readonly allergen_tags: readonly string[];
   readonly sort_order: number;
+  /**
+   * `meal_ingredients.section` (0018) — the sub-recipe heading, mirrored so a
+   * cake looks the same on a reinstall as it did on the device it was
+   * imported on.
+   *
+   * `string | null` AND NOT OPTIONAL, unlike the domain field it comes from.
+   * The row is an upsert payload, and a key PostgREST never receives is not
+   * the same instruction as a key it receives as null: the first leaves
+   * whatever the stored row already held, which after an edit that removed a
+   * heading is the heading the household just got rid of. `toMealIngredientRows`
+   * below therefore states it on every row, exactly as `toMealRow` states
+   * `excluded_from_cook_proof` rather than letting an absent local value
+   * become an absent column.
+   */
+  readonly section: string | null;
 }
 
 /** `meal_steps` (0001). `unique (meal_id, step_number)` is why mirrorWrites.ts deletes before it upserts here. */
@@ -269,6 +284,12 @@ export function toMealIngredientRows(
     unit: ingredient.unit,
     allergen_tags: ingredient.allergenTags,
     sort_order: ingredient.sortOrder,
+    // `?? null`, the same normalisation `excluded_from_cook_proof` gets one
+    // function up: the domain field is optional because every row written
+    // before 0018 is missing the key, and a missing key already means "this
+    // ingredient belongs to no sub-recipe". Stating it keeps the upsert an
+    // instruction rather than a silence.
+    section: ingredient.section ?? null,
   }));
 }
 

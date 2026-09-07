@@ -431,8 +431,8 @@ describe('extractRecipeFromHtml — the whole extraction', () => {
       recipe: {
         title: 'Traybake met kip en citroen',
         ingredients: [
-          { name: 'kipfilet', quantity: '300', unit: 'g' },
-          { name: 'olijfolie', quantity: '2', unit: 'el' },
+          { name: 'kipfilet', quantity: '300', unit: 'g', section: null },
+          { name: 'olijfolie', quantity: '2', unit: 'el', section: null },
         ],
         steps: ['Oven voorverwarmen op 200 graden.', 'Alles 25 minuten roosteren.'],
         estimatedMinutes: 35,
