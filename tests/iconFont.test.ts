@@ -27,14 +27,17 @@ const EXPECTED_FEATHER: readonly IconName[] = [
 ];
 
 /**
- * The eighteen names MaterialCommunityIcons draws, same rule: written out by
- * hand from glyphmaps/MaterialCommunityIcons.json (7448 glyphs) rather than
- * read back out of the module under test.
+ * The twenty-eight names MaterialCommunityIcons draws, same rule: written out
+ * by hand from glyphmaps/MaterialCommunityIcons.json (7448 glyphs) rather
+ * than read back out of the module under test. (The count said "eighteen"
+ * while the list held twenty-seven — it had not been recounted when the
+ * ingredient categories landed. Recomputed here rather than incremented.)
  */
 const EXPECTED_MATERIAL_COMMUNITY: readonly IconName[] = [
   'timer',
   'cooking-pot',
   'bowl-steam',
+  'cooked',
   'pasta',
   'rice-bowl',
   'potato',
@@ -149,6 +152,22 @@ describe('isIconAvailable', () => {
     expect(isIconAvailable('timer')).toBe(true);
     expect(resolveInstalledGlyph('timer')).toEqual({ family: 'material-community', name: 'timer-sand' });
     expect(resolveInstalledGlyph('clock')).toEqual({ family: 'feather', name: 'clock' });
+  });
+
+  /**
+   * `cooked` is the second name whose glyph was ARGUED rather than picked,
+   * so it gets the same treatment as `timer`. It replaced Feather's `check`
+   * on the library tile because a check beside a calendar reads as a to-do
+   * box — the owner read the badge as the inverse of its meaning on a real
+   * device. The truer drawing, `pot-steam`, was unavailable: it is already
+   * Remy's `wok`, and the uniqueness invariant below forbids a second name
+   * on one drawing. Pinning both sides is what stops that being undone by a
+   * tidy-up that only reads one of the two tables.
+   */
+  test('draws the library tile history mark as a kitchen object, not the check it replaced', () => {
+    expect(resolveInstalledGlyph('cooked')).toEqual({ family: 'material-community', name: 'chef-hat' });
+    expect(resolveInstalledGlyph('check')).toEqual({ family: 'feather', name: 'check' });
+    expect(resolveInstalledGlyph('cooked')).not.toEqual(resolveInstalledGlyph('wok'));
   });
 });
 

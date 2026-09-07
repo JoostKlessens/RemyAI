@@ -62,11 +62,11 @@
  *   MaterialCommunityIcons 1277.0 KB .ttf   212.4 KB glyphmap JSON
  *
  * That is 1.25 MB of font asset and 212 KB of JSON parsed into the JS
- * bundle at startup, for eighteen glyphs out of 7448 — 0.24% of the glyphs
- * at 100% of the weight. It is recorded here rather than in a document
+ * bundle at startup, for twenty-eight glyphs out of 7448 — 0.38% of the
+ * glyphs at 100% of the weight. It is recorded here rather than in a document
  * because this is the file where someone would act on it. The cheaper path
  * exists and is deliberately not taken yet: `createIconSet` accepts a custom
- * glyph map, so the eighteen codepoints could be lifted out of the glyphmap
+ * glyph map, so the twenty-eight codepoints could be lifted out of the glyphmap
  * and pointed at the same `.ttf` the package already ships, dropping the
  * 212 KB. It would cost the compiler check below — the thing that makes
  * every name in this file verified rather than remembered — and hard-code
@@ -88,7 +88,9 @@
  * prop, whose type IS that glyphmap's key set, so `npx tsc --noEmit` fails
  * the moment one of these strings stops naming a real glyph. The union
  * members were additionally checked by hand against
- * glyphmaps/MaterialCommunityIcons.json (7448 keys) on 7 September 2026.
+ * glyphmaps/MaterialCommunityIcons.json (7448 keys) on 7 September 2026 —
+ * `chef-hat` included, added the same day for the library tile's history
+ * mark and read out of that file rather than remembered.
  *
  * ⚠ WHICH GLYPH DRAWS WHICH TAG IS A DESIGN CHOICE AND NOT A MEASUREMENT.
  * That the font CAN draw all seventeen is measured. That `aardappel` is best
@@ -142,6 +144,12 @@ export const ICON_NAMES = [
   // op de lege bibliotheek").
   'cooking-pot',
   'bowl-steam',
+  // The library tile's history mark, at 14 pt. Deliberately in a group of its
+  // own: it is not one of WS4's UI glyphs (it says something about a RECIPE,
+  // not about a control) and it is not a dish (it names an event, not a
+  // food). libraryTileBadge.ts owns why the one fact on that tile which is
+  // not a plan needed a drawing of its own.
+  'cooked',
   // One per DISH_TAGS entry — see dishTagIcons.ts for which tag gets which,
   // and for why two tags reuse `cooking-pot`/`bowl-steam` from the display
   // list rather than getting near-duplicate names of their own.
@@ -214,7 +222,7 @@ export type FeatherGlyphName =
   | 'x';
 
 /**
- * The MaterialCommunityIcons glyphs this app names, eighteen of 7448. Listed
+ * The MaterialCommunityIcons glyphs this app names, twenty-eight of 7448. Listed
  * one by one rather than typed as `string`, because a narrow union is what
  * makes the compiler check in Icon.tsx worth having: a typo here is a build
  * failure, and a typo in a `string` is a blank space on a phone.
@@ -226,6 +234,7 @@ export type MaterialCommunityGlyphName =
   | 'candy'
   | 'carrot'
   | 'cheese'
+  | 'chef-hat'
   | 'cow'
   | 'egg'
   | 'fish'
@@ -331,6 +340,32 @@ const INSTALLED_GLYPH_BY_ICON: Readonly<Partial<Record<IconName, InstalledGlyph>
   // minting near-duplicates.
   'cooking-pot': materialCommunity('pot-mix'),
   'bowl-steam': materialCommunity('bowl-mix'),
+  // ⚠ THE ONE ENTRY IN THIS TABLE CHOSEN AGAINST A BETTER DRAWING RATHER THAN
+  // FOR ITSELF, so it is flagged the way the three guesses above are.
+  //
+  // `pot-steam` is the better picture of "iemand heeft dit gekookt" — steam
+  // only rises while or just after cooking, which is exactly the tense the
+  // badge needs. It is unavailable for two independent reasons, both measured
+  // rather than felt. (1) It is already Remy's `wok` (see the dish tags
+  // below), and the invariant in tests/iconFont.test.ts refuses two Remy names
+  // on one drawing outright — "which would make two controls look identical".
+  // (2) That is not a technicality here: LibrarySearchBar draws the
+  // "Waarmee?" chips through iconForDishTag on the SAME screen as the tile
+  // grid, so a `pot-steam` badge would sit inches from a `pot-steam` chip
+  // LABELLED "Wokgerecht" — the labelled one would teach the wrong meaning to
+  // the unlabelled one, swapping the check mark's misreading for a new one.
+  //
+  // `pot-steam-outline` exists and would pass that test on the name while
+  // failing it on the eye; picking it would be gaming the invariant.
+  // `silverware-fork-knife` is thin parallel strokes and this badge draws at
+  // 14 pt (RecipeTile's BADGE_GLYPH_SIZE). `history` is a clock face, which
+  // this file already refuses for any new meaning — see `timer` above.
+  //
+  // A chef's hat is nobody's first choice for a household app and it is the
+  // honest second: an unmistakable silhouette at 14 pt, spent on no other
+  // name, and — the only property that actually matters — impossible to read
+  // as a to-do box, which is what went wrong with `check`.
+  cooked: materialCommunity('chef-hat'),
   // Base / carbohydrate.
   pasta: materialCommunity('pasta'),
   'rice-bowl': materialCommunity('rice'),
@@ -411,10 +446,10 @@ export function resolveInstalledGlyph(name: IconName): InstalledGlyph | null {
 }
 
 /**
- * Whether an installed font can draw this icon. True for all thirty-three
- * names since GAP-19 landed, and this function does not go away for it: the
- * ratio was fifteen of thirty-three the day before, and the next icon the
- * design asks for will make it thirty-three of thirty-four.
+ * Whether an installed font can draw this icon. True for all forty-five
+ * names, and this function does not go away for it: the ratio was fifteen of
+ * thirty-three the day before GAP-19 landed, and the next icon the design
+ * asks for will make it forty-five of forty-six.
  *
  * Call sites use it to choose a LAYOUT, never to choose a placeholder — see
  * Icon.tsx's header for why a placeholder is the one thing this seam refuses

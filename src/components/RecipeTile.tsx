@@ -42,9 +42,22 @@
  *
  * 2. THE BADGE IS A GLYPH WHERE THERE IS AN HONEST ONE. "Nog geen planning"
  *    drew 138.4pt inside a 170.5pt tile before this change; at 109.7pt it is
- *    not close. libraryTileBadge.ts owns which state draws what and why two
- *    of the four keep words — and, for `geen_planning`, why the honest badge
- *    is none at all.
+ *    not close. libraryTileBadge.ts owns which state draws what: a calendar
+ *    for `deze_week`, the WORD "Ooit" for `ooit` (the one badge deliberately
+ *    kept as text), a chef's hat for `al_gekookt`, and nothing at all for
+ *    `geen_planning`.
+ *
+ *    THAT HAT USED TO BE A CHECK MARK, AND THE OWNER READ IT BACKWARDS on a
+ *    device — a check beside a calendar is to-do-list vocabulary, so "al
+ *    gekookt" came across as "dit wil ik nog koken". The fix is a glyph swap
+ *    and nothing more, because the four scheduling states already partition
+ *    the owner's own question: `al_gekookt` means at least one cook event and
+ *    the other three mean none, which recipeScheduling.ts:45-63 guarantees by
+ *    checking cook events before it ever looks at a save. ONE badge is
+ *    therefore all the data supports; the marks were made to differ in KIND
+ *    (a kitchen object versus a planning object) rather than a second chip
+ *    being added that would have had nothing to say. libraryTileBadge.ts
+ *    carries that measurement and the rejected two-mark design in full.
  *
  * NEITHER COSTS A SCREEN-READER USER ANYTHING. `accessibilityLabel` below is
  * still "<title>, <scheduling state>" in full, on every tile, unchanged. Both
@@ -242,6 +255,18 @@ interface BadgeStyle {
  * translucent scrim-toned chip for `geen_planning` — the least-resolved
  * state gets the least visual weight, not a warning colour (this is a
  * scheduling gap, not an error).
+ *
+ * UNCHANGED BY THE BADGE REDESIGN, ON PURPOSE. When `al_gekookt` stopped
+ * being a check mark and became a chef's hat, the obvious follow-on was to
+ * re-tone it too — green-on-green is "success" vocabulary and a cooked dish
+ * is history, not an achievement. It was left alone because this exact
+ * pairing is load-bearing outside this file: tests/contrast.test.ts asserts
+ * it, and ShoppingListRow.tsx's header cites it by name ("the 'gemaakt' chip
+ * in RecipeTile.tsx uses the same `positive`-on- ..."). Re-toning would
+ * falsify a comment in a file this change does not own, to fix a thing
+ * nobody reported. What the owner misread was the GLYPH; the colour never
+ * came up. Anyone who does want to revisit it should move all three call
+ * sites together.
  */
 function resolveBadgeStyle(state: RecipeSchedulingInfo['state'], colors: ColorTokens): BadgeStyle {
   switch (state) {
