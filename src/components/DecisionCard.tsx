@@ -285,13 +285,44 @@ export interface DecisionCardProps {
  * number somebody can look at on a phone for a rule nobody can, and it does
  * not close the risk below.
  *
- * THE OPEN RISK, ACCEPTED RATHER THAN SOLVED: at very large Dynamic Type the
- * name and the friend line grow, the photo does not shrink, and the card
- * runs past `heroBlock` — there is no scroll on this screen. That is the
- * same exposure A6 below already takes on purpose by refusing to cap the
- * dish name, and it is what a hero that is one fixed composition costs. If
- * it ever needs fixing, the fix is a scroll view or a photo that shrinks
- * with the type, not a smaller default for everybody.
+ * ⚠ THIS WAS "AN OPEN RISK, ACCEPTED RATHER THAN SOLVED", AND IT CAME DUE
+ * WITHIN A DAY. The paragraph below is kept because its reasoning was right
+ * and its ESTIMATE OF WHEN was wrong, which is the more useful half to
+ * remember:
+ *
+ *   "at very large Dynamic Type the name and the friend line grow, the photo
+ *   does not shrink, and the card runs past `heroBlock` — there is no scroll
+ *   on this screen... If it ever needs fixing, the fix is a scroll view or a
+ *   photo that shrinks with the type, not a smaller default for everybody."
+ *
+ * It was scoped to "very large Dynamic Type" because the height budget that
+ * sized this photo was written against the filter bar SHUT (73 pt). The bar
+ * became a disclosure on the same day, in a package built in parallel with
+ * this one, and OPEN it is 235 pt — so `heroBlock` drops from 544 to 382
+ * while the card still wants ~453. The card overflowed by ~71 pt, `heroBlock`
+ * centres, and React Native does not clip: half of that drew over the filter
+ * bar, and the top element of this card is the dish name. The owner saw the
+ * filters overlapping the recipe's name.
+ *
+ * TAKEN: the second of the two fixes it named. The photo shrinks — see
+ * `photoFrame` and the `flexShrink` chain above it. `PHOTO_WIDTH` stays 200
+ * and remains what the card wants; it is now a CEILING rather than a fixed
+ * size, so nothing gets a smaller default and a cramped hero costs the photo
+ * instead of the layout.
+ *
+ * THE REJECTED FIX, and it is the conventional reading of "uitklap menu": let
+ * the drawer FLOAT over the hero with a scrim instead of pushing it. The hero
+ * never resizes, so nothing can overflow. It loses on what the drawer was for
+ * — the owner asked for it so the screen would be less busy and the photo
+ * could be bigger, and a panel over the photo is busier than one beside it —
+ * and it trades a visible overlap for a deliberate one, which is a harder
+ * thing to get right than an honest resize.
+ *
+ * ⚠ THE LESSON IS ABOUT THE SPLIT, NOT THE CSS. Two packages were built in
+ * parallel on strictly separate file lists and each verified green ALONE.
+ * The height budget runs straight through that separation: neither agent
+ * could see the other's contribution to it, and the number that broke was the
+ * one neither owned. Disjoint files are not disjoint layouts.
  *
  * 9:16 AND NOT 4:5, even though ui-research/ASSEMBLY.md §2.2 recommends 4:5:
  * that recommendation is about DENSITY (5.8 tiles per screen against 3.7)
@@ -396,7 +427,12 @@ export function DecisionCard(props: DecisionCardProps): JSX.Element {
           header has the owner's instruction and what the space bought.
           Nothing replaces it: the dish name is the first thing on the
           screen now, which is what it was always meant to be. */}
-      <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      {/* `flexShrink: 1` alongside the animated values, and it is load-bearing
+          rather than defensive: this view is the link between `container` and
+          the photo, and a link that cannot shrink stops the chain. The
+          animated `opacity`/`translateY` are unaffected — neither is a layout
+          property, which is why the swap still runs on the native driver. */}
+      <Animated.View style={{ opacity, transform: [{ translateY }], flexShrink: 1 }}>
         <View style={styles.dishTitleWrap}>
           {/* A6: no numberOfLines cap — this is the single most important
               content in the app; docs/DESIGN.md prefers letting a row grow
@@ -472,6 +508,13 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingHorizontal: spacing.screenPaddingHorizontal,
+    // BOUNDED BY `heroBlock`, WHICH IS WHAT LETS THE PHOTO SHRINK INSTEAD OF
+    // THE CARD OVERFLOWING. Yoga only shrinks a child when its container has
+    // a definite main-axis size; without this the column sized itself from
+    // its content and simply ran past the block it sits in — and RN does not
+    // clip by default, so the overflow drew ON TOP of the filter bar above.
+    // `heroBlock` is `flex: 1`, so `flexShrink` here is the whole chain.
+    flexShrink: 1,
   },
   dishTitleWrap: {
     position: 'relative',
@@ -511,8 +554,21 @@ const styles = StyleSheet.create({
     // a fixed width, so it says so itself rather than relying on the column
     // it happens to sit in today.
     alignSelf: 'center',
-    width: PHOTO_WIDTH,
+    // HEIGHT IS THE BASIS AND `aspectRatio` DERIVES THE WIDTH, WHICH IS THE
+    // REVERSE OF HOW THIS STARTED. With `width` fixed, `flexShrink` shrinks
+    // the main axis (height, in this column) while the width stays put, and
+    // the ratio breaks. Sizing from the main axis is what lets Yoga shrink
+    // the frame and recompute the other side, so 9:16 survives every size
+    // this can end up at.
+    height: PHOTO_WIDTH / PHOTO_ASPECT_RATIO,
     aspectRatio: PHOTO_ASPECT_RATIO,
+    flexShrink: 1,
+    // A FLOOR, BECAUSE `flexShrink` ON ITS OWN HAPPILY GOES TO ZERO. Below
+    // roughly this the still stops being a photograph of a dish and becomes a
+    // coloured rectangle, at which point the honest thing is to overflow
+    // visibly rather than pretend. Nothing renders this small today; it is
+    // here so that a future row added to this card fails loudly.
+    minHeight: 140,
     borderRadius: radii.radiusSm,
     overflow: 'hidden',
     alignItems: 'center',
