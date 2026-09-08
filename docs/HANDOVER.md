@@ -81,6 +81,8 @@ omdat elke bevinding erin een *patroon* is dat zich herhaalt.
 | `PRODUCT-DECISIONS.md` | PD-001 t/m **PD-023**. Vastgelegd; niet heropenen zonder aanleiding. PD-002 draagt sinds 5 september een omkeringsbanner, en **PD-015, PD-017 en PD-019 sinds 6 september** — alle vier blijven staan, want dit document draait beslissingen schriftelijk terug en verwijdert het argument nooit. Let op: dit document is Engels, in tegenstelling tot de rest van `docs/`. |
 | `SESSIE-6-SEPTEMBER.md` | Wat er op 6 september gevraagd, gebouwd en gevonden is, inclusief het groeiplan voor de sociale laag en het antwoord op de embed-vraag. **Wegwerpdocument**: zodra dit handover-bestand het heeft opgenomen mag het weg — deze repo heeft zijn procesdocumenten op 3 september bewust opgeruimd. |
 | `DESIGN.md`, `DESIGN-SOCIAL.md`, `ARCHITECTURE.md` | Staande documenten. Zie de waarschuwing onderaan over `DESIGN.md`. `ARCHITECTURE.md`'s sectie over de 16:00-push draagt sinds 5 september een banner: die specificatie is niet tegen deze database te bouwen. |
+| `LOKAAL-DRAAIEN.md` | **Nieuw op 8 september.** Van niets naar een lokale stack: Docker Desktop op Win11/WSL2, `supabase start`, en — de belangrijkste test in dat document — `db reset`, dat alle migraties tegen een lege database afspeelt. Niemand heeft ooit geverifieerd dat dit schema vanaf nul opbouwt. ⚠ Bevat ook het lokaal/productie-onderscheid: dit project **is** gelinkt (`supabase/.temp/project-ref` bestaat), dus `db reset --linked` is een echt gevaar en geen theorie. |
+| `TOESTELTEST.md` | **Nieuw op 8 september.** Afvinkbare lijst voor alles wat nooit op een scherm is gezien, Android bovenaan omdat dat de goedkoopste meting met het grootste gevolg is. |
 | `MEETPLAN.md` | **Nieuw op 8 september.** Hoe je meet wat mensen gebruiken, in twee lagen: SQL over wat er al staat, en pas daarna een gesloten set eigen events. ⚠ **Lees in elk geval de eerste sectie voordat je iets over meten aanneemt** — de premisse "de database is een event log" is maar half waar. De bron van waarheid is AsyncStorage op het toestel; `decisions` en `saves` spiegelen NIET naar Supabase, dus "aangeboden op Kiezen" en "gekozen" zijn er niet uit te halen. PD-004's save-to-cook blijft wél meetbaar, via `meals` → `cook_events`. |
 
 ---
@@ -1065,7 +1067,13 @@ geen code maar één handeling. De rest is werk.
    filterlade** eromheen, de **glyphs in de chips** (een glyph vult zijn
    hele em-vak waar een letter alleen zijn kaphoogte vult, dus hij oogt snel
    zwaar — en de schijnbare afstand tot het woord ging van 24pt naar 8pt), de
-   **twee zelfgetekende glyphs** (melkpak en peul, alleen als geometrie
+   **twee zelfgetekende glyphs** (⚠ **NIET TE TESTEN — SCHRAP DIT PUNT.**
+   `dairy` en `legumes` hebben geen aanroepplek: hun enige consument was
+   `ingredientCategoryIcons.ts`, en `ingredientCategories.ts:11` zegt zelf
+   "THE ONE REMAINING IMPORT IN src/ IS NOT A CALLER". Er is geen scherm dat
+   ze tekent, dus er valt niets te bekijken. Gevonden op 8 september bij het
+   opstellen van `TOESTELTEST.md`, waar ze als expliciet overslaan staan —
+   melkpak en peul, alleen als geometrie
    geverifieerd en nooit door react-native-svg gerenderd), of
    `react-native-svg` **in Expo Go** doet wat het SDK-manifest belooft, de
    **34pt** die `Ja`/`Iets anders` zakten, de **`Geavanceerd`-opening**, en de

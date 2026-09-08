@@ -75,20 +75,25 @@ declare
   -- het bestand er wél doordacht uitzag en niemand het uitvoerde.
   --
   -- De les is niet "kijk beter": het is dat een uuid-literal een DATATYPE
-  -- heeft dat je niet kunt zien zonder hem te parsen. De tags hieronder zijn
-  -- daarom alle negen geldig hex, en de controle is één regel die je kunt
-  -- draaien vóór je plakt:
+  -- heeft dat je niet kunt zien zonder hem te parsen. Lezen vond hem niet;
+  -- parsen vindt hem in een fractie van een seconde. Draai daarom vóór je
+  -- plakt:
   --
-  --     grep -v "^[[:space:]]*--" demo_social.sql \
-  --       | grep -o "5eed5eed-0000-4000-8000-[0-9a-zA-Z]*" \
-  --       | grep -v "^5eed5eed-0000-4000-8000-[0-9a-f]\{12\}$"
+  --     npm run check:seed
   --
-  -- Leeg is goed. DIE EERSTE REGEL STRIPT HET COMMENTAAR EN IS NIET
-  -- OPTIONEEL: zonder haar leest de controle haar eigen documentatie mee en
-  -- meldt drie treffers die geen van drieën een uuid-literal zijn — de
-  -- foutmelding hierboven, en het zoekpatroon in deze regels zelf. Een
-  -- controle die op een gezond bestand alarm slaat, is een controle die je
-  -- de volgende keer overslaat.
+  -- (!) HIER STOND EEN GREP-KETEN, EN DIE DEUGDE NIET ALS POORT — wat een
+  -- leerzamere fout is dan de uuid zelf. `grep -v` eindigt met exit 1 als er
+  -- niets overblijft. Nul ongeldige uuid's gaf dus "mislukt" en één gevonden
+  -- fout gaf "geslaagd": precies omgekeerd. Als documentatie werkte hij (een
+  -- mens ziet lege uitvoer en snapt het), als geautomatiseerde controle deed
+  -- hij het tegenovergestelde van wat er stond. Een eerdere versie miste
+  -- bovendien het commentaarfilter en meldde drie valse treffers uit dít
+  -- blok, want het foutvoorbeeld hierboven staat er letterlijk in.
+  --
+  -- `scripts/check-seed-uuids.mjs` doet het wél: hij kiest zijn eigen
+  -- exitcode, draait op cmd.exe zonder Git Bash, strípt commentaar buiten
+  -- strings, en vangt naast een niet-hex teken ook de tweede soort fout die
+  -- een vormcontrole mist — een groep met de verkeerde lengte.
   --
   -- De tags, met de betekenis die de letter niet meer draagt:
   --
