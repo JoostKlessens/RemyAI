@@ -118,12 +118,34 @@
  * where that reads better, and nothing is ever obliged to.
  *
  * THE RE-EXPORTS ARE `export type`, AND THAT SPELLING IS DELIBERATE. A plain
- * `export { ... } from './x.ts'` would compile identically here and emit a
- * real runtime re-export for modules that have nothing to export at run
- * time — a value edge in the graph, resolved literally by Deno, standing for
- * files made entirely of erased types. `export type` guarantees the edge
- * stays erased; the `.ts` extension guarantees it would still resolve if it
- * ever stopped being.
+ * `export { ... }` re-export — the same line without the word `type` — would
+ * compile identically here and emit a real runtime re-export for modules that
+ * have nothing to export at run time: a value edge in the graph, resolved
+ * literally by Deno, standing for files made entirely of erased types.
+ * `export type` guarantees the edge stays erased; the `.ts` extension
+ * guarantees it would still resolve if it ever stopped being.
+ *
+ * (!) THAT SENTENCE USED TO SPELL THE REJECTED FORM OUT IN FULL, WITH A
+ * MADE-UP MODULE PATH AFTER `from`, AND IT BROKE `supabase start` FOR THE
+ * WHOLE PROJECT. On 8 September 2026, the first time anybody ran the local
+ * stack, the CLI refused to boot with:
+ *
+ *     failed to read file: open src/domain/import/x.ts: no such file or directory
+ *
+ * There is no such file and there never was: it was an illustration inside
+ * this comment. The Supabase CLI scans edge-function sources for relative
+ * imports with a matcher that does not strip comments, so an EXAMPLE of a
+ * module specifier is indistinguishable to it from a real one — and this file
+ * is reachable from `supabase/functions/parse-recipe` through
+ * `canonicalRecipeStore.ts`. No container started, and the error named a file
+ * nobody could find in a directory nobody had edited.
+ *
+ * The bug is the CLI's; the constraint is ours and it is real. DO NOT WRITE A
+ * QUOTED MODULE PATH AFTER THE WORD `from` IN ANY COMMENT UNDER
+ * `src/domain/import/**` OR `supabase/functions/**`, not even as an example.
+ * Describe the shape instead, the way the paragraph above now does. A path
+ * that DOES exist would be worse than one that does not: it would resolve,
+ * and quietly pull a file into the function bundle.
  */
 
 export type {

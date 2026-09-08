@@ -953,11 +953,11 @@ geen code maar één handeling. De rest is werk.
    verschijnt gewoon niet en de feed eromheen laadt normaal. Er staat dus
    geen foutmelding op je te wachten die zegt dat dit nog moet.
 
-   ⚠ Regels over de migratiestand zijn in dit document VIER keer onwaar
-   gebleken. Draai `npx supabase migration list` vóór je hier iets beweert;
-   het leest en wijzigt niets. Wat ik zelf gemeten heb op 8 september: niets
-   — er draait hier geen Docker, dus `supabase status` faalt. Wat ik wél weet
-   is dat `0019` vandaag geschreven is en dus onmogelijk al remote kan staan.
+   ✅ **GEDAAN, EN VOOR HET EERST IN DIT DOCUMENT ECHT GEMETEN.** Op
+   8 september ná de reviewronde: `npx supabase migration list` geeft `0001`
+   t/m `0019`, met `local` en `remote` gelijk voor alle negentien. Dat is de
+   meting zelf, niet een gevolgtrekking uit "ik heb het gepusht" — het
+   onderscheid dat dit document vier keer verkeerd heeft gemaakt.
 
    **(b) `supabase/seed/demo_social.sql`** — plakken in de SQL-editor en
    uitvoeren. **Je hoeft niets meer in te vullen**, en dat is de reden dat
@@ -1011,12 +1011,39 @@ geen code maar één handeling. De rest is werk.
    naar het voorvoegsel `5eed5eed` in plaats van een lijst bij te houden, dus
    hij is met de seed meegegroeid zonder aangeraakt te zijn.
 
-   ⚠ **GEEN VAN DEZE TWEE BESTANDEN IS OOIT UITGEVOERD.** Er draait hier geen
-   Postgres en geen Docker, dus de SQL is gelezen en tegen het schema
-   nagelopen, niet gedraaid. De twee dingen die ik daardoor niet weet: of
-   `suggested_friends()` compileert zoals bedoeld, en of de seed in één keer
-   doorloopt. Beide falen luidruchtig in de SQL-editor als er iets mis is —
-   dat is de goedkoopste plek om het te merken.
+   ✅ **ALLES HIERONDER IS OP 8 SEPTEMBER LOKAAL GEDRAAID EN GEMETEN.** Dit
+   blok zei vier alinea's lang "nooit uitgevoerd"; dat is niet meer waar, en
+   dit is de eerste keer in dit project dat de SQL is gedraaid vóór een mens
+   hem in productie plakte. Docker Desktop stond geïnstalleerd en uit; met
+   `npx supabase start` staat de lokale stack er.
+
+   Wat er gemeten is, in deze volgorde:
+
+   - **`npm run db:reset`, exit 0.** Alle negentien migraties toegepast tegen
+     een LEGE database. Daarmee is de vraag beantwoord die niemand ooit had
+     gesteld: dit schema bouwt vanaf nul op. `0019` compileert — dat was tot
+     dat moment onbekend, en beide reviewrondes kwamen niet verder dan "geen
+     blokkerende fout gevonden", wat iets anders is dan "hij draait".
+   - **De seed, lokaal, met een echt profiel `joost`.** De automatische
+     eigenaarsdetectie vond hem. Uitkomst 6 / 1 / 8 / 6 / 18 / 1 — precies
+     wat de controlequery belooft.
+   - **`suggested_friends()` aangeroepen mét een JWT-claim**, wat in de
+     SQL-editor niet kan. Uitkomst: Noor 2 gemeenschappelijke vrienden,
+     Youssef 1, Daan 0 met 6 stemmen. **Tessa staat er niet in.** En
+     `public_votes` voor Noor is 1 en niet 0 — dat is het bewijs dat de
+     drempel op de KWALIFICATIE zit en niet op de telling.
+   - **De drempel doet echt werk.** Dezelfde pool zonder ondergrens geeft
+     Daan 6, Tessa 1, Youssef 1, Noor 1 — Tessa zou er dus in hebben gestaan.
+   - **De beveiliging klopt.** `has_function_privilege('anon', …)` is `false`,
+     `authenticated` is `true`, en zonder JWT geeft de functie nul rijen in
+     plaats van alles. Fail-closed, zoals de kop van `0019` beweert.
+   - **De teardown**, ook nooit gedraaid: alle tien tabellen terug op nul.
+   - **Idempotentie**, tot nu toe een bewering in de kop van de seed: twee
+     keer achter elkaar draaien geeft dezelfde zes aantallen.
+
+   ⚠ **Wat hiermee NIET bewezen is:** dit ging tegen een lokale Postgres, niet
+   tegen productie. `auth.users` komt van GoTrue en de lokale versie hoeft niet
+   die van de cloud te zijn.
 
    **Waarom de keten langer is dan "voeg een vriend toe", want dat is de
    bevinding hier:** de view `shared_cooks` (0009) poort op VIER dingen
