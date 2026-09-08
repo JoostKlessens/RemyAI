@@ -59,6 +59,49 @@
  * into a view model. `RecipeRating.ratedAt` passes through untouched. A
  * list that moves because something is new is a feed wearing a ranking's
  * clothes.
+ *
+ * ===========================================================================
+ * THE FILTER RUNS AFTER THIS MODULE, AND THAT DECIDED HOW MUCH IS FETCHED
+ * ===========================================================================
+ *
+ * Trending grew a reader-set filter on 8 September 2026 (PD-014's amendment).
+ * There were two places to put it, and this file is why it went where it did.
+ *
+ * FILTERING BEFORE THE CUT — narrow the whole ranked set, then take the top
+ * LEADERBOARD_MAX_ROWS of what survives — is the more generous reading of
+ * what a filter is. It gives "de top 25 curries" instead of "de curries in de
+ * top 25", so a reader who picks a tag no top-25 recipe carries still gets
+ * the best curries in the app rather than an empty screen.
+ *
+ * IT IS REFUSED HERE ON AN ARITHMETIC RATHER THAN A TASTE ARGUMENT, and the
+ * arithmetic is the ceiling this codebase already accepted.
+ * `assembleLeaderboard` cannot filter what it was never given a name for, so
+ * filtering before the cut requires `listCanonicalRecipes` to be handed EVERY
+ * over-floor recipe instead of twenty-five. `BOARD_RATING_ROW_CEILING` is
+ * 50 000 rating rows and `LEADERBOARD_MIN_VOTES` is 3, so at the ceiling this
+ * read already tolerates, that call can be asked for up to ~16 600 ids — a
+ * PostgREST `in.(…)` of roughly 600 kB of URL, which does not fail slowly,
+ * it fails. The design that survives its own stated ceiling is the one that
+ * ships.
+ *
+ * MEASURED ON TODAY'S DATA THE TWO ARE INDISTINGUISHABLE, which is why the
+ * ceiling had to decide it. The demo seed holds 8 recipes and 18 ratings, of
+ * which exactly 3 recipes clear the floor — so the ranked set and the top 25
+ * are the same three rows, and both designs fetch the same three recipes.
+ * Nothing measurable today separates them.
+ *
+ * WHAT PAYS FOR THE REFUSAL IS THE CHIP ROW, not a compromise in here. The
+ * chips Trending offers are collected from the cards that are actually on
+ * screen (`collectSelectableBoardDishTags`), so a tag no top-25 recipe
+ * carries is never offered — a reader cannot tap their way to the empty
+ * result the "before" design was meant to avoid. The only way left to empty
+ * the feed is a COMBINATION, and "Wissen" undoes that in one tap.
+ *
+ * ⚠ SO THIS FILE IS UNCHANGED BY THE FILTER, deliberately: same two reads,
+ * same slice to LEADERBOARD_MAX_ROWS, same `assembleLeaderboard`. The filter
+ * is pure and runs on the screen over rows already in hand, which is also
+ * what keeps a chip tap from producing a spinner — the same property the
+ * scope switch has and for the same reason.
  */
 
 import { getKringFixture, type FriendFeedScenario } from '@/fixtures/friendFeedFixtures';
@@ -108,6 +151,15 @@ const NO_FRIEND_VOTES: FriendVotes = { votes: [], voterNames: new Map() };
  * something a household does to its own copy on Bevestigen. So no collision
  * chip can appear on live data, and its absence says nothing whatsoever
  * about the dish. It must never be styled or read as reassurance.
+ *
+ * `dishTags` AND `estimatedMinutes` ARE REAL COLUMNS AND ARE CARRIED, which
+ * is the exact opposite statement from the one above and is why the two sit
+ * in one function. Both are on `recipes` since 0006 and both are written by
+ * the extraction model at import; `allergenTags` is empty here because there
+ * is nothing to carry, not because this mapper declined to carry it.
+ * Trending's filter narrows on these two and on nothing else — see
+ * `leaderboardPresentation.ts` for why a mood or a course axis would be a
+ * filter over a column that does not exist.
  */
 function toBoardRecipe(recipe: CanonicalRecipeSummary): BoardRecipe {
   return {
@@ -117,6 +169,8 @@ function toBoardRecipe(recipe: CanonicalRecipeSummary): BoardRecipe {
     creatorPlatform: recipe.platform,
     thumbnailUrl: recipe.thumbnailUrl,
     allergenTags: [],
+    dishTags: recipe.dishTags,
+    estimatedMinutes: recipe.estimatedMinutes,
   };
 }
 

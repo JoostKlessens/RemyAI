@@ -235,6 +235,21 @@ describe('collectAvailableDishTags', () => {
   test('is empty for a library with no categorized meals', () => {
     expect(collectAvailableDishTags([makeMeal(), makeMeal({ id: 'm-2' })])).toEqual([]);
   });
+
+  /**
+   * The widening this function got on 8 September 2026 so Trending could use
+   * it instead of copying it (GAP-33 is about the copy that already exists).
+   * Asserted with a row shape that is deliberately NOT a `Meal`: if the
+   * constraint ever narrows back to `readonly Meal[]`, this stops compiling,
+   * which is the failure mode worth having.
+   */
+  test('collects from any row carrying dishTags, not only from a Meal', () => {
+    const boardRows = [
+      { recipeId: 'recipe-1', dishTags: ['pasta', 'vegetarisch'] },
+      { recipeId: 'recipe-2', dishTags: ['soep'] },
+    ];
+    expect([...collectAvailableDishTags(boardRows)].sort()).toEqual(['pasta', 'soep', 'vegetarisch']);
+  });
 });
 
 // ---------------------------------------------------------------------------

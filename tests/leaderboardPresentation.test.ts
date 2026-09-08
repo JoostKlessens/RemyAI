@@ -23,7 +23,9 @@ import {
   assembleLeaderboard,
   buildBoardMetaLine,
   buildBoardRowAccessibilityLabel,
+  describeCookTime,
   formatBoardScore,
+  formatCookTime,
   formatVoteCount,
 } from '@/components/leaderboardPresentation';
 import type { BoardRecipe } from '@/components/leaderboardPresentation';
@@ -49,6 +51,12 @@ function makeBoardRecipe(overrides: Partial<BoardRecipe> = {}): BoardRecipe {
     creatorPlatform: 'tiktok',
     thumbnailUrl: null,
     allergenTags: [],
+    // The two filter axes, added 8 September 2026. Both default to their
+    // absent value rather than to something convenient: an empty `dish_tags`
+    // and a null `estimated_minutes` are the ordinary state of a canonical
+    // recipe, not an edge case, so the default fixture is the ordinary one.
+    dishTags: [],
+    estimatedMinutes: null,
     ...overrides,
   };
 }
@@ -206,28 +214,87 @@ describe('assembleLeaderboard', () => {
   });
 });
 
+describe('the cook time on a card', () => {
+  /** The visible form, which `DecisionCard` prints inline on Kiezen and which therefore has no coverage there. */
+  test('is written the way Kiezen writes it', () => {
+    expect(formatCookTime(25)).toBe('25 min');
+  });
+
+  /**
+   * The spoken form is deliberately NOT the visible one: "min" is an
+   * abbreviation a screen reader may or may not expand, and which expansion
+   * it picks is not something to gamble on.
+   */
+  test('is spoken in full, never as the abbreviation', () => {
+    expect(describeCookTime(25)).toBe('25 minuten');
+    expect(describeCookTime(25)).not.toBe(formatCookTime(25));
+  });
+});
+
 describe('buildBoardRowAccessibilityLabel', () => {
-  test('reads the position, the dish and the score as one sentence', () => {
+  const label = (recipe: BoardRecipe): string => {
     const rows = assembleLeaderboard({
-      ratings: votes('recipe-1', 5, LEADERBOARD_MIN_VOTES + 10),
-      recipes: [makeBoardRecipe()],
-      excludedAllergenTags: [],
+      ratings: votes(recipe.recipeId, 5, LEADERBOARD_MIN_VOTES + 10),
+      recipes: [recipe],
+      excludedAllergenTags: recipe.allergenTags,
     });
-    const row = rows[0];
-    expect(row).toBeDefined();
-    const label = buildBoardRowAccessibilityLabel(row!);
-    expect(label).toContain('1');
-    expect(label).toContain('Pistache-tiramisu');
-    expect(label).toContain('5,0');
+    expect(rows[0]).toBeDefined();
+    return buildBoardRowAccessibilityLabel(rows[0]!);
+  };
+
+  test('reads the dish and the score as one sentence', () => {
+    const spoken = label(makeBoardRecipe());
+    expect(spoken).toContain('Pistache-tiramisu');
+    expect(spoken).toContain('5,0');
+    expect(spoken).toContain('@kokenmetkees');
+  });
+
+  /**
+   * THE RANK LEFT THE SENTENCE WHEN IT LEFT THE CARD (8 September 2026).
+   * A position spoken to one reader and drawn for nobody is the mirror image
+   * of the failure PD-007a's "labelled, never hidden" is about: two readers
+   * would be told two different things about one card, and the one who cannot
+   * see the screen would be the only one holding a number they cannot check.
+   *
+   * Asserted on the FIRST card, whose rank is 1, and against a title and a
+   * score that contain no "1." — so this fails the moment a rank prefix comes
+   * back.
+   */
+  test('no longer announces a board position the card does not draw', () => {
+    const spoken = label(makeBoardRecipe({ title: 'Zalm met venkel' }));
+    expect(spoken.startsWith('1.')).toBe(false);
+    expect(spoken.startsWith('Zalm met venkel')).toBe(true);
+  });
+
+  test('speaks the cook time when the recipe has one', () => {
+    expect(label(makeBoardRecipe({ estimatedMinutes: 25 }))).toContain('25 minuten');
+  });
+
+  /** Null is the ordinary state of `estimated_minutes`, and an absent fact must produce no sentence rather than "onbekend". */
+  test('says nothing at all about time when the recipe has none', () => {
+    expect(label(makeBoardRecipe({ estimatedMinutes: null }))).not.toContain('minuten');
   });
 
   test('carries the collision label into the spoken description', () => {
+    expect(label(makeBoardRecipe({ allergenTags: ['noten'] }))).toContain('bevat noten');
+  });
+});
+
+describe('the filter axes on a row model', () => {
+  /**
+   * The board's own filter reads these two fields off the assembled cards
+   * rather than re-fetching the recipes behind them (see
+   * src/lib/trendingSource.ts on why the cut happens first), so a row that
+   * dropped them would silently make every chip return nothing.
+   */
+  test('carries the recipe’s dishTags and cook time through to the card', () => {
     const rows = assembleLeaderboard({
       ratings: votes('recipe-1', 5, LEADERBOARD_MIN_VOTES + 10),
-      recipes: [makeBoardRecipe({ allergenTags: ['noten'] })],
-      excludedAllergenTags: ['noten'],
+      recipes: [makeBoardRecipe({ dishTags: ['soep', 'veganistisch'], estimatedMinutes: 30 })],
+      excludedAllergenTags: [],
     });
-    expect(buildBoardRowAccessibilityLabel(rows[0]!)).toContain('bevat noten');
+    expect(rows[0]?.dishTags).toEqual(['soep', 'veganistisch']);
+    expect(rows[0]?.estimatedMinutes).toBe(30);
   });
 });
 

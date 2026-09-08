@@ -73,6 +73,22 @@ export interface CanonicalRecipeSummary {
   /** `recipes.author_name` — the creator's handle as the platform reported it. Null when oEmbed gave none. */
   readonly authorName: string | null;
   readonly thumbnailUrl: string | null;
+  /**
+   * `recipes.dish_tags` (0006) — the composition axis, written once at
+   * import by the extraction model and by nobody else. Added 8 September
+   * 2026 so Trending can offer the filter the owner asked for: every other
+   * filtering surface in this app narrows `meals`, and a canonical list has
+   * no `meals` row to narrow.
+   *
+   * NOT the allergen axis, and never usable as one. `ingredient_tags` is a
+   * household's own answer on Bevestigen (PD-006) and lives nowhere on a
+   * canonical row — see the paragraph above on why an untagged recipe is
+   * UNKNOWN rather than safe. The column is `not null default '{}'`, so an
+   * empty array means "the model named none", never "not loaded".
+   */
+  readonly dishTags: readonly string[];
+  /** `recipes.estimated_minutes` — only ever set when the caption stated it, because the extraction model is instructed never to estimate. Null is a real and common state, not a missing read. */
+  readonly estimatedMinutes: number | null;
 }
 
 /**

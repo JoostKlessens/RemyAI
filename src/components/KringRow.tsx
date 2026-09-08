@@ -25,13 +25,54 @@
  * somebody's public post, and PD-007's attribution obligation applies here
  * exactly as it does in the feed and on the board.
  *
- * THE ROW IS NOT PRESSABLE, deliberately. Opening a canonical recipe from
- * here needs a screen that reads canonical recipes, and no such screen
- * exists: `/friends/[feedItemId]` resolves a feed item and would answer a
- * recipe id with "Dit recept staat er niet meer", which is a lie about a
- * recipe that exists. An action that silently does nothing is worse than no
- * action, so there is no `onPress` prop to pass — the absence is the
- * contract rather than a gap a caller could fill in.
+ * ⚠ THE ROW IS STILL NOT PRESSABLE, AND IT IS NO LONGER A CONTRACT. THE
+ * OWNER REVERSED THAT ON 8 SEPTEMBER 2026, VERBATIM: "Als ik naar de
+ * trending tab ga, kan ik niet op de recepten klikken die ik daar zie."
+ *
+ * The paragraph this replaces read, in full: "THE ROW IS NOT PRESSABLE,
+ * deliberately. Opening a canonical recipe from here needs a screen that
+ * reads canonical recipes, and no such screen exists: `/friends/[feedItemId]`
+ * resolves a feed item and would answer a recipe id with 'Dit recept staat er
+ * niet meer', which is a lie about a recipe that exists. An action that
+ * silently does nothing is worse than no action, so there is no `onPress`
+ * prop to pass — the absence is the contract rather than a gap a caller could
+ * fill in."
+ *
+ * ITS PREMISE IS STILL TRUE AND ITS LAST SENTENCE IS NOT. There is still no
+ * screen that shows a canonical recipe, `/friends/[feedItemId]` would still
+ * answer a recipe id with a lie, and an action that silently does nothing is
+ * still worse than no action. What changed is the status of the absence: it
+ * was a considered position and it is now a debt. Leaving it described as a
+ * contract would be this file telling the next reader that a question has
+ * been settled when it has been reopened.
+ *
+ * WHAT IS ACTUALLY IN THE WAY, measured on 8 September 2026 rather than
+ * assumed. The honest destination is a canonical recipe screen whose action
+ * is "bewaren", and it is a package rather than a prop: no route shows a
+ * canonical recipe; `listCanonicalRecipes` returns a SUMMARY with no
+ * ingredients and no steps, so there is nothing to read one from; and no
+ * write anywhere in this codebase copies a `recipes` row into `meals` —
+ * `/friends/[feedItemId]` has no "Opslaan" for exactly that reason and says
+ * so in its own header. The cheaper destination, a link to the source post,
+ * is blocked on something else: `recipes.normalized_url` is not projected
+ * onto `CanonicalRecipeSummary`, and it is not a route to cooking either
+ * (PD-014's fourth condition), so it would be the worse answer even
+ * unblocked.
+ *
+ * So there is still no `onPress` prop, for the surviving half of the old
+ * reason — a prop nobody can fill in honestly is an invitation to fill it in
+ * dishonestly. `TrendingCard`, the `Iedereen` scope's new card, reached the
+ * same place by the same route and carries the three destinations in full.
+ *
+ * ⚠ THE TWO SCOPES OF TRENDING NOW DRAW DIFFERENT SHAPES. `Iedereen` became a
+ * card feed on 8 September 2026 (PD-014's amendment); this row did not. That
+ * is a recorded inconsistency rather than an oversight: converting it needs
+ * `dishTags` and `estimatedMinutes` on `KringRecipe`, whose only producer
+ * outside that package is `src/fixtures/friendFeedFixtures.ts`, a file the
+ * package did not own — and 7 September's lesson was about exactly the kind
+ * of edit that reaches across a package boundary to finish something.
+ * (tabs)/ranglijst.tsx's header carries the same note and names it as the
+ * follow-up.
  *
  * IT DOES NOT ANIMATE, AND MUST NOT. PD-020.1's entrance is the
  * announcement that a directed send arrived; a kring row is an aggregate of

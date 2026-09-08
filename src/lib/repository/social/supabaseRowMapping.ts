@@ -107,6 +107,9 @@ export interface RecipeRow {
   readonly platform: string;
   readonly author_name: string | null;
   readonly thumbnail_url: string | null;
+  /** `not null default '{}'` in 0006, so this is never absent — an empty array is the model having named no tags. */
+  readonly dish_tags: readonly string[];
+  readonly estimated_minutes: number | null;
 }
 
 /**
@@ -283,6 +286,13 @@ export function toCanonicalRecipe(row: RecipeRow): CanonicalRecipeSummary {
     platform: row.platform as CreatorPlatform,
     authorName: row.author_name,
     thumbnailUrl: row.thumbnail_url,
+    // Copied rather than defaulted: the column is `not null` in 0006, so a
+    // `?? []` here would be a fallback for a state the schema forbids, and
+    // it would hide the one failure that can really happen — a `.select()`
+    // that forgot to name the column, which arrives as `undefined` and
+    // would then read as "this recipe has no tags".
+    dishTags: row.dish_tags,
+    estimatedMinutes: row.estimated_minutes,
   };
 }
 

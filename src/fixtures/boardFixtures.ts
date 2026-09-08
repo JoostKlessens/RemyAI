@@ -86,6 +86,29 @@ function votes(recipeId: string, pattern: readonly number[], count: number): rea
   }));
 }
 
+/**
+ * THE TWO FILTER AXES ARRIVED HERE ON 8 SEPTEMBER 2026, and the values are
+ * chosen to make the filter's own failure modes reachable from the dev row
+ * rather than only in production:
+ *
+ * - **`soep` is carried by two recipes and every other tag by one.** It is
+ *   the only chip whose tap leaves more than one card standing, which is what
+ *   makes the narrowing visible: after that tap the offered chips must shrink
+ *   to what those two cards actually carry, plus `soep` itself.
+ * - **The tiramisu carries no tags and no time at all.** It is the card no
+ *   tag chip can ever reach and the card with no time row to draw, and it is
+ *   deliberately the TOP one — so the first thing on the board is the thing
+ *   both axes drop. Neither absence is a fixture shortcut: `dish_tags` is
+ *   `not null default '{}'`, and a null `estimated_minutes` is what the
+ *   extraction model writes whenever the caption did not state a duration,
+ *   which is most of them.
+ *
+ * The tags come from src/domain/dishTags.ts's closed vocabulary, which the
+ * REAL column does not guarantee (`BoardRecipe.dishTags` carries that
+ * measurement). A fixture using an off-vocabulary tag would be exercising a
+ * chip that cannot be drawn, which is a worse thing to develop against than
+ * the ordinary case.
+ */
 const RECIPES: readonly BoardRecipe[] = [
   {
     recipeId: 'recipe-tiramisu',
@@ -96,6 +119,8 @@ const RECIPES: readonly BoardRecipe[] = [
     // The collision case: this really does contain nuts, and the board
     // must label it without moving it (PD-014 condition 6 vs PD-007a).
     allergenTags: ['noten'],
+    dishTags: [],
+    estimatedMinutes: null,
   },
   {
     recipeId: 'recipe-zalm',
@@ -104,6 +129,8 @@ const RECIPES: readonly BoardRecipe[] = [
     creatorPlatform: 'tiktok',
     thumbnailUrl: null,
     allergenTags: ['vis'],
+    dishTags: ['visgerecht', 'ovenschotel'],
+    estimatedMinutes: 35,
   },
   {
     recipeId: 'recipe-ramen',
@@ -112,6 +139,8 @@ const RECIPES: readonly BoardRecipe[] = [
     creatorPlatform: 'tiktok',
     thumbnailUrl: null,
     allergenTags: ['ei', 'soja', 'gluten'],
+    dishTags: ['noedels', 'soep'],
+    estimatedMinutes: 30,
   },
   {
     recipeId: 'recipe-linzen',
@@ -120,6 +149,8 @@ const RECIPES: readonly BoardRecipe[] = [
     creatorPlatform: 'tiktok',
     thumbnailUrl: null,
     allergenTags: [],
+    dishTags: ['soep', 'veganistisch'],
+    estimatedMinutes: 25,
   },
   {
     recipeId: 'recipe-pasta',
@@ -128,6 +159,8 @@ const RECIPES: readonly BoardRecipe[] = [
     creatorPlatform: 'tiktok',
     thumbnailUrl: null,
     allergenTags: ['gluten'],
+    dishTags: ['pasta', 'vegetarisch'],
+    estimatedMinutes: 20,
   },
 ];
 

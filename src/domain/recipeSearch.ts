@@ -318,19 +318,46 @@ export function filterLibraryRows<TRow extends { readonly meal: Meal }>(
 }
 
 /**
- * The dishTags present on at least one meal in the library — what a filter
- * bar may offer as chips, mirroring `collectAvailableDishMoods` in
- * dishMoods.ts exactly (same reasoning: rendering the whole closed
- * vocabulary unconditionally turns a filter into a catalogue, and a chip
- * for a category nothing in this household's library carries is a control
- * guaranteed to return zero rows). No equivalent already existed in
- * dishTags.ts, so it lives here rather than being added to a module this
- * change does not otherwise own.
+ * The dishTags present on at least one row in a pool — what a filter bar may
+ * offer as chips, mirroring `collectAvailableDishMoods` in dishMoods.ts
+ * exactly (same reasoning: rendering the whole closed vocabulary
+ * unconditionally turns a filter into a catalogue, and a chip for a category
+ * nothing in this pool carries is a control guaranteed to return zero rows).
+ * No equivalent already existed in dishTags.ts, so it lives here rather than
+ * being added to a module this change does not otherwise own.
+ *
+ * IT TOOK `readonly Meal[]` UNTIL 8 SEPTEMBER 2026, AND WIDENING IT IS THE
+ * WHOLE REASON IT DID NOT HAVE TO BE COPIED. Trending's `Iedereen` scope
+ * needed the identical collector over `BoardRowModel` — a canonical recipe
+ * has no `Meal` row anywhere, so nothing on that surface can be narrowed by
+ * a `Meal`-typed function — and this body never touched a single field
+ * except `dishTags`. The constraint now says exactly that and nothing more.
+ * No existing caller changes: `Meal` satisfies it structurally, and the
+ * narrowed `readonly Meal[]` that `collectSelectableDishTags` hands in below
+ * still infers `Meal` for `TRow`.
+ *
+ * ⚠ THIS IS THE FUNCTION docs/LONGLIST.md GAP-33 IS ABOUT, AND A THIRD COPY
+ * IS THE ONE THAT WOULD HAVE HURT. Kiezen still keeps a private duplicate of
+ * this body (`src/app/(tabs)/index.tsx:283`); that is GAP-33's open half and
+ * it is not this package's file to fix. A third copy, written for Trending
+ * because the parameter type was one word too narrow, would have turned a
+ * two-copy defect into a three-copy one — which is exactly what GAP-33 warns
+ * the next author about.
+ *
+ * WHAT IT STILL DOES NOT DO is narrow against the current selection; that is
+ * `collectSelectableDishTags` below, whose Trending equivalent is
+ * `collectSelectableBoardDishTags` (src/components/trendingFilter.ts). That
+ * one could NOT be widened the same way, and the reason is measured rather
+ * than assumed: it is generic over `{ readonly meal: Meal }` and it takes a
+ * `LibrarySearchState`, and neither exists on a board of canonical recipes.
+ * Only the PRINCIPLE crossed over, not the function.
  */
-export function collectAvailableDishTags(meals: readonly Meal[]): readonly string[] {
+export function collectAvailableDishTags<TRow extends { readonly dishTags: readonly string[] }>(
+  rows: readonly TRow[],
+): readonly string[] {
   const tags = new Set<string>();
-  for (const meal of meals) {
-    for (const tag of meal.dishTags) {
+  for (const row of rows) {
+    for (const tag of row.dishTags) {
       tags.add(tag);
     }
   }
