@@ -31,6 +31,7 @@
  */
 
 import type { CreatorPlatform } from '@/domain/feed/types';
+import type { SuggestedFriendRow } from '@/domain/social/friendSuggestions';
 import type { Friendship, FriendshipAction, Profile, ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
 import type { IsoDateTimeString, MealId } from '@/domain/types';
 
@@ -451,6 +452,29 @@ export interface RemySocialRepository {
    * that never answers the question shares nothing, forever.
    */
   listFriendCookedRecipes(): Promise<readonly FriendCook[]>;
+
+  /**
+   * "Misschien ken je" — friend candidates for THIS reader, ranked by how
+   * many of their accepted friends know the candidate and then by how
+   * active the candidate is (0019's `suggested_friends()`).
+   *
+   * TAKES NO `profileId`, ALONE AMONG THE READS ON THIS INTERFACE, and
+   * that asymmetry is the security property rather than an oversight. The
+   * function answers for `auth.uid()` and nothing else; a parameter here
+   * would suggest a caller could ask about somebody else's suggestions,
+   * which is precisely the enumeration of the friend graph that 0007
+   * refused. The signature says what the wire will honour.
+   *
+   * IT CANNOT BE ASSEMBLED CLIENT-SIDE, which is why it is a method and
+   * not a helper over `listFriendships`. `friendships_select` shows a
+   * reader only the rows they are a party to, so a client asking who
+   * Sanne knows gets nothing back and would conclude she knows nobody —
+   * an empty feature that looks like a working one.
+   *
+   * `maxRows` is a REQUEST, not a guarantee. 0019 clamps it to 50 on its
+   * own side, so a caller cannot turn a definer-rights read into a dump.
+   */
+  listSuggestedFriends(maxRows: number): Promise<readonly SuggestedFriendRow[]>;
 
   /**
    * Send one dish to one friend — het pannetje, the whole second tier

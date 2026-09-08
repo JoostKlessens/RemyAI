@@ -78,6 +78,7 @@ import {
   toRecipeRating,
   toRecipeShare,
   toSentMeal,
+  toSuggestedFriend,
   type FriendshipRow,
   type ProfileRow,
   type RecipeRatingRow,
@@ -87,7 +88,12 @@ import {
   type SentMealRow,
   type SentShareRow,
   type SharedCookRow,
+  // The wire shape and the domain shape share a name across the seam;
+  // both are aliased here so a reader of `listSuggestedFriends` can see
+  // which side of the wire each one is on.
+  type SuggestedFriendRow as SuggestedFriendRpcRow,
 } from './supabaseRowMapping';
+import type { SuggestedFriendRow as DomainSuggestedFriendRow } from '@/domain/social/friendSuggestions';
 
 /** How many rows one PostgREST page asks for. Supabase caps a single response well below the ceiling, so a whole-table read has to page. */
 const PAGE_SIZE = 1000;
@@ -416,6 +422,23 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
         profileId: row.profile_id,
         recipeId: row.recipe_id,
       }));
+    },
+
+    async listSuggestedFriends(maxRows: number): Promise<readonly DomainSuggestedFriendRow[]> {
+      // AN RPC AND NOT A SELECT, because there is no relation to select
+      // from: `friendships_select` (0007) hides every row the caller is
+      // not a party to, so the second hop only exists inside a
+      // `security definer` function. See 0019's header.
+      //
+      // NO `.order()` AND NO `.range()`. The function orders and caps on
+      // its own side — a client-side order on an RPC result would be a
+      // second ranking over the same rows, and `selectFriendSuggestions`
+      // is documented as preserving the order it receives.
+      const { data, error } = await client.rpc('suggested_friends', { max_rows: maxRows });
+      if (error) {
+        fail('Reading friend suggestions', error);
+      }
+      return ((data ?? []) as SuggestedFriendRpcRow[]).map(toSuggestedFriend);
     },
 
     async sendRecipe(input: SendRecipeInput): Promise<RecipeShare> {

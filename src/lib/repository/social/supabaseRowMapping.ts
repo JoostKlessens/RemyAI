@@ -38,6 +38,11 @@
 
 import { isValidRating } from '@/domain/rating';
 import type { CreatorPlatform } from '@/domain/feed/types';
+// Aliased on import: the row shape below and the domain shape it maps to
+// share a name on purpose (they are the same fact either side of the
+// wire), and without the alias one of them would have to be renamed to
+// something worse than either.
+import type { SuggestedFriendRow as DomainSuggestedFriendRow } from '@/domain/social/friendSuggestions';
 import type { Friendship, FriendshipStatus, Profile, RecipeRating } from '@/domain/social/types';
 import type { CanonicalRecipeSummary, IncomingSend, RecipeShare, SentMeal } from './types';
 
@@ -278,6 +283,44 @@ export function toCanonicalRecipe(row: RecipeRow): CanonicalRecipeSummary {
     platform: row.platform as CreatorPlatform,
     authorName: row.author_name,
     thumbnailUrl: row.thumbnail_url,
+  };
+}
+
+/**
+ * One row of `suggested_friends()` (0019), as PostgREST returns it.
+ *
+ * A FUNCTION RESULT AND NOT A TABLE, which is why this shape has no `id`
+ * and no `created_at`: the function returns a projection it composed, not
+ * a `profiles` row. Naming the field `profile_id` here rather than `id`
+ * keeps that visible — a reader who sees `id` starts assuming they hold a
+ * whole profile and can read `avatar_url` off it.
+ */
+export interface SuggestedFriendRow {
+  readonly profile_id: string;
+  readonly handle: string;
+  readonly display_name: string;
+  readonly mutual_friends: number;
+  readonly public_votes: number;
+}
+
+/**
+ * The counts are coerced rather than trusted, and that is not ceremony.
+ * PostgREST serialises Postgres numerics as JSON numbers, but 0019's
+ * `::integer` casts sit inside a `coalesce` in a function whose signature
+ * a later migration could widen to `bigint` — and a `bigint` crosses the
+ * wire as a STRING in some driver configurations, at which point
+ * `count > 0` on the domain side compares a string to a number and
+ * `"0" > 0` is false while `"12" > 0` is true. Coercing here means the
+ * domain module receives numbers or `NaN`, and `describeSuggestionReason`
+ * already refuses `NaN` explicitly.
+ */
+export function toSuggestedFriend(row: SuggestedFriendRow): DomainSuggestedFriendRow {
+  return {
+    profileId: row.profile_id,
+    handle: row.handle,
+    displayName: row.display_name,
+    mutualFriends: Number(row.mutual_friends),
+    publicVotes: Number(row.public_votes),
   };
 }
 

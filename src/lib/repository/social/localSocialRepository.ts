@@ -41,6 +41,7 @@ import type {
   RecipeId,
   RecipeRating,
 } from '@/domain/social/types';
+import type { SuggestedFriendRow } from '@/domain/social/friendSuggestions';
 import type { Household, IsoDateTimeString, Meal, MealId, MealIngredient } from '@/domain/types';
 import { nowIso } from '../clock';
 import { generateLocalId } from '../id';
@@ -511,6 +512,21 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
         }
       }
       return ratings.filter((rating) => !withheldRecipeIds.has(rating.recipeId));
+    },
+
+    async listSuggestedFriends(): Promise<readonly SuggestedFriendRow[]> {
+      // Empty, for `listFriendCookedRecipes`'s reason one step further out.
+      // A suggestion is built from the SECOND hop of the friend graph —
+      // who the people you know are connected to — and this store holds
+      // one device's rows. There is no second hop in here to walk.
+      //
+      // The tempting local approximation is "everyone in this store I am
+      // not already connected to", and it is worse than nothing: it would
+      // make a local test pass for a reason the real backend cannot
+      // reproduce, since 0019 ranks by mutual count and this store has no
+      // mutuals to count. Same honesty rule `listCanonicalRecipes` states
+      // below.
+      return [];
     },
 
     async listFriendCookedRecipes(): Promise<readonly FriendCook[]> {
