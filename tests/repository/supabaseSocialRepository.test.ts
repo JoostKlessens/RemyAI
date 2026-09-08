@@ -42,6 +42,18 @@ class FakeQuery implements PromiseLike<FakeResponse> {
     this.log.push(`select(${columns ?? '*'})`);
     return this;
   }
+  /**
+   * Logged separately from `upsert`, and that separation is the point of
+   * the friendship tests below: on the wire an upsert is
+   * `INSERT ... ON CONFLICT DO UPDATE`, which Postgres checks against the
+   * INSERT policy's WITH CHECK even when it takes the update branch. A
+   * fake that collapsed the three verbs into one entry could not tell the
+   * statement that works from the one that answered 403 for months.
+   */
+  insert(values: unknown): this {
+    this.log.push(`insert(${JSON.stringify(values)})`);
+    return this;
+  }
   upsert(values: unknown, options?: unknown): this {
     this.log.push(`upsert(${JSON.stringify(values)},${JSON.stringify(options ?? {})})`);
     return this;
@@ -262,13 +274,126 @@ describe('reading canonical recipes', () => {
 
   test('maps a recipe row onto the display summary', async () => {
     const fake = makeClient([
-      ok([{ id: 'r-1', title: 'Ramen', platform: 'tiktok', author_name: 'noedelnoah', thumbnail_url: null }]),
+      ok([
+        {
+          id: 'r-1',
+          title: 'Ramen',
+          platform: 'tiktok',
+          author_name: 'noedelnoah',
+          thumbnail_url: null,
+          dish_tags: ['noedels', 'soep'],
+          estimated_minutes: 25,
+        },
+      ]),
     ]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     expect(await repository.listCanonicalRecipes(['r-1'])).toEqual([
-      { recipeId: 'r-1', title: 'Ramen', platform: 'tiktok', authorName: 'noedelnoah', thumbnailUrl: null },
+      {
+        recipeId: 'r-1',
+        title: 'Ramen',
+        platform: 'tiktok',
+        authorName: 'noedelnoah',
+        thumbnailUrl: null,
+        // Carried through rather than defaulted: a `?? []` in the mapper
+        // would turn a `.select()` that forgot the column into "this recipe
+        // has no tags", which is the one failure worth catching here.
+        dishTags: ['noedels', 'soep'],
+        estimatedMinutes: 25,
+      },
     ]);
+  });
+});
+
+const friendshipRow = (overrides: Record<string, unknown> = {}) => ({
+  id: 'f-1',
+  // The other party asked; 'p-1' is the addressee throughout, because that
+  // is the only side the transition table lets answer a pending request.
+  requester_id: 'p-2',
+  addressee_id: 'p-1',
+  status: 'pending',
+  blocked_by: null,
+  created_at: PG_TIME,
+  responded_at: null,
+  ...overrides,
+});
+
+/**
+ * The statement SHAPE `actOnFriendship` chooses, which is the one thing
+ * about this method a type check cannot see and RLS can refuse.
+ *
+ * This is not the transition table under another name — that is
+ * src/domain/social/friendship.ts's, tested there, and the header above
+ * says why it is not re-asserted here. What these three tests pin is
+ * narrower and was wrong in production: the method used to send one
+ * `.upsert(row, { onConflict: 'id' })` for both cases, which PostgREST
+ * turns into `INSERT ... ON CONFLICT (id) DO UPDATE`. Postgres checks the
+ * INSERT policy's WITH CHECK against the new row for that statement form
+ * even when the conflict takes the UPDATE branch, and `friendships_insert`
+ * (0007) only admits a pending row whose requester is the caller or a
+ * blocked row whose blocker is the caller — so every answer to somebody
+ * else's request came back 42501 while a brand-new request worked fine.
+ *
+ * A fake client cannot reproduce that refusal; it has no policies. What it
+ * CAN do is assert the wire shape, and the wire shape is what decided it.
+ */
+describe('acting on a friendship', () => {
+  test('answering an existing request updates that row and sends no insert-shaped statement', async () => {
+    const fake = makeClient([ok(friendshipRow()), ok(friendshipRow({ status: 'accepted', responded_at: PG_TIME }))]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.actOnFriendship('p-1', 'p-2', 'accept');
+
+    const joined = fake.log.join(' ');
+    expect(joined).toContain('update(');
+    // Both of these would be the bug back: an upsert is an insert on the
+    // wire, and a plain insert on an existing pair would collide with
+    // `friendships`' unique pair key rather than transition it.
+    expect(joined).not.toContain('upsert(');
+    expect(joined).not.toContain('insert(');
+    // The row is addressed by filter, so the primary key stays out of the
+    // payload — the client has no business restating a key it is matching on.
+    expect(joined).toContain('eq(id,f-1)');
+    const write = fake.log.find((entry) => entry.startsWith('update(')) ?? '';
+    expect(write).toContain('"status":"accepted"');
+    expect(write).not.toContain('"id"');
+  });
+
+  test('a first request on a pair with no row is an insert that mints no id', async () => {
+    const fake = makeClient([ok(null), ok(friendshipRow({ requester_id: 'p-1', addressee_id: 'p-2' }))]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.actOnFriendship('p-1', 'p-2', 'request');
+
+    const write = fake.log.find((entry) => entry.startsWith('insert(')) ?? '';
+    expect(write).toContain('"status":"pending"');
+    // `gen_random_uuid()` supplies the key and `now()` the timestamp;
+    // sending either would be the client overruling a database default.
+    expect(write).not.toContain('"id"');
+    expect(fake.log.join(' ')).not.toContain('upsert(');
+  });
+
+  /**
+   * The trap the update branch is easiest to get wrong. Re-asking after a
+   * decline swaps requester and addressee, `guard_friendship_transition`
+   * compares the PAIR rather than the two columns separately, and it
+   * raises "a re-request must name the profile doing the asking as
+   * requester" when the swap is missing — measured against the local stack,
+   * HTTP 400. A payload of status and timestamps alone would look correct
+   * on every other transition and break only this one.
+   */
+  test('re-asking after a decline writes both sides of the pair, not only the status', async () => {
+    const fake = makeClient([
+      ok(friendshipRow({ status: 'declined', responded_at: PG_TIME })),
+      ok(friendshipRow({ requester_id: 'p-1', addressee_id: 'p-2' })),
+    ]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await repository.actOnFriendship('p-1', 'p-2', 'request');
+
+    const write = fake.log.find((entry) => entry.startsWith('update(')) ?? '';
+    expect(write).toContain('"requester_id":"p-1"');
+    expect(write).toContain('"addressee_id":"p-2"');
   });
 });
 

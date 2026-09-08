@@ -272,25 +272,57 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
       }
 
       const fields = nextFriendshipFields(current, actorProfileId, otherProfileId, result.status, new Date().toISOString());
-      // `id` is sent only when a row already exists. On a new pair it is
-      // omitted so `gen_random_uuid()` supplies it — the client has no
-      // business minting a key the database already defaults, and
-      // `created_at` is left alone for the same reason.
-      const { data, error } = await client
-        .from('friendships')
-        .upsert(
-          {
-            ...(current === null ? {} : { id: current.id }),
-            requester_id: fields.requesterId,
-            addressee_id: fields.addresseeId,
-            status: fields.status,
-            blocked_by: fields.blockedBy,
-            responded_at: fields.respondedAt,
-          },
-          { onConflict: 'id' },
-        )
-        .select()
-        .single();
+      const row = {
+        requester_id: fields.requesterId,
+        addressee_id: fields.addresseeId,
+        status: fields.status,
+        blocked_by: fields.blockedBy,
+        responded_at: fields.respondedAt,
+      };
+
+      // TWO STATEMENTS AND NOT ONE UPSERT, and the reason is a policy
+      // rather than a preference. `.upsert(row, { onConflict: 'id' })`
+      // travels as `INSERT ... ON CONFLICT (id) DO UPDATE`, and for that
+      // statement form Postgres checks the INSERT policy's WITH CHECK
+      // against the new row even when the conflict sends it down the UPDATE
+      // branch. `friendships_insert` (0007) admits exactly two shapes — a
+      // `pending` row whose requester is me, or a `blocked` row whose
+      // blocker is me — so every transition on an EXISTING row was refused
+      // with 42501: accepting (which writes `accepted` with the OTHER party
+      // as requester), declining, re-asking, and blocking someone a row
+      // already existed for. Measured against a live stack with a real
+      // session on 8 September 2026: the upsert answers HTTP 403, the same
+      // transition as a plain PATCH answers HTTP 200, and
+      // `guard_friendship_transition` lets it through — the trigger was
+      // never the refuser. A NEW request kept working, because that really
+      // is an INSERT of a pending row with the caller as requester, which
+      // is exactly the half of this screen the owner could still use.
+      //
+      // THE OTHER REPAIR WAS REJECTED ON PURPOSE. Widening
+      // `friendships_insert` to `requester_id = auth.uid() or addressee_id
+      // = auth.uid()` also makes the upsert succeed — verified — and it
+      // would trade a security property for a code path: 0007 says a row
+      // may only come INTO EXISTENCE as an open request from me or a block
+      // by me, and that is the sentence the whole table leans on. One code
+      // path was the upsert's only argument, and the price of it was that
+      // the path taken most often had never worked once.
+      //
+      // `id` IS IN NEITHER PAYLOAD. The update addresses the row through
+      // `.eq('id', …)` and the insert lets `gen_random_uuid()` supply one:
+      // the client has no business minting a key the database already
+      // defaults, and `created_at` is left alone for the same reason.
+      //
+      // BOTH SIDES OF THE PAIR ARE WRITTEN ON THE UPDATE TOO, which looks
+      // redundant on an accept and is not. Re-asking after a `declined`
+      // swaps requester and addressee (`nextFriendshipFields` returns the
+      // actor as requester whenever the new status is `pending`), and
+      // `guard_friendship_transition` guards the PAIR rather than the two
+      // columns separately — so omitting them would drop that swap with no
+      // error anywhere, which is the quietest way this could break.
+      const { data, error } =
+        current === null
+          ? await client.from('friendships').insert(row).select().single()
+          : await client.from('friendships').update(row).eq('id', current.id).select().single();
 
       if (error) {
         fail(`Recording "${action}" on a friendship`, error);
@@ -648,7 +680,12 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
 
       const { data, error } = await client
         .from('recipes')
-        .select('id, title, platform, author_name, thumbnail_url')
+        // `dish_tags` and `estimated_minutes` joined this projection on
+        // 8 September 2026, for Trending's filter. They widen a projection
+        // INSIDE a row this client can already read — 0006 grants SELECT on
+        // `recipes` to every authenticated reader, and PD-014 rests its whole
+        // safety argument on exactly that — so nothing new is exposed.
+        .select('id, title, platform, author_name, thumbnail_url, dish_tags, estimated_minutes')
         .in('id', [...recipeIds]);
 
       if (error) {
