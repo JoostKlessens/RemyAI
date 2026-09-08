@@ -122,17 +122,33 @@ function assertNoneContain(banned: readonly string[]): void {
 
 describe('the route', () => {
   /**
-   * Pinned because TWO entry points navigate to it — the Vrienden tab
-   * header and the Sturen sheet's empty state — and a screen reachable
-   * from one of them only is the bug this constant exists to make
-   * impossible. It lives beside the copy rather than in either caller for
-   * exactly that reason.
+   * Pinned because SEVERAL entry points navigate to it, none of which can
+   * import each other, and a screen reachable from only some of them is
+   * the bug this constant exists to make impossible.
+   *
+   * (!) THE LIST CHANGED ON 8 SEPTEMBER 2026 AND THIS COMMENT SAID "TWO"
+   * UNTIL IT DID. It named the Vrienden tab HEADER and the Sturen sheet's
+   * empty state. The header button is gone at the owner's request
+   * (DESIGN-SOCIAL.md §4.2, amended), so the callers are now: the Sturen
+   * sheet's empty state, the Vrienden empty state, and — both added with
+   * the suggestion block — the waiting-requests line and `Zoeken op
+   * gebruikersnaam` at the foot of §4.5. The last of those is the only
+   * one that survives a non-empty feed, which is why it renders even when
+   * there are no suggestions to put above it.
    */
-  test('is one constant both entry points can import', () => {
+  test('is one constant every entry point can import', () => {
     expect(ADD_FRIEND_ROUTE).toBe('/friends/add');
   });
 
-  test('the entry-point label is §4.1 and §4.2 verbatim', () => {
+  /**
+   * §4.1's label, and §4.2's until the header control was removed. It is
+   * still the word on the Sturen sheet and on the Vrienden empty state,
+   * so it stays pinned — but §4.2 no longer renders it, and §4.5's row
+   * control is the single word `Toevoegen` instead (pinned in
+   * tests/friendSuggestions.test.ts). Repeating the noun down a list of
+   * three named people is the texture the owner called AI-generated.
+   */
+  test('the entry-point label is §4.1 verbatim', () => {
     expect(ADD_FRIEND_ENTRY_LABEL).toBe('Vriend toevoegen');
   });
 });

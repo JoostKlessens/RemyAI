@@ -49,25 +49,69 @@
  * consent gate, the ranking and the collision lookup in that one correct
  * order; this screen deliberately owns none of that logic itself.
  *
- * ON THE SUBTITLE, AND WHY "Wat vrienden echt gekookt hebben." STAYS.
- * A directed send no longer requires a cook (the gate was removed in
- * migration 0009, deliberately, and must not come back), so a subtitle
- * claiming the whole list was cooked once over-claimed. DESIGN.md §8 as
- * amended resolves that structurally rather than editorially: a proof card
- * carries the eyebrow `SANNE MAAKTE DIT` and a send card carries `GEDEELD
- * DOOR JORIS`, so the row that would have told the lie now states the
- * truth about itself. Rewording the subtitle on top of that would take the
- * option §8 declined, and it would cost the one earned claim this tab
- * makes: softening "gekookt" to cover sends demotes proof to the level of
- * the cheap thing, which is the inverse of the rule that a send may never
- * borrow the language of proof. So the copy is §4.2's, verbatim — and now
- * it is the only subtitle there is, rather than one of two.
+ * THE SUBTITLE AND THE HEADER BUTTON ARE BOTH GONE, ON 8 SEPTEMBER 2026,
+ * AND THE ARGUMENT THAT KEPT THEM IS PRESERVED BELOW RATHER THAN DELETED.
+ * The owner, looking at the shipped screen: "op de vrienden tab bovenaan
+ * vriend toevoegen, die mag weg en de zin daaronder ook … ik wil dat je de
+ * look van deze pagina clean maakt en intuitief."
  *
- * BOTH CARD KINDS ARE NOW ON THIS SCREEN, which is what that argument was
+ * What stood here was a three-storey header — a title, a right-aligned
+ * secondary button, and a line of explanatory grey under both — on a screen
+ * whose entire content is a list of cards that explain themselves. Each
+ * storey had a good reason and the stack of them had none. That is the
+ * texture he called AI-generated, and it is worth naming where it comes
+ * from: every one of those elements was added to satisfy a rule in
+ * isolation, and nothing ever asked what the three of them looked like
+ * together.
+ *
+ * (!) REMOVING THE BUTTON REMOVED THE ONLY DURABLE DOOR TO `/friends/add`,
+ * which is the thing to know before touching this file again. The empty
+ * state has one, and the empty state disappears the instant a card
+ * arrives — so a person with two friends and a full feed would have had no
+ * way to add a third. `SuggestionSection`'s `Zoeken op gebruikersnaam` is
+ * that door now, and it renders even when there are no suggestions FOR
+ * THAT REASON. Do not make it conditional on the list being non-empty.
+ *
+ * ---
+ *
+ * THE ARGUMENT THAT USED TO KEEP THE SUBTITLE, kept because it is still
+ * true about the WORDS and only wrong about whether they were needed:
+ *
+ *   A directed send no longer requires a cook (the gate was removed in
+ *   migration 0009, deliberately, and must not come back), so a subtitle
+ *   claiming the whole list was cooked once over-claimed. DESIGN.md §8 as
+ *   amended resolves that structurally rather than editorially: a proof
+ *   card carries the eyebrow `SANNE MAAKTE DIT` and a send card carries
+ *   `GEDEELD DOOR JORIS`, so the row that would have told the lie now
+ *   states the truth about itself.
+ *
+ * That resolution is exactly why the line could go without anything
+ * replacing it: the cards were ALREADY saying what the subtitle was
+ * saying, once each, in the place a reader is actually looking. WS3 had
+ * independently flagged the sentence as factually wrong for the mixed list
+ * and proposed a rewrite; deleting it answers that finding better than
+ * rewording it would have.
+ *
+ * BOTH CARD KINDS ARE ON THIS SCREEN, which is what that argument was
  * waiting for. A proof card carries "SANNE MAAKTE DIT" and opens the
  * canonical, world-readable `recipes` row; a send card carries "GEDEELD
- * DOOR JORIS", the sender's note, and opens her own meal. The subtitle is
- * no longer ahead of the screen.
+ * DOOR JORIS", the sender's note, and opens her own meal.
+ *
+ * ---
+ *
+ * WHAT THE HEADER CARRIES INSTEAD, AND THE RULE BEHIND IT: nothing, unless
+ * something is addressed to the reader personally. `PendingRequestsLine`
+ * draws only when a friendship request is actually waiting, and it is the
+ * only accent-coloured thing on the screen. A header that is a name and
+ * usually nothing else is §4.2's "one control at most" taken one step
+ * further — on a feed, even one control is one too many when there is
+ * nothing to answer.
+ *
+ * SUGGESTIONS SIT AT THE FOOT AND NEVER AT THE TOP. They are what to do
+ * when the feed runs out, so they belong after it — in
+ * `ListFooterComponent`, under the end note. Putting people to add above
+ * the dinners your friends cooked would make this tab a growth surface,
+ * which is the reading PD-004 spends its whole argument refusing.
  *
  * LIVE, WITH FIXTURES BEHIND A DEV SWITCH — the same shape Trending uses,
  * and the reads themselves live in `@/lib/gekooktSource`. Its
@@ -102,7 +146,7 @@ import type { JSX } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { hapticCompleted } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DEFAULT_FRIEND_FEED_SCENARIO, FRIEND_FEED_SCENARIOS, type FriendFeedScenario } from '@/fixtures/friendFeedFixtures';
 import {
@@ -112,13 +156,21 @@ import {
   markVisitSeen,
   type FriendsData,
 } from '@/lib/gekooktSource';
-import {
-  ADD_FRIEND_ENTRY_ACCESSIBILITY_LABEL,
-  ADD_FRIEND_ENTRY_LABEL,
-  ADD_FRIEND_ROUTE,
-} from '@/components/addFriendCopy';
-import { Button } from '@/components/Button';
+import { ADD_FRIEND_ROUTE } from '@/components/addFriendCopy';
 import { FriendProofCard } from '@/components/FriendProofCard';
+import { PendingRequestsLine, SuggestionSection } from '@/components/FriendSuggestionRows';
+import {
+  SUGGESTION_FAILED,
+  SUGGESTION_SENT_LABEL,
+  formatPendingRequests,
+} from '@/components/friendSuggestionCopy';
+import type { FriendSuggestion } from '@/domain/social/friendSuggestions';
+import type { ProfileId } from '@/domain/social/types';
+import {
+  countIncomingFriendRequests,
+  loadFriendSuggestions,
+  requestFriendship,
+} from '@/lib/friendSuggestionSource';
 import { FriendRecipeCard } from '@/components/FriendRecipeCard';
 import {
   getGekooktCardKey,
@@ -128,11 +180,16 @@ import {
 } from '@/components/gekooktPresentation';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { useSession } from '@/hooks/useSession';
-import { getColors, spacing, typeScale } from '@/theme/tokens';
+import { getColors, spacing, typeScale } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
-/** §4.2 pins this. See the header on why the line is unchanged by the kring's departure. */
-const SUBTITLE_COPY = 'Wat vrienden echt gekookt hebben.';
+/*
+  `SUBTITLE_COPY` STOOD HERE AND IS GONE, not commented out. The sentence
+  it held — "Wat vrienden echt gekookt hebben." — and the whole argument
+  for and against it are in this file's header, where a reader looking for
+  why the screen has no subtitle will actually go. A dead constant kept "in
+  case" is a string the next person has to prove nothing reads.
+*/
 
 /** Names the thing the reader is actually looking at, rather than "er ging iets mis". */
 const ERROR_COPY = 'De vriendenlijst kon niet geladen worden.';
@@ -175,6 +232,39 @@ export default function FriendsScreen(): JSX.Element {
 
   const [source, setSource] = useState<FriendsSource>('live');
   const [state, setState] = useState<FriendsState>(INITIAL_STATE);
+
+  /**
+   * The people half of the screen, held apart from `state` on purpose.
+   *
+   * TWO READS THAT MUST BE ABLE TO FAIL SEPARATELY. A failed suggestion
+   * read must not blank a feed that loaded, and a failed feed read must
+   * not hide the suggestions that would tell a new person what to do next
+   * — which is the exact case where suggestions matter most, because
+   * `loadLiveFriends` returns early with nothing when there are no friends
+   * yet. One combined state object would make each failure the other's.
+   *
+   * NO `status` FIELD ON THIS ONE, unlike `FriendsState`. There is nothing
+   * to say while it loads: the block simply is not there yet, and a
+   * "suggesties laden..." line under a feed would be a spinner over
+   * content that may not exist — the thing docs/DESIGN.md §3 warns about.
+   * It appears when it has something, and stays absent otherwise.
+   */
+  const [suggestions, setSuggestions] = useState<readonly FriendSuggestion[]>([]);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  const [suggestionMessage, setSuggestionMessage] = useState<string | null>(null);
+
+  /**
+   * Everyone asked this visit. Optimistic, and deliberately not folded
+   * into `suggestions` by rebuilding the list: the row stays where it is
+   * and swaps its button for `Verzoek verstuurd`, so a list of three does
+   * not reshuffle under the thumb that just tapped it.
+   *
+   * A ref beside the state for the reason `askRef` exists on the add
+   * screen: the set is read inside the reload that follows the write, and
+   * a state setter has not taken effect by then.
+   */
+  const [requestedProfileIds, setRequestedProfileIds] = useState<ReadonlySet<ProfileId>>(new Set());
+  const requestedRef = useRef<ReadonlySet<ProfileId>>(new Set());
 
   /**
    * PD-020.2's closed-loop haptic. The decision specified a `positive`
@@ -262,59 +352,138 @@ export default function FriendsScreen(): JSX.Element {
     };
   }, [source, userId, load]);
 
+  /**
+   * The people read, and the two facts it produces.
+   *
+   * IT RUNS FOR THE LIVE SOURCE ONLY. The `__DEV__` scenarios are fixtures
+   * for the FEED; there is no suggestion fixture, and inventing one would
+   * put three fictional strangers under a designer's demo list with real
+   * `Toevoegen` buttons behind them.
+   *
+   * ONE `try` AROUND BOTH CALLS, and both are lost together when either
+   * fails. That is the correct grain: the suggestion block and the pending
+   * line are one region of the screen, they fail for the same reasons
+   * (network, RLS, a missing migration), and reporting one while the other
+   * silently zeroes would be a screen that half-lies. `Promise.all`
+   * because the two reads do not depend on each other.
+   *
+   * (!) A FAILURE HERE IS SWALLOWED WITHOUT A MESSAGE, and that is not the
+   * same swallow `markVisitSeen` performs. Until 0019 is pushed, this call
+   * fails on every device with `PGRST202` — function not found — and a
+   * screen that shouted about it would report a deployment fact as a user
+   * error, on a block the reader did not ask for, under a feed that
+   * loaded. The block simply does not appear. `suggestionMessage` is for
+   * the WRITE below, which the reader did ask for.
+   */
+  const loadPeople = useCallback(
+    async (next: FriendsSource, profileId: string | null, isCurrent: () => boolean): Promise<void> => {
+      if (next !== 'live' || profileId === null) {
+        return;
+      }
+      try {
+        const [rows, waiting] = await Promise.all([
+          loadFriendSuggestions(requestedRef.current),
+          countIncomingFriendRequests(profileId),
+        ]);
+        if (isCurrent()) {
+          setSuggestions(rows);
+          setPendingRequestCount(waiting);
+        }
+      } catch {
+        // See above. No message, and the previous rows are left standing
+        // rather than blanked — the same rule `FriendsState` follows for
+        // a refresh that fails on a list already on screen.
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let active = true;
+    void loadPeople(source, userId, () => active);
+    return () => {
+      active = false;
+    };
+  }, [source, userId, loadPeople]);
+
+  /**
+   * Ask one suggested person, optimistically.
+   *
+   * THE ROW IS MARKED BEFORE THE WRITE AND UNMARKED IF IT FAILS, rather
+   * than after. A `Toevoegen` that stays live for the length of a round
+   * trip is a `Toevoegen` that gets tapped twice, and the second tap hits
+   * 0007's unique pair constraint — which would then report a failure for
+   * a request that actually went out.
+   *
+   * `requestedRef` IS UPDATED SYNCHRONOUSLY beside the state, because the
+   * reload at the end reads it: `loadFriendSuggestions` takes the hidden
+   * set as an argument, and a state setter has not landed by then. Without
+   * it the person just asked comes straight back with a fresh button, on
+   * the very read meant to replace them.
+   */
+  const addSuggestedFriend = useCallback(
+    async (profileId: ProfileId): Promise<void> => {
+      if (userId === null || requestedRef.current.has(profileId)) {
+        return;
+      }
+      const marked = new Set(requestedRef.current).add(profileId);
+      requestedRef.current = marked;
+      setRequestedProfileIds(marked);
+      setSuggestionMessage(null);
+
+      try {
+        await requestFriendship(userId, profileId);
+        AccessibilityInfo.announceForAccessibility(SUGGESTION_SENT_LABEL);
+        // Re-read so the row is replaced by a real candidate rather than
+        // leaving a permanent "Verzoek verstuurd" in a list of three.
+        void loadPeople('live', userId, () => true);
+      } catch {
+        const rolledBack = new Set(requestedRef.current);
+        rolledBack.delete(profileId);
+        requestedRef.current = rolledBack;
+        setRequestedProfileIds(rolledBack);
+        // Said out loud as well as drawn: nothing else on this screen
+        // announces a write, and this is the only one it can make.
+        setSuggestionMessage(SUGGESTION_FAILED);
+        AccessibilityInfo.announceForAccessibility(SUGGESTION_FAILED);
+      }
+    },
+    [userId, loadPeople],
+  );
+
   // The detail screen still reads fixtures, so it needs a scenario. Live
   // produces no cards today, which makes this fallback unreachable rather
   // than wrong — and when the list gains its live send read, the detail screen
   // has to gain one too rather than inheriting a demo param.
   const detailScenario: FriendFeedScenario = source === 'live' ? DEFAULT_FRIEND_FEED_SCENARIO : source;
 
+  // Null on almost every visit, which is the point — see the header block
+  // in the JSX below. The count-to-sentence rule is `formatPendingRequests`'
+  // and lives in the copy module, where a test can reach it.
+  const pendingLine = formatPendingRequests(pendingRequestCount);
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
 
+      {/*
+        A NAME, AND THEN USUALLY NOTHING. The button and the subtitle that
+        stood here are gone at the owner's request; this file's header
+        carries what they were for, why the argument that kept them was
+        sound about the words and wrong about the stack, and — the part
+        worth reading before editing — where the door to `/friends/add`
+        went.
+
+        `pendingLine` IS THE ONE EXCEPTION, and it is an exception the
+        reader asked for by being asked something. It is null unless a
+        friendship request is genuinely waiting, so on almost every visit
+        this header is exactly a word.
+      */}
       <View style={styles.header}>
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Vrienden</Text>
-        {/*
-          §4.2's header action: "gains secondary `+ Vriend toevoegen`
-          top-right — the mirror of Mijn recepten's `+ Link plakken`, so the
-          two list tabs share a grammar." It is that mirror structurally as
-          well as visually: the same `secondary` variant, the same
-          right-aligned box with its own minWidth, the same '+' carried in
-          the label rather than drawn as an icon.
-
-          IT IS THE ONLY CONTROL IN THIS HEADER, which is now the rule
-          rather than this screen's habit. The owner said he did not
-          understand "the menu at the top of the screen while you also have
-          a menu at the bottom", and he was describing a real thing: a
-          right-aligned stack of two or three unlike controls reads as
-          navigation. Every tab header in this app is now a name and at most
-          one control — here the door to a new friend, on Mijn recepten the
-          way the library grows, on Trending the scope switch — so the top
-          of a screen says what this screen does rather than offering a
-          second menu.
-
-          IT STACKS UNDER THE TITLE RATHER THAN SITTING BESIDE IT, which is
-          where §4.2's ASCII sketch draws it. Mijn recepten stacks for a
-          reason that applies identically here — a `title2` and a 200-point
-          secondary do not both fit on a narrow phone, and the failure mode
-          is the button shrinking until its label wraps to two lines.
-          "Shared grammar" is the instruction the sketch is illustrating, so
-          the grammar wins where the two disagree. Phone-width behaviour is
-          not verifiable in this environment either way, which is a second
-          reason to take the arrangement that has already shipped on the
-          sibling tab.
-        */}
-        <View style={styles.headerActions}>
-          <View style={styles.addFriendButton}>
-            <Button
-              label={`+ ${ADD_FRIEND_ENTRY_LABEL}`}
-              variant="secondary"
-              onPress={() => router.push(ADD_FRIEND_ROUTE)}
-              accessibilityLabel={ADD_FRIEND_ENTRY_ACCESSIBILITY_LABEL}
-            />
-          </View>
-        </View>
-        <Text style={[typeScale.bodySmall, styles.headerSubtitle, { color: colors.textMuted }]}>{SUBTITLE_COPY}</Text>
+        {pendingLine === null ? null : (
+          <PendingRequestsLine text={pendingLine} colors={colors} onPress={() => router.push(ADD_FRIEND_ROUTE)} />
+        )}
       </View>
 
       {/*
@@ -339,9 +508,25 @@ export default function FriendsScreen(): JSX.Element {
       <FriendsBody
         state={state}
         reduceMotionEnabled={reduceMotionEnabled}
-        onOpenLibrary={() => router.push('/recipes')}
-        onAddFriend={() => router.push(ADD_FRIEND_ROUTE)}
         onOpenSend={(feedItemId: string) => router.push(`/friends/${feedItemId}?scenario=${detailScenario}`)}
+        /*
+          ONE NODE, RENDERED IN BOTH BODIES. The suggestion block sits under
+          the feed when there is one and under the empty state when there
+          is not, and it is the same element either way — built once here
+          rather than twice down there, because the two copies would be two
+          places to forget the search line that is now this screen's only
+          durable way to `/friends/add`.
+        */
+        footer={
+          <SuggestionSection
+            suggestions={suggestions}
+            colors={colors}
+            requestedProfileIds={requestedProfileIds}
+            onAdd={(profileId: string) => void addSuggestedFriend(profileId)}
+            onSearch={() => router.push(ADD_FRIEND_ROUTE)}
+            message={suggestionMessage}
+          />
+        }
       />
     </SafeAreaView>
   );
@@ -350,9 +535,18 @@ export default function FriendsScreen(): JSX.Element {
 interface FriendsBodyProps {
   readonly state: FriendsState;
   readonly reduceMotionEnabled: boolean;
-  readonly onOpenLibrary: () => void;
-  /** §4.4's handle exchange — the second of the two doors §4.2 puts on the empty state. */
-  readonly onAddFriend: () => void;
+  /**
+   * "Misschien ken je", plus the way to somebody who is not in it.
+   *
+   * A NODE AND NOT A SET OF CALLBACKS, which is the one place this file
+   * takes a shortcut on purpose. The block needs six things from the
+   * screen (the rows, the palette, the optimistic set, two handlers and a
+   * message), and threading six props through a component whose job is
+   * choosing between four bodies would make `FriendsBody` a courier. It
+   * renders what it is handed, in two places, and knows nothing about
+   * what is in it.
+   */
+  readonly footer: JSX.Element;
   /**
    * A send opens the SENDER'S OWN MEAL, readable only while
    * `has_active_send_to_me()` says so.
@@ -390,7 +584,7 @@ function FriendsBody(props: FriendsBodyProps): JSX.Element {
     return <FriendsNotice title={ERROR_COPY} body={state.message} />;
   }
   if (state.cards.length === 0) {
-    return <EmptyFeedState onOpenLibrary={props.onOpenLibrary} onAddFriend={props.onAddFriend} />;
+    return <EmptyFeedState footer={props.footer} />;
   }
 
   return (
@@ -413,7 +607,20 @@ function FriendsBody(props: FriendsBodyProps): JSX.Element {
         })
       }
       ItemSeparatorComponent={ListGap}
-      ListFooterComponent={FeedEndNote}
+      /*
+        AN INLINE ELEMENT AND NOT A COMPONENT REFERENCE. `ListFooterComponent`
+        used to be `FeedEndNote`, a stable function identity, and it could
+        be: it took nothing. This footer closes over `props.footer`, so
+        passing a fresh arrow here would remount the block — and its
+        `Verzoek verstuurd` state with it — on every render of the list.
+        An element is diffed rather than remounted.
+      */
+      ListFooterComponent={
+        <>
+          <FeedEndNote />
+          {props.footer}
+        </>
+      }
       contentContainerStyle={styles.listContent}
     />
   );
@@ -489,8 +696,8 @@ function FeedEndNote(): JSX.Element {
 }
 
 interface EmptyFeedStateProps {
-  readonly onOpenLibrary: () => void;
-  readonly onAddFriend: () => void;
+  /** The same "Misschien ken je" block the feed gets — see `FriendsBodyProps.footer`. */
+  readonly footer: JSX.Element;
 }
 
 /**
@@ -502,18 +709,27 @@ interface EmptyFeedStateProps {
  * reassures somebody: your own recipes stay private until you share one,
  * every time, deliberately.
  *
- * IT NOW OFFERS THE WAY OUT OF THE EMPTINESS, which it could not before.
- * The previous version of this comment said there was no "nodig een vriend
- * uit" button "because there is no invite flow behind it yet, and a primary
- * action that does nothing is worse than no action at all" — an accurate
- * statement of a real gap, and the gap is closed: `/friends/add` is §4.4's
- * handle exchange and it works. §4.2 asks for exactly these two secondary
- * actions here, in this order. Neither is a primary: this screen is not
- * trying to talk anybody into acquiring friends, it is telling them where
- * the door is.
+ * IT LOST A RULE, A BUTTON AND A BUTTON, ON 8 SEPTEMBER 2026, and gained
+ * the thing the buttons were standing in for. What was here was six
+ * elements deep — a title, a line, a decorative hairline, a footnote, and
+ * two identical-looking secondary buttons stacked one above the other. The
+ * owner's word for that texture was "AI gegenereerd", and this block is
+ * where it was thickest: a divider that separates two sentences from each
+ * other, and two buttons of equal weight that made a person choose between
+ * "add a friend" and "look at my own recipes" before anything had happened.
+ *
+ * WHAT REPLACED THEM IS NOT A THIRD BUTTON. The suggestion block below
+ * names actual people with an actual reason, and ends in the line that
+ * goes to `/friends/add`. That is strictly more useful than a button
+ * labelled with a category: "Toevoegen" next to a name someone recognises
+ * is a decision a person can make, and "Vriend toevoegen" on its own is a
+ * task they have to go and do.
+ *
+ * `Naar mijn recepten` IS SIMPLY GONE, and nothing replaces it. §4.2 asked
+ * for it, and it was answering a question this screen was not being asked:
+ * a tab bar with Mijn recepten on it sits four points below this text.
  */
 function EmptyFeedState(props: EmptyFeedStateProps): JSX.Element {
-  const { onOpenLibrary, onAddFriend } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -521,28 +737,10 @@ function EmptyFeedState(props: EmptyFeedStateProps): JSX.Element {
     <View style={styles.empty}>
       <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>Nog niets gedeeld</Text>
       <Text style={[typeScale.bodySmall, styles.emptyBody, { color: colors.textMuted }]}>
-        Stuurt iemand je een recept, dan staat het hier — met het originele filmpje erbij.
+        Stuurt iemand je een recept, dan staat het hier — met het originele filmpje erbij. Andersom blijft alles van
+        jou privé: delen doe je zelf, per recept.
       </Text>
-      <View style={[styles.emptyRule, { backgroundColor: colors.border }]} />
-      <Text style={[typeScale.caption, styles.emptyFootnote, { color: colors.textMuted }]}>
-        Andersom blijft alles van jou privé. Delen doe je zelf, per recept.
-      </Text>
-      <View style={styles.emptyAction}>
-        <Button
-          label={ADD_FRIEND_ENTRY_LABEL}
-          variant="secondary"
-          onPress={onAddFriend}
-          accessibilityLabel={ADD_FRIEND_ENTRY_ACCESSIBILITY_LABEL}
-        />
-      </View>
-      <View style={styles.emptySecondAction}>
-        <Button
-          label="Naar mijn recepten"
-          variant="secondary"
-          onPress={onOpenLibrary}
-          accessibilityLabel="Naar mijn recepten, je eigen opgeslagen recepten"
-        />
-      </View>
+      {props.footer}
     </View>
   );
 }
@@ -558,8 +756,8 @@ function FriendsNotice(props: { readonly title: string; readonly body: string | 
   const colors = getColors(scheme);
 
   return (
-    <View style={styles.empty}>
-      <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>{props.title}</Text>
+    <View style={styles.notice}>
+      <Text style={[typeScale.title2, styles.noticeTitle, { color: colors.textPrimary }]}>{props.title}</Text>
       {props.body === null ? null : (
         <Text style={[typeScale.caption, styles.noticeBody, { color: colors.textMuted }]}>{props.body}</Text>
       )}
@@ -621,20 +819,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space4,
     paddingBottom: spacing.space4,
   },
-  headerActions: {
-    alignItems: 'flex-end',
-    marginTop: spacing.space2,
-  },
-  addFriendButton: {
-    // `Button` is `width: '100%'` of its box, so the box is what sizes it.
-    // Matches Mijn recepten's `pasteButton` in kind; narrower because the
-    // label is two words rather than "+ Link plakken" plus a longer reach.
-    alignSelf: 'flex-end',
-    minWidth: 200,
-  },
-  headerSubtitle: {
-    marginTop: spacing.space3,
-  },
   listContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
     paddingBottom: spacing.space10,
@@ -647,43 +831,42 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   empty: {
+    // NOT CENTRED ANY MORE, AND THE SUGGESTION BLOCK IS WHY. This used to
+    // be `alignItems: 'center'` over two lines and two buttons, which is
+    // the right treatment for a short apology in the middle of a screen.
+    // It now carries a list of people whose rows are `space-between` —
+    // a name on the left, a control on the right — and `alignItems:
+    // 'center'` shrink-wraps a row to its content, which would collapse
+    // that gap to nothing. Left-aligned and top-set, so the empty state
+    // and a full feed put their text in the same place.
+    flex: 1,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    paddingTop: spacing.space6,
+  },
+  emptyTitle: {
+    marginBottom: spacing.space2,
+  },
+  emptyBody: {
+    // No `textAlign` and no width cap: the line runs to the same measure as
+    // every card below it.
+  },
+  notice: {
+    // Loading and failure keep the centred treatment the empty state gave
+    // up, because they really are one short sentence with nothing under
+    // them — and a notice pinned to the top of an otherwise blank screen
+    // reads as a heading for content that never arrives.
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.screenPaddingHorizontal,
   },
-  emptyTitle: {
+  noticeTitle: {
     marginBottom: spacing.space2,
     textAlign: 'center',
   },
-  emptyBody: {
-    textAlign: 'center',
-  },
-  emptyRule: {
-    height: 1,
-    alignSelf: 'stretch',
-    marginTop: spacing.space6,
-    marginBottom: spacing.space4,
-  },
-  emptyFootnote: {
-    textAlign: 'center',
-  },
   noticeBody: {
-    // The notice has no hairline rule above it to space it, unlike the
-    // empty state's footnote, so it carries its own gap.
-    marginTop: spacing.space4,
+    marginTop: spacing.space2,
     textAlign: 'center',
-  },
-  emptyAction: {
-    marginTop: spacing.space6,
-    minWidth: 220,
-  },
-  emptySecondAction: {
-    // Tighter than the gap above it: the two actions are one group, and the
-    // space6 separates the group from the footnote rather than the buttons
-    // from each other.
-    marginTop: spacing.space3,
-    minWidth: 220,
   },
   devRow: {
     flexDirection: 'row',
