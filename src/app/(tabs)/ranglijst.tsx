@@ -189,6 +189,7 @@ import {
   TRENDING_FILTER_EMPTY_TITLE,
   collectSelectableBoardDishTags,
   countTrendingFilters,
+  describeTrendingFilters,
   filterBoardRows,
   type TrendingFilterState,
 } from '@/components/trendingFilter';
@@ -570,6 +571,20 @@ interface TrendingFilterTriggerProps {
 function TrendingFilterTrigger(props: TrendingFilterTriggerProps): JSX.Element {
   const { activeFilterCount, isExpanded, onToggle, colors } = props;
   const isFiltering = activeFilterCount > 0;
+  /*
+    THE SPOKEN SENTENCE COMES FROM `trendingFilter.ts`, not from two string
+    literals here. It was two literals for about ten minutes, which put copy
+    in a `.tsx` where vitest cannot reach it — the exact thing every
+    `*Copy.ts` module in this directory exists to prevent.
+
+    It also rescued a function from being dead. `describeTrendingFilters` lost
+    its only production caller when the drawer's own opening was deleted, and
+    a `grep` found it alive in tests alone. Using it here is better than
+    banner-ing it as uncalled: the count-in-words rule it holds is asserted
+    EQUAL to Kiezen's by tests/trendingFilter.test.ts, so this glyph now
+    speaks the same sentence the other two filter controls do.
+  */
+  const copy = describeTrendingFilters(activeFilterCount);
 
   return (
     <Pressable
@@ -577,14 +592,17 @@ function TrendingFilterTrigger(props: TrendingFilterTriggerProps): JSX.Element {
       style={styles.filterTrigger}
       accessibilityRole="button"
       accessibilityState={{ expanded: isExpanded }}
-      accessibilityLabel={
-        isFiltering ? `Filters, ${activeFilterCount} actief` : 'Filters'
-      }
+      accessibilityLabel={copy.accessibilityLabel}
     >
+      {/* The glyph IS the button — the owner, after seeing it shipped beside a
+          worded opening: "Het icoontje is de filterknop, je hoeft dan niet ook
+          nog 'filter' neer te zetten en een dropdown menu te maken." So no
+          label beside it and no chevron under it; the drawer below is the
+          controls themselves. */}
       <Icon name="filter" size={20} color={isFiltering ? colors.accent : colors.textMuted} />
-      {isFiltering ? (
+      {copy.activeBadge === null ? null : (
         <Text style={[typeScale.caption, styles.filterCount, { color: colors.accent }]}>{activeFilterCount}</Text>
-      ) : null}
+      )}
     </Pressable>
   );
 }
