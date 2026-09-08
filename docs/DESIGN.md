@@ -306,6 +306,20 @@ re-weighted via `fontWeight` like the OS system font, hence `sansBold`/
 PD-014; was "Ranglijst"), in that order. No tab icons — text-only labels in
 `typeScale.caption` (monospace), matching each other exactly.
 
+> ⚠ **BANNER, 8 September 2026 — the refusal below stands, and Trending now
+> looks more like the thing it refuses. PD-014a is the amendment.** The owner
+> asked for the board to be drawn as a scrolling card feed with photographs
+> ("een soort scroll feature ... zoals instagram met foto's") plus a filter,
+> and it is. **The sentence below is not repealed and is not weakened**: the
+> refused surface is *algorithmic strangers*, and those two words are
+> load-bearing separately. Trending is still selected by no model, still
+> ordered by score and never by recency, still bounded at
+> `LEADERBOARD_MAX_ROWS` with no pagination and no infinite scroll, and still
+> identical for every reader — the filter is a narrowing the reader sets, sees
+> and clears, which PD-014a distinguishes from personalisation at length.
+> What changed is how a bounded, deterministic, identical list is DRAWN. Read
+> PD-014a before citing this paragraph about Trending.
+
 **This document said "no third tab" until PD-010, and it was right to.**
 The argument was that the product has two tasks — deciding and keeping —
 and that a third tab is how a decision tool turns into a browsing app.
@@ -1018,6 +1032,35 @@ applies to this surface too.
 ---
 
 ## 9. Trending — best-rated, at two scopes
+
+> ⚠ **AMENDED 8 September 2026 — the `Iedereen` scope is a card feed now, so
+> the "Layout" paragraph below is stale for that scope. PD-014a is the
+> decision; this banner is the correction.** What that paragraph describes —
+> a three-column row of rank, a `space20` thumbnail and a text block — is
+> still exactly what the `Vrienden` scope draws. `Iedereen` draws a vertical
+> feed of cards instead: dish name in `title2`, the cook time with its clock,
+> a 200pt 9:16 still (monogram fallback, unchanged), the `numeral` meta row
+> "8,04 · 3 stemmen", and the creator in `caption` mono. **The rank column is
+> gone from that scope**, and with it the ability to read "wat staat er op 1";
+> PD-014a inventories that loss rather than writing it off.
+>
+> **Three things in this section are NOT amended and are worth re-reading
+> before touching this surface**: the ordering and anti-scroll rules (still
+> `LEADERBOARD_MAX_ROWS`, still "Dat is de hele lijst.", still no pagination
+> and no `onEndReached`), the Dutch comma and the never-abbreviated vote
+> count, and PD-007a's collision chip — labelled, never hidden, never ranked
+> down.
+>
+> **"Tapping a row opens the recipe" below is still not true**, and it was not
+> true before this amendment either. There is no screen that shows a canonical
+> recipe. PD-014a's table sets out the three destinations and what the honest
+> one actually costs; condition 4 is outstanding and named rather than quietly
+> satisfied.
+>
+> **A filter bar sits above the `Iedereen` feed**: a 44pt disclosure with an
+> active count, opening onto `TimeCapPicker` and a dish-tag chip row that
+> narrows against its own selection. Two axes only, and the other two were
+> refused on the schema — `recipes` has no `dish_moods` and no `dish_course`.
 
 **Purpose**: PD-014's fourth surface. Ordered boards of canonical recipes,
 ranked by what the people who cooked them thought. The `Iedereen` scope is

@@ -8,7 +8,7 @@ niets van de voorgaande gesprekken gelezen heeft.
 8 september 's ochtends staat ongecommit in de boom (zie *Wat er op
 8 september gebeurde*, deel twee). Vier checks groen, gedraaid en niet
 overgeschreven uit de vorige stand: typecheck 0, lint 0, `check:functions` 0,
-**3273 tests over 136 bestanden**.
+**3313 tests over 137 bestanden**.
 
 ⚠ **Vier commits staan nog niet op `origin`.** Gemeten met `git rev-list
 --left-right --count origin/feat/live-import-and-plan-phases...HEAD`, dat
@@ -145,7 +145,7 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 3273 tests / 136 bestanden
+npm test                 3313 tests / 137 bestanden
 ```
 
 ⚠ Hier stond **3249 over 135** en dáárvoor **3137 over 130**. Het nieuwe
@@ -898,6 +898,139 @@ uit `iconFont.ts` in plaats van uit de prozalijst in zijn opdracht, en vond er
 45 waar de opdracht 41 zei. **Drie keer corrigeerde de bron de opdracht.** Dat
 is precies waarom de briefings hier metingen meegeven én zeggen ze na te
 meten.
+
+---
+
+### Later op 8 september: Trending, en een bug die al die tijd zichtbaar was
+
+**Ongecommit in de boom.** Vijf poorten groen — typecheck 0, lint 0,
+`check:functions` 0, `check:seed` 0, **3313 tests over 137 bestanden**
+(nulmeting van deze ronde: 3273 over 136). Gedraaid, niet opgehoogd.
+
+Vier meldingen van de eigenaar, twee agents parallel. **De verdeling was
+anders dan op 7 september, met opzet:** de vier meldingen zijn tot TWEE
+pakketten samengevoegd in plaats van vier, omdat twee ervan hetzelfde scherm
+raken (`friends/add.tsx`) en de andere twee dezelfde lijst en dezelfde
+scrollpositie. Dat is de les van 7 september toegepast in plaats van herhaald.
+
+⚠ **Er was één gedeelde grootheid, en die is vóór het uitzetten door de
+orkestrator zelf geland in plaats van aan een pakket gegeven.** Trendings
+filter had `recipes.dish_tags` nodig, en die reis loopt door
+`supabaseSocialRepository.ts` — hetzelfde bestand waar het andere pakket in
+moest zijn. `CanonicalRecipeSummary` is daarom vooraf verbreed met `dishTags`
+en `estimatedMinutes` (vier bestanden, poorten daarna groen), waarna de twee
+bestandslijsten écht disjunct waren. Nul botsingen.
+
+**ACCEPTEREN VAN EEN VRIENDSCHAPSVERZOEK HEEFT NOOIT GEWERKT** (GAP-52).
+`actOnFriendship` stuurde één `.upsert(row, { onConflict: 'id' })`. PostgREST
+maakt daar `INSERT … ON CONFLICT (id) DO UPDATE` van, en **Postgres toetst
+voor die statementvorm de `WITH CHECK` van de INSERT-policy op de nieuwe rij,
+ook als het conflict de UPDATE-tak neemt.** `friendships_insert` (0007) laat
+maar twee vormen toe — een `pending`-rij met mij als requester, of een
+`blocked`-rij met mij als blokkeerder. Een accept schrijft `accepted` met de
+ánder als requester, dus beide takken zijn onwaar en élke overgang op een
+bestaande rij kwam terug met `42501`. Een níeuw verzoek werkte wél; dat is
+precies de helft van dat scherm die de eigenaar nog kon gebruiken.
+
+**Dit is de eerste bug van dit project die tegen een echte database is bewezen
+vóór er een regel aan gerepareerd werd**, en dat is de methodische winst van
+de dag. De lokale stack draaide, de seed stond erin, er was een echt account
+met een echte JWT: de upsert geeft HTTP 403, dezelfde overgang als `PATCH`
+geeft 200, en `guard_friendship_transition()` liet hem gewoon door — **de
+trigger was nooit de weigeraar, en dat was de voor de hand liggende
+verdachte.** Welke policy het wél was, is bewezen met twee identieke `on
+conflict`-statements in een teruggedraaide transactie: verscheept → fout,
+policy tijdelijk verbreed → `INSERT 0 1`.
+
+De policy verbreden is expliciet afgewezen. De fix splitst op `current`:
+`insert`, of `update … eq('id')`. ⚠ Beide zijden van het paar gaan mee in de
+update, want een her-verzoek uit `declined` wisselt requester en addressee om
+en de trigger bewaakt het PAAR — weglaten geeft `P0001`, ook gemeten.
+
+⚠ **Nagekeken of dit elders ook zit, in plaats van het te hopen:** de drie
+andere upserts in dat bestand zijn schoon. `profiles_insert`,
+`recipe_ratings_insert` en `recipe_shares_insert` hebben alle drie een
+predicaat dat op een merge-update waar blijft. `friendships` was de enige
+tabel waar de `WITH CHECK` van de status en de rol afhangt.
+
+**DE TERUGKNOP: VIER VERKLARINGEN GEMETEN, ALLE VIER AFGEVALLEN, OORZAAK NIET
+GEVONDEN** (GAP-53) — en dat staat er zo, in de code én in de longlist, omdat
+het waar is. Afgevallen: de ontbrekende `edges`-prop (zonder `edges` is de
+default álle vier, dus de top-inset wórdt toegepast; de schermen mét `edges`
+zijn de TABschermen, waar de bottom-edge weg moet); de hitbox (al 44 × 44);
+"deze header wijkt af" (byte voor byte identiek aan drie andere schermen); en
+"`router.back()` heeft geen bestemming" (beide deuren zijn een `push`).
+
+Wat er wél is gedaan: `initialMetrics={initialWindowMetrics}` op de
+`SafeAreaProvider`, en `hitSlop={8}` op alle vier de schermen die deze rij
+delen. ⚠ **Geen van beide is een diagnose, en de code zegt dat zelf.** ⚠ **De
+rij is NIET verplaatst hoewel de eigenaar daar letterlijk om vroeg** — dat zou
+een pleister op een niet-gevonden oorzaak zijn. En `hitSlop` wint hier omhóóg
+en zijwaarts, niet omlaag: op iOS bereikt een tik buiten de bounds van de
+óuderview het kind niet, en deze rij is maar zo hoog als 8pt padding plus de
+knop. **Daaruit volgt een falsifieerbare voorspelling die op een toestel twee
+minuten kost:** is het raakvlak de oorzaak, dan mankeren `recipe/[mealId]`,
+`import/paste` en `settings` het net zo goed. Staat als 8c in `TOESTELTEST.md`.
+
+**TRENDING IS EEN KAARTENFEED GEWORDEN, EN DE FOTO WAS EEN DEFECT** (GAP-54).
+Twee klachten, twee soorten antwoord, en dat onderscheid is de kern. *"Geen
+foto"* was géén ontwerpbesluit: `BoardRowModel` droeg `thumbnailUrl` al en
+`toBoardRecipe` vulde hem al — `BoardRow` tekende alleen nooit een `<Image>`.
+Onafhankelijk bevestigd doordat `useThumbnailFallback.ts`' header de vier
+`<Image>`-plekken van de app opsomt en deze niet noemt. **De standaardscope
+van die tab heeft dus nooit een foto kunnen tonen terwijl de scope ernaast het
+altijd kon.** De scrollfeed is de amendering; de foto is een reparatie.
+
+Wat NIET meegaf, met mechanisme en al vastgelegd in **PD-014a**: de toevoer
+(25 rijen, `buildLeaderboard` ongewijzigd), de ordening (score, nooit recency)
+en de personalisatie (`rankRecipes` ziet het huishouden niet).
+⚠ **`onEndReached` staat nergens, en die afwezigheid is nu de voorwaarde in
+plaats van een omissie** — het is de ene regel die PD-014's tweede voorwaarde
+stil zou ondermijnen.
+
+**De scherpste zin van dat amendement, en hij maakt de omkering kleiner dan
+hij lijkt:** DESIGN-SOCIAL §2.4 verdedigt een scrollbare receptenlijst op twee
+woorden, *geen vreemden* en *niet algoritmisch*. Het structurele argument —
+"the feed cannot exceed what your friends actually cook" — gaat over de
+**Vrienden-tab**. Trendings `Iedereen`-scope is **per definitie een lijst van
+vreemden** en was dat altijd al. Die helft van de verdediging heeft dit
+oppervlak nooit gedekt. De andere helft is onaangeroerd.
+
+⚠ **Voorwaarde 4 van PD-014 — "elke rij is een route naar koken" — wordt NIET
+gehaald, en werd vóór deze ronde ook al niet gehaald.** PD-014a vinkt hem niet
+stilzwijgend af maar noemt hem openstaand. Zie GAP-55: er bestaat **geen enkel
+schrijfpad in deze codebase dat een `recipes`-rij naar `meals` kopieert** —
+`importRecipe.ts` post een URL en herparseert. Dat is een meting die de
+opdracht van de orkestrator corrigeerde, en het is de derde keer vandaag dat
+een uitvoerder de bron boven de briefing verkoos. De andere twee:
+`externalLinking.ts` staat in `src/components/` en niet in `src/lib/`, en
+`recipes.dish_tags` is **niet** gebonden aan de zeventien `DISH_TAGS` —
+`Shakshuka met feta` draagt `eieren`, dat er niet in staat.
+
+⚠ **De twee scopes tekenen nu verschillende vormen.** `Iedereen` is een
+kaartenfeed, `Vrienden` bleef `KringRow`'s compacte strip, omdat
+`KringRecipe` geen `dishTags` en geen `estimatedMinutes` draagt. Dat ziet de
+eigenaar bij de eerste tik op de segmentknop, en het is de hoogste-waarde
+vervolgstap.
+
+**Eén ding dat de seed niet kan.** De acht demo-recepten hebben
+`thumbnail_url = null`, dus elke kaart tekent een monogram. Dat is **niet
+eerlijk te repareren**: die URL's zijn pre-signed en kortlevend, en
+`research/13-legal-tos.md` legt vast dat oEmbed lézen mag en downloaden niet.
+Elke verzonnen URL geeft 403 → monogram; een gekopieerde afbeelding mag niet.
+De enige manier waarop de eigenaar echte foto's op Trending ziet is één echt
+recept importeren.
+
+**Twee dingen zijn bewust NIET beslist en liggen bij de eigenaar:** hoe diep
+de feed mag (de stemvloer van drie houdt hem op drie kaarten met de demo-data;
+verlagen maakt de ranglijst minder waar), en waar een tik heen moet. Zie
+`TOESTELTEST.md` §8f.
+
+⚠ **`npm run db:seed` werkt niet** (OPS-13), gemeten met CLI v2.116.0:
+`db query` stuurt één prepared statement en `demo_social.sql` is een `do`-blok
+plus een `select`. `LOKAAL-DRAAIEN.md` had dit als "niet uitgeprobeerd" staan;
+dat is nu ingevuld met de meting én het werkende alternatief
+(`docker exec -i supabase_db_remy psql … < supabase/seed/demo_social.sql`).
 
 ---
 

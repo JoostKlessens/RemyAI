@@ -277,6 +277,26 @@ protected, identical-for-everyone object; on Vrienden both modes are
 friend-scoped answers to the tab's own question, neither claims to be
 the same for every reader, and neither is the board.
 
+> ⚠ **BANNER, 8 September 2026 — half of the paragraph below is routinely
+> quoted about the wrong surface, and PD-014a says so.** Trending's
+> `Iedereen` scope became a vertical card feed on that date, at the owner's
+> instruction, and this paragraph is the nearest thing in the repo to a
+> defence of a scrolling list of recipes. **It does not transfer, and half of
+> it never could.** The argument below earns its distinction on two words —
+> not *strangers*, and not *algorithmic*. The strangers half is about **this
+> tab**, whose supply is your friends' kitchens; Trending's global scope is
+> **by definition a list of strangers** and always was, so
+> "the feed cannot exceed what your friends actually cook" has never covered
+> it. What does cover it, and what PD-014a leans on, is the other half:
+> nothing there is selected by a model, the supply is bounded by
+> `LEADERBOARD_MAX_ROWS` rather than by editorial restraint, and the order is
+> identical for every reader. Read PD-014a before citing this paragraph about
+> anything other than Vrienden.
+>
+> §2.2's rule against padding is untouched by all of it: the two Trending
+> scopes still share a fetch and nothing else, and a thin friends ranking
+> stays visibly thin.
+
 **Why this is not the "Ontdekken" surface, argued rather than assumed.**
 DESIGN.md refused "an *Ontdekken* surface of algorithmic strangers", and
 this tab is a scrollable list of recipes, so the distinction has to be

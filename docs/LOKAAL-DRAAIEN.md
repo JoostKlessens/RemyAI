@@ -485,12 +485,32 @@ Die verwijdert precies de rijen met het voorvoegsel `5eed5eed` en niets anders �
 hij houdt geen lijst bij maar vraagt het aan de database, dus hij is met de seed
 meegegroeid zonder aangeraakt te zijn.
 
-⚠ **Of `db query -f` een bestand met meerdere statements in één keer slikt, is
-niet uitgeprobeerd.** `demo_social.sql` is één `do $$ … $$;`-blok plus een losse
-`select` eronder. Klaagt de CLI, dan is het alternatief: plak het bestand in de
-**lokale** Studio op <http://127.0.0.1:54323>, SQL-editor. Dat is dezelfde
-handeling als tegen productie, alleen op een database die je mag slopen — en dat
-is de hele winst van dit document.
+⚠ **Hier stond dat dit "niet uitgeprobeerd" was. Op 8 september 2026 is het
+uitgeprobeerd, en het WERKT NIET.** De voorspelling die hier stond klopte:
+`demo_social.sql` is één `do $$ … $$;`-blok plus een losse `select` eronder, en
+`supabase db query` stuurt één prepared statement. Met CLI v2.116.0 geeft
+`npm run db:seed`:
+
+```
+{"code":"LegacyDbQueryExecError",
+ "message":"failed to execute query: error: cannot insert multiple commands
+            into a prepared statement"}
+```
+
+Twee alternatieven, allebei gedraaid:
+
+```powershell
+docker exec -i supabase_db_remy psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/seed/demo_social.sql
+```
+
+Dat geeft de `NOTICE` van de seed plus de controletabel hieronder, in één keer.
+Of: plak het bestand in de **lokale** Studio op <http://127.0.0.1:54323>,
+SQL-editor. Dat is dezelfde handeling als tegen productie, alleen op een
+database die je mag slopen — en dat is de hele winst van dit document.
+
+`npm run db:seed:teardown` loopt tegen precies hetzelfde aan zodra het
+teardown-bestand meer dan één statement draagt; draai hem dan via dezelfde
+`docker exec … psql`-regel.
 
 ### Wat er hoort te ontstaan
 

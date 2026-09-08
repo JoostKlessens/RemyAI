@@ -486,6 +486,13 @@ two platforms.
 
 ## PD-014 — The global board is a fourth surface, and what that overrides
 
+> ⚠ **AMENDED on 8 September 2026 by the owner. See PD-014a below.** The board is drawn as a
+> vertical card feed with photographs instead of a numbered list, and it carries a reader-set
+> filter. **None of the six conditions below is repealed** — the amendment re-checks each one and
+> records the mechanism that keeps it true. What genuinely goes is the rank number and the
+> scannability of twenty-five lines. Everything else in this PD stands and is still cited by the
+> code.
+
 **The decision.** Remy gets a fourth tab: a global board ranking canonical recipes by what every
 household that cooked them thought. Fase 6.
 
@@ -589,6 +596,171 @@ words and the longer form does not fit it. Both words are the owner's own, chose
 alternatives after he asked what "Ranglijst" was meant to convey; the tab read "Ranglijst" and the
 header "Best beoordeeld" until then. The route segment is still `/ranglijst`, which is not
 user-facing.
+
+### PD-014a — Amended: the board is a card feed with a filter, and all six conditions survive
+
+**Owner decision, 8 September 2026**, on an iPhone 16 Pro against the production database with
+`supabase/seed/demo_social.sql` in it.
+
+**Verbatim:**
+
+> "Als ik naar de trending tab ga, kan ik niet op de recepten klikken die ik daar zie, ook hebben
+> ze geen foto, een soort scroll feature zou ik hier liever willen dan een ranking. Ik wil dat je
+> hier gewoon een zelfde soort ervaring krijgt als bij kiezen maar dan dat je naar beneden kan
+> scrollen en er een nieuw recept komt. Bijvoorbeeld zoals instagram met foto's werkt.
+>
+> Ook hier wil ik dat je een filter kan aanzetten."
+
+**What is amended: the FORM. What is not: the SUPPLY and the ORDER.** That line is the whole
+decision. A numbered list of twenty-five rows becomes a vertical feed of cards with photographs,
+one recipe per card, scrolled rather than scanned. Nothing about which recipes are on it, in which
+order, or for whom, changes at all.
+
+**One of the two complaints was a defect and not a decision, and it is worth separating.** "Ook
+hebben ze geen foto" is not a design position anybody took: `BoardRowModel` has carried
+`thumbnailUrl` since it existed and `toBoardRecipe` has always filled it, and the row component
+simply never drew an `<Image>` — independently confirmed by `useThumbnailFallback.ts`'s own header,
+which enumerates the app's four `<Image>` sites and does not name it. The DEFAULT scope of this tab
+has never been able to show a picture, while the `Vrienden` scope beside it always could. The scroll
+feed is the amendment; the photograph is a repair.
+
+#### The six conditions, re-checked one at a time
+
+Not asserted to survive — checked, with the mechanism named, because a condition that is merely
+claimed to hold is a condition nobody can find later.
+
+1. **Kiezen stays first and stays the launch tab.** Untouched. Tab order did not move.
+2. **Finite, and says so out loud.** Untouched, and this is the condition a feed most easily loses.
+   Same `LEADERBOARD_MAX_ROWS` (25), same `buildLeaderboard`, same `BOARD_END_COPY` — "Dat is de
+   hele lijst." — under the last card. **There is no `onEndReached` anywhere on this route**, and
+   that absence is now the condition rather than an oversight: it is the single line that would undo
+   it silently. A feed that fills itself up is a different decision from a feed that shows itself,
+   and only the second was taken.
+3. **Ordered by score, never by recency.** Untouched. No timestamp reaches any view model on this
+   route; `RecipeRating.ratedAt` still stops inside the domain. The filter is an `Array#filter`, so
+   what survives it stands in exactly the order `rankRecipes` produced.
+4. **Every row is a route to cooking.** **NOT satisfied, and it was not satisfied before this
+   change either.** See "The tap" below. This is the one condition that is honestly outstanding, and
+   the amendment does not pretend otherwise.
+5. **Every row carries its creator.** Untouched. Every card draws `@handle · Platform`; PD-007's
+   attribution obligation is unchanged.
+6. **No personalisation, ever.** Untouched, and this is the one the filter has to answer for. See
+   below.
+
+#### Why a filter is not personalisation
+
+Condition 6 reads "One board, identical for every reader." The filter narrows what one reader is
+looking at, and the difference is structural rather than semantic:
+
+- **The order never moves.** Filtering is an `Array#filter` over the assembled board. Two readers
+  with the same chips set see the same cards in the same order; a reader with nothing set sees
+  precisely the board everyone else sees. Nothing in the filter can promote a row.
+- **The reader states it, sees it, and can undo it in one tap.** A shut drawer carries its count in
+  the accent colour with "Wissen" beside it. A model tuning this board to a taste profile would do
+  the same arithmetic silently and answer to nobody. That is the distinction, and it is the whole
+  distinction.
+- **It survives nothing.** The screen resets it on every mount, exactly as Kiezen resets
+  `DecisionFilters`. A narrowing that followed a household into tomorrow would be a profile with
+  extra steps.
+- **`rankRecipes` still never sees the household.** The ranking has no parameter for one and must
+  not acquire one.
+
+**Two axes, and the other two were refused on the schema rather than on taste.** Gerechttags (AND)
+and time. `recipes` (0006) carries `dish_tags` and `estimated_minutes` and carries neither
+`dish_moods` nor `dish_course` — 0010 and 0017 added those to `meals` alone, and 0017 sets out at
+length why a `recipes.course` was deliberately refused. A mood chip on this surface would filter on
+a column that does not exist.
+
+#### The refusals that stay
+
+Explicit, because an amendment is exactly when a list like this gets lost:
+
+- **No algorithmic personalisation.** No model, no per-viewer ordering, no taste profile, no
+  "omdat je X hebt gekookt". `rankRecipes` sees ratings and nothing else.
+- **No recency sorting**, anywhere, at any scope, and no timestamp in any view model on this route.
+- **No badges.** No "nieuw", no "trending", no "populair", no streaks, no counts of anything except
+  the votes behind a grade.
+- **No infinite scroll**, no pagination, no "meer laden", no pull-for-more. The list ends and says
+  so.
+- **No padding of the friends list with global rows.** DESIGN-SOCIAL.md §2.2's rule is untouched:
+  a thin friends ranking stays visibly thin, the two scopes share a fetch and nothing else, and
+  `assembleKring` still has no parameter that could top one up from the other.
+- **No free-text search.** The filter is a closed chip vocabulary plus a time ladder. A search box
+  over a global list of strangers' recipes is the "Ontdekken" surface's control, and this PD
+  authorises a bounded board rather than a way to look things up in one.
+
+#### What is genuinely given up
+
+Two real functions disappear, and neither is replaced:
+
+1. **The rank number, and with it "wat staat er op 1".** A reader could previously read the board's
+   verdict as a position. `BoardRowModel.rank` still carries the number and nothing draws it. It
+   left the spoken accessibility label at the same moment it left the card — a position announced to
+   one reader and drawn for nobody would mean two readers being told different things about one
+   card, and the one who cannot see the screen would be the only one holding a number they cannot
+   check.
+2. **The scannability of twenty-five lines.** Comparing the top five at a glance was a real thing
+   this screen could do and now cannot; a card feed shows one at a time. That is what the photograph
+   costs, and the owner asked for the photograph knowing this screen had none.
+
+#### The half of the old defence that never applied here
+
+The sharpest thing to know about this reversal, and it makes it smaller than it looks.
+
+`DESIGN-SOCIAL.md` §2.4 defends a scrollable list of recipes against DESIGN.md's refused
+"Ontdekken" surface on **two** words: not *strangers*, and not *algorithmic*. Its structural
+argument — *"the feed cannot exceed what your friends actually cook"* — is about the **Vrienden
+tab**. Trending's `Iedereen` scope is **by definition a list of strangers**, and always was. So half
+of that defence never covered this surface and does not now.
+
+What covers it is the other half, and that half is untouched: nothing here is selected by a model
+optimising anything, the supply is bounded by arithmetic rather than by editorial restraint, and the
+order is identical for every reader. **This amendment changes how a bounded, deterministic,
+identical list is DRAWN.** It does not move it one step closer to the surface DESIGN.md refused.
+
+#### The tap: accepted, owed, and blocked
+
+He asked for it first — "kan ik niet op de recepten klikken die ik daar zie" — and the previous
+position, written into two component headers, was that the absence was a *contract*. **That framing
+is withdrawn.** It is now a debt, and the code says so.
+
+What blocks it is not effort but a missing destination. No screen in this app shows a canonical
+recipe: `/recipe/[mealId]` reads a household's own `meals` row, and `/friends/[feedItemId]` resolves
+a feed item and would answer a recipe id with "Dit recept staat er niet meer" — a lie about a recipe
+that exists. Three destinations were considered and measured:
+
+| | Destination | Verdict |
+| :-- | :-- | :-- |
+| A | No tap | What ships today. Honest, and not an answer to what he asked. |
+| B | The source post, via `recipes.normalized_url` | Blocked on data, and the weaker answer anyway: `normalized_url` is not projected onto `CanonicalRecipeSummary` and `listCanonicalRecipes` does not select it. It is also a route **out of the app**, so it fails condition 4 rather than satisfying it. |
+| C | A canonical recipe screen whose action is "bewaren" | The only destination that honours PD-004 and condition 4 at once, and it is a package rather than a prop. |
+
+**What C actually needs, measured**: a new route; a repository read that returns a canonical
+recipe's ingredients and steps (none exists — `listCanonicalRecipes` returns a summary); and a write
+that copies a `recipes` row into `meals`, which exists nowhere in this codebase — `/friends/[feedItemId]`
+has no "Opslaan" for exactly that reason and says so in its own header. PD-010 additionally requires
+that such a copy start at `allergenTagStatus: 'unknown'`.
+
+**So condition 4 is outstanding and named rather than quietly satisfied.** A tap to
+`/friends/[feedItemId]` is ruled out permanently: it would answer a real recipe with a claim that it
+is gone.
+
+#### What is deliberately left to the owner
+
+**How deep may the feed go?** On the demo seed, exactly **three** recipes clear
+`LEADERBOARD_MIN_VOTES = 3` — measured, not estimated: 8 recipes and 18 ratings in the database,
+population mean 7,861111, giving *Kip uit de oven met citroen* 8,04 (3 stemmen), *Romige pasta met
+spinazie* 7,98 (4 stemmen) and *Rode linzensoep* 7,66 (3 stemmen). Instagram-like scrolling through
+three cards is not the experience he described, and the only lever — lowering the vote floor —
+changes the arithmetic of the ranking and therefore how true it is. **That is an owner decision and
+it was not taken in this round.** The form is built; the floor stays 3.
+
+**And the photographs will still be monograms.** All eight demo recipes have `thumbnail_url = null`,
+and the seed cannot honestly be given one: these URLs are pre-signed and short-lived, and
+`research/13-legal-tos.md` records that reading oEmbed is permitted and downloading is not. Any
+invented URL answers 403; any copied image is not ours to ship. Every card will draw the monogram,
+which is the correct behaviour and not a failed test. The only way real photographs appear on this
+surface is a real import.
 
 ---
 

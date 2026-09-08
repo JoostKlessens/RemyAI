@@ -433,6 +433,129 @@ deze volgorde; de eerste is de goedkoopste.
 
 ---
 
+## 8. De ronde van 8 september 's avonds — het verzoek, de terugknop en Trending
+
+Drie van je vier punten zijn gerepareerd; het vierde is een toestelvraag
+geworden en staat hieronder als zodanig.
+
+### 8a. Het vriendschapsverzoek — dit hoort nu gewoon te werken
+
+- [ ] **Vrienden → `Zoeken op gebruikersnaam` → Fatima's rij → `Accepteren`.**
+
+      **Wat je hoort te zien:** de rij verdwijnt uit `VERZOEKEN` en Fatima
+      staat onder `VRIENDEN`. Is dit je eerste geaccepteerde vriendschap in
+      dit huishouden, dan komt daarna éénmalig de deelvraag omhoog.
+
+      **Wat het betekent als het anders is:** de reparatie zat in de
+      statementvorm die de app naar Postgres stuurt, en die is tegen een
+      lokale database met echte RLS bewezen — 403 vóór, 200 ná. Gebeurt er op
+      je toestel nog steeds niets, dan is het **niet meer deze oorzaak**.
+      Schrijf dan op of er bovenaan het scherm een rode zin staat: die melding
+      rendert boven de `VERZOEKEN`-kop en kan buiten beeld staan als je naar
+      de rij gescrold bent. Dat vermoeden is nooit op een scherm bevestigd, en
+      dit is de meting die het beslist.
+
+- [ ] **`Weigeren` op een verzoek**, en **een nieuw verzoek sturen** naar een
+      handle die bestaat. Beide gingen mee in dezelfde reparatie; het nieuwe
+      verzoek werkte altijd al en is hier de regressietest.
+
+### 8b. De terugknop — dit is een MEETING, geen reparatie
+
+⚠ **De oorzaak van jouw melding is niet gevonden.** Vier verklaringen zijn
+nagemeten en afgevallen, waaronder de twee die het meest voor de hand lagen:
+de knop was al 44 × 44 pt (de norm) en de veilige zone wordt wél toegepast.
+Wat er is gedaan is het raakvlak vergroten en een bekende opstartfout in de
+insets dichten — geen van beide is een diagnose, en de code zegt dat zelf.
+
+- [ ] **Tik `Terug` op `/friends/add` meteen nadat het scherm verschijnt**, en
+      nog eens na een seconde wachten. Doe dat vijf keer.
+
+      **Wat je hoort te zien:** je gaat terug naar Vrienden, elke keer.
+
+      **Wat het betekent als het anders is:** noteer of het misgaat bij de
+      snelle tik of ook bij de rustige. Alleen bij de snelle → het zit in de
+      opstartinsets. Ook bij de rustige → het is iets anders, en dan is de
+      volgende meting 8c.
+
+- [ ] **⚠ DE BELANGRIJKSTE METING VAN DEZE SECTIE — 8c.** Doe precies
+      hetzelfde op **Mijn recepten → een recept → `Terug`**, op
+      **Instellingen → `Sluiten`**, en op **importeren → `Annuleren`**.
+
+      **Waarom:** die drie rijen zijn byte voor byte dezelfde rij als die op
+      `/friends/add` — zelfde padding, zelfde 44pt-vloer, zelfde plek. **Is
+      het raakvlak de oorzaak, dan mankeren die drie het net zo goed.**
+      Mankeert alléén `/friends/add`, dan ligt het aan iets dat uniek is aan
+      dát scherm en niet aan de knop, en dat is een heel ander onderzoek.
+
+      Dit is de goedkoopste meting in dit document met het grootste gevolg,
+      precies zoals onderdeel 1 dat voor Android is.
+
+- [ ] **De knop staat NIET lager.** Je stelde dat zelf voor. Het is bewust
+      niet gedaan zolang de oorzaak onbekend is — verplaatsen zou een pleister
+      zijn en dan weten we nooit wat het was. Vind je hem na 8b en 8c nog
+      steeds slecht bereikbaar, dan is "lager" alsnog een prima antwoord; zeg
+      het, en het gebeurt.
+
+### 8d. Trending — de scrollfeed
+
+- [ ] **Trending, scope `Iedereen`.**
+
+      **Wat je hoort te zien:** **precies drie kaarten**, in deze volgorde —
+      *Kip uit de oven met citroen* (8,04), *Romige pasta met spinazie*
+      (7,98), *Rode linzensoep* (7,66) — met onderaan *"Dat is de hele
+      lijst."*
+
+      ⚠ **Drie is het goede getal en geen bug.** Alleen die drie halen de
+      ondergrens van drie stemmen. En de volgorde is bewust niet het rauwe
+      gemiddelde: de pasta heeft het hoogste gemiddelde en de kip staat toch
+      boven, omdat een cijfer naar het populatiegemiddelde geschaald wordt
+      naar hoeveel bewijs eronder ligt.
+
+      ⚠ **Drie kaarten is ook niet de Instagram-ervaring die je beschreef**,
+      en dat is een beslissing die bij jou ligt. Zie 8f.
+
+- [ ] **⚠ Elke kaart toont een MONOGRAM en geen foto. Dat is goed gedrag.**
+
+      De acht demo-recepten hebben geen thumbnail, en dat is niet eerlijk te
+      repareren: die URL's zijn kortlevend en ondertekend, en de
+      licentievoorwaarden staan lezen wel toe en kopiëren niet. **Wil je echte
+      foto's zien, importeer dan één echt TikTok- of Instagram-recept** — die
+      vult de thumbnail wél. Dat is meteen de enige manier om te zien of de
+      kaart klopt mét een foto erop.
+
+- [ ] **Het filter.** Open de lade, kies een gerechttag, kijk of het aantal
+      kaarten klopt met wat je koos, en tik `Wissen`.
+
+      ⚠ **Een tijdcap van 20 minuten maakt de feed leeg.** De drie recepten
+      duren 45, 25 en 30 minuten. Een lege feed mét een gezet filter is
+      correct gedrag en geen fout — maar kijk of het scherm dát ook zegt, in
+      plaats van te lijken alsof er niets geladen is.
+
+- [ ] **Tik op een kaart.** Er gebeurt niets, en dat is bekend en
+      opgeschreven. Zie 8f.
+
+- [ ] **Schakel naar scope `Vrienden`.**
+
+      ⚠ **Dan zie je de OUDE compacte rijen, niet de nieuwe kaarten.** Dat is
+      bekend, staat in de code opgeschreven, en is de hoogste-waarde
+      vervolgstap. Kijk of het je stoort — dat oordeel bepaalt of het de
+      volgende ronde in gaat.
+
+### 8f. Twee dingen waar alleen jij over gaat
+
+- [ ] **Hoe diep mag de feed?** De ondergrens van drie stemmen houdt de lijst
+      nu op drie kaarten. Verlagen geeft je meer om doorheen te scrollen en
+      maakt de ranglijst minder waar — één stem is dan al genoeg om mee te
+      doen. Niemand heeft dat voor je besloten.
+
+- [ ] **Waar moet een tik heen?** Er bestaat vandaag geen scherm dat een
+      recept van iemand anders toont, en er is ook geen pad dat er een kopie
+      van in jouw lijst zet. De eerlijke bestemming is *"Bewaren"*, en dat is
+      een eigen bouwronde. Het alternatief — de tik opent het bronbericht in
+      TikTok — is één regel en leidt de app uit.
+
+---
+
 ## Afronden
 
 Schrijf per bevinding drie regels op: **welk scherm**, **wat je zag**, **wat je
