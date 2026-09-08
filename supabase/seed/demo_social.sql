@@ -62,6 +62,32 @@ declare
   -- Vaste id's, zodat opnieuw draaien dezelfde rijen raakt en de teardown ze
   -- exact kan vinden. Het voorvoegsel IS het label.
   --
+  -- (!) EEN UUID KENT ALLEEN 0-9 EN a-f. DIT BESTAND HEEFT DAAR OP
+  -- 8 SEPTEMBER 2026 OP GEFAALD, bij de eerste keer dat iemand het draaide:
+  --
+  --     ERROR: 22P02: invalid input syntax for type uuid:
+  --     "5eed5eed-0000-4000-8000-00000000h001"
+  --
+  -- De tabellen kregen oorspronkelijk een letter als geheugensteun — h voor
+  -- household, m voor member, r voor rating, s voor share — en van die vier
+  -- is er geen enkele hexadecimaal. Vier van de negen tabellen konden dus
+  -- nooit één rij schrijven, en dat is drie dagen niemand opgevallen omdat
+  -- het bestand er wél doordacht uitzag en niemand het uitvoerde.
+  --
+  -- De les is niet "kijk beter": het is dat een uuid-literal een DATATYPE
+  -- heeft dat je niet kunt zien zonder hem te parsen. De tags hieronder zijn
+  -- daarom alle negen geldig hex, en de controle is één regel die je kunt
+  -- draaien vóór je plakt:
+  --
+  --     grep -o "5eed5eed-0000-4000-8000-[0-9a-zA-Z]*" demo_social.sql \
+  --       | grep -v "^5eed5eed-0000-4000-8000-[0-9a-f]\{12\}$"
+  --
+  -- Leeg is goed. De tags, met de betekenis die de letter niet meer draagt:
+  --
+  --     0 profiles      a recipes     b households   c cook_events
+  --     1 recipe_ratings              d household_members
+  --     2 recipe_shares  e meals      f friendships
+  --
   -- DE VORM VAN HET NETWERK IS HET BELANGRIJKSTE AAN DIT BESTAND, want de
   -- vriendensuggesties (0019) rekenen op de TWEEDE stap in de grafiek en die
   -- kun je niet zien met alleen twee vrienden. Wat hieronder ontstaat:
@@ -204,38 +230,38 @@ begin
   --    geaccepteerde vriendschap die zij niet met jou hebben.
   insert into public.households (id, name, share_cooks_with_friends)
   values
-    ('5eed5eed-0000-4000-8000-00000000h001', 'Huishouden Sanne (demo)', true),
-    ('5eed5eed-0000-4000-8000-00000000h002', 'Huishouden Bram (demo)',  true)
+    ('5eed5eed-0000-4000-8000-00000000b001', 'Huishouden Sanne (demo)', true),
+    ('5eed5eed-0000-4000-8000-00000000b002', 'Huishouden Bram (demo)',  true)
   on conflict (id) do update set share_cooks_with_friends = true;
 
   insert into public.household_members (id, household_id, display_name, auth_user_id)
   values
-    ('5eed5eed-0000-4000-8000-00000000m001', '5eed5eed-0000-4000-8000-00000000h001', 'Sanne (demo)', sanne_id),
-    ('5eed5eed-0000-4000-8000-00000000m002', '5eed5eed-0000-4000-8000-00000000h002', 'Bram (demo)',  bram_id)
+    ('5eed5eed-0000-4000-8000-00000000d001', '5eed5eed-0000-4000-8000-00000000b001', 'Sanne (demo)', sanne_id),
+    ('5eed5eed-0000-4000-8000-00000000d002', '5eed5eed-0000-4000-8000-00000000b002', 'Bram (demo)',  bram_id)
   on conflict (id) do nothing;
 
   -- 5. Hun maaltijden en kookgebeurtenissen. Dit is het bewijs: shared_cooks
   --    koppelt (household_member.auth_user_id, meal.recipe_id) en niets meer.
   insert into public.meals (id, household_id, title, source, recipe_id, estimated_minutes, servings, excluded_from_cook_proof)
   values
-    ('5eed5eed-0000-4000-8000-00000000e001', '5eed5eed-0000-4000-8000-00000000h001', 'Romige pasta met spinazie',   'saved', recipe_a, 25, 4, false),
-    ('5eed5eed-0000-4000-8000-00000000e002', '5eed5eed-0000-4000-8000-00000000h001', 'Rode linzensoep',             'saved', recipe_c, 30, 4, false),
-    ('5eed5eed-0000-4000-8000-00000000e003', '5eed5eed-0000-4000-8000-00000000h002', 'Kip uit de oven met citroen', 'saved', recipe_b, 45, 4, false),
-    ('5eed5eed-0000-4000-8000-00000000e004', '5eed5eed-0000-4000-8000-00000000h002', 'Wok met noedels en broccoli', 'saved', recipe_d, 20, 2, false),
-    ('5eed5eed-0000-4000-8000-00000000e005', '5eed5eed-0000-4000-8000-00000000h001', 'Shakshuka met feta',          'saved', recipe_e, 25, 3, false),
-    ('5eed5eed-0000-4000-8000-00000000e006', '5eed5eed-0000-4000-8000-00000000h002', 'Risotto met champignons',     'saved', recipe_h, 40, 2, false)
+    ('5eed5eed-0000-4000-8000-00000000e001', '5eed5eed-0000-4000-8000-00000000b001', 'Romige pasta met spinazie',   'saved', recipe_a, 25, 4, false),
+    ('5eed5eed-0000-4000-8000-00000000e002', '5eed5eed-0000-4000-8000-00000000b001', 'Rode linzensoep',             'saved', recipe_c, 30, 4, false),
+    ('5eed5eed-0000-4000-8000-00000000e003', '5eed5eed-0000-4000-8000-00000000b002', 'Kip uit de oven met citroen', 'saved', recipe_b, 45, 4, false),
+    ('5eed5eed-0000-4000-8000-00000000e004', '5eed5eed-0000-4000-8000-00000000b002', 'Wok met noedels en broccoli', 'saved', recipe_d, 20, 2, false),
+    ('5eed5eed-0000-4000-8000-00000000e005', '5eed5eed-0000-4000-8000-00000000b001', 'Shakshuka met feta',          'saved', recipe_e, 25, 3, false),
+    ('5eed5eed-0000-4000-8000-00000000e006', '5eed5eed-0000-4000-8000-00000000b002', 'Risotto met champignons',     'saved', recipe_h, 40, 2, false)
   on conflict (id) do update set recipe_id = excluded.recipe_id;
 
   -- Relatieve datums, nooit vaste. Een seed met '2026-09-08' erin is over een
   -- maand een seed die "vorige maand gekookt" zegt.
   insert into public.cook_events (id, household_id, meal_id, cooked_on, rating, created_at)
   values
-    ('5eed5eed-0000-4000-8000-00000000c001', '5eed5eed-0000-4000-8000-00000000h001', '5eed5eed-0000-4000-8000-00000000e001', current_date - 2, 8.5, now() - interval '2 days'),
-    ('5eed5eed-0000-4000-8000-00000000c002', '5eed5eed-0000-4000-8000-00000000h001', '5eed5eed-0000-4000-8000-00000000e002', current_date - 5, 7.0, now() - interval '5 days'),
-    ('5eed5eed-0000-4000-8000-00000000c003', '5eed5eed-0000-4000-8000-00000000h002', '5eed5eed-0000-4000-8000-00000000e003', current_date - 1, 9.0, now() - interval '1 day'),
-    ('5eed5eed-0000-4000-8000-00000000c004', '5eed5eed-0000-4000-8000-00000000h002', '5eed5eed-0000-4000-8000-00000000e004', current_date - 8, 6.5, now() - interval '8 days'),
-    ('5eed5eed-0000-4000-8000-00000000c005', '5eed5eed-0000-4000-8000-00000000h001', '5eed5eed-0000-4000-8000-00000000e005', current_date - 3, 8.0, now() - interval '3 days'),
-    ('5eed5eed-0000-4000-8000-00000000c006', '5eed5eed-0000-4000-8000-00000000h002', '5eed5eed-0000-4000-8000-00000000e006', current_date - 6, 7.5, now() - interval '6 days')
+    ('5eed5eed-0000-4000-8000-00000000c001', '5eed5eed-0000-4000-8000-00000000b001', '5eed5eed-0000-4000-8000-00000000e001', current_date - 2, 8.5, now() - interval '2 days'),
+    ('5eed5eed-0000-4000-8000-00000000c002', '5eed5eed-0000-4000-8000-00000000b001', '5eed5eed-0000-4000-8000-00000000e002', current_date - 5, 7.0, now() - interval '5 days'),
+    ('5eed5eed-0000-4000-8000-00000000c003', '5eed5eed-0000-4000-8000-00000000b002', '5eed5eed-0000-4000-8000-00000000e003', current_date - 1, 9.0, now() - interval '1 day'),
+    ('5eed5eed-0000-4000-8000-00000000c004', '5eed5eed-0000-4000-8000-00000000b002', '5eed5eed-0000-4000-8000-00000000e004', current_date - 8, 6.5, now() - interval '8 days'),
+    ('5eed5eed-0000-4000-8000-00000000c005', '5eed5eed-0000-4000-8000-00000000b001', '5eed5eed-0000-4000-8000-00000000e005', current_date - 3, 8.0, now() - interval '3 days'),
+    ('5eed5eed-0000-4000-8000-00000000c006', '5eed5eed-0000-4000-8000-00000000b002', '5eed5eed-0000-4000-8000-00000000e006', current_date - 6, 7.5, now() - interval '6 days')
   on conflict (id) do nothing;
 
   -- 6. Openbare stemmen. Twee dingen tegelijk: Ranglijst rangschikt hierop
@@ -252,36 +278,36 @@ begin
   --    zes stemmen van Daan zijn zes verschillende recepten.
   insert into public.recipe_ratings (id, recipe_id, rater_profile_id, rating)
   values
-    ('5eed5eed-0000-4000-8000-00000000r001', recipe_a, sanne_id,   8.5),
-    ('5eed5eed-0000-4000-8000-00000000r002', recipe_a, bram_id,    9.0),
-    ('5eed5eed-0000-4000-8000-00000000r003', recipe_a, fatima_id,  8.0),
-    ('5eed5eed-0000-4000-8000-00000000r004', recipe_b, bram_id,    9.0),
-    ('5eed5eed-0000-4000-8000-00000000r005', recipe_b, sanne_id,   7.5),
-    ('5eed5eed-0000-4000-8000-00000000r006', recipe_c, sanne_id,   7.0),
-    ('5eed5eed-0000-4000-8000-00000000r007', recipe_d, bram_id,    6.5),
-    ('5eed5eed-0000-4000-8000-00000000r008', recipe_e, sanne_id,   8.0),
-    ('5eed5eed-0000-4000-8000-00000000r009', recipe_h, bram_id,    7.5),
+    ('5eed5eed-0000-4000-8000-000000001001', recipe_a, sanne_id,   8.5),
+    ('5eed5eed-0000-4000-8000-000000001002', recipe_a, bram_id,    9.0),
+    ('5eed5eed-0000-4000-8000-000000001003', recipe_a, fatima_id,  8.0),
+    ('5eed5eed-0000-4000-8000-000000001004', recipe_b, bram_id,    9.0),
+    ('5eed5eed-0000-4000-8000-000000001005', recipe_b, sanne_id,   7.5),
+    ('5eed5eed-0000-4000-8000-000000001006', recipe_c, sanne_id,   7.0),
+    ('5eed5eed-0000-4000-8000-000000001007', recipe_d, bram_id,    6.5),
+    ('5eed5eed-0000-4000-8000-000000001008', recipe_e, sanne_id,   8.0),
+    ('5eed5eed-0000-4000-8000-000000001009', recipe_h, bram_id,    7.5),
     -- Noor en Youssef stemmen ook, maar minder: hun suggestie leunt op de
     -- gedeelde vrienden, en een hoge stemtelling erbij zou niet zichtbaar
     -- maken welke van de twee regels hen omhoog bracht.
-    ('5eed5eed-0000-4000-8000-00000000r010', recipe_c, noor_id,    9.0),
-    ('5eed5eed-0000-4000-8000-00000000r011', recipe_f, youssef_id, 8.0),
+    ('5eed5eed-0000-4000-8000-000000001010', recipe_c, noor_id,    9.0),
+    ('5eed5eed-0000-4000-8000-000000001011', recipe_f, youssef_id, 8.0),
     -- Daan: zes recepten, zes stemmen, nul vrienden.
-    ('5eed5eed-0000-4000-8000-00000000r012', recipe_a, daan_id,    7.0),
-    ('5eed5eed-0000-4000-8000-00000000r013', recipe_b, daan_id,    8.5),
-    ('5eed5eed-0000-4000-8000-00000000r014', recipe_c, daan_id,    6.0),
-    ('5eed5eed-0000-4000-8000-00000000r015', recipe_e, daan_id,    9.5),
-    ('5eed5eed-0000-4000-8000-00000000r016', recipe_g, daan_id,    7.5),
-    ('5eed5eed-0000-4000-8000-00000000r017', recipe_h, daan_id,    8.0),
+    ('5eed5eed-0000-4000-8000-000000001012', recipe_a, daan_id,    7.0),
+    ('5eed5eed-0000-4000-8000-000000001013', recipe_b, daan_id,    8.5),
+    ('5eed5eed-0000-4000-8000-000000001014', recipe_c, daan_id,    6.0),
+    ('5eed5eed-0000-4000-8000-000000001015', recipe_e, daan_id,    9.5),
+    ('5eed5eed-0000-4000-8000-000000001016', recipe_g, daan_id,    7.5),
+    ('5eed5eed-0000-4000-8000-000000001017', recipe_h, daan_id,    8.0),
     -- Tessa stemt een keer. Genoeg om te bestaan, te weinig om Daan te
     -- verdringen — en zij hoort sowieso niet in de suggesties te staan.
-    ('5eed5eed-0000-4000-8000-00000000r018', recipe_g, tessa_id,   7.0)
+    ('5eed5eed-0000-4000-8000-000000001018', recipe_g, tessa_id,   7.0)
   on conflict (id) do update set rating = excluded.rating;
 
   -- 7. Een doorgestuurd recept, zodat "het pannetje" ook iets te tonen heeft.
   insert into public.recipe_shares (id, meal_id, sender_profile_id, recipient_profile_id, note)
   values
-    ('5eed5eed-0000-4000-8000-00000000s001', '5eed5eed-0000-4000-8000-00000000e003', bram_id, owner_id, 'Deze moet je proberen!')
+    ('5eed5eed-0000-4000-8000-000000002001', '5eed5eed-0000-4000-8000-00000000e003', bram_id, owner_id, 'Deze moet je proberen!')
   on conflict (id) do nothing;
 
   raise notice 'Demo-data geplaatst voor handle %. Alles begint met 5eed5eed; draai demo_social_teardown.sql om het weg te halen.', resolved_handle;
