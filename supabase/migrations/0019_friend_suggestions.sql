@@ -135,10 +135,39 @@ as $$
   -- The two pools, unioned on profile id. A candidate that appears in both
   -- keeps both numbers, which is what makes "a mutual friend who is also
   -- active" sort above either on its own.
+  --
+  -- (!) THE ACTIVITY POOL HAS A FLOOR, AND THE FLOOR IS THE WHOLE POINT OF
+  -- THIS CTE. Without `vote_count >= 3` a single vote qualifies a total
+  -- stranger, and the row then reads "Beoordeelde 1 recept" next to their
+  -- real name — which is a true sentence and a worthless reason. One vote is
+  -- not "actief op Remy"; it is somebody who opened the app once.
+  --
+  -- Found in review on 8 September 2026, before this migration was ever
+  -- applied, and it had already produced a FALSE TEST ORACLE. The demo seed
+  -- and three documents all said "Tessa hoort er NIET in te staan; staat ze
+  -- er wel, dan reikt de query een stap te ver." Tessa is three hops out and
+  -- has exactly one vote, so she qualified through this pool — with
+  -- `mutual_friends = 0`, which means the second hop was behaving perfectly.
+  -- The stated symptom of a leak was in fact the correct answer, and only
+  -- `MAX_VISIBLE_SUGGESTIONS = 3` on the client kept her off the screen.
+  -- A test that condemns a healthy function is worse than no test.
+  --
+  -- THE FLOOR IS ON QUALIFICATION, NOT ON THE COUNT, and that distinction is
+  -- deliberate: `vote_counts` stays complete so the `public_votes` column it
+  -- feeds through the LEFT JOIN below keeps telling the truth for everybody.
+  -- Putting `having count(*) >= 3` inside `vote_counts` instead would make a
+  -- mutual-friend candidate with two votes report zero, and a column that
+  -- silently means "votes, but only above a threshold" is the kind of half
+  -- number nobody can reason about later.
+  --
+  -- Three is a judgement and not a measurement — there is no usage data yet
+  -- to calibrate against. It is deliberately conservative: on a small user
+  -- base nobody clears it and the activity pool is simply empty, which is
+  -- the honest state. An empty block beats a bad suggestion.
   candidates as (
     select candidate_id as id from mutuals
     union
-    select rater_profile_id from vote_counts
+    select rater_profile_id from vote_counts where vote_count >= 3
   )
   select
     p.id,

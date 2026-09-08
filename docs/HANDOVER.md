@@ -872,7 +872,10 @@ laatste zou een verzonnen getal naast een echte naam zijn.
 **De seed vraagt niets meer.** Punt 2 hierboven bleef vier dagen liggen omdat
 je er je eigen handle in moest typen. Hij zoekt nu zelf het enige profiel dat
 niet met `demo_` begint. Het netwerk erin is drie stappen diep en met opzet zo:
-Tessa staat erin om te kúnnen zien dat ze er NIET in hoort te staan.
+Tessa staat erin om te kúnnen zien dat ze er NIET in hoort te staan — en dat
+criterium bleek zelf fout, wat de vondst van de reviewronde was. Zie punt 2
+hieronder: één stem was genoeg om te kwalificeren zolang de activiteitspool
+geen ondergrens had, en `0019` heeft die nu wel.
 
 ⚠ **NIETS VAN DE SQL IS GEDRAAID.** Geen Docker op deze machine, dus
 `supabase status` faalt en er is geen Postgres om `0019` of de seed tegenaan te
@@ -973,9 +976,24 @@ geen code maar één handeling. De rest is werk.
    - Daan kent niemand maar stemde op zes recepten → *"Beoordeelde 6
      recepten"*. Hij is het enige geval waarin je de tweede soort suggestie
      te zien krijgt; kende hij één vriend van je, dan won de andere regel.
-   - Tessa kent alleen Noor — de DERDE stap. **Zij hoort NIET in je
-     suggesties te staan.** Staat ze er wel, dan reikt de query een stap te
-     ver, en dat is precies het soort fout dat je anders pas veel later ziet.
+   - Tessa kent alleen Noor — de DERDE stap — en heeft één stem. **Zij hoort
+     er langs geen van beide routes in te staan.** Niet via de tweede hop
+     (dan zou hij een stap te ver reiken), en niet via activiteit (één stem
+     haalt de drempel van drie niet).
+
+   ⚠ **HET CRITERIUM VOOR TESSA STOND HIER FOUT EN IS OP 8 SEPTEMBER
+   RECHTGEZET, en dit is de leerzaamste fout van de dag.** Er stond kaal:
+   "staat ze er wel, dan reikt de query een stap te ver." Dat was een test
+   die een GEZONDE functie afkeurt. Tessa heeft één stem, en de
+   activiteitspool van `0019` kende toen geen ondergrens — dus ze
+   kwalificeerde, mét `mutual_friends = 0`, wat betekent dat de tweede hop
+   precies deed wat hij belooft. Het symptoom dat als lek was opgeschreven
+   wás het juiste antwoord; alleen `MAX_VISIBLE_SUGGESTIONS = 3` hield haar
+   uit beeld. Gevonden bij review vóór `0019` ooit was toegepast.
+   `0019` heeft nu `vote_count >= 3` op de activiteitspool — op de
+   KWALIFICATIE en niet op de telling, zodat `public_votes` voor iedereen
+   waar blijft. Haar stem blijft met opzet staan: die maakt haar het bewijs
+   dát de drempel werkt.
 
    Acht recepten, achttien stemmen, één doorgestuurd recept. Onderaan het
    bestand staat een controlequery die die aantallen teruggeeft: klopt die en

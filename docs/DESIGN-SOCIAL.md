@@ -647,7 +647,27 @@ already makes with its mono `wacht`.
 | reason | sentence | source |
 |---|---|---|
 | shared friends | "2 gemeenschappelijke vrienden" | `suggested_friends().mutual_friends` |
-| activity | "Beoordeelde 7 recepten" | `suggested_friends().public_votes` |
+| activity | "Beoordeelde 7 recepten" | `suggested_friends().public_votes`, **minimaal 3** |
+
+**(!) De activiteitspool heeft een ondergrens van drie stemmen, en die is er
+door een fout in de eerste versie.** Zonder ondergrens kwalificeert één stem
+een volslagen vreemde, en dan staat er *"Beoordeelde 1 recept"* naast een
+echte naam: een ware zin en een waardeloze reden. Eén stem is niet "actief op
+Remy", het is iemand die de app één keer opende.
+
+Dat was bij review op 8 september 2026 niet alleen een ontwerpzwakte maar ook
+een **onjuist testorakel**: de demo-seed en drie documenten zeiden dat Tessa —
+drie stappen ver, één stem — niet mocht verschijnen, "en staat ze er wel, dan
+reikt de query een stap te ver". Ze verscheen, mét `mutual_friends = 0`, wat
+betekent dat de tweede hop juist perfect werkte. Alleen de cap van drie op het
+scherm hield haar uit beeld. Een test die een gezonde functie afkeurt kost meer
+dan geen test.
+
+De grens zit op de KWALIFICATIE en niet op de telling: `vote_counts` blijft
+compleet, zodat de `public_votes` die de rij toont voor iedereen waar blijft.
+Drie is een oordeel en geen meting — er is nog geen gebruiksdata om op te
+kalibreren — en bewust aan de voorzichtige kant: haalt niemand hem, dan is de
+activiteitspool leeg, en een leeg blok is beter dan een slechte suggestie.
 
 A candidate can carry both numbers; a row that said both would say
 nothing. The mutual-friends line wins every tie — including one mutual

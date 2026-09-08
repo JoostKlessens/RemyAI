@@ -79,10 +79,18 @@ declare
   -- daarom alle negen geldig hex, en de controle is één regel die je kunt
   -- draaien vóór je plakt:
   --
-  --     grep -o "5eed5eed-0000-4000-8000-[0-9a-zA-Z]*" demo_social.sql \
+  --     grep -v "^[[:space:]]*--" demo_social.sql \
+  --       | grep -o "5eed5eed-0000-4000-8000-[0-9a-zA-Z]*" \
   --       | grep -v "^5eed5eed-0000-4000-8000-[0-9a-f]\{12\}$"
   --
-  -- Leeg is goed. De tags, met de betekenis die de letter niet meer draagt:
+  -- Leeg is goed. DIE EERSTE REGEL STRIPT HET COMMENTAAR EN IS NIET
+  -- OPTIONEEL: zonder haar leest de controle haar eigen documentatie mee en
+  -- meldt drie treffers die geen van drieën een uuid-literal zijn — de
+  -- foutmelding hierboven, en het zoekpatroon in deze regels zelf. Een
+  -- controle die op een gezond bestand alarm slaat, is een controle die je
+  -- de volgende keer overslaat.
+  --
+  -- De tags, met de betekenis die de letter niet meer draagt:
   --
   --     0 profiles      a recipes     b households   c cook_events
   --     1 recipe_ratings              d household_members
@@ -102,8 +110,32 @@ declare
   --
   -- Daarmee toont het Vrienden-scherm alle drie de gevallen tegelijk: een
   -- suggestie op gedeelde vrienden, een suggestie op activiteit, en een
-  -- wachtend verzoek. Tessa hoort er NIET in te staan; staat ze er wel, dan
-  -- reikt de query een stap te ver.
+  -- wachtend verzoek.
+  --
+  -- (!) HET ACCEPTATIECRITERIUM VOOR TESSA STOND HIER FOUT, EN HET IS HET
+  -- LEERZAAMSTE DEEL VAN DIT BESTAND. Er stond: "Tessa hoort er NIET in te
+  -- staan; staat ze er wel, dan reikt de query een stap te ver." Dat is een
+  -- test die een GEZONDE functie afkeurt.
+  --
+  -- Tessa heeft namelijk één stem (regel met recipe_g hieronder), en de
+  -- activiteitspool van 0019 kende oorspronkelijk geen ondergrens. Ze
+  -- kwalificeerde dus — met `mutual_friends = 0`, wat betekent dat de tweede
+  -- hop precies deed wat hij belooft. Het gemelde symptoom van een lek wás
+  -- het juiste antwoord, en alleen de cap van drie op het scherm hield haar
+  -- uit beeld. Had ze zeven stemmen gehad, dan had ze Daan verdrongen.
+  --
+  -- Gevonden bij review op 8 september 2026, vóór 0019 ooit was toegepast.
+  -- 0019 heeft nu een ondergrens van drie stemmen op de activiteitspool, en
+  -- HAAR ENE STEM BLIJFT DAAROM MET OPZET STAAN: die maakt Tessa het bewijs
+  -- dát die drempel werkt, in plaats van een persoon die toevallig nergens
+  -- in voorkomt.
+  --
+  -- Het criterium, nu in twee delen en allebei waar:
+  --   * Tessa mag NOOIT verschijnen MET gemeenschappelijke vrienden. Gebeurt
+  --     dat wel, dan reikt de tweede hop een stap te ver — dat is het echte
+  --     lek waar dit netwerk op test.
+  --   * Tessa mag ook niet via activiteit verschijnen, want één stem haalt
+  --     de drempel van drie niet.
   sanne_id   constant uuid := '5eed5eed-0000-4000-8000-000000000001';
   bram_id    constant uuid := '5eed5eed-0000-4000-8000-000000000002';
   fatima_id  constant uuid := '5eed5eed-0000-4000-8000-000000000003';
