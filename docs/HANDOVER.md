@@ -4,10 +4,11 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 8 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`16d9e1c` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
-regels. Vier checks groen, nagemeten en niet overgeschreven uit de vorige
-stand: typecheck 0, lint 0, `check:functions` 0, **3249 tests over 135
-bestanden**.
+`16d9e1c` gecommit. **De werkboom is NIET schoon** — de vriendenronde van
+8 september 's ochtends staat ongecommit in de boom (zie *Wat er op
+8 september gebeurde*, deel twee). Vier checks groen, gedraaid en niet
+overgeschreven uit de vorige stand: typecheck 0, lint 0, `check:functions` 0,
+**3273 tests over 136 bestanden**.
 
 ⚠ **Vier commits staan nog niet op `origin`.** Gemeten met `git rev-list
 --left-right --count origin/feat/live-import-and-plan-phases...HEAD`, dat
@@ -141,11 +142,13 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 3249 tests / 135 bestanden
+npm test                 3273 tests / 136 bestanden
 ```
 
-⚠ Hier stond **3137 over 130**, en dat was de stand van vóór de twee rondes
-van 7 september. De drie nieuwe testbestanden zijn
+⚠ Hier stond **3249 over 135** en dáárvoor **3137 over 130**. Het nieuwe
+bestand is `tests/friendSuggestions.test.ts` (24 tests, de vriendenronde van
+8 september). **Gedraaid, niet opgehoogd** — dezelfde discipline als hieronder.
+De drie testbestanden van de ronde ervoor zijn
 `tests/decisionFilterCopy.test.ts`, `tests/vanavondActionCopy.test.ts` en
 `tests/ingredientSections.test.ts`; de rest van de aanwas zit in bestaande
 bestanden. **Deze telling is gedraaid, niet opgehoogd** — dezelfde fout die
@@ -808,6 +811,77 @@ dat het in elk SVG-element spreidde. React leest `key` van het element af
 vóórdat props bestaan, dus dat werkt én waarschuwt. Nu expliciet, en ná de
 spread — een `{...common}` erachter zou hem terugzetten.
 
+### Later op 8 september: de Vrienden-tab, en een refusal die is teruggedraaid
+
+**Ongecommit in de boom.** Vier checks groen (3273 over 136).
+
+De eigenaar, na de ochtendronde: *"op de vrienden tab bovenaan vriend
+toevoegen, die mag weg en de zin daaronder ook … ik wil dat je de look van
+deze pagina clean maakt en intuitief, misschien wat suggesties voor vrienden
+op basis van wie jouw vrienden zijn en met wie zij zijn verbonden of wie er
+veel recepten plaatst op de app."*
+
+**De kop is nu een woord.** Weg zijn `+ Vriend toevoegen` en *"Wat vrienden
+echt gekookt hebben."*; weg zijn ook de twee gestapelde secondary-knoppen en
+het decoratieve streepje in de lege staat. Wat er stond was drie verdiepingen
+boven een lijst kaarten die zichzelf al uitleggen, en zes elementen diep in de
+lege staat. **Elk element had een eigen goede reden en de stapel had er geen**
+— dat is de "AI-gegenereerde" textuur waar hij naar wees, en het is precies wat
+er gebeurt als elke regel apart wordt bevredigd en niemand naar het geheel
+kijkt.
+
+⚠ **Het weghalen van die knop haalde de enige duurzame deur naar
+`/friends/add` weg**, en dat is het ding om te weten vóór je dit scherm weer
+aanraakt. De lege staat had er ook een, en die verdwijnt zodra er één kaart
+binnenkomt — dus iemand met twee vrienden en een volle feed had geen manier om
+een derde toe te voegen. `Zoeken op gebruikersnaam` onderaan het
+suggestieblok is die deur nu, en die tekent **ook als er nul suggesties zijn**.
+Maak hem niet afhankelijk van een niet-lege lijst.
+
+**"Misschien ken je" — en dit draait twee opgeschreven weigeringen terug.**
+DESIGN-SOCIAL.md zei op twee plaatsen "geen suggesties" en "no
+vrienden-van-vrienden". De eigenaar vroeg letterlijk om allebei. Ze zijn
+geamendeerd in §4.4 en §7 in plaats van stilletjes overschreven, met §4.5 als
+nieuwe spec.
+
+**Wat wél is opgegeven en wat niet, want dat is de kern.** De tweede stap in de
+vriendengrafiek is nu leesbaar — maar alleen binnen `suggested_friends()`
+(migratie `0019`), een `security definer`-functie die teruggeeft **hoevéél** van
+je vrienden iemand kennen en nooit **wie**. Dat laatste zou een feit over de
+grafiek van jóuw vriend zijn, verteld aan een derde, en dat is exact wat
+`friendships_select` in `0007` weigert. Wat niet bewoog: geen adresboek, geen
+followers, geen publieke profielen. Wat is geaccepteerd als prijs, en niet
+weggeredeneerd: een aantal lekt nog steeds randen aan een geduldige lezer die
+één voor één vrienden maakt en de getallen ziet bewegen. Eén bewuste
+vriendschap per bit.
+
+⚠ **DE CLIENT KAN DIT NIET ZELF, EN DAT FAALT STIL.** Vraag je vanuit de app
+wie Sanne kent, dan geeft RLS je nul rijen terug en concludeer je dat ze
+niemand kent. Een feature die niets doet en er werkend uitziet. Daarom staat
+de tweede stap in SQL en niet in TypeScript.
+
+⚠ **"Wie plaatst veel recepten" BESTAAT NIET ALS GETAL, en de copy liegt er
+niet over.** Er is geen kolom "wie heeft dit recept toegevoegd": `recipes`
+(0006) is canoniek en gesleuteld op een URL, en de huishoudkopie die het weet
+is `meals`, dat `meals_select` terecht aan elk ander huishouden weigert. Het
+enige publieke spoor van een persoon zijn de stemmen die hij uitbrengt. De
+regel is dus *"Beoordeelde 7 recepten"* en nooit *"plaatste 7 recepten"* — dat
+laatste zou een verzonnen getal naast een echte naam zijn.
+`tests/friendSuggestions.test.ts` veegt op die formulering.
+
+**De seed vraagt niets meer.** Punt 2 hierboven bleef vier dagen liggen omdat
+je er je eigen handle in moest typen. Hij zoekt nu zelf het enige profiel dat
+niet met `demo_` begint. Het netwerk erin is drie stappen diep en met opzet zo:
+Tessa staat erin om te kúnnen zien dat ze er NIET in hoort te staan.
+
+⚠ **NIETS VAN DE SQL IS GEDRAAID.** Geen Docker op deze machine, dus
+`supabase status` faalt en er is geen Postgres om `0019` of de seed tegenaan te
+houden. Beide zijn gelezen en tegen het schema nagelopen — kolomnamen, types,
+de `numeric(4,2)`-grenzen uit `0008`, het `blocked`-terminale trigger-gedrag,
+en dat de trigger `auth.uid() is null` doorlaat zodat de seed idempotent
+opnieuw kan draaien. Dat is niet hetzelfde als gedraaid. **Het is de eerste
+plek waar dit stuk kan stukgaan.**
+
 **Wat deze dag over agents leerde, los van de code:** de CEO die de ronde
 verdeelde corrigeerde vier fouten in zijn eigen opdracht (regelaantallen,
 regelnummers, een verschuiving van +202 die als +194 was doorgegeven — en dat
@@ -863,17 +937,65 @@ geen code maar één handeling. De rest is werk.
    een `date` zonder tijd en had het nooit gekund. **Er is geen migratie
    nodig**; de kolom was er al en niemand las hem.
 
-2. ⚠ **`supabase/seed/demo_social.sql` DRAAIEN — nog niet gebeurd.** De
-   eigenaar meldde op 8 september dat Vrienden en Ranglijst leeg zijn. Dat is
-   geen defect: `loadLiveFriends` keert vroeg terug zodra
-   `collectAcceptedFriendIds` leeg is, en Ranglijst rangschikt
-   `recipe_ratings`-rijen die niet bestaan. Er staat niets in de database.
+2. ⚠ **TWEE DINGEN IN SUPABASE ZETTEN — DIT IS HET ENIGE DAT DE EIGENAAR
+   ZELF MOET DOEN, en zonder allebei blijft Vrienden er leeg uitzien.**
 
-   Eén regel invullen (zijn eigen handle, bovenin) en plakken in de
-   SQL-editor. Het script weigert te draaien als het die handle niet vindt en
-   somt op welke er wél zijn — een vriendschap zonder de andere helft levert
-   een tab op die nog steeds leeg is, en dan lijkt het script stuk terwijl de
-   invoer dat was. `demo_social_teardown.sql` haalt alles weer weg.
+   **(a) `npx supabase db push`** — migratie **`0019_friend_suggestions.sql`**
+   staat klaar en is local-only. Zij maakt `suggested_friends()`, waar het
+   blok "Misschien ken je" op leest. Zonder haar faalt die ene read met
+   `PGRST202` (function not found), en dat is met opzet **stil**: het blok
+   verschijnt gewoon niet en de feed eromheen laadt normaal. Er staat dus
+   geen foutmelding op je te wachten die zegt dat dit nog moet.
+
+   ⚠ Regels over de migratiestand zijn in dit document VIER keer onwaar
+   gebleken. Draai `npx supabase migration list` vóór je hier iets beweert;
+   het leest en wijzigt niets. Wat ik zelf gemeten heb op 8 september: niets
+   — er draait hier geen Docker, dus `supabase status` faalt. Wat ik wél weet
+   is dat `0019` vandaag geschreven is en dus onmogelijk al remote kan staan.
+
+   **(b) `supabase/seed/demo_social.sql`** — plakken in de SQL-editor en
+   uitvoeren. **Je hoeft niets meer in te vullen**, en dat is de reden dat
+   dit punt vier dagen bleef liggen: de vorige versie eiste dat je bovenin je
+   eigen handle intypte, en een script dat pas werkt na een bewerking is een
+   script dat blijft liggen. Hij zoekt nu zelf het enige profiel dat niet met
+   `demo_` begint, en weigert mét een opsomming als dat er nul of meer dan
+   één zijn.
+
+   **Wat er nu in zit, en waarom het meer is dan drie namen.** Het netwerk is
+   met opzet drie stappen diep, want de suggesties leunen op de TWEEDE stap
+   en die kun je met twee vrienden niet zien:
+
+   - Sanne en Bram zijn je vrienden (geaccepteerd), met huishouden, delen
+     aan, en zes kookgebeurtenissen — dat is wat de feed vult.
+   - Fatima heeft je een verzoek gestuurd → de regel bovenaan het scherm.
+   - Noor kent Sanne én Bram → *"2 gemeenschappelijke vrienden"*.
+   - Youssef kent alleen Sanne → *"1 gemeenschappelijke vriend"*.
+   - Daan kent niemand maar stemde op zes recepten → *"Beoordeelde 6
+     recepten"*. Hij is het enige geval waarin je de tweede soort suggestie
+     te zien krijgt; kende hij één vriend van je, dan won de andere regel.
+   - Tessa kent alleen Noor — de DERDE stap. **Zij hoort NIET in je
+     suggesties te staan.** Staat ze er wel, dan reikt de query een stap te
+     ver, en dat is precies het soort fout dat je anders pas veel later ziet.
+
+   Acht recepten, achttien stemmen, één doorgestuurd recept. Onderaan het
+   bestand staat een controlequery die die aantallen teruggeeft: klopt die en
+   blijft een scherm tóch leeg, dan ligt het aan de app en niet aan de data.
+
+   ⚠ **`suggested_friends()` staat bewust NIET in die controlequery.** Die
+   functie leest `auth.uid()`, en de SQL-editor draait als `postgres` zonder
+   JWT — hij zou nul rijen teruggeven, wat eruitziet als een defect terwijl
+   het de beveiliging is die werkt. Dat deel test je op een toestel.
+
+   `demo_social_teardown.sql` haalt alles weer weg; die vraagt de database
+   naar het voorvoegsel `5eed5eed` in plaats van een lijst bij te houden, dus
+   hij is met de seed meegegroeid zonder aangeraakt te zijn.
+
+   ⚠ **GEEN VAN DEZE TWEE BESTANDEN IS OOIT UITGEVOERD.** Er draait hier geen
+   Postgres en geen Docker, dus de SQL is gelezen en tegen het schema
+   nagelopen, niet gedraaid. De twee dingen die ik daardoor niet weet: of
+   `suggested_friends()` compileert zoals bedoeld, en of de seed in één keer
+   doorloopt. Beide falen luidruchtig in de SQL-editor als er iets mis is —
+   dat is de goedkoopste plek om het te merken.
 
    **Waarom de keten langer is dan "voeg een vriend toe", want dat is de
    bevinding hier:** de view `shared_cooks` (0009) poort op VIER dingen

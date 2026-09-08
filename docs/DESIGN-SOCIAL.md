@@ -477,14 +477,58 @@ state, the end line "Dat is alles wat er gedeeld is." Changes:
 - **Header:** gains secondary `+ Vriend toevoegen` top-right — the
   mirror of Bibliotheek's `+ Link plakken`, so the two list tabs share a
   grammar.
+
+  > **SUPERSEDED, 2026-09-08 — THE HEADER HAS NO CONTROL AND NO
+  > SUBTITLE.** The owner, on the shipped screen: *"op de vrienden tab
+  > bovenaan vriend toevoegen, die mag weg en de zin daaronder ook … ik
+  > wil dat je de look van deze pagina clean maakt en intuitief."*
+  >
+  > Both are gone. What stood there was three storeys — a title, a
+  > right-aligned secondary, and a line of explanatory grey under both —
+  > over a list of cards that already explain themselves. Each storey was
+  > specified separately and satisfied its own rule; nothing ever asked
+  > what the three looked like stacked.
+  >
+  > **The subtitle needed no replacement, and this document is why.**
+  > §8-as-amended resolved the over-claim structurally rather than
+  > editorially: a proof card says `SANNE MAAKTE DIT` and a send card
+  > says `GEDEELD DOOR JORIS`. The cards were already saying what the
+  > subtitle said, once each, where the reader is looking. WS3 had
+  > independently flagged the line as factually wrong for a mixed list
+  > and proposed a rewrite; deleting it answers that finding better.
+  >
+  > **(!) The header is now the only thing that can carry a personal
+  > address, and it carries one only when there is one:** a single line,
+  > `bodySmall` in `accent` over a hairline, reading "2
+  > vriendschapsverzoeken wachten op je", tapping through to §4.4. Null
+  > otherwise — which is almost every visit. It is a sentence and not a
+  > badge on purpose: a number in a circle says something is unread and
+  > cannot be answered.
+  >
+  > **The door to §4.4 moved and did not disappear**, which is the thing
+  > to check before touching this screen. It is `Zoeken op
+  > gebruikersnaam` at the foot of §4.5's block, and that line renders
+  > even when there are no suggestions — otherwise somebody with two
+  > friends and a full feed would have no way to add a third.
 - **Unseen band** for sends (§3.2); the closed-loop dress (§3.4). No
   "NIEUW" divider — the entrance motion is the only announcement.
 - **Empty state (Gekookt):** copy becomes "Zodra vrienden koken of je
   iets sturen, staat het hier — met het originele filmpje erbij."; the
   privacy footnote updates to name the model: "Jouw kookbeurten zijn
   alleen zichtbaar als je dat zelf aanzet, en sturen doe je altijd per
-  recept." Secondary actions: `Vriend toevoegen` and `Naar je
-  bibliotheek`. Kring's empty state is §2.2's.
+  recept." ~~Secondary actions: `Vriend toevoegen` and `Naar je
+  bibliotheek`.~~ Kring's empty state is §2.2's.
+
+  > **AMENDED 2026-09-08.** The two stacked secondaries are gone with the
+  > header button, in the same pass and for the same reason — two
+  > identically-weighted buttons made a person choose between "add a
+  > friend" and "look at my own recipes" before anything had happened.
+  > `Naar je bibliotheek` is simply dropped: a tab bar with Mijn recepten
+  > on it sits a few points below that text. The empty state is now a
+  > title, one line, and §4.5's block — which names actual people with an
+  > actual reason, and is strictly more useful than a button labelled
+  > with a category. The decorative hairline between the two sentences
+  > went too; it separated a sentence from its own footnote.
 
 ```
 ┌───────────────────────────────────┐
@@ -537,7 +581,14 @@ recipe, with the same anatomy minus note and minus sender eyebrow.
 ### 4.4 Vriend toevoegen — the handle exchange (new, deliberately small)
 
 The minimum viable friendship: you know someone's handle because they
-told you. No search-by-name, no contact-book upload, no suggestions.
+told you. No search-by-name, no contact-book upload, ~~no suggestions~~.
+
+> **AMENDED 2026-09-08.** "No suggestions" was reversed by the owner —
+> see §4.5 and the amendment on the standing-refusals list in §7. Two
+> halves of this sentence stand: there is still no search-by-name (you
+> type an exact handle, `findProfileByHandle` never does a `like`) and
+> still no contact-book upload. **This screen itself is unchanged**; the
+> suggestion block lives on the Vrienden tab, not here.
 Full-screen over the tabs. Your own handle stated large (`title1` mono)
 with "Zo vinden vrienden jou."; a mono handle input (`borderStrong`,
 `radiusSm`) + primary `Verstuur verzoek`; pending requests as plain rows
@@ -560,6 +611,96 @@ quiet tertiary behind a confirm.
 │ VERZOEKEN                          │ label · mono
 │  Meike (@meike)  [Accepteren] Weiger│
 │  → @pieter                  wacht  │ numeral · mono
+└───────────────────────────────────┘
+```
+
+### 4.5 Misschien ken je — friend suggestions (new, 2026-09-08)
+
+Requested by the owner in one sentence — *"misschien wat suggesties voor
+vrienden op basis van wie jouw vrienden zijn en met wie zij zijn
+verbonden of wie er veel recepten plaatst op de app"* — and it reverses
+two recorded refusals, which are amended in §4.4 and §7 rather than
+quietly dropped.
+
+**Where it sits: at the FOOT of Vrienden, never at the top.** It is what
+to do when the feed runs out, so it renders after the end line "Dat is
+alles wat er gedeeld is." — `ListFooterComponent`, and inside the empty
+state in the same position. People to add, placed above the dinners your
+friends cooked, would turn this tab into a growth surface, which is the
+reading PD-004 spends its whole argument refusing.
+
+**Three rows, hard cap.** Not a scroll, not a carousel, not a "toon
+meer". Three is a footnote; twelve is a funnel.
+
+**Each row: name over handle, one reason, one control.** `PartyName`
+from §4.4's row grammar, so a list of people looks the same on both
+screens. The reason is `caption` mono in `textMuted`, the control is a
+`secondary` `Toevoegen` — matching `Accepteren`'s weight for
+`IncomingRow`'s reason: this screen is not trying to talk anybody into
+acquiring friends. Once tapped, the button is REPLACED by the words
+`Verzoek verstuurd` rather than disabled — a disabled control says "you
+may not", the words say what happened, which is the swap `OutgoingRow`
+already makes with its mono `wacht`.
+
+**Two reasons, and mutual friends always win.**
+
+| reason | sentence | source |
+|---|---|---|
+| shared friends | "2 gemeenschappelijke vrienden" | `suggested_friends().mutual_friends` |
+| activity | "Beoordeelde 7 recepten" | `suggested_friends().public_votes` |
+
+A candidate can carry both numbers; a row that said both would say
+nothing. The mutual-friends line wins every tie — including one mutual
+against two hundred votes — because that is the order migration 0019
+sorts by, and a list sorted by one number and captioned with another
+reads as shuffled. A candidate with neither is dropped rather than shown
+under a blank line.
+
+**(!) The activity line counts VOTES, and says so, because the number
+the owner asked for does not exist.** "Wie plaatst er veel recepten" has
+no column behind it: `recipes` (0006) is canonical and keyed on a URL,
+and the household copy that knows who imported it is `meals`, which
+`meals_select` correctly refuses to every other household. The only
+public trace a person leaves is the ratings they cast. So the sentence
+is *"Beoordeelde 7 recepten"* and never *"plaatste 7 recepten"* — the
+latter would be a fabricated number printed beside a real name.
+`tests/friendSuggestions.test.ts` sweeps for that wording.
+
+**What is excluded, by the database and not by the client.** Yourself,
+and every profile you already hold a `friendships` row with in ANY
+status — friend, pending either way, declined, blocked. Four reasons
+that happen to agree: suggesting a friend is noise, suggesting an open
+request is a duplicate write the trigger refuses, suggesting a declined
+pair re-asks an answered question, and suggesting someone who blocked
+you is the one outcome this must never produce. Because the exclusion is
+complete, the tap needs no `planFriendRequest` classification — unlike
+§4.4, where a person may type any handle at all.
+
+**Privacy: a count, never a name.** See the amendment in §7. The second
+hop is readable only inside `suggested_friends()`, a `security definer`
+function; what it returns is how many of your friends know somebody, and
+never which. A client cannot compute this at all — `friendships_select`
+would hand it an empty result and it would conclude nobody is connected.
+
+```
+┌───────────────────────────────────┐
+│ Vrienden                           │ title2
+│ 1 vriendschapsverzoek wacht op je  │ bodySmall · accent  (only if >0)
+│ ───────────────────────────────────│ hairline
+│ … de feed …                        │
+│ Dat is alles wat er gedeeld is.    │ caption, centred
+│                                    │
+│ MISSCHIEN KEN JE                   │ label · mono
+│  Noor (demo)          [Toevoegen]  │ body / secondary
+│  @demo_noor                        │ caption · mono
+│  2 gemeenschappelijke vrienden     │ caption, textMuted
+│  Youssef (demo)       [Toevoegen]  │
+│  @demo_youssef                     │
+│  1 gemeenschappelijke vriend       │
+│  Daan (demo)          [Toevoegen]  │
+│  @demo_daan                        │
+│  Beoordeelde 6 recepten            │
+│ Zoeken op gebruikersnaam           │ bodySmall, textSecondary → §4.4
 └───────────────────────────────────┘
 ```
 
@@ -839,10 +980,46 @@ asked. Recorded in PD-022.)**
 - **No padding the kring.** A thin friends list is never blended with
   global rows to look fuller — that would rebuild the refused Ontdekken
   surface out of spare parts. Thin is the honest state (§2.2).
-- **No follower model, no public profiles, no vrienden-van-vrienden, no
-  contact-book upload.** The graph is built by handle exchange between
+- **No follower model, no public profiles, ~~no vrienden-van-vrienden~~,
+  no contact-book upload.** The graph is built by handle exchange between
   people who already know each other; growth loops over Article-9-
   adjacent data are the kind this product does not want.
+
+  > **AMENDED 2026-09-08 — vrienden-van-vrienden is now BUILT, at the
+  > owner's explicit request, and the rest of this bullet stands.** He
+  > asked for "suggesties voor vrienden op basis van wie jouw vrienden
+  > zijn en met wie zij zijn verbonden of wie er veel recepten plaatst op
+  > de app". That is the second hop, named. See §4.5.
+  >
+  > **What was actually given up, stated plainly rather than softened.**
+  > This document argued the second hop away twice — here, and in §2.2's
+  > "why this is not the Ontdekken surface", which lists "no
+  > friends-of-friends" as one of three things keeping Vrienden from
+  > being a discovery feed. That argument was about the FEED's supply,
+  > and it survives intact: no card in the feed comes from anyone but a
+  > mutually accepted friend, and the supply is still bounded by what
+  > real kitchens actually cook. What changed is who may be OFFERED as a
+  > friend — at most three people, at the foot of the screen, below the
+  > end of the feed.
+  >
+  > **The three refusals that did not move, and are enforced rather than
+  > promised.** (1) Contact-book upload: still nothing, anywhere.
+  > (2) Follower model and public profiles: a suggestion offers a
+  > friendship request the other person must accept, and there is no
+  > profile to visit. (3) **The graph is still not enumerable.**
+  > `suggested_friends()` (migration 0019) returns HOW MANY of your
+  > friends know a candidate and never WHICH — naming them would be a
+  > fact about your friend's graph disclosed to a third party, which is
+  > exactly what 0007's `friendships_select` refuses.
+  > `tests/friendSuggestions.test.ts` sweeps every sentence the block can
+  > render for that leak.
+  >
+  > **The cost that was accepted.** A mutual-friend COUNT still leaks
+  > edges to a patient reader: befriend one person at a time, re-read the
+  > counts, and differences are inferable. That costs one deliberate
+  > friendship per bit, and it is why the rows are capped and the read is
+  > a function rather than a filterable relation. A real cost, taken
+  > rather than argued away.
 - **No trophy shelf, no streaks, no most-cooked leaderboard of
   friends.** Proof decorates recipes; it never accumulates into scores
   for people. The kring ranks recipes by friends' votes, never friends
