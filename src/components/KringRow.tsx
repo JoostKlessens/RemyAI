@@ -2,6 +2,25 @@
  * One row of de Kring (DESIGN-SOCIAL.md §2.2, §4.2): rank, still, dish, the
  * grade with its voters named, and the collision chip when there is one.
  *
+ * ⚠ ZERO PRODUCTION CALLERS SINCE 8 SEPTEMBER 2026. Its only consumer was
+ * Trending's `Vrienden` scope, and that scope now draws `TrendingCard` like
+ * the `Iedereen` scope beside it — the owner asked for the two to look the
+ * same. `grep -rn "KringRow\b" src/ tests/` finds this file and prose in
+ * eight others; no JSX anywhere renders it.
+ *
+ * KEPT RATHER THAN DELETED, on the same footing this repo already grants
+ * `mainIngredients.ts` and `ingredientCategoryIcons.ts`, and the footing is a
+ * REASON and not sentiment: this is the only compact list row in the app that
+ * pairs a rank with a named-voter meta line, and the day a surface wants a
+ * dense scannable ranking again — the thing PD-014a explicitly gave up when
+ * the board became a card feed — this is that component, already written and
+ * already tested. Deleting it would make that day a day for re-deriving a
+ * layout that is written down.
+ *
+ * ⚠ DO NOT READ ITS PRESENCE AS EVIDENCE THAT SOMETHING USES IT. If a third
+ * consumer never appears, the honest move is to delete it and let git
+ * remember — not to leave it here accruing another year of maintenance.
+ *
  * MOVED OUT OF src/app/(tabs)/friends.tsx, VERBATIM, and for that file's own
  * recurring reason: it had reached the 800-line ceiling. `_gekooktSource.ts`
  * was the first carve and took the reads; this is the second and takes the

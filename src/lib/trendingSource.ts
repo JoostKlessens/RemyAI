@@ -183,6 +183,12 @@ function toKringRecipe(recipe: CanonicalRecipeSummary): KringRecipe {
     creatorPlatform: recipe.platform,
     thumbnailUrl: recipe.thumbnailUrl,
     allergenTags: [],
+    // Carried since 8 September 2026, so this scope draws the same card as
+    // the board. Both come off the canonical row this function is already
+    // handed — see `toBoardRecipe` directly above, which does the identical
+    // thing for the identical reason.
+    dishTags: recipe.dishTags,
+    estimatedMinutes: recipe.estimatedMinutes,
   };
 }
 

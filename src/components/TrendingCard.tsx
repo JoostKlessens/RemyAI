@@ -134,11 +134,36 @@ import { Image, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { isIconAvailable } from '@/components/iconFont';
 import { fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
-import { buildBoardRowAccessibilityLabel, formatCookTime, type BoardRowModel } from './leaderboardPresentation';
+import { buildBoardRowAccessibilityLabel, formatCookTime } from './leaderboardPresentation';
 import { useThumbnailFallback } from './useThumbnailFallback';
 
+/**
+ * Exactly what this card draws, and nothing else.
+ *
+ * IT IS A STRUCTURAL SHAPE AND NOT ONE OF THE TWO ROW MODELS, so both
+ * scopes of Trending can hand their rows to one component without either
+ * model having to become the other. `BoardRowModel` and `KringRowModel`
+ * both satisfy it; neither imports it.
+ *
+ * `rank` IS ABSENT ON PURPOSE. Both models carry one and this card draws
+ * neither — the ordering is the information, a printed number on a photo
+ * card is a scoreboard, and PD-014a kept the ordering while dropping the
+ * scoreboard. Listing it here would invite it back onto the card.
+ */
+export interface TrendingCardModel {
+  readonly recipeId: string;
+  readonly title: string;
+  /** Whatever the scope means by "the evidence": vote count on the board, named friends in the kring. */
+  readonly metaLine: string;
+  readonly creatorLine: string;
+  readonly thumbnailUrl: string | null;
+  readonly collisionLabel: string | null;
+  readonly dishTags: readonly string[];
+  readonly estimatedMinutes: number | null;
+}
+
 export interface TrendingCardProps {
-  readonly row: BoardRowModel;
+  readonly row: TrendingCardModel;
 }
 
 /**

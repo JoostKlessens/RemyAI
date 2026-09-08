@@ -88,18 +88,27 @@
  * highly rated" — among everyone, or among the people I know. Reading one
  * tells you what the other is for.
  *
- * ⚠ THE TWO SCOPES NOW DRAW DIFFERENT SHAPES, AND THAT IS A KNOWN, RECORDED
- * INCONSISTENCY RATHER THAN AN OVERSIGHT. `Iedereen` is a card feed;
- * `Vrienden` is still `KringRow`'s compact strip with its small thumbnail.
- * The owner's complaint was measured against `Iedereen`, which is the default
- * and the only scope that never had a photo at all. Converting the friends
- * scope needs `dishTags` and `estimatedMinutes` on `KringRecipe`, and the
- * only producer of that type outside this package is
- * `src/fixtures/friendFeedFixtures.ts` — a file this package does not own, so
- * doing it here would have meant either an optional field nobody else fills
- * or an edit across a package boundary that 7 September's lesson was written
- * about. It is the highest-value follow-up on this surface and it is in the
- * report rather than hidden in a diff.
+ * ✅ THE TWO SCOPES DRAW THE SAME CARD, since 8 September 2026. This block
+ * used to open with a warning that they did not, and that warning did its
+ * job: it named the prerequisite (`dishTags` and `estimatedMinutes` on
+ * `KringRecipe`), named the cost (a producer in a package this one does not
+ * own), and put the follow-up in the report rather than hiding it in a diff.
+ * The owner saw the two scopes side by side within the hour — "van alleen
+ * vrienden ziet er nog anders uit, zorg dat deze hetzelfde worden" — so the
+ * prerequisite was met instead of deferred.
+ *
+ * What that took: two fields carried through `KringRecipe`, `KringRowModel`,
+ * `toKringRecipe` and the kring fixtures, and a structural `TrendingCardModel`
+ * on the card so both row models satisfy it without either becoming the
+ * other. The cross-package edit the old note feared was three lines in
+ * `friendFeedFixtures.ts`, and the compiler found every site.
+ *
+ * ⚠ WHAT IS STILL DIFFERENT, and must stay different: the meta line and the
+ * vote floor. `Iedereen` says "8,72 · 204 stemmen" and applies
+ * `LEADERBOARD_MIN_VOTES`; `Vrienden` says "8,5 · Sanne en Joris" and applies
+ * no floor at all, because two friends naming a dish is evidence and two
+ * strangers is not. Same shape, different sentence — which is what a scope
+ * switch is for.
  *
  * WHY NOT TWO STACKED SECTIONS. Because DESIGN-SOCIAL.md §2.2 forbids
  * padding a thin friends list to make it look fuller, and stacking is how
@@ -144,8 +153,19 @@
  * empty. One switch moves both scopes — see `@/lib/trendingSource`.
  */
 
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BOARD_SCENARIOS, type BoardScenario } from '@/fixtures/boardFixtures';
 import {
@@ -154,7 +174,6 @@ import {
   loadLiveTrending,
   type TrendingData,
 } from '@/lib/trendingSource';
-import { KringRow } from '@/components/KringRow';
 import {
   KRING_EMPTY_BODY,
   KRING_EMPTY_TITLE,
@@ -169,12 +188,16 @@ import {
   TRENDING_FILTER_EMPTY_BODY,
   TRENDING_FILTER_EMPTY_TITLE,
   collectSelectableBoardDishTags,
+  countTrendingFilters,
   filterBoardRows,
   type TrendingFilterState,
 } from '@/components/trendingFilter';
-import { SegmentedControl, type SegmentedControlOption } from '@/components/SegmentedControl';
+// `SegmentedControlOption` is kept for `SCOPE_OPTIONS`' shape; the control
+// itself is gone — see `ScopeSwitch` on why two words replaced the box.
+import type { SegmentedControlOption } from '@/components/SegmentedControl';
+import { Icon } from '@/components/Icon';
 import { useSession } from '@/hooks/useSession';
-import { getColors, spacing, typeScale } from '@/theme/tokens';
+import { getColors, spacing, typeScale, type ColorTokens } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 /** The two scopes of one question. Never persisted — see this file's header. */
@@ -294,54 +317,275 @@ export default function TrendingScreen(): JSX.Element {
   // so a chip that narrowed the feed to one card is still on screen to undo
   // it. LIB-07's rule; src/components/trendingFilter.ts carries the argument.
   const visibleBoardRows = useMemo(() => filterBoardRows(state.boardRows, filter), [state.boardRows, filter]);
+  /**
+   * The friends rows through the SAME filter, which is new on 8 September:
+   * `filterBoardRows` reads `dishTags` and `estimatedMinutes`, and until
+   * today the kring model carried neither.
+   */
+  const visibleFriendRows = useMemo(() => filterBoardRows(state.friendRows, filter), [state.friendRows, filter]);
+  /**
+   * Chips collected from BOTH pools, because one drawer now governs both
+   * pages and a chip that vanished on swipe would look like the filter had
+   * forgotten itself. A tag offered here always leaves at least one card
+   * standing on at least one page — which is a weaker promise than the
+   * single-scope version made, and the honest one for a shared control.
+   */
   const selectableDishTags = useMemo(
-    () => collectSelectableBoardDishTags(state.boardRows, filter),
-    [state.boardRows, filter],
+    () => collectSelectableBoardDishTags([...state.boardRows, ...state.friendRows], filter),
+    [state.boardRows, state.friendRows, filter],
   );
+
+  /**
+   * The drawer's open state, lifted out of `TrendingFilterBar` because its
+   * opening now lives in the header — see the JSX below. Never persisted: a
+   * drawer that remembered being open would greet the reader with a control
+   * instead of their food.
+   */
+  const [isFilterOpen, setFilterOpen] = useState(false);
+
+  /**
+   * The pager, and the two-way binding between it and `scope`.
+   *
+   * `pageWidth` IS MEASURED RATHER THAN TAKEN FROM `Dimensions`. A tab screen
+   * is not always the window: a split view on iPad, a rotation mid-gesture
+   * and the safe-area insets all make the window width the wrong number, and
+   * a pager whose page is wider than its viewport tears halfway between two
+   * scopes with no way back. `onLayout` gives the actual box.
+   *
+   * IT STARTS AT ZERO, and the pages render at zero width for exactly one
+   * frame. That is why `scrollTo` is guarded on it below: scrolling to
+   * `1 * 0` would leave the pager on page one while `scope` said the other,
+   * which is the one desync that would strand the reader.
+   */
+  const pagerRef = useRef<ScrollView | null>(null);
+  const [pageWidth, setPageWidth] = useState(0);
+
+  const handlePagerLayout = useCallback((event: LayoutChangeEvent): void => {
+    setPageWidth(event.nativeEvent.layout.width);
+  }, []);
+
+  /**
+   * The swipe telling the switch what happened. `onMomentumScrollEnd` and
+   * not `onScroll`: a scope that flipped mid-drag would relabel the words
+   * under the finger that is still deciding.
+   */
+  const handlePagerSettled = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+      const width = event.nativeEvent.layoutMeasurement.width;
+      if (width <= 0) {
+        return;
+      }
+      const page = Math.round(event.nativeEvent.contentOffset.x / width);
+      setScope(page === 0 ? 'iedereen' : 'vrienden');
+    },
+    [],
+  );
+
+  /**
+   * The switch telling the pager what to do — the other half of the same
+   * binding, so tapping a word and swiping a page are one state.
+   *
+   * ANIMATED, so a tap looks like the swipe it stands in for. Guarded on a
+   * measured width for the reason above.
+   */
+  useEffect(() => {
+    if (pageWidth <= 0) {
+      return;
+    }
+    pagerRef.current?.scrollTo({ x: scope === 'iedereen' ? 0 : pageWidth, animated: true });
+  }, [scope, pageWidth]);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={source} onSelect={setSource} /> : null}
 
+      {/*
+        THE HEADER LOST ITS BOX AND ITS SUBTITLE, at the owner's request:
+        "ik wil dat de switch tussen de twee subtieler wordt … ook wil ik dat
+        de filters wat subtieler worden, maak er bv een trechter van die klein
+        bovenaan kan komen te staan om het minder invasief te maken."
+
+        What stood here was a `SegmentedControl` — a filled, bordered,
+        full-width two-button box — under the title, with an explanatory line
+        under that, above a full-width filter bar with its own rule. Four
+        stacked horizontal bands before the first photo. The scope switch is
+        now two words, and the filter is one glyph beside them.
+
+        The subtitle is gone rather than moved. It said what the scope meant
+        ("wat iedereen het hoogst beoordeelt"), and the two words say that
+        already now that they are the only thing on the line.
+      */}
       <View style={styles.header}>
-        <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Trending recipes</Text>
-        {/*
-          The one control this header carries, in the slot the other tabs
-          give their single action. Every tab header in this app is a name
-          and at most one control, which is what keeps the top of a screen
-          from reading as a second menu above the tab bar.
-        */}
-        <View style={styles.scopeSwitch}>
-          <SegmentedControl
-            options={SCOPE_OPTIONS}
-            value={scope}
-            onChange={setScope}
-            accessibilityLabel="Wiens beoordelingen je ziet"
+        <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Trending</Text>
+        <View style={styles.controlRow}>
+          <ScopeSwitch scope={scope} onChange={setScope} colors={colors} />
+          <TrendingFilterTrigger
+            activeFilterCount={countTrendingFilters(filter)}
+            isExpanded={isFilterOpen}
+            onToggle={() => setFilterOpen((wasOpen) => !wasOpen)}
+            colors={colors}
           />
         </View>
-        <Text style={[typeScale.bodySmall, styles.headerSubtitle, { color: colors.textMuted }]}>
-          {SCOPE_SUBTITLE[scope]}
-        </Text>
       </View>
 
-      {/* The filter belongs to one scope, so it is mounted with that scope
-          rather than in the header — the header's "a name and at most one
-          control" rule is what keeps the top of this screen from becoming a
-          menu, and a bar that stayed while its list went away would be a
-          control with nothing to act on.
+      {/* The drawer, and only the drawer — the opening that used to sit on
+          top of it now lives in the header row above.
 
-          It IS mounted for every state of that scope, including the empty and
-          error ones, which is the opposite of what `showFilterBar` does on
-          Kiezen. The reason is the failure it has to survive: a filter that
-          emptied the feed must be undoable from the screen it emptied, and
-          unmounting the bar with the list would strand the reader with no
-          "Wissen" and no way back. */}
-      {scope === 'iedereen' ? (
+          IT IS SHARED BY BOTH SCOPES, which it could not be before: the
+          friends rows carried no `dishTags` and no `estimatedMinutes`, so
+          there was nothing to narrow. Both models carry both fields now, so
+          one filter acts on whichever list is under the thumb.
+
+          UNMOUNTED WHEN SHUT rather than hidden with a style, matching the
+          other two drawers: a shut drawer must cost no height and must give
+          a screen reader nothing to walk past. `Wissen` moved inside it with
+          the rest — the trigger carries a count instead, so a reader who
+          filtered the feed empty can still see that they did. */}
+      {isFilterOpen ? (
         <TrendingFilterBar filter={filter} selectableDishTags={selectableDishTags} onChange={setFilter} />
       ) : null}
 
-      {scope === 'iedereen' ? <BoardBody state={state} rows={visibleBoardRows} /> : <FriendsBoardBody state={state} />}
+      {/* TWO PAGES SIDE BY SIDE, so the scopes can be swiped between —
+          "je moet ook kunnen vegen van links naar rechts en andersom om te
+          switchen tussen de bladen".
+
+          A PAGING ScrollView AND NOT A GESTURE HANDLER. The swipe has to be
+          the scroll: a `PanResponder` that jumped scopes at a threshold would
+          move in one step where a finger moves continuously, and it would
+          fight the vertical FlatList inside each page for the same touch. A
+          horizontal pager owns the horizontal axis, the lists own the
+          vertical one, and neither has to arbitrate.
+
+          BOTH PAGES STAY MOUNTED. That is the cost and it is worth it: a
+          scope that unmounted would lose its scroll position on every swipe,
+          which is precisely the thing that makes a pager feel like two tabs
+          rather than two pages. Each list is virtualised, so the price is the
+          two visible screenfuls rather than two whole feeds. */}
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handlePagerSettled}
+        onLayout={handlePagerLayout}
+        style={styles.pager}
+        // The lists inside scroll vertically; without this the pager claims
+        // the gesture on the diagonal and the feed feels sticky.
+        directionalLockEnabled
+      >
+        <View style={[styles.page, { width: pageWidth }]}>
+          <BoardBody state={state} rows={visibleBoardRows} />
+        </View>
+        <View style={[styles.page, { width: pageWidth }]}>
+          <FriendsBoardBody state={state} rows={visibleFriendRows} />
+        </View>
+      </ScrollView>
     </SafeAreaView>
+  );
+}
+
+interface ScopeSwitchProps {
+  readonly scope: TrendingScope;
+  readonly onChange: (scope: TrendingScope) => void;
+  readonly colors: ColorTokens;
+}
+
+/**
+ * Two words, and the current one is the one you can read.
+ *
+ * IT REPLACED A `SegmentedControl` — a filled, bordered, full-width box —
+ * because the owner asked for "subtieler", and because a segmented control
+ * is the wrong instrument for this particular choice. That control is for
+ * picking a mode you might not be in; these two words label the page you are
+ * already on and the one a swipe away. The switch is a caption on the
+ * gesture now, not a substitute for it.
+ *
+ * WEIGHT AND COLOUR CARRY THE STATE, NOT A FILL. The active scope is
+ * `textPrimary`, the other is `textMuted`, and nothing is boxed. That is the
+ * same treatment the library's sort words use, so the two tab headers read
+ * as siblings.
+ *
+ * `accessibilityRole="tab"` AND `selected`, so a screen reader announces
+ * this as the two-page structure it now genuinely is — the pager underneath
+ * makes that true, where a segmented control was only ever a button pair.
+ */
+function ScopeSwitch(props: ScopeSwitchProps): JSX.Element {
+  const { scope, onChange, colors } = props;
+
+  return (
+    <View style={styles.scopeSwitch} accessibilityRole="tablist">
+      {SCOPE_OPTIONS.map((option) => {
+        const isActive = option.value === scope;
+        return (
+          <Pressable
+            key={option.value}
+            onPress={() => onChange(option.value)}
+            style={styles.scopeWord}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
+            accessibilityLabel={`${option.label}, ${SCOPE_SUBTITLE[option.value]}`}
+          >
+            <Text
+              style={[
+                // `button` is Archivo SemiBold at the same 16pt as `body`,
+                // so the active word gains weight without gaining height —
+                // the two words must not shift sideways when the scope
+                // changes, or the switch appears to twitch under the thumb.
+                isActive ? typeScale.button : typeScale.body,
+                { color: isActive ? colors.textPrimary : colors.textMuted },
+              ]}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+interface TrendingFilterTriggerProps {
+  readonly activeFilterCount: number;
+  readonly isExpanded: boolean;
+  readonly onToggle: () => void;
+  readonly colors: ColorTokens;
+}
+
+/**
+ * The funnel, small and top-right — "maak er bv een trechter van die klein
+ * bovenaan kan komen te staan om het minder invasief te maken".
+ *
+ * IT IS A GLYPH AND NOT A WORD, which is the whole of the "less invasive".
+ * The opening used to be a full-width row with a label, a chevron and a
+ * bottom rule, sitting between the header and the first photo; it cost a
+ * band of height on every visit to say something only some visits act on.
+ * A glyph beside the scope words costs none.
+ *
+ * THE COUNT IS THE ONE THING IT SAYS OUT LOUD. A funnel that looks identical
+ * whether or not it is filtering is how somebody ends up staring at three
+ * cards wondering where the rest went — and the drawer that would tell them
+ * is shut. So an active filter tints the glyph and puts the number beside
+ * it, which is the smallest honest amount of noise.
+ */
+function TrendingFilterTrigger(props: TrendingFilterTriggerProps): JSX.Element {
+  const { activeFilterCount, isExpanded, onToggle, colors } = props;
+  const isFiltering = activeFilterCount > 0;
+
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={styles.filterTrigger}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: isExpanded }}
+      accessibilityLabel={
+        isFiltering ? `Filters, ${activeFilterCount} actief` : 'Filters'
+      }
+    >
+      <Icon name="filter" size={20} color={isFiltering ? colors.accent : colors.textMuted} />
+      {isFiltering ? (
+        <Text style={[typeScale.caption, styles.filterCount, { color: colors.accent }]}>{activeFilterCount}</Text>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -404,25 +648,46 @@ function BoardBody(props: BoardBodyProps): JSX.Element {
   );
 }
 
+interface FriendsBoardBodyProps extends ScopeBodyProps {
+  /** `state.friendRows` with the reader's filter applied — the same filter the board scope gets. */
+  readonly rows: readonly KringRowModel[];
+}
+
 /**
- * The same four bodies over the friends list, and the rows are `KringRow`
- * unchanged — the component, its model and its accessibility label all
- * moved here from Vrienden without a line of rendering changing, and the
- * card feed next door deliberately left them that way (see this file's
- * header on the recorded inconsistency).
+ * The same five bodies over the friends list, drawing THE SAME CARD as the
+ * board scope.
  *
- * IT IS NOT FILTERED, and that follows from the same boundary:
- * `KringRowModel` carries no `dishTags` and no `estimatedMinutes`, so there
- * is nothing here to narrow on. A filter bar over an unfilterable list would
- * be a control that changes nothing.
+ * IT USED TO DRAW `KringRow`'s compact strip, and this file's header used to
+ * record that as a deliberate inconsistency with a named prerequisite:
+ * converting it "needs `dishTags` and `estimatedMinutes` on `KringRecipe`".
+ * The owner saw the two scopes side by side and asked for exactly that —
+ * "van alleen vrienden ziet er nog anders uit, zorg dat deze hetzelfde
+ * worden" — so the prerequisite was met rather than argued with, and both
+ * scopes now hand their rows to `TrendingCard`.
+ *
+ * THE TWO MODELS ARE STILL TWO TYPES. `TrendingCard` takes a structural
+ * `TrendingCardModel` that both satisfy, which is what lets one component
+ * draw both without either scope inheriting the other's meaning. What stays
+ * different is what the numbers SAY: the board's meta line is "8,72 · 204
+ * stemmen" and this one is "8,5 · Sanne en Joris", a grade backed by people
+ * you actually know. Same shape, different sentence — which is the whole
+ * point of a scope switch.
+ *
+ * IT IS FILTERED NOW, for the same reason: the two fields it lacked were
+ * exactly the two the filter narrows on.
  *
  * IT IS NOT PADDED FROM THE LIST NEXT DOOR, ever. §2.2: a thin friends
  * ranking is the honest one, and blending in strangers' rows to make it
  * look fuller would rebuild the refused "Ontdekken" surface out of spare
  * parts. There is no parameter here to do it with, and there must not be.
+ *
+ * AND IT STILL HAS NO VOTE FLOOR, unlike the board. `LEADERBOARD_MIN_VOTES`
+ * asks whether a stranger's average is trustworthy; two friends naming a
+ * dish is evidence on its own terms. Giving this scope the board's floor
+ * would empty it for everybody with a normal number of friends.
  */
-function FriendsBoardBody(props: ScopeBodyProps): JSX.Element {
-  const { state } = props;
+function FriendsBoardBody(props: FriendsBoardBodyProps): JSX.Element {
+  const { state, rows } = props;
 
   if (state.friendRows.length === 0 && state.status === 'loading') {
     return <TrendingNotice title={LOADING_COPY} body={null} />;
@@ -433,12 +698,15 @@ function FriendsBoardBody(props: ScopeBodyProps): JSX.Element {
   if (state.friendRows.length === 0) {
     return <EmptyFriendsBoardState />;
   }
+  if (rows.length === 0) {
+    return <FilteredOutBoardState />;
+  }
 
   return (
     <FlatList
-      data={state.friendRows}
+      data={rows}
       keyExtractor={(row: KringRowModel) => row.recipeId}
-      renderItem={({ item }: { item: KringRowModel }) => <KringRow row={item} />}
+      renderItem={({ item }: { item: KringRowModel }) => <TrendingCard row={item} />}
       ItemSeparatorComponent={ListGap}
       ListFooterComponent={FriendsBoardEndNote}
       contentContainerStyle={styles.listContent}
@@ -621,11 +889,46 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space4,
     paddingBottom: spacing.space4,
   },
-  scopeSwitch: {
+  controlRow: {
+    // The scope words on the left, the funnel hard right. One line where
+    // there used to be three bands — see the header block in the JSX.
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: spacing.space3,
   },
-  headerSubtitle: {
-    marginTop: spacing.space3,
+  scopeSwitch: {
+    flexDirection: 'row',
+    // Wider than the gap inside a word so the two read as two choices
+    // rather than one phrase.
+    gap: spacing.space4,
+  },
+  scopeWord: {
+    // The 44pt floor on a bare word: the text is 21pt tall, and a tap target
+    // the size of its own glyphs is the bug this app has already met once
+    // this week on a back row.
+    minHeight: spacing.touchTargetMin,
+    justifyContent: 'center',
+  },
+  filterTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.space1,
+    minHeight: spacing.touchTargetMin,
+    minWidth: spacing.touchTargetMin,
+    justifyContent: 'flex-end',
+  },
+  filterCount: {
+    // Beside the glyph, never on it: a number in a dot on a funnel is a
+    // badge, and badges on this surface are what PD-004 refuses.
+    marginLeft: spacing.space1,
+  },
+  pager: {
+    flex: 1,
+  },
+  page: {
+    // Width is measured and injected at render — see `pageWidth`.
+    flex: 1,
   },
   listContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,

@@ -335,7 +335,20 @@ export function describeCookTime(minutes: number): string {
  * reader can see and a screen reader cannot is the failure that rule exists
  * to prevent, and that half of PD-007a is untouched by any of this.
  */
-export function buildBoardRowAccessibilityLabel(row: BoardRowModel): string {
+export function buildBoardRowAccessibilityLabel(row: {
+  // THE FIVE FIELDS THIS FUNCTION ACTUALLY READS, and not `BoardRowModel`.
+  // Widened on 8 September 2026 so the friends scope can use it too: both
+  // scopes now draw `TrendingCard`, and that card owns a `TrendingCardModel`
+  // shape which `BoardRowModel` and `KringRowModel` both satisfy. Asking for
+  // the whole board model here would have forced the kring to grow a `rank`
+  // this sentence never speaks — and it does not speak it on purpose, since
+  // the card stopped printing a position (PD-014a).
+  readonly title: string;
+  readonly estimatedMinutes: number | null;
+  readonly metaLine: string;
+  readonly creatorLine: string;
+  readonly collisionLabel: string | null;
+}): string {
   const parts = [row.title];
   if (row.estimatedMinutes !== null) {
     parts.push(describeCookTime(row.estimatedMinutes));

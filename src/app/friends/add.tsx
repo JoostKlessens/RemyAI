@@ -504,7 +504,36 @@ export default function AddFriendScreen(): JSX.Element {
             padding, up to the top of the safe area — and sideways, while
             downward it stops where the row does. */}
         <Pressable
-          onPress={() => router.back()}
+          /*
+            `canGoBack()` FIRST, AND THIS IS THE SECOND ATTEMPT AT THIS BUG.
+            The owner reported on 8 September that the back control does
+            nothing, an `initialWindowMetrics` fix shipped, and he reported
+            again: "De terug knop werkt nog niet." So the first-frame-inset
+            hypothesis is FALSIFIED, not merely unconfirmed, and this is the
+            one remaining cause that produces exactly this symptom with a
+            perfectly good 44pt tap target: the press lands, the handler
+            runs, and `router.back()` is a NO-OP because there is nothing on
+            the stack behind this screen.
+
+            That happens whenever `/friends/add` is the first route the app
+            resolves — a cold start straight onto it, a reload while it is
+            open (Expo Go does this on every save), or a deep link. The
+            screen then has no history, `back()` returns silently, and from
+            the outside it is indistinguishable from a dead button.
+
+            `replace` AND NOT `push`, so the modal is left rather than
+            stacked on top of itself, and `/friends` because that is the tab
+            this screen belongs to — every entry point that pushes it comes
+            from there or from a sheet on top of it.
+
+            ⚠ STILL NOT A CONFIRMED DIAGNOSIS. It is a real defect on a real
+            path, and it may not be HIS path. What would settle it in twenty
+            seconds is docs/TOESTELTEST.md §8c: the same control on
+            Instellingen, which is the same row on the same presentation. If
+            back works there and not here, it is this screen; if it fails
+            there too, it is the row or the modal.
+          */
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/friends'))}
           accessibilityRole="button"
           accessibilityLabel="Terug naar het vorige scherm"
           hitSlop={8}
@@ -734,7 +763,26 @@ const styles = StyleSheet.create({
     // the text column does, without moving the text column.
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
+    // space6 (24pt) AND NOT space2 (8pt) — THE OWNER ASKED FOR THIS TWICE.
+    // "dat pagina terug teken iets lager moet om te voorkomen dat je hier
+    // soms niet op kan klikken" (8 September), and again after the first fix
+    // failed: "De terug knop werkt nog niet."
+    //
+    // It was withheld the first time on the grounds that his proposal hung
+    // on his own guess about his phone, and that a better mechanism had
+    // turned up. That mechanism has now been falsified by the only test that
+    // counts, so the argument for withholding it is gone — and the argument
+    // for it was always independently sound: on a `fullScreenModal` the
+    // system gesture area and the Dynamic Island both sit above this row,
+    // and 8pt of clearance is thin regardless of which one is eating the
+    // tap.
+    //
+    // ⚠ THIS DIVERGES FROM THE THREE SIBLING SCREENS, which the old comment
+    // valued at "byte-for-byte the same". That symmetry was worth having
+    // until it cost a working control on the one screen that was reported.
+    // If §8c shows the sibling screens fail too, the fix belongs in all
+    // four and this divergence should close rather than spread by copying.
+    paddingTop: spacing.space6,
   },
   back: {
     // `minWidth` as well as `minHeight` now, matching the two models: the

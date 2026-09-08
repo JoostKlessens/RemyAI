@@ -34,6 +34,11 @@ function makeKringRecipe(overrides: Partial<KringRecipe> = {}): KringRecipe {
     creatorPlatform: 'tiktok',
     thumbnailUrl: null,
     allergenTags: [],
+    // Defaults, so every case written before 8 September keeps testing what
+    // it was written to test. `assembleKring` carries both straight through;
+    // that carrying has its own case at the bottom of this file.
+    dishTags: [],
+    estimatedMinutes: null,
     ...overrides,
   };
 }
@@ -208,5 +213,57 @@ describe('the copy', () => {
   test('the empty state states a fact and promises nothing', () => {
     expect(KRING_EMPTY_TITLE).toBe('Nog geen cijfers van je vrienden');
     expect(KRING_EMPTY_BODY).toBe('Geeft een vriend een recept een cijfer, dan staat het hier.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The two fields that let both Trending scopes draw one card
+// ---------------------------------------------------------------------------
+
+describe('what the row carries for the card next door', () => {
+  /**
+   * `dishTags` and `estimatedMinutes` were added to `KringRecipe` and
+   * `KringRowModel` on 8 September 2026 for one reason: the owner saw the two
+   * Trending scopes side by side and asked for them to look the same, and
+   * `ranglijst.tsx` had recorded these exact two fields as the prerequisite.
+   *
+   * The test is that they are CARRIED and not derived. Nothing in this module
+   * may compute a cook time or invent a tag — both come off the canonical
+   * `recipes` row the caller already fetched, and a default quietly filled in
+   * here would put a number on a card that no database row supports.
+   */
+  test('carries dishTags and estimatedMinutes straight through from the recipe', () => {
+    // Arrange
+    const recipe = makeKringRecipe({ dishTags: ['pasta', 'vegetarisch'], estimatedMinutes: 25 });
+
+    // Act
+    const [row] = assembleKring({
+      votes: [voted(PROFILE_A, 'recipe-1', 8)],
+      recipes: [recipe],
+      voterNames: NAMES,
+      excludedAllergenTags: [],
+    });
+
+    // Assert
+    expect(row?.dishTags).toEqual(['pasta', 'vegetarisch']);
+    expect(row?.estimatedMinutes).toBe(25);
+  });
+
+  /**
+   * Null is a real state and must survive as null. `recipes.estimated_minutes`
+   * is nullable because the extraction model is instructed never to guess a
+   * time the caption did not state — so a zero or a fallback here would be
+   * this module inventing the one thing that pipeline refuses to invent.
+   */
+  test('an unknown cook time stays unknown rather than becoming a number', () => {
+    const [row] = assembleKring({
+      votes: [voted(PROFILE_A, 'recipe-1', 8)],
+      recipes: [makeKringRecipe({ estimatedMinutes: null, dishTags: [] })],
+      voterNames: NAMES,
+      excludedAllergenTags: [],
+    });
+
+    expect(row?.estimatedMinutes).toBeNull();
+    expect(row?.dishTags).toEqual([]);
   });
 });

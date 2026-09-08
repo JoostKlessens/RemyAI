@@ -90,6 +90,24 @@ export interface KringRecipe {
   readonly thumbnailUrl: string | null;
   /** The recipe's own allergen tags. PD-006 tri-state: absent means UNKNOWN, never "safe". */
   readonly allergenTags: readonly string[];
+  /**
+   * `recipes.dish_tags` and `recipes.estimated_minutes`, added 8 September
+   * 2026 so this scope can draw the SAME card as `Iedereen`.
+   *
+   * The owner, looking at the two scopes side by side: "de trending iedereen
+   * pagina is nu goed maar van alleen vrienden ziet er nog anders uit, zorg
+   * dat deze hetzelfde worden."
+   *
+   * These two fields were the entire reason it looked different. The scope
+   * switch promises one question at two scopes and was drawing two shapes —
+   * a photo card on one side, a compact strip on the other. That gap was
+   * recorded as deliberate rather than forgotten: `ranglijst.tsx`'s header
+   * said converting the friends scope "needs `dishTags` and
+   * `estimatedMinutes` on `KringRecipe`". This is that named prerequisite,
+   * met.
+   */
+  readonly dishTags: readonly string[];
+  readonly estimatedMinutes: number | null;
 }
 
 /** One rendered row. Everything the component needs and nothing it has to compute. */
@@ -104,6 +122,22 @@ export interface KringRowModel {
   readonly thumbnailUrl: string | null;
   /** PD-007a's chip, or null when there is nothing to say. Null is NOT "checked and clean". */
   readonly collisionLabel: string | null;
+  /**
+   * Carried through from `KringRecipe` so this model satisfies the same
+   * `TrendingCardModel` shape `BoardRowModel` does, and the two scopes can
+   * hand their rows to ONE component.
+   *
+   * (!) THE TWO MODELS ARE STILL TWO TYPES, and that is not an oversight to
+   * tidy up later. They differ in what their `metaLine` MEANS — the board's
+   * is "8,72 · 204 stemmen" and this one is "8,5 · Sanne en Joris", a
+   * number backed by named people you actually know — and in whether a vote
+   * floor applies (the board has `LEADERBOARD_MIN_VOTES`, this scope
+   * deliberately has none, because two friends naming a dish is real
+   * evidence and two strangers is not). Merging them would force one answer
+   * on both questions.
+   */
+  readonly dishTags: readonly string[];
+  readonly estimatedMinutes: number | null;
 }
 
 export interface KringRequest {
@@ -195,6 +229,11 @@ export function assembleKring(request: KringRequest): readonly KringRowModel[] {
         creatorLine: buildCreatorLine(recipe),
         thumbnailUrl: recipe.thumbnailUrl,
         collisionLabel: buildAllergenCollisionLabel(findCollidingTags(recipe, request.excludedAllergenTags)),
+        // Carried, never derived. Both come off the canonical row the
+        // caller already fetched, so the card and the filter read the
+        // rows that are actually on screen instead of asking again.
+        dishTags: recipe.dishTags,
+        estimatedMinutes: recipe.estimatedMinutes,
       },
     ];
   });

@@ -531,6 +531,11 @@ function makeKringRecipe(
     // screen's header) — the fixture populates them so the collision chip
     // has something real to fire on while designing.
     allergenTags: meal.ingredientTags,
+    // Taken from the fixture meal so the friends scope has something to
+    // filter on and a cook time above the photo while designing. In
+    // production both come off the canonical `recipes` row instead.
+    dishTags: meal.dishTags,
+    estimatedMinutes: meal.estimatedMinutes,
   };
 }
 
