@@ -320,7 +320,11 @@ end $$;
 -- een scherm leeg, dan ligt het aan de app en niet aan de data — het
 -- onderscheid dat op 8 september vier dagen kostte om te maken.
 --
--- Verwacht: 5 geaccepteerde vriendschappen, 1 open verzoek, 8 recepten,
+-- Verwacht: 6 geaccepteerde vriendschappen, 1 open verzoek, 8 recepten,
+-- (⚠ hier stond 5, en dat was geteld en niet nageteld: jij↔Sanne, Bram↔jij,
+--  Sanne↔Noor, Bram↔Noor, Sanne↔Youssef, Noor↔Tessa. Zes. Een verkeerd
+--  verwacht getal maakt een goede run verdacht, wat het omgekeerde is van
+--  waar deze query voor staat.)
 -- 6 kookgebeurtenissen, 18 stemmen, 1 doorgestuurd recept.
 --
 -- (!) `suggested_friends()` STAAT HIER NIET BIJ, en dat is geen omissie. Die
