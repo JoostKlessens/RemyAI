@@ -3,41 +3,47 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
-**Stand:** 7 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`5f0c762` gecommit, plus **een ongecommitte ronde in de werkboom** (zie
-*Ronde B* hieronder). De sessies van 6 en 7 september staan in de
-geschiedenis: 143 bestanden, vier migraties (`0015`, `0016`, `0017`, `0018`)
-en negen hernoemingen. Vier checks groen op de boom zoals hij nu staat:
-**3222 tests over 133 bestanden**, nagemeten met `npm test` en niet
-overgeschreven uit de vorige stand.
+**Stand:** 8 september 2026, branch `feat/live-import-and-plan-phases`, t/m
+`16d9e1c` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
+regels. Vier checks groen, nagemeten en niet overgeschreven uit de vorige
+stand: typecheck 0, lint 0, `check:functions` 0, **3249 tests over 135
+bestanden**.
 
-⚠⚠ **NIETS VAN DIT ALLES STAAT OP `origin`, EN DE EIGENAAR DENKT VAN WEL.**
-Gemeten met `git rev-list --left-right --count
-origin/feat/live-import-and-plan-phases...HEAD`, dat `0	11` teruggeeft:
-**elf commits vooruit, nul achter.** `origin/feat/live-import-and-plan-phases`
-staat nog op `8f49b3b` — de docs-commit van 7 september — en alles wat
-daarna gebouwd is (`84e0125` t/m `5f0c762`, plus de ongecommitte ronde) leeft
-uitsluitend op deze laptop.
+⚠ **Vier commits staan nog niet op `origin`.** Gemeten met `git rev-list
+--left-right --count origin/feat/live-import-and-plan-phases...HEAD`, dat
+`0	4` teruggeeft. `origin` staat op `13db125`; wat daarna kwam — `775cb59`,
+`7bac986`, `7718b9f`, `16d9e1c` — leeft alleen hier. Op 7 september is er wél
+gepusht (zestien commits, `8f49b3b..13db125`), dus dit is een verse
+achterstand en niet de oude.
 
-**Waarom hij dacht dat hij gepusht had, want die redenering is de eigenlijke
-bevinding:** hij zag de wijzigingen op zijn telefoon. Dat bewijst niets over
-`origin`. Expo Go haalt de bundle rechtstreeks van de metro-server op deze
-laptop over hetzelfde wifi-netwerk — dat is precies waarom `npx expo start`
-een QR-code toont en geen build uploadt. **Een wijziging op het toestel zien
-is bewijs dat de laptop draait, niet dat git iets verzonden heeft.** Dit
-onderscheid heeft dit project al een keer geld gekost bij de migratiestand,
-in de omgekeerde richting: daar werd een aanname over de database als stand
-van zaken opgeschreven. Hier is het een aanname over een remote. Beide
-kosten één commando om te controleren.
+**EN HIER STOND EEN BEWERING DIE ONWAAR BLEEK, IN DE MEEST LEERZAME RICHTING.**
+Dit document zei dagenlang, in hoofdletters: "niets van dit alles staat op
+`origin`, en de eigenaar denkt van wel". De meting klopte — er stonden elf
+commits lokaal — maar de CONCLUSIE over wat hij dacht was fout. Hij had gezegd
+"Ik heb het gepusht", en hij bedoelde `npx supabase db push`: de migratie, niet
+git. Dat was precies punt 1 van het lijstje dat hem was voorgelegd. Hij had
+gedaan wat er gevraagd was, en dit document heeft hem twee keer verteld dat
+zijn push niet was aangekomen.
 
-**De werkboom is NIET schoon.** Ronde A staat wel in commits — de vier
-pakketten van de toestelronde (`a8d686a` LIB-09, `1a49630` LIB-10, `4dc32d4`
-GAP-35/36, `fd8ece0` GAP-37) plus de vijf van de ontwerpronde erna
-(`55c3187` t/m `5f0c762`) — en elk van de eerste vier is apart groen
-geverifieerd met de rest van de boom opzij gezet, in plaats van alleen samen.
-Zie *Wat er op 7 september 's avonds gebeurde*. Maar dertien gewijzigde en
-vier nieuwe bestanden uit Ronde B staan nog ongestaged; die staan hieronder
-opgesomd omdat een verse sessie ze anders voor rommel aanziet.
+De les is niet "meet je remote" — dat stond er al. **De les is dat "pushen" in
+dit project twee dingen betekent, en dat een assistent die er één van aanneemt
+een correcte meting aan een verkeerde vraag hangt.** Vraag welke, of meet ze
+allebei: `git rev-list --left-right --count origin/<branch>...HEAD` voor de
+ene, `npx supabase migration list` voor de andere.
+
+**De database is bij: `0001` t/m `0018` draaien, local én remote.** Nagemeten
+op 8 september; er staat niets klaar dat nog toegepast moet worden. `0018`
+(ingrediëntsecties) is door de eigenaar zelf gedraaid.
+
+⚠ **ÉÉN DING IS HALF GEBOUWD EN DAT IS HET EERSTE WAT JE MOET WETEN.** De
+eigenaar vroeg om een cijfervraag die pas twaalf uur na het koken verschijnt.
+Het DOMEIN staat compleet in `src/domain/cookRating.ts` met 16 tests —
+`RATING_DELAY_HOURS`, `isRatingDue`, `selectPendingRating`, `averageCookRating`.
+**De UI bestaat niet.** Nagemeten: `grep -rn "selectPendingRating\|isRatingDue"
+src/ --include=*.tsx` geeft nul treffers. `OutcomeCard` vraagt het cijfer dus
+nog steeds direct na het koken, precies wat hij weg wilde. Zie punt 1 onder
+*Wat er nu open ligt* voor wat er nog moet gebeuren en welke beslissing hij al
+genomen heeft.
 
 ⚠ **Er ging één commit aan vooraf die niets doet en die je moet kennen
 voordat je `git log` leest**: `84e0125` normaliseert de regeleindes van
@@ -135,7 +141,7 @@ Bij netwerkisolatie: `npx expo start --tunnel`.
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 3222 tests / 133 bestanden
+npm test                 3249 tests / 135 bestanden
 ```
 
 ⚠ Hier stond **3137 over 130**, en dat was de stand van vóór de twee rondes
@@ -616,9 +622,11 @@ gemarkeerd.
 
 De eigenaar keek voor de derde keer op een toestel en gaf twee reeksen
 instructies. De eerste reeks staat in vijf commits (`55c3187` t/m
-`5f0c762`); de tweede staat **nog ongecommit in de werkboom** en is
-hieronder per bestand opgesomd, omdat een verse sessie die anders niet van
-rommel kan onderscheiden.
+`5f0c762`), de tweede in vijf daarna (`d7f5e42` t/m `13db125`). ⚠ **Ronde B
+stond hier dagenlang beschreven als "nog ongecommit in de werkboom"; dat is
+sinds 7 september niet meer waar** — de opsomming per bestand hieronder is
+bewaard omdat ze precies zegt wat er in die commits zit, niet omdat er nog
+iets los staat.
 
 ### Ronde A — gecommit, `55c3187` t/m `5f0c762`
 
@@ -664,7 +672,7 @@ toestelvraag.
 commit raakte **tien** bestanden, niet de twaalf die hier eerder gerapporteerd
 is — nagemeten met `git show --stat`.
 
-### Ronde B — ongecommit in de werkboom
+### Ronde B — gecommit, `d7f5e42` t/m `13db125`
 
 Dertien gewijzigde bestanden en vier nieuwe. De nieuwe zijn
 `src/components/decisionFilterCopy.ts`, `src/components/vanavondActionCopy.ts`
@@ -750,43 +758,166 @@ is hoe een designsysteem ophoudt er een te zijn.
 
 ---
 
+## Wat er op 8 september gebeurde
+
+Vijf dingen van de eigenaar, op een toestel, plus twee meldingen. Vier
+commits: `775cb59`, `7bac986`, `7718b9f`, `16d9e1c`.
+
+**De filters overlapten de receptnaam, en de oorzaak was de verdeling.** Zie
+punt 3 hieronder; dit is de belangrijkste les van de dag en hij gaat over
+agentafbakening, niet over CSS.
+
+**De 45 tekeningen zijn aangesloten, en MaterialCommunityIcons is eruit.** De
+eigenaar keurde ze goed en zag ze daarna niet werken — terecht, ze lagen als
+losse SVG's onder `design/icons-v2/` omdat zijn eigen voorwaarde was ze eerst
+te bekijken. `src/components/iconArtwork/` is nu de kopie in de app:
+`drawings.ts` (211 elementen over 45 tekeningen, gegenereerd uit de bron),
+`palette.ts` (22 kleuren) en `IconArtwork.tsx`. Geen nieuwe dependency —
+`react-native-svg` stond er al — en geen buildstap.
+
+De bundlewinst is de eigenlijke opbrengst: `iconFont.ts` had de prijs van
+MaterialCommunityIcons zelf gemeten op **1277 KB `.ttf` plus 212 KB
+glyphmap-JSON**, voor 28 glyphs van de 7448, en schreef erbij dat die ruil
+gemaakt moest worden zodra de bundle pijn deed. `@expo/vector-icons` laadt per
+familie, dus met de laatste aanroepplek weg stopt de familie met meeliften.
+Nagemeten: nul verwijzingen in `src/` behalve proza. Feather (54,3 KB) blijft.
+
+⚠ **Twee dingen om te weten vóór je een icoon aanraakt.** `Icon`'s `color`-prop
+doet NIETS meer voor een naam met artwork, en dat is alle namen — een tekening
+die ÍS een wortel kan geen `textMuted` aannemen en een wortel blijven. `Chip`
+tintte zijn glyph mee met de geselecteerde staat; dat is weg, en overleefbaar
+omdat `Chip`'s eigen header al betoogt dat die staat de vulling plus de rand
+is. En donkere modus is een REGEL, geen tweede set tekeningen: de kleuren
+heten bij rol, de vier neutralen flippen, de vijftien kleuren blijven
+byte-identiek. ⚠ Dat donkere palet is afgeleid en door niemand bekeken.
+
+**Vier bestanden omzeilen de naad** en importeren `Feather` rechtstreeks:
+`friends/[feedItemId].tsx`, `CreatorAttribution.tsx`, `ImportCreatorCredit.tsx`
+en `ImportSourceField.tsx`. Daarom kan `@expo/vector-icons` niet helemaal weg.
+
+**Het gemiddelde cijfer staat op de tegel.** `RecipeSchedulingInfo.lastRating`
+heet nu `averageRating` en komt uit `averageCookRating`. Geen `count > 1`-tak:
+het gemiddelde van één cijfer is dat cijfer, dus één regel in plaats van twee
+die uit elkaar kunnen lopen. Een overgeslagen cijfer telt niet als nul.
+⚠ Bijwerking die bewust geaccepteerd is: `lastCookedOn` en het getal
+beschrijven niet langer dezelfde avond.
+
+**En een fout van mij die de eigenaar meldde:** "a props object containing a
+'key' prop is being spread into JSX". `renderElement` zette `key` in het object
+dat het in elk SVG-element spreidde. React leest `key` van het element af
+vóórdat props bestaan, dus dat werkt én waarschuwt. Nu expliciet, en ná de
+spread — een `{...common}` erachter zou hem terugzetten.
+
+**Wat deze dag over agents leerde, los van de code:** de CEO die de ronde
+verdeelde corrigeerde vier fouten in zijn eigen opdracht (regelaantallen,
+regelnummers, een verschuiving van +202 die als +194 was doorgegeven — en dat
+getal bestond helemaal niet, er stonden kale regelnummers). Een uitvoerder
+weigerde een instructie over te schrijven die onwaar was (`alignItems:
+'stretch'` garandeert géén gelijke knophoogtes). Een derde las de icoonlijst
+uit `iconFont.ts` in plaats van uit de prozalijst in zijn opdracht, en vond er
+45 waar de opdracht 41 zei. **Drie keer corrigeerde de bron de opdracht.** Dat
+is precies waarom de briefings hier metingen meegeven én zeggen ze na te
+meten.
+
+---
+
 ## Wat er nu open ligt
 
-Op volgorde, en de eerste twee zijn van een andere soort dan de rest: die
-kosten geen code maar een handeling van de eigenaar.
+Punt 1 is half gebouwd en heeft een beslissing die al genomen is; punt 2 kost
+geen code maar één handeling. De rest is werk.
 
-1. ~~**De vier pakketten van de toestelronde committen.**~~ **Gedaan op
+1. ⚠ **DE CIJFERVRAAG NA TWAALF UUR — HET DOMEIN STAAT, DE SHEET NIET.** Dit
+   is het enige onaffe werk in de boom en het is met opzet zo achtergelaten:
+   de helft die een test kan bewaken is af en geverifieerd, de helft die dat
+   niet kan is niet begonnen.
+
+   **Wat de eigenaar vroeg, letterlijk:** "Daarnaast wil ik dat je pas een
+   cijfer kan geven de eerste keer dat je de app opent na 12 uur sinds het
+   afronden van het recept. Anders heb je het waarschijnlijk nog helemaal
+   niet gegeten."
+
+   **Wat er af is:** `src/domain/cookRating.ts`, 16 tests.
+   `RATING_DELAY_HOURS` (12), `isRatingDue(event, nowMs)`,
+   `selectPendingRating(cookEvents, nowMs)` — de OUDSTE die toe is, zodat een
+   achterstand op volgorde van gebeuren leegloopt — en `averageCookRating`,
+   dat al wél bedraad is op de bibliotheektegel.
+
+   **Wat er niet is:** elke aanroepplek. `grep -rn "selectPendingRating\|isRatingDue"
+   src/ --include=*.tsx` geeft nul treffers. Concreet nog te doen:
+   - het cijfer UIT `OutcomeCard` halen (daar staat het nu, direct na het
+     koken — precies wat weg moest). ⚠ Alleen het CIJFER; de "Gemaakt!"-
+     bevestiging en het deel-vinkje blijven waar ze zijn.
+   - een sheet die bij het openen van de app verschijnt als
+     `selectPendingRating` iets teruggeeft. **De eigenaar heeft die vorm al
+     gekozen** uit drie opties: een sheet bij het openen, niet een kaart op
+     Kiezen en niet alleen een badge op de tegel. Hij komt terug tot je
+     antwoordt of hem wegstuurt.
+   - de schrijfkant hergebruiken, niet opnieuw bedenken:
+     `cook/[mealId].tsx:435`'s `handleRate` doet al de twee schrijfacties die
+     hierbij horen (`setCookEventRating` privé + `castPublicVote` openbaar).
+
+   **De meting die dit goedkoop maakte, zodat je hem niet opnieuw hoeft te
+   doen:** `cook_events` heeft sinds `0001` een `created_at timestamptz`, en
+   die rij wordt geschreven door `handleCooked(true)` — de "Gemaakt!"-
+   bevestiging. Dat ís dus het afrondmoment dat zijn zin noemt. `cookedOn` is
+   een `date` zonder tijd en had het nooit gekund. **Er is geen migratie
+   nodig**; de kolom was er al en niemand las hem.
+
+2. ⚠ **`supabase/seed/demo_social.sql` DRAAIEN — nog niet gebeurd.** De
+   eigenaar meldde op 8 september dat Vrienden en Ranglijst leeg zijn. Dat is
+   geen defect: `loadLiveFriends` keert vroeg terug zodra
+   `collectAcceptedFriendIds` leeg is, en Ranglijst rangschikt
+   `recipe_ratings`-rijen die niet bestaan. Er staat niets in de database.
+
+   Eén regel invullen (zijn eigen handle, bovenin) en plakken in de
+   SQL-editor. Het script weigert te draaien als het die handle niet vindt en
+   somt op welke er wél zijn — een vriendschap zonder de andere helft levert
+   een tab op die nog steeds leeg is, en dan lijkt het script stuk terwijl de
+   invoer dat was. `demo_social_teardown.sql` haalt alles weer weg.
+
+   **Waarom de keten langer is dan "voeg een vriend toe", want dat is de
+   bevinding hier:** de view `shared_cooks` (0009) poort op VIER dingen
+   tegelijk — een wederzijds geaccepteerde vriendschap,
+   `households.share_cooks_with_friends`, een maaltijd die niet is uitgesloten,
+   én een `recipe_id`. Mist er één, dan blijft de feed leeg zonder dat iets
+   zegt waarom.
+
+3. ~~**De vier pakketten van de toestelronde committen.**~~ **Gedaan op
    7 september**, en de voorspelling in dit blok klopte: de vier
    bestandslijsten raakten elkaar niet, dus het werden vier commits en geen
-   één. Wat de vorige ronde tot één commit van 143 bestanden dwong — nieuwe
-   bestanden die nog nergens in git stonden, en een receptscherm dat modules
-   van diezelfde dag importeerde — speelde hier niet.
+   één.
 
    **Wat het opleverde en wat de volgende ronde ervan mag overnemen:** elk
    pakket is apart groen gemeten in plaats van alleen samen, door de rest van
    de boom met `git stash push --keep-index` opzij te zetten en de vier checks
    op de gestagede inhoud alleen te draaien. Dat is hetzelfde onderscheid dat
    de worktrees van 5 september maakten — "mijn wijziging is groen" tegen "de
-   boom is groen" — voor een fractie van de kosten, en het is de goedkope
-   versie zolang de pakketten disjunct zijn.
+   boom is groen" — voor een fractie van de kosten, zolang de pakketten
+   disjunct zijn.
 
-   De enige verrassing zat in de regeleindes, en die is de moeite waard: de
-   767 regels ruis op `(tabs)/index.tsx` waren **niet** het werk van een agent
-   die het bestand in tekstmodus had geschreven, zoals dit document op
-   4 september vermoedde. Ze kwamen uit `core.autocrlf=true` plus een blob die
-   als enige in de repo CRLF droeg. Dat is dus geen agentfout maar een
-   repo-eigenschap, en hij komt terug zodra een ander bestand ooit met CRLF in
-   git belandt. `git diff --numstat` naast `git diff --numstat
-   --ignore-cr-at-eol` maakt het in één blik zichtbaar.
+   ⚠ **EN OP 8 SEPTEMBER BLEEK DAT ONVOLDOENDE, OP DE DUURSTE MANIER.** Twee
+   pakketten van de ontwerpronde — de filterlade op Kiezen en de grotere foto
+   — zijn zo geverifieerd, elk apart groen, bestandslijsten volledig
+   disjunct. Toen liep de receptnaam over de filterlade heen zodra die
+   openging. De hoogtebegroting loopt dwars door die scheiding: de
+   foto-agent rekende met de lade DICHT (73pt) omdat dat het getal was dat hij
+   kreeg, open is hij 235pt, en dan wil de kaart 453pt in een hero van 382.
+   **Disjuncte bestanden zijn geen disjuncte layouts.** Wie de volgende ronde
+   zo verdeelt, benoemt vooraf welke GEDEELDE GROOTHEDEN er zijn — een
+   hoogtebudget, een scrollpositie, een z-volgorde — en geeft die aan één
+   pakket. De reparatie zit in `DecisionCard.tsx` (`775cb59`): de foto is een
+   plafond geworden in plaats van een vaste maat.
 
-2. ~~**`npx supabase db push` draaien.**~~ **Gedaan door de eigenaar op
-   7 september, en de tool bood hem alleen `0017` aan** — `0015` en `0016`
-   waren al toegepast, wat dit document opnieuw verkeerd had staan. Nagemeten:
-   `0001` t/m `0017`, `local` en `remote` gelijk voor alle zeventien. Trending
-   en het gerechttype zijn daarmee te testen. Zie *Wat er draait* voor waarom
-   deze regel drie keer op rij onwaar is geweest.
+4. ~~**`npx supabase db push` draaien.**~~ **Gedaan door de eigenaar.**
+   Nagemeten op 8 september: `0001` t/m `0018`, `local` en `remote` gelijk
+   voor alle achttien. ⚠ Deze regel is in dit document VIER keer onwaar
+   geweest, drie keer te pessimistisch (`0011`/`0012`, `0014`, `0015`/`0016`)
+   en één keer te optimistisch omgekeerd — op 8 september stond hier dat
+   `0018` nog local-only was, op een meting die 's middags klopte en 's avonds
+   niet meer. Draai `npx supabase migration list` vóór je hier iets beweert;
+   het leest en wijzigt niets.
 
-3. **De app op een toestel doorlopen, en dit blijft punt één met stip** — nu
+5. **De app op een toestel doorlopen, en dit blijft punt één met stip** — nu
    met zeven verse dingen erbij die niemand heeft gezien. In volgorde van
    twijfel: de **koksmuts** op de tegel (leest die als "al gekookt" op
    14pt, of als "recept"?), de **200pt foto op Kiezen** en de **dichte
@@ -829,7 +960,7 @@ kosten geen code maar een handeling van de eigenaar.
    Doe ook de throttle-test (21 imports binnen tien minuten; de 21e hoort
    `import_throttled` te krijgen).
 
-4. **De filterbug is nog maar half weg, en Ronde B heeft hem goedkoper
+6. **De filterbug is nog maar half weg, en Ronde B heeft hem goedkoper
    gemaakt in plaats van hem op te lossen** (GAP-33). De bibliotheek
    herberekent zijn chips tegen wat de andere filters overlaten; **Kiezen
    doet dat niet.** Kies daar twee chips die niet samen voorkomen en je
@@ -848,7 +979,7 @@ kosten geen code maar een handeling van de eigenaar.
    ervóór was hij duurder.** Dat is de reden om hem te laten liggen, en niet
    dat er geen tijd was.
 
-5. **Dislikes doen letterlijk niets, en dat is groter dan een filter.** Je
+7. **Dislikes doen letterlijk niets, en dat is groter dan een filter.** Je
    typt `paddenstoelen` — het voorbeeld dat de app zelf voorstelt — en het
    sluit nooit iets uit, want dislikes worden vergeleken met
    `Meal.ingredientTags`, dat alleen uit de EU-14 allergenenlijst gevuld
@@ -856,11 +987,27 @@ kosten geen code maar een handeling van de eigenaar.
    filter in de hele app gelezen**, alleen voor weergave. Er is dus geen
    ingrediëntfilter; er is een allergenenfilter dat eruitziet als één.
 
-6. **De iconen** (GAP-19) — ✅ **gebouwd op 7 september, en wat er nu nog
+8. **De iconen** (GAP-19) — ✅ **twee keer af, en de tweede keer verving de
+   eerste.** Op 7 september kreeg de seam een tweede fontfamilie; op
+   8 september kreeg hij 45 eigen gekleurde tekeningen en ging die familie er
+   weer uit. Wat er nu nog ligt is één ding: de **21 empty-state markeringen**
+   uit WS4 §5.3-5.5, waarvan er nul geleverd zijn. Die waren op het font
+   geblokkeerd en zijn dat allang niet meer.
+
+   ⚠ **ALLES HIERONDER BESCHRIJFT DE EERSTE OPLOSSING EN IS ALS VERANTWOORDING
+   BEWAARD, NIET ALS BESCHRIJVING VAN VANDAAG.** Lees het voor het argument —
+   het legt uit waarom `iconFont.ts` `{ family, name }` teruggeeft in plaats
+   van een kale glyphnaam, en dat mechanisme staat er nog — maar niet voor de
+   stand. Vandaag draait de app op `src/components/iconArtwork/`, tekent
+   MaterialCommunityIcons niets meer, en is `Icon`'s `color`-prop inert voor
+   elke naam met artwork. Zie *Wat er op 8 september gebeurde*.
+
+   In de vorm waarin dit punt op 7 september werd opgeschreven: **gebouwd, en
+   wat er nu nog
    ligt is een oordeel en geen werk.** De seam draagt twee families, alle
    zeventien mappings staan aan, en `isIconAvailable` is van vijftien van de
    drieëndertig naar drieëndertig van de drieëndertig gegaan. Vier checks
-   groen (3137 tests toen; 3222 nu, zie *Wat er draait*). Wat hieronder stond als opdracht staat er nu als
+   groen (3137 tests toen; 3249 nu, zie *Wat er draait*). Wat hieronder stond als opdracht staat er nu als
    verantwoording; lees het door vóór je aan de mappings tornt.
 
    **Wat er veranderde, en waar.** `iconFont.ts` geeft geen kale glyphnaam
@@ -1016,7 +1163,7 @@ kosten geen code maar een handeling van de eigenaar.
    icoonvak wordt toch al getekend, dus een echt icoon kost nul punten — met
    twee families is er nu ook iets om erin te zetten.
 
-7. **`Bewaren` op de gedeelde receptpagina** (GAP-32). De Vrienden-tab is op
+9. **`Bewaren` op de gedeelde receptpagina** (GAP-32). De Vrienden-tab is op
    echte data grotendeels inert: bewijskaarten krijgen geen `onPress`,
    `/friends/[feedItemId]` draait op fixtures — en op **elke** build, niet
    alleen in dev, want dat scherm heeft geen `__DEV__`-poort — en de enige
@@ -1025,12 +1172,12 @@ kosten geen code maar een handeling van de eigenaar.
    daarvan zelf als vervanger voor Strava's kudos. Het is volledig
    gespecificeerd in `DESIGN-SOCIAL.md` §3.3 en §4.3.
 
-8. **`src/app/import/confirm.tsx` is 963 regels**, ver over het plafond van
+10. **`src/app/import/confirm.tsx` is 963 regels**, ver over het plafond van
    800, en was op 892 vóór iemand hem deze week aanraakte. Eruit halen wat
    eruit moet — `buildEditedRecipe`, `buildMealInput`, `persistImportedMeal`
    naar `src/domain/import/**` — is een schone, afgebakende klus.
 
-9. **De mail naar Food Influencers United.** Het mandje vullen bij AH en
+11. **De mail naar Food Influencers United.** Het mandje vullen bij AH en
    Jumbo is gelicentieerd (`api.tobasket.com`, sinds oktober 2025), gratis
    te testen vóór betaling, en BSK-06 staat daarom open in plaats van dicht.
    De vraag die telt staat nergens publiek beantwoord: **krijgt een
@@ -1038,16 +1185,16 @@ kosten geen code maar een handeling van de eigenaar.
    (prijsvergelijking) legaal kan bestaan. Lange doorlooptijd, dus vroeg
    sturen.
 
-10. **Eigen SMTP**, waarna de zes-cijfer-route werkt en er testgebruikers
+12. **Eigen SMTP**, waarna de zes-cijfer-route werkt en er testgebruikers
     kunnen bestaan.
 
-11. **IMP-05** — één secret, geen code: `GEMINI_MODEL` op een gedateerde
+13. **IMP-05** — één secret, geen code: `GEMINI_MODEL` op een gedateerde
    snapshot pinnen. Sinds de foto-import is dit dringender: een
    multimodale aanroep kost een veelvoud van een tekstaanroep, en een
    verschoven alias faalt als `llm_request_failed`, onzichtbaar in alles
    wat je kunt tellen.
 
-12. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
+14. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
    hebben? Het duurst betaalde openstaande punt.
 
 **Geblokkeerd op iets dat niet in code te betalen is:** ENT-01, de share
