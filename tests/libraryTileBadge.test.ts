@@ -34,9 +34,14 @@ function cookEvent(cookedOn: string, rating: number | null): CookEvent {
 }
 
 describe('describeLibraryTileBadge', () => {
-  test('every state has an answer — the function is total, so no tile can render an undefined badge', () => {
+  test('every state has an answer — null or a badge, never undefined', () => {
+    // Still total, and the answer set grew by one on 8 September 2026: null
+    // is now a legitimate answer, for every state but `al_gekookt`. What must
+    // never happen is `undefined`, which is what would render an empty chip.
     for (const state of LIBRARY_SCHEDULING_STATES) {
-      expect(describeLibraryTileBadge(info(state)).kind).toMatch(/^(icon|text)$/);
+      const badge = describeLibraryTileBadge(info(state));
+      expect(badge === null || /^(icon|text)$/.test(badge.kind)).toBe(true);
+      expect(badge).not.toBeUndefined();
     }
   });
 
@@ -57,9 +62,20 @@ describe('describeLibraryTileBadge', () => {
     expect(describeLibraryTileBadge(info('al_gekookt', 8))).toEqual({ kind: 'text', label: formatGrade(8) });
   });
 
-  test('a recipe that has not been cooked wears the chef hat — all three of those states, not just the unplanned one', () => {
+  /**
+   * ⚠ THIS TEST ASSERTED THE OPPOSITE UNTIL 8 SEPTEMBER 2026, and the
+   * inversion is the owner's: "Misschien beter om het chefshoedje bij mijn
+   * recepten (om aan te tonen dat je het nog niet hebt gekookt) weg te halen,
+   * het is niet informatief en ziet er raar uit."
+   *
+   * The old version pinned the hat onto all three not-cooked states. It was
+   * a faithful test of a decision that has since been reversed, so it is
+   * rewritten rather than deleted — the corner is now empty for exactly the
+   * states it used to mark.
+   */
+  test('a recipe that has not been cooked wears nothing at all — all three of those states', () => {
     for (const state of LIBRARY_SCHEDULING_STATES.filter((candidate) => candidate !== 'al_gekookt')) {
-      expect(describeLibraryTileBadge(info(state))).toEqual({ kind: 'icon', icon: 'cooked' });
+      expect(describeLibraryTileBadge(info(state))).toBeNull();
     }
   });
 
@@ -92,15 +108,26 @@ describe('describeLibraryTileBadge', () => {
     // Structural, not decorative: the resolver never builds such a row, and
     // a badge that would print a number for one is a badge that could show
     // a grade for a meal nobody has made.
-    expect(describeLibraryTileBadge(info('deze_week', 9))).toEqual({ kind: 'icon', icon: 'cooked' });
+    expect(describeLibraryTileBadge(info('deze_week', 9))).toBeNull();
   });
 
-  test('the drawing is the same in both directions — only the colour separates made from not made', () => {
-    expect(describeLibraryTileBadge(info('al_gekookt', null))).toEqual(describeLibraryTileBadge(info('geen_planning')));
+  /**
+   * ⚠ BOTH OF THE TESTS THAT STOOD HERE ARE GONE BY REVERSAL, AND WHAT
+   * REPLACES THEM IS THEIR INVERSE. They asserted that the hat drew
+   * identically for made and not-made ("only the colour separates" them), and
+   * that an unplanned recipe was "no longer a blank corner".
+   *
+   * That pair WAS the design the owner rejected: one drawing carrying two
+   * meanings, told apart by fill colour alone. Drawing and meaning are now
+   * one-to-one, which is the property worth pinning instead.
+   */
+  test('the hat means made, and nothing else draws it', () => {
+    expect(describeLibraryTileBadge(info('al_gekookt', null))).toEqual({ kind: 'icon', icon: 'cooked' });
+    expect(describeLibraryTileBadge(info('geen_planning'))).toBeNull();
   });
 
-  test('an unplanned recipe is no longer a blank corner — a missing badge cannot say "nog niet gemaakt"', () => {
-    expect(describeLibraryTileBadge(info('geen_planning')).kind).not.toBe('none');
+  test('an unplanned recipe is a blank corner again', () => {
+    expect(describeLibraryTileBadge(info('geen_planning'))).toBeNull();
   });
 
   test('every grade the scale can produce fits the narrowest supported tile', () => {
@@ -115,8 +142,12 @@ describe('describeLibraryTileBadge', () => {
     for (let step = 0; step <= steps; step += 1) {
       const grade = Number((RATING_MIN + step * RATING_STEP).toFixed(1));
       const badge = describeLibraryTileBadge(info('al_gekookt', grade));
-      expect(badge.kind).toBe('text');
-      if (badge.kind === 'text') {
+      // Non-null across the whole scale is part of the assertion now: a
+      // cooked, graded dish must always draw, or the number the owner asked
+      // for would silently vanish somewhere on the ladder.
+      expect(badge).not.toBeNull();
+      expect(badge?.kind).toBe('text');
+      if (badge?.kind === 'text') {
         expect(badge.label.length).toBeLessThanOrEqual(LIBRARY_TILE_BADGE_TEXT_BUDGET_CHARS);
       }
     }
@@ -126,7 +157,9 @@ describe('describeLibraryTileBadge', () => {
     // Not reachable today (the glyph resolves), and asserted anyway: the
     // badge now hangs on ONE glyph for all four states, so a font swap takes
     // the whole corner rather than half of it.
-    expect(describeLibraryTileBadge(info('deze_week'), () => false)).toEqual({ kind: 'text', label: 'Deze week' });
+    // `deze_week` no longer reaches the fallback at all: it returns null
+    // before the font is consulted, so there is no word to swap in.
+    expect(describeLibraryTileBadge(info('deze_week'), () => false)).toBeNull();
     expect(describeLibraryTileBadge(info('al_gekookt', null), () => false)).toEqual({ kind: 'text', label: 'Al gekookt' });
   });
 
@@ -217,8 +250,8 @@ describe('buildLibraryTileSpokenState', () => {
   test('the drawn grade and the spoken grade are the same number, written the same way', () => {
     const badge = describeLibraryTileBadge(info('al_gekookt', 8.5));
 
-    expect(badge.kind).toBe('text');
-    if (badge.kind === 'text') {
+    expect(badge?.kind).toBe('text');
+    if (badge?.kind === 'text') {
       expect(buildLibraryTileSpokenState(info('al_gekookt', 8.5))).toContain(badge.label);
     }
   });

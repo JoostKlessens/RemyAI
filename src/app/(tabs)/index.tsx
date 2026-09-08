@@ -141,6 +141,8 @@ import {
 } from '@/fixtures/decisionFixtures';
 import { DecisionCard } from '@/components/DecisionCard';
 import { DecisionFilterBar } from '@/components/DecisionFilterBar';
+import { FilterTrigger } from '@/components/FilterTrigger';
+import { countDecisionFilters, describeDecisionFilters } from '@/components/decisionFilterCopy';
 import { DecisionErrorState, DecisionLoadingSkeleton } from '@/components/DecisionScreenStates';
 import { DevScenarioRow, type DevScenario } from '@/components/DevScenarioRow';
 import { NoCandidateState } from '@/components/NoCandidateState';
@@ -437,6 +439,14 @@ export default function VanavondScreen(): JSX.Element {
   const isEmptyRotation = currentResult.kind === 'no_candidate' && currentResult.reason === 'empty_rotation';
   const showFilterBar = effectivePhase === 'ready' && !isEmptyRotation;
 
+  /**
+   * The drawer's open state, lifted out of `DecisionFilterBar` when its
+   * opening became a glyph above it. Never persisted: Kiezen opens on the
+   * food, and a drawer that remembered being open would greet the household
+   * with three rows of controls instead of a dish.
+   */
+  const [isFilterOpen, setFilterOpen] = useState(false);
+
   const getMealById = (mealId: MealId): Meal | undefined => session?.mealById.get(mealId);
 
   const handleAccept = (result: Extract<DecisionResult, { kind: 'suggestion' }>): void => {
@@ -582,7 +592,30 @@ export default function VanavondScreen(): JSX.Element {
           row does not move on a swap (docs/DESIGN.md §1). Hidden for `empty_rotation`:
           offering to narrow a library that has nothing in it is noise, and
           that state's single job is to get the first link pasted. */}
+      {/* THE OPENING IS A GLYPH NOW, AND THE BAR IS ONLY WHAT IT OPENS. The
+          owner: "ik wil dat we het filter icoontje net zo toepassen op de
+          kiezen pagina als we bij trending hebben gedaan." What stood here
+          was a full-width bar with a bottom rule whose SHUT state was still a
+          44pt row reading `Filters` — on the one screen in this app whose
+          whole thesis is that it shows you one dish and not a list. A band of
+          chrome above that dish, on every visit, to offer a narrowing most
+          visits never use.
+
+          ⚠ THIS SCREEN HAS NO HEADER TO PUT THE GLYPH IN, unlike Trending,
+          and that is deliberate rather than missing: Kiezen opens on the
+          food. So `FilterTrigger` draws its own right-aligned row. It is the
+          one way this differs from the screen it was copied from, and it
+          follows from a difference that was already there. */}
       {showFilterBar ? (
+        <FilterTrigger
+          activeFilterCount={countDecisionFilters(filters)}
+          isExpanded={isFilterOpen}
+          onToggle={() => setFilterOpen((wasOpen) => !wasOpen)}
+          accessibilityLabel={describeDecisionFilters(countDecisionFilters(filters)).accessibilityLabel}
+        />
+      ) : null}
+
+      {showFilterBar && isFilterOpen ? (
         <DecisionFilterBar
           filters={filters}
           availableDishTags={session?.availableDishTags ?? []}

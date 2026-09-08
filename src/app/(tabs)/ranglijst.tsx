@@ -196,7 +196,7 @@ import {
 // `SegmentedControlOption` is kept for `SCOPE_OPTIONS`' shape; the control
 // itself is gone — see `ScopeSwitch` on why two words replaced the box.
 import type { SegmentedControlOption } from '@/components/SegmentedControl';
-import { Icon } from '@/components/Icon';
+import { FilterTrigger } from '@/components/FilterTrigger';
 import { useSession } from '@/hooks/useSession';
 import { getColors, spacing, typeScale, type ColorTokens } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
@@ -420,11 +420,15 @@ export default function TrendingScreen(): JSX.Element {
         <Text style={[typeScale.title2, { color: colors.textPrimary }]}>Trending</Text>
         <View style={styles.controlRow}>
           <ScopeSwitch scope={scope} onChange={setScope} colors={colors} />
-          <TrendingFilterTrigger
+          {/* The glyph IS the button — see FilterTrigger's header. The
+              sentence comes from this screen's own copy module, because
+              Kiezen's filters have a third axis and would speak a different
+              one. */}
+          <FilterTrigger
             activeFilterCount={countTrendingFilters(filter)}
             isExpanded={isFilterOpen}
             onToggle={() => setFilterOpen((wasOpen) => !wasOpen)}
-            colors={colors}
+            accessibilityLabel={describeTrendingFilters(countTrendingFilters(filter)).accessibilityLabel}
           />
         </View>
       </View>
@@ -542,68 +546,6 @@ function ScopeSwitch(props: ScopeSwitchProps): JSX.Element {
         );
       })}
     </View>
-  );
-}
-
-interface TrendingFilterTriggerProps {
-  readonly activeFilterCount: number;
-  readonly isExpanded: boolean;
-  readonly onToggle: () => void;
-  readonly colors: ColorTokens;
-}
-
-/**
- * The funnel, small and top-right — "maak er bv een trechter van die klein
- * bovenaan kan komen te staan om het minder invasief te maken".
- *
- * IT IS A GLYPH AND NOT A WORD, which is the whole of the "less invasive".
- * The opening used to be a full-width row with a label, a chevron and a
- * bottom rule, sitting between the header and the first photo; it cost a
- * band of height on every visit to say something only some visits act on.
- * A glyph beside the scope words costs none.
- *
- * THE COUNT IS THE ONE THING IT SAYS OUT LOUD. A funnel that looks identical
- * whether or not it is filtering is how somebody ends up staring at three
- * cards wondering where the rest went — and the drawer that would tell them
- * is shut. So an active filter tints the glyph and puts the number beside
- * it, which is the smallest honest amount of noise.
- */
-function TrendingFilterTrigger(props: TrendingFilterTriggerProps): JSX.Element {
-  const { activeFilterCount, isExpanded, onToggle, colors } = props;
-  const isFiltering = activeFilterCount > 0;
-  /*
-    THE SPOKEN SENTENCE COMES FROM `trendingFilter.ts`, not from two string
-    literals here. It was two literals for about ten minutes, which put copy
-    in a `.tsx` where vitest cannot reach it — the exact thing every
-    `*Copy.ts` module in this directory exists to prevent.
-
-    It also rescued a function from being dead. `describeTrendingFilters` lost
-    its only production caller when the drawer's own opening was deleted, and
-    a `grep` found it alive in tests alone. Using it here is better than
-    banner-ing it as uncalled: the count-in-words rule it holds is asserted
-    EQUAL to Kiezen's by tests/trendingFilter.test.ts, so this glyph now
-    speaks the same sentence the other two filter controls do.
-  */
-  const copy = describeTrendingFilters(activeFilterCount);
-
-  return (
-    <Pressable
-      onPress={onToggle}
-      style={styles.filterTrigger}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: isExpanded }}
-      accessibilityLabel={copy.accessibilityLabel}
-    >
-      {/* The glyph IS the button — the owner, after seeing it shipped beside a
-          worded opening: "Het icoontje is de filterknop, je hoeft dan niet ook
-          nog 'filter' neer te zetten en een dropdown menu te maken." So no
-          label beside it and no chevron under it; the drawer below is the
-          controls themselves. */}
-      <Icon name="filter" size={20} color={isFiltering ? colors.accent : colors.textMuted} />
-      {copy.activeBadge === null ? null : (
-        <Text style={[typeScale.caption, styles.filterCount, { color: colors.accent }]}>{activeFilterCount}</Text>
-      )}
-    </Pressable>
   );
 }
 
@@ -927,19 +869,6 @@ const styles = StyleSheet.create({
     // this week on a back row.
     minHeight: spacing.touchTargetMin,
     justifyContent: 'center',
-  },
-  filterTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space1,
-    minHeight: spacing.touchTargetMin,
-    minWidth: spacing.touchTargetMin,
-    justifyContent: 'flex-end',
-  },
-  filterCount: {
-    // Beside the glyph, never on it: a number in a dot on a funnel is a
-    // badge, and badges on this surface are what PD-004 refuses.
-    marginLeft: spacing.space1,
   },
   pager: {
     flex: 1,

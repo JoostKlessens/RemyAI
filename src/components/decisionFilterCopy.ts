@@ -54,6 +54,8 @@
  * true and the one that fails loudly if it stops being.
  */
 
+import type { DecisionFilters } from '@/domain/types';
+
 /**
  * THE TAG ROW'S HEADING, AND THE DEBT THIS FILE PAYS.
  *
@@ -226,4 +228,29 @@ export function describeDecisionFilters(activeFilterCount: number): DecisionFilt
     activeBadge: counted,
     accessibilityLabel: `${inside} ${counted}.`,
   };
+}
+
+/**
+ * How many axes the household has narrowed — one for a time cap, one per
+ * dish tag, one per mood.
+ *
+ * MOVED HERE FROM `DecisionFilterBar` ON 8 SEPTEMBER 2026, when the opening
+ * left that component for `FilterTrigger` and Kiezen needed the same number
+ * to tint its glyph. It was file-local there, which was right while the bar
+ * was the only thing that could see it and wrong the moment a second caller
+ * appeared.
+ *
+ * IT BELONGS BESIDE `describeDecisionFilters` because those two are one
+ * thought: this counts, that speaks, and a count computed one way for the
+ * glyph and another for the sentence is precisely the drift a shared module
+ * prevents. `countTrendingFilters` sits next to its own copy in
+ * trendingFilter.ts for the same reason, which is why the two screens can be
+ * asserted equal rather than hoped equal.
+ *
+ * A `.ts` MODULE AND NOT THE `.tsx` IT CAME FROM, which is the other half of
+ * the move: vitest runs `node` with react-native stubbed, so a rule living in
+ * a component is a rule no test can reach.
+ */
+export function countDecisionFilters(filters: DecisionFilters): number {
+  return (filters.maxMinutes !== null ? 1 : 0) + filters.requiredDishTags.length + filters.anyDishMoods.length;
 }

@@ -237,7 +237,38 @@ function resolveShowableGrade(scheduling: RecipeSchedulingInfo): number | null {
 export function describeLibraryTileBadge(
   scheduling: RecipeSchedulingInfo,
   isIconAvailable: (name: IconName) => boolean = installedIconAvailable,
-): LibraryTileBadge {
+): LibraryTileBadge | null {
+  /*
+    NOTHING AT ALL FOR A DISH YOU HAVE NOT COOKED, since 8 September 2026.
+
+    The owner: "Misschien beter om het chefshoedje bij mijn recepten (om aan
+    te tonen dat je het nog niet hebt gekookt) weg te halen, het is niet
+    informatief en ziet er raar uit."
+
+    Both halves are right and the first is the one that matters. The corner
+    drew the SAME chef's hat whether or not the dish had been made, and
+    separated the two meanings by fill colour alone — green for cooked,
+    `surface` for not. So the mark carried no information on its own: you had
+    to already know the convention to read it, and it fired on the ORDINARY
+    state, which most tiles in a library are in. A badge that marks the
+    default is decoration in a badge's clothes.
+
+    THE HAT SURVIVES FOR THE ONE CASE IT ACTUALLY REPORTS: cooked, no grade.
+    There it says something the tile says nowhere else — you made this — and
+    the green is docs/DESIGN.md's completion colour doing its documented job.
+    It is now the only case that draws it, so drawing and meaning are
+    one-to-one for the first time.
+
+    ⚠ THE `al_gekookt` GUARD SITS BEFORE THE GRADE LOOKUP, which is belt and
+    braces: `resolveShowableGrade` already returns null for every other
+    state, so a grade can only exist here. Written as two checks anyway,
+    because the day somebody lets a planned dish carry a rating this function
+    should keep its promise rather than quietly start badging planning again.
+  */
+  if (scheduling.state !== 'al_gekookt') {
+    return null;
+  }
+
   const grade = resolveShowableGrade(scheduling);
   if (grade !== null) {
     return { kind: 'text', label: formatGrade(grade) };
@@ -245,6 +276,9 @@ export function describeLibraryTileBadge(
   if (isIconAvailable(COOKED_MARK)) {
     return { kind: 'icon', icon: COOKED_MARK };
   }
+  // The font-gone fallback, unchanged in kind and now reachable only for a
+  // cooked dish — so the word it renders is `al_gekookt`'s and never a
+  // planning state's.
   return { kind: 'text', label: buildSchedulingLabel(scheduling.state) };
 }
 

@@ -199,7 +199,6 @@
  */
 
 import type { JSX } from 'react';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
 import { DISH_TAGS } from '@/domain/dishTags';
@@ -210,7 +209,6 @@ import type { DecisionFilters } from '@/domain/types';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 import { Chip } from './Chip';
 import { ChipGroup } from './ChipGroup';
-import { Icon } from './Icon';
 import { IconChip } from './IconChip';
 import { TimeCapPicker } from './TimeCapPicker';
 import {
@@ -220,10 +218,8 @@ import {
   DECISION_FILTER_TAGS_EYEBROW,
   describeDecisionDishMoodChip,
   describeDecisionDishTagChip,
-  describeDecisionFilters,
 } from './decisionFilterCopy';
 import { iconForDishTag } from './dishTagIcons';
-import { isIconAvailable, type IconName } from './iconFont';
 
 export interface DecisionFilterBarProps {
   readonly filters: DecisionFilters;
@@ -302,26 +298,6 @@ function countActiveFilters(filters: DecisionFilters): number {
   return (filters.maxMinutes !== null ? 1 : 0) + filters.requiredDishTags.length + filters.anyDishMoods.length;
 }
 
-/**
- * The chevron on the "Filters" opening. Feather has no `chevron-down`, so the
- * open state is this glyph turned a quarter turn (`disclosureGlyphExpanded`)
- * — exactly what `LibrarySearchBar`'s disclosure does, and rejected for the
- * same reason there: a second name in iconFont.ts whose only job would be to
- * be the same drawing, rotated, would also have to be added to that file's
- * exhaustive `Record<IconName, InstalledGlyph>`.
- *
- * THE REJECTED ALTERNATIVE WAS THE `filter` FUNNEL, which iconFont.ts does
- * have. It loses because it names what the word beside it already names,
- * while a disclosure is the one control on this bar whose entire meaning IS a
- * direction — the case a word cannot make more cheaply. Two glyphs on a 44pt
- * row would also crowd the count, which is the one thing on a shut drawer
- * that has to be read.
- */
-const DISCLOSURE_GLYPH: IconName = 'chevron-right';
-
-/** 16pt — the small end of WS4's 16-20pt UI band, and `Chip`'s size for a glyph beside a label. Larger reads as an illustration competing with the word rather than a mark introducing it. */
-const DISCLOSURE_GLYPH_SIZE = 16;
-
 export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
   const { filters, availableDishTags, availableDishMoods, onChange } = props;
   const scheme = useColorScheme();
@@ -344,7 +320,6 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
   // STARTS SHUT, ALWAYS — see this file's header for why the library's
   // seed-from-the-count initializer is inert on this screen rather than
   // merely unnecessary.
-  const [isExpanded, setIsExpanded] = useState(false);
 
   // `TimeCap` and `DecisionFilters.maxMinutes` are the same value — whole
   // minutes or `null` for no cap — so nothing is translated here. That
@@ -378,40 +353,21 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
   };
 
   return (
-    <View style={[styles.bar, { borderBottomColor: colors.border }]}>
-      {/* The only row that is always drawn, and the whole shut height: one
-          44pt touch target, the opening on the left and "Wissen" opposite it.
-          "Wissen" stays out here rather than inside the drawer because a
-          household that cannot see its filters is exactly the household that
-          needs the undo — guard two, see the header. */}
-      <View style={styles.headerRow}>
-        <FilterDisclosure
-          isExpanded={isExpanded}
-          activeFilterCount={activeFilterCount}
-          onToggle={() => setIsExpanded((wasExpanded) => !wasExpanded)}
-        />
-        {activeFilterCount > 0 ? (
-          <Pressable
-            onPress={() => onChange(NO_DECISION_FILTERS)}
-            style={styles.reset}
-            accessibilityRole="button"
-            accessibilityLabel={DECISION_FILTER_RESET_A11Y_LABEL}
-          >
-            <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>
-              {DECISION_FILTER_RESET_LABEL}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
+    <View style={styles.bar}>
+      {/* ⚠ THIS COMPONENT IS THE DRAWER AND NOT THE CONTROL, SINCE 8 SEPTEMBER
+          2026. It used to open with its own 44pt row — the word `Filters`, a
+          chevron and a count — with everything below folded behind it. The
+          owner asked for Trending's treatment here: "ik wil dat we het filter
+          icoontje net zo toepassen op de kiezen pagina als we bij trending
+          hebben gedaan", having already said of that glyph: "Het icoontje is
+          de filterknop, je hoeft dan niet ook nog 'filter' neer te zetten en
+          een dropdown menu te maken."
 
-      {/* UNMOUNTED rather than hidden with a style, matching the library's
-          drawer: a shut drawer must cost no height at all — that is the whole
-          162pt — and must give a screen reader nothing to walk past. Nothing
-          about the controls themselves changed when they moved in here: same
-          picker, same vocabularies, same order, same AND/OR semantics, same
-          spoken labels. */}
-      {isExpanded ? (
-        <>
+          So the opening lives in `(tabs)/index.tsx` as a `FilterTrigger`, and
+          this file renders only what the opening opens. Nothing about the
+          controls changed: same picker, same vocabularies, same order, same
+          AND/OR semantics, same spoken labels. */}
+      <>
           {/* No eyebrow above it any more — instruction 2. The picker draws
               its own clock and numeral, so a heading was the same sentence
               twice; the word is still spoken by the opening's label. */}
@@ -508,73 +464,27 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
               </ChipGroup>
             </>
           ) : null}
-        </>
-      ) : null}
+
+        {/* `Wissen` LAST, AND STILL HERE. It used to sit on the opening row so
+            it was reachable with the drawer shut — guard two in this file's
+            header. The trigger carries the active count now, so a household
+            that filtered the rotation empty can still SEE that they did, and
+            the glyph that says so is the glyph that leads here. One tap
+            deeper is the price of a screen that opens on its own food. */}
+        {activeFilterCount > 0 ? (
+          <Pressable
+            onPress={() => onChange(NO_DECISION_FILTERS)}
+            style={styles.reset}
+            accessibilityRole="button"
+            accessibilityLabel={DECISION_FILTER_RESET_A11Y_LABEL}
+          >
+            <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>
+              {DECISION_FILTER_RESET_LABEL}
+            </Text>
+          </Pressable>
+        ) : null}
+      </>
     </View>
-  );
-}
-
-/**
- * The "Filters" opening: the only thing on this bar that is neither a chip nor
- * a picker, and the only thing on it at all until somebody taps.
- *
- * IT IS A `button`, NOT A `checkbox`. It holds no part of `DecisionFilters`
- * and narrows nothing — it decides whether three controls are on screen — and
- * a checkbox role would file a control that changes no result with the two
- * dozen beside it that do.
- *
- * `accessibilityState={{ expanded }}` RATHER THAN A LABEL SAYING "OPEN" OR
- * "DICHT", the choice `AdvancedDisclosure` and `SourceTextPanel` both made:
- * the platform announces expanded/collapsed in the user's own language, and a
- * hand-written Dutch equivalent is a second translation of a sentence the OS
- * already says, free to drift from the visible chevron the day somebody edits
- * one of them.
- *
- * THE SPOKEN LABEL NAMES WHAT IS INSIDE AND WHAT IS ON — "Filters: Hoeveel
- * tijd? Ingrediënten Waar heb je zin in? 2 filters actief." A sighted
- * household reads those facts off the drawer when it opens; somebody who
- * cannot see the chips gets them from the control that hides them.
- * decisionFilterCopy.ts owns both sentences and composes the axis names from
- * the eyebrows themselves, so a fourth axis moved behind this fold cannot
- * leave the label listing three.
- *
- * `isIconAvailable` IS ASKED BEFORE THE CHEVRON IS DRAWN, exactly as `Chip`
- * and `AdvancedDisclosure` do and for the reason Icon.tsx's header gives:
- * `Icon` renders NOTHING for a name no installed font can draw, so a caller
- * that wants no dangling gap in a `gap`-spaced row has to ask first. The word
- * and the count carry the control without it.
- */
-function FilterDisclosure(props: {
-  readonly isExpanded: boolean;
-  readonly activeFilterCount: number;
-  readonly onToggle: () => void;
-}): JSX.Element {
-  const { isExpanded, activeFilterCount, onToggle } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-  const copy = describeDecisionFilters(activeFilterCount);
-
-  return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: isExpanded }}
-      accessibilityLabel={copy.accessibilityLabel}
-      style={styles.disclosure}
-    >
-      {isIconAvailable(DISCLOSURE_GLYPH) ? (
-        <View style={isExpanded ? styles.disclosureGlyphExpanded : null}>
-          <Icon name={DISCLOSURE_GLYPH} size={DISCLOSURE_GLYPH_SIZE} color={colors.textMuted} />
-        </View>
-      ) : null}
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>{copy.label}</Text>
-      {/* The accent colour is the point: a count in `textMuted` beside a muted
-          label reads as more label, and this is the one thing on a shut drawer
-          that says a filter is running. */}
-      {copy.activeBadge !== null ? (
-        <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>{copy.activeBadge}</Text>
-      ) : null}
-    </Pressable>
   );
 }
 
@@ -585,30 +495,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space3,
     paddingBottom: spacing.space4,
     gap: spacing.space2,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: spacing.touchTargetMin,
-  },
-  disclosure: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space2,
-    // Stretches the header row's full 44pt so the opening is a real target
-    // rather than a 15pt band of text. `flex: 1` and not `flex-start`: the
-    // household reaches for this holding a pan, and the space between the
-    // word and "Wissen" is dead otherwise.
-    flex: 1,
-    alignSelf: 'stretch',
-    justifyContent: 'flex-start',
-  },
-  disclosureGlyphExpanded: {
-    // A quarter turn clockwise: `chevron-right` becomes the chevron-down every
-    // open disclosure draws. See `DISCLOSURE_GLYPH` for why a rotation and not
-    // a second glyph name; it is also compositor-only, so nothing reflows.
-    transform: [{ rotate: '90deg' }],
   },
   eyebrow: {
     textTransform: 'uppercase',

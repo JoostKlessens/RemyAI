@@ -225,22 +225,32 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
           </Text>
         </View>
 
-        {/* EVERY tile wears one, which is the point of the redesign: a
-            corner that is sometimes empty cannot say "dit heb je nog niet
-            gemaakt". libraryTileBadge.ts carries what it draws and why. */}
-        <View style={[styles.badge, { backgroundColor: badge.backgroundColor }]} pointerEvents="none">
-          {badgeContent.kind === 'icon' ? (
-            <Icon name={badgeContent.icon} size={BADGE_GLYPH_SIZE} color={badge.textColor} />
-          ) : (
-            // A grade lands here by design; a scheduling word only when a
-            // font swap has taken the hat away. WS-2 §3.2's redline covers
-            // both: one line, capped at 60% of the tile, so a clip is
-            // explicit instead of the frame's silent one.
-            <Text style={[typeScale.caption, styles.badgeLabel, { color: badge.textColor }]} numberOfLines={1}>
-              {badgeContent.label}
-            </Text>
-          )}
-        </View>
+        {/* ⚠ NOT EVERY TILE WEARS ONE ANY MORE, AND THIS COMMENT SAID THE
+            OPPOSITE UNTIL 8 SEPTEMBER 2026. It read: "EVERY tile wears one,
+            which is the point of the redesign: a corner that is sometimes
+            empty cannot say 'dit heb je nog niet gemaakt'." The argument was
+            sound and its PREMISE is what the owner rejected — he does not
+            want the corner to say "nog niet gemaakt" at all: "het is niet
+            informatief en ziet er raar uit."
+
+            An empty corner is the ordinary case now. The badge draws only
+            for a dish actually cooked; `describeLibraryTileBadge` returns
+            null for everything else and carries the reasoning. */}
+        {badgeContent === null ? null : (
+          <View style={[styles.badge, { backgroundColor: badge.backgroundColor }]} pointerEvents="none">
+            {badgeContent.kind === 'icon' ? (
+              <Icon name={badgeContent.icon} size={BADGE_GLYPH_SIZE} color={badge.textColor} />
+            ) : (
+              // A grade lands here by design; a scheduling word only when a
+              // font swap has taken the hat away. WS-2 §3.2's redline covers
+              // both: one line, capped at 60% of the tile, so a clip is
+              // explicit instead of the frame's silent one.
+              <Text style={[typeScale.caption, styles.badgeLabel, { color: badge.textColor }]} numberOfLines={1}>
+                {badgeContent.label}
+              </Text>
+            )}
+          </View>
+        )}
       </View>
     </Pressable>
   );
