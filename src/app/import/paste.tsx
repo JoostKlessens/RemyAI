@@ -1038,10 +1038,18 @@ export default function ImportPasteScreen(): JSX.Element {
       {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <ImportDevScenarioRow onSelect={applyDevScenario} /> : null}
 
       <View style={styles.header}>
+        {/* `hitSlop` HERE BECAUSE THE ROW IS SHARED, not because this screen
+            was reported. The owner's 8 September report was about
+            friends/add.tsx, whose cause has NOT been found; that screen's
+            header lists what was ruled out. This row is byte-for-byte the
+            same one, so widening the target there and not here would make
+            four identical rows quietly behave in two ways. 44pt stays the
+            floor and nothing shrinks. */}
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
           accessibilityLabel="Annuleren, sluit recept importeren"
+          hitSlop={8}
           style={styles.cancelButton}
         >
           <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Annuleren</Text>

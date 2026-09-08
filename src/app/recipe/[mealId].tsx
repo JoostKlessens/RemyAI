@@ -412,10 +412,18 @@ export default function RecipeOverviewScreen(): JSX.Element {
 
   const backRow = (
     <View style={styles.header}>
+      {/* `hitSlop` HERE BECAUSE THE ROW IS SHARED, not because this screen
+          was reported. The owner's 8 September report was about
+          friends/add.tsx, whose cause has NOT been found; that screen's
+          header lists what was ruled out. This row is byte-for-byte the
+          same one, so widening the target there and not here would make
+          four identical rows quietly behave in two ways. 44pt stays the
+          floor and nothing shrinks. */}
       <Pressable
         onPress={() => router.back()}
         accessibilityRole="button"
         accessibilityLabel={RECIPE_OVERVIEW_BACK_ACCESSIBILITY_LABEL}
+        hitSlop={8}
         style={styles.backButton}
       >
         <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>{RECIPE_OVERVIEW_BACK_LABEL}</Text>

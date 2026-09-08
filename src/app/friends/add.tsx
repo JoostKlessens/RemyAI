@@ -430,6 +430,23 @@ export default function AddFriendScreen(): JSX.Element {
           await maybeAskCookSharing(lists.acceptedFriendCount, row.displayName);
         }
       } catch {
+        // A SUSPICION ABOUT THIS MESSAGE, RECORDED RATHER THAN ACTED ON.
+        // `announce` writes into the one message slot up near the input,
+        // which renders ABOVE the VERZOEKEN label — so a reader who has
+        // scrolled down to the request row they just answered may have the
+        // sentence off-screen behind them. That is read off the render
+        // order and has NOT been observed on a device, which is why nothing
+        // has moved: it would relocate a message the send-request path
+        // deliberately puts under the input, on the strength of a guess.
+        // It is worth checking on the next device pass, together with the
+        // Terug report above. `announceForAccessibility` fires either way,
+        // so a VoiceOver reader hears it regardless of scroll position.
+        //
+        // Until 8 September this path also fired on every accept and
+        // decline, because `actOnFriendship` sent an upsert Postgres
+        // refused — see that method for the measurement. So "the owner saw
+        // nothing happen" had two candidate halves, and only one of them
+        // is now known to be fixed.
         announce(describeAddFriendOutcome('failed', row.handleLabel));
       }
     },
@@ -461,10 +478,36 @@ export default function AddFriendScreen(): JSX.Element {
           every back-word in the app across three copy modules, not a side
           effect of moving one View. */}
       <View style={styles.header}>
+        {/* `hitSlop` FOR A REPORT WHOSE CAUSE IS NOT FOUND, and it is worth
+            being precise about which half is which. The owner reported on
+            8 September that Terug on this screen "soms" does not respond.
+            Four explanations were measured and ruled out: the missing
+            `edges` prop (harmless — the default is all four), the hitbox
+            (already 44x44, the norm), this header being different from the
+            others (it is byte-for-byte the same), and `router.back()` having
+            nowhere to go (both doors here are a `push`). So this is not a
+            fix; it is the cheapest widening of the target that cannot make
+            anything worse, applied while the cause is still open.
+
+            THE SAME VALUE GOES ON ALL FOUR SCREENS THAT DRAW THIS ROW —
+            recipe/[mealId].tsx, import/paste.tsx and settings.tsx — because
+            the row is provably identical on all four, and repairing one
+            would make the other three quietly different in a way no test
+            would notice. 8 rather than 4 is the larger of the two values
+            already in this codebase (MemberRow, OutcomeCard); 44 stays the
+            floor and nothing shrinks.
+
+            WHAT IT ACTUALLY BUYS, reasoned from the layout and not measured
+            on a device: on iOS a touch outside the PARENT's bounds does not
+            reach the child, and this header row is only as tall as its 8pt
+            top padding plus the button. So the gain is upward — into that
+            padding, up to the top of the safe area — and sideways, while
+            downward it stops where the row does. */}
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
           accessibilityLabel="Terug naar het vorige scherm"
+          hitSlop={8}
           style={styles.back}
         >
           <Text style={[typeScale.button, { color: colors.textSecondary }]}>{ADD_FRIEND_BACK_LABEL}</Text>

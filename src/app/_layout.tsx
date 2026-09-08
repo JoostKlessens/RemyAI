@@ -44,7 +44,7 @@ import { Archivo_400Regular, Archivo_600SemiBold, Archivo_700Bold } from '@expo-
 import { IBMPlexMono_500Medium, IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono';
 import * as Linking from 'expo-linking';
 import { AppState } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { completeSignInFromUrl } from '@/lib/auth';
 import { useSession } from '@/hooks/useSession';
 import { startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
@@ -117,7 +117,25 @@ export default function RootLayout(): JSX.Element | null {
   }
 
   return (
-    <SafeAreaProvider>
+    /* `initialMetrics` IS NOT DECORATION. Without it the provider hands its
+       children `{0,0,0,0}` until a native measurement comes back, so the
+       first frames of any screen render as though the device had no notch
+       and no home indicator; `initialWindowMetrics` is that same
+       measurement read synchronously at module scope, so the first frame is
+       already right. On a `fullScreenModal` — which is what `friends/add`,
+       `cook/[mealId]` and `import/paste` are — the visible consequence is
+       that the back row sits at y=8 instead of y≈67 for a moment, which on
+       an iPhone with a Dynamic Island puts it under hardware that eats the
+       tap.
+
+       THIS IS NOT A DIAGNOSIS OF THE OWNER'S REPORT (8 September: "als ik
+       op die pagina zit en op terug probeer te klikken werkt dit niet").
+       That cause has NOT been found — four candidates were measured and
+       ruled out, see docs/RONDE-8-SEPTEMBER-TRENDING.md taak B. This prop
+       is here because it is a real gap on its own terms and the library
+       documents it as the recommended setup; that it also happens to fit
+       the word "soms" is a reason to look, not a finding. */
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <AuthGate />
       <HouseholdBootstrapGate />
       <Stack screenOptions={{ headerShown: false }}>
