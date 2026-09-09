@@ -156,10 +156,13 @@
  * `describeDecisionFilters` for why the library's version counts only two of
  * its four and why that is the same rule, not a different one.
  *
- * TWO, "WISSEN" ON THE ALWAYS-VISIBLE ROW. It sits opposite the opening and
- * appears the moment anything is set, so a bar whose drawer is shut still
- * says out loud that there is something to undo. It costs nothing when there
- * is not.
+ * ⚠ TWO, "WISSEN" — WITHDRAWN 9 SEPTEMBER 2026, on the owner's instruction
+ * ("remove the 'wissen' button"). It used to sit opposite the opening and
+ * appear the moment anything was set. Guard three below turns out to be the
+ * one that carries the risk this guard was written for, and it is a primary
+ * button rather than a quiet word. What is lost is clearing several chips at
+ * once while results still exist — one tap per chip now. See the body where
+ * the control stood.
  *
  * THREE, `NoCandidateState` ALREADY DRAWS ITS OWN "FILTERS WISSEN" — a
  * primary button, on `filtered_out`, at NoCandidateState.tsx:122-129. A
@@ -199,10 +202,9 @@
  */
 
 import type { JSX } from 'react';
-import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
 import { DISH_TAGS } from '@/domain/dishTags';
-import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import { normalizeTag } from '@/domain/normalizeTag';
 import type { TimeCap } from '@/domain/timeCap';
 import type { DecisionFilters } from '@/domain/types';
@@ -213,8 +215,6 @@ import { IconChip } from './IconChip';
 import { TimeCapPicker } from './TimeCapPicker';
 import {
   DECISION_FILTER_MOODS_EYEBROW,
-  DECISION_FILTER_RESET_A11Y_LABEL,
-  DECISION_FILTER_RESET_LABEL,
   DECISION_FILTER_TAGS_EYEBROW,
   describeDecisionDishMoodChip,
   describeDecisionDishTagChip,
@@ -294,9 +294,14 @@ export interface DecisionFilterBarProps {
  * `DECISION_FILTER_TIME_EYEBROW`, spoken only by the opening's accessibility
  * label, because a screen reader cannot glance into a shut drawer.
  */
-function countActiveFilters(filters: DecisionFilters): number {
-  return (filters.maxMinutes !== null ? 1 : 0) + filters.requiredDishTags.length + filters.anyDishMoods.length;
-}
+/*
+ * ⚠ A PRIVATE `countActiveFilters` STOOD HERE AND IS GONE (9 september 2026).
+ * It existed for one reason — deciding whether to draw `Wissen` — and it was
+ * a SECOND implementation of a sum `decisionFilterCopy.ts` already exports as
+ * `countDecisionFilters`, which is what `(tabs)/index.tsx` feeds the trigger.
+ * Two functions computing the same number is precisely the drift this
+ * codebase keeps paying for; with the control gone there is one again.
+ */
 
 export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
   const { filters, availableDishTags, availableDishMoods, onChange } = props;
@@ -309,7 +314,7 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
   const availableMoods = new Set(availableDishMoods.map(normalizeTag));
   const visibleMoods = DISH_MOODS.filter((entry) => availableMoods.has(entry.mood));
   const selectedMoods = new Set(filters.anyDishMoods.map(normalizeTag));
-  const activeFilterCount = countActiveFilters(filters);
+
 
   // The drawer's state lives HERE and not in (tabs)/index.tsx, mirroring
   // `isAdvancedExpanded` in LibrarySearchBar: whether a control is unfolded is
@@ -465,24 +470,25 @@ export function DecisionFilterBar(props: DecisionFilterBarProps): JSX.Element {
             </>
           ) : null}
 
-        {/* `Wissen` LAST, AND STILL HERE. It used to sit on the opening row so
-            it was reachable with the drawer shut — guard two in this file's
-            header. The trigger carries the active count now, so a household
-            that filtered the rotation empty can still SEE that they did, and
-            the glyph that says so is the glyph that leads here. One tap
-            deeper is the price of a screen that opens on its own food. */}
-        {activeFilterCount > 0 ? (
-          <Pressable
-            onPress={() => onChange(NO_DECISION_FILTERS)}
-            style={styles.reset}
-            accessibilityRole="button"
-            accessibilityLabel={DECISION_FILTER_RESET_A11Y_LABEL}
-          >
-            <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>
-              {DECISION_FILTER_RESET_LABEL}
-            </Text>
-          </Pressable>
-        ) : null}
+        {/* ⚠ `Wissen` STOOD HERE AND IS GONE — 9 september 2026, op verzoek
+            van de eigenaar: "it also says 'wissen' below it which I do not
+            want, remove the 'wissen' button."
+
+            WHAT CARRIED IT WAS GUARD TWO IN THIS FILE'S HEADER, and that
+            guard turns out not to be the load-bearing one. It existed for a
+            filter that is SET but cannot be SEEN, and the case it actually
+            protects — a narrowing that empties the rotation — is answered one
+            screen down without this control: `NoCandidateState.tsx:122-129`
+            draws its own "Filters wissen" as a PRIMARY button on
+            `filtered_out`. That is guard three, it is louder than this was,
+            and it fires exactly when it matters.
+
+            WHAT IS GENUINELY LOST, named rather than glossed: clearing
+            several chips at once while results still exist. That is one tap
+            per chip now. The count on the trigger still says how many are on
+            (guard one), and guard four still holds — `(tabs)/index.tsx`
+            resets to `NO_DECISION_FILTERS` on every load, so no narrowing
+            survives the screen. */}
       </>
     </View>
   );
@@ -502,12 +508,6 @@ const styles = StyleSheet.create({
   tagEyebrow: {
     marginTop: spacing.space2,
   },
-  reset: {
-    // The header row is already touchTargetMin tall, so stretching the
-    // pressable across it gives "Wissen" a full 44pt target without padding
-    // that would visually detach it from the opening opposite.
-    justifyContent: 'center',
-    alignSelf: 'stretch',
-    paddingLeft: spacing.space4,
-  },
+  // `reset` styled "Wissen" and went with it (9 september 2026).
+  // react-native/no-unused-styles is what caught the leftover.
 });

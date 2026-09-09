@@ -259,27 +259,29 @@ import { DISH_COURSES } from '@/domain/dishCourses';
 import { DISH_MOODS } from '@/domain/dishMoods';
 import { DISH_TAGS } from '@/domain/dishTags';
 import { normalizeTag } from '@/domain/normalizeTag';
-import { NO_LIBRARY_SEARCH, isLibrarySearchActive, type LibrarySearchState } from '@/domain/recipeSearch';
+// `NO_LIBRARY_SEARCH` and `isLibrarySearchActive` left with "Wissen"
+// (9 september 2026); the state type itself is still this bar's whole subject.
+import type { LibrarySearchState } from '@/domain/recipeSearch';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 import { Chip } from './Chip';
 import { Icon } from './Icon';
 import { IconChip } from './IconChip';
+import { FilterTrigger } from './FilterTrigger';
 import { TimeCapPicker } from './TimeCapPicker';
 import { iconForDishTag } from './dishTagIcons';
-import { isIconAvailable, type IconName } from './iconFont';
+// `isIconAvailable` and `IconName` went with the "Geavanceerd" chevron
+// (9 september 2026) — `Icon` is still imported for the search field's ✕.
 import { LIBRARY_SCHEDULING_STATES } from './libraryGridFilter';
 import { buildSchedulingLabel, type RecipeSchedulingState } from './recipeScheduling';
 import {
   LIBRARY_FILTER_COURSES_EYEBROW,
   LIBRARY_FILTER_MOODS_EYEBROW,
   LIBRARY_FILTER_PLAN_EYEBROW,
-  LIBRARY_FILTER_RESET_A11Y_LABEL,
-  LIBRARY_FILTER_RESET_LABEL,
   LIBRARY_FILTER_TAGS_EYEBROW,
   LIBRARY_SEARCH_CLEAR_QUERY_LABEL,
   LIBRARY_SEARCH_INPUT_LABEL,
   LIBRARY_SEARCH_PLACEHOLDER,
-  describeAdvancedFilters,
+  describeLibraryFilters,
   describeDishCourseChip,
   describeDishMoodChip,
   describeDishTagChip,
@@ -330,14 +332,14 @@ const FILTER_ROW_HEIGHT = 47;
  * no installed font can draw, so a caller that wants no dangling gap has to
  * ask first. The label and the count carry the control without it.
  */
-const DISCLOSURE_GLYPH: IconName = 'chevron-right';
-
-/**
- * 16pt — the small end of WS4's 16-20pt UI band, and `IconChip`'s size for a
- * glyph beside a label. Larger reads as an illustration competing with the
- * word rather than as a mark introducing it.
+/*
+ * ⚠ `DISCLOSURE_GLYPH` ('chevron-right') AND `DISCLOSURE_GLYPH_SIZE` (16)
+ * STOOD HERE AND WENT WITH THE "Geavanceerd" ROW (9 september 2026). The
+ * comment above them still holds for whatever draws a glyph next, and is why
+ * it is kept: `Icon` renders NOTHING for a name no installed font can draw,
+ * so a caller that wants no dangling gap has to ask `isIconAvailable` first.
+ * `FilterTrigger` draws the funnel now and owns its own size.
  */
-const DISCLOSURE_GLYPH_SIZE = 16;
 
 export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   const {
@@ -371,7 +373,9 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   const visibleStates = LIBRARY_SCHEDULING_STATES.filter((state) => offeredStates.has(state));
   const selectedStates = new Set(search.anySchedulingStates);
 
-  const isActive = isLibrarySearchActive(search);
+  // `isActive` (`isLibrarySearchActive`) stood here. It gated the old "Wissen"
+  // row and has had no reader since that row went; `foldedFilterCount` below
+  // is what the funnel counts, and it deliberately excludes the query.
   const hasCategoryRow = visibleTags.length > 0 || visibleMoods.length > 0;
   // Nothing behind the fold means no fold: an opening onto an empty row is a
   // control that answers a finger with nothing. In practice this closes only
@@ -383,7 +387,18 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   // shows. Deliberately not `isLibrarySearchActive`, which also counts the
   // query, the tag chips and the time cap: those are all on screen, and a
   // count that included them would claim something is hidden when nothing is.
-  const advancedFilterCount = search.anySchedulingStates.length + search.anyDishCourses.length;
+  // EVERY AXIS BUT THE QUERY, because since 9 september 2026 every axis but
+  // the query is behind the funnel. It used to be the two folded ones only,
+  // on the rule that a badge must not claim something is hidden when it is on
+  // screen — that rule is unchanged and now includes four more axes, because
+  // the fold grew. The query stays out for exactly the original reason: it is
+  // the one control still visible.
+  const foldedFilterCount =
+    (search.maxMinutes !== null ? 1 : 0) +
+    search.requiredDishTags.length +
+    search.anyDishMoods.length +
+    search.anySchedulingStates.length +
+    search.anyDishCourses.length;
 
   // Seeded from the count, not started shut — guard two of the three the
   // header lists against a filter that is set and cannot be seen. It matters
@@ -393,7 +408,7 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   // that search would otherwise come back invisible. A lazy initializer and
   // NOT a derived value: after mount the drawer is the household's own
   // decision, and recomputing would re-open one they just shut on purpose.
-  const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(() => advancedFilterCount > 0);
+  const [isFilterOpen, setIsFilterOpen] = useState(() => foldedFilterCount > 0);
 
   // Immutable both ways, matching DecisionFilterBar's own toggle — the
   // caller holds this object in state and may still be mid-render with the
@@ -463,14 +478,38 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
           ) : null}
         </View>
 
-        {/* The owner's clock, on the search row because he approved a layout
-            with both on one line. `TimeCapPicker` draws its own clock and
-            numeral, so this bar adds no eyebrow above it — see
-            libraryFilterCopy.ts on the one eyebrow that is no longer drawn. */}
+        {/* ⚠ THE CLOCK USED TO SHARE THIS ROW AND IS NOW BEHIND THE FUNNEL —
+            9 september 2026: "Only leave the searchbar at the top and the rest
+            under the filter button." It sat here because the owner approved a
+            layout with both on one line; he has since seen that layout on a
+            screen and asked for this one. The field gets the whole row back,
+            which also retires the crowding that made the search box and the
+            slider read as one control. */}
+      </View>
+
+      {/* The same opening Kiezen draws, and deliberately the same component:
+          two screens with two funnels that behaved differently would be two
+          things to learn. It counts every axis, because since today every
+          axis is behind it — the query is the one control still outside, and
+          `describeLibraryFilters` carries why it is not counted. */}
+      <View style={styles.triggerRow}>
+        <FilterTrigger
+          activeFilterCount={foldedFilterCount}
+          isExpanded={isFilterOpen}
+          onToggle={() => setIsFilterOpen((wasOpen) => !wasOpen)}
+          accessibilityLabel={describeLibraryFilters(foldedFilterCount).accessibilityLabel}
+        />
+      </View>
+
+      {/* Everything below is UNMOUNTED when the drawer is shut rather than
+          hidden with a style: a shut drawer then costs no height and gives a
+          screen reader nothing to walk past. Same posture as Kiezen's bar,
+          which its own screen mounts conditionally. */}
+      {isFilterOpen ? (
         <View style={styles.timeCapWrap}>
           <TimeCapPicker value={search.maxMinutes} onChange={(maxMinutes) => onChange({ ...search, maxMinutes })} />
         </View>
-      </View>
+      ) : null}
 
       {/* THE ROW THAT CARRIES "WISSEN" IS THE ROW THAT IS ALWAYS THERE, and
           since the plan and course axes moved behind the opening, that is this
@@ -483,23 +522,8 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
           header). The zero-results state below the bar carries its own clear
           button: a second answer to the same problem, not a reason to drop the
           first. */}
-      {hasCategoryRow || isActive ? (
-        <FilterRow
-          reset={
-            isActive ? (
-              <Pressable
-                onPress={() => onChange(NO_LIBRARY_SEARCH)}
-                style={styles.reset}
-                accessibilityRole="button"
-                accessibilityLabel={LIBRARY_FILTER_RESET_A11Y_LABEL}
-              >
-                <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>
-                  {LIBRARY_FILTER_RESET_LABEL}
-                </Text>
-              </Pressable>
-            ) : null
-          }
-        >
+      {isFilterOpen && hasCategoryRow ? (
+        <FilterRow>
           {visibleTags.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_TAGS_EYEBROW} /> : null}
           {/* AND semantics — see DecisionFilterBar's identical row for the
               full argument. Spoken out loud in each chip's own
@@ -535,20 +559,15 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
         </FilterRow>
       ) : null}
 
-      {hasAdvancedRow ? (
-        <AdvancedDisclosure
-          isExpanded={isAdvancedExpanded}
-          activeFilterCount={advancedFilterCount}
-          onToggle={() => setIsAdvancedExpanded((wasExpanded) => !wasExpanded)}
-        />
-      ) : null}
-
-      {/* The two axes the owner asked to take out of the ordinary bar.
-          UNMOUNTED rather than hidden with a style, so a shut drawer costs no
-          height and gives a screen reader nothing to walk past. Nothing about
-          the chips themselves changed: same vocabularies, same order, same OR
-          semantics, same spoken labels. */}
-      {hasAdvancedRow && isAdvancedExpanded ? (
+      {/* ⚠ AN `AdvancedDisclosure` STOOD BETWEEN THESE TWO ROWS AND IS GONE
+          (9 september 2026). It was LIB-09's second tier — "Geavanceerd" —
+          and it only made sense while the tag row and the clock sat OUTSIDE a
+          fold. With every axis behind the funnel there is no ordinary tier
+          for it to be advanced of, and a disclosure inside a drawer is a
+          second latch rather than a hierarchy. The chips it used to hide are
+          now simply the rest of this drawer, in the same order, with the same
+          OR semantics and the same spoken labels. */}
+      {isFilterOpen && hasAdvancedRow ? (
         <FilterRow>
           {visibleStates.length > 0 ? <RowEyebrow text={LIBRARY_FILTER_PLAN_EYEBROW} /> : null}
           {/* OR semantics, spoken in each chip's own label. A recipe
@@ -585,59 +604,25 @@ export function LibrarySearchBar(props: LibrarySearchBarProps): JSX.Element {
   );
 }
 
-/**
- * The "Geavanceerd" opening: one row, one control, the only thing on this bar
- * that is neither a chip nor a field. IT IS A `button`, NOT A `checkbox` — it
- * holds no part of `LibrarySearchState` and narrows nothing, it decides
- * whether two chip rows are on screen, and a checkbox role would file a
- * control that changes no result with the twenty-odd beside it that do.
+/*
+ * ⚠ AN `AdvancedDisclosure` COMPONENT STOOD HERE AND IS GONE — 9 september
+ * 2026, with the "Geavanceerd" tier it drew. Two of its arguments outlived it
+ * and are recorded because `FilterTrigger` inherits both:
  *
- * `accessibilityState={{ expanded }}` RATHER THAN A LABEL SAYING "OPEN" OR
- * "DICHT" — the choice `SourceTextPanel` made, for its reason: the platform
- * announces expanded/collapsed in the user's own language, and a hand-written
- * Dutch equivalent is a second translation of a sentence the OS already says,
- * free to drift from the visible chevron the day somebody edits one of them.
+ *   IT WAS A `button`, NEVER A `checkbox`. An opening holds no part of
+ *   `LibrarySearchState` and narrows nothing; a checkbox role would file a
+ *   control that changes no result with the twenty-odd beside it that do.
+ *   `FilterTrigger` is a `button` for the same reason.
  *
- * THE SPOKEN LABEL NAMES WHAT IS INSIDE AND WHAT IS ON. "Geavanceerde
- * filters: Wanneer? Welke gang? 2 filters actief." A sighted household reads
- * those facts off the row when it opens; somebody who cannot see the chips
- * gets them from the control that hides them. libraryFilterCopy.ts owns both
- * sentences and composes the axis names from the eyebrows themselves, so a
- * third axis moved behind this fold cannot leave the label listing two.
+ *   THE COUNT IS THE POINT, and it is drawn in `accent`. A count in
+ *   `textMuted` beside a muted label reads as more label, and on a shut
+ *   drawer it is the one thing that says a filter is running. That is now
+ *   `FilterTrigger`'s numeral — and since GAP-58 the funnel itself fills in,
+ *   so the state has two channels instead of one.
+ *
+ * What did NOT survive is `accessibilityState={{ expanded }}` on a row with a
+ * chevron and a word; the trigger carries the same state on a glyph.
  */
-function AdvancedDisclosure(props: {
-  readonly isExpanded: boolean;
-  readonly activeFilterCount: number;
-  readonly onToggle: () => void;
-}): JSX.Element {
-  const { isExpanded, activeFilterCount, onToggle } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-  const copy = describeAdvancedFilters(activeFilterCount);
-
-  return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityState={{ expanded: isExpanded }}
-      accessibilityLabel={copy.accessibilityLabel}
-      style={styles.advancedToggle}
-    >
-      {isIconAvailable(DISCLOSURE_GLYPH) ? (
-        <View style={isExpanded ? styles.advancedGlyphExpanded : null}>
-          <Icon name={DISCLOSURE_GLYPH} size={DISCLOSURE_GLYPH_SIZE} color={colors.textMuted} />
-        </View>
-      ) : null}
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>{copy.label}</Text>
-      {/* The accent colour is the point: a count in `textMuted` beside a muted
-          label reads as more label, and this is the one thing on a shut drawer
-          that says a filter is running. */}
-      {copy.activeBadge !== null ? (
-        <Text style={[typeScale.label, styles.eyebrow, { color: colors.accent }]}>{copy.activeBadge}</Text>
-      ) : null}
-    </Pressable>
-  );
-}
 
 /**
  * One 47pt chip row that scrolls sideways and never wraps — WS-2 §3.1's
@@ -737,10 +722,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  triggerRow: {
+    // `FilterTrigger` right-aligns itself and pays its own horizontal inset,
+    // exactly as it does on Kiezen and Trending, so this wrapper adds none.
+    paddingTop: spacing.space1,
+  },
   timeCapWrap: {
-    // Half the row. `TimeCapPicker` stretches to it, giving a ~145pt track at
-    // 393pt — see this file's header on what that costs and what it buys.
-    flex: 1,
+    // FULL WIDTH NOW, not half a row. The picker shared the search row until
+    // 9 september 2026; behind the funnel it has the screen to itself, which
+    // roughly doubles the track and makes a five-minute stop something a
+    // thumb can actually land on — the trade this file's header flagged as
+    // "worth putting back in front of the owner" is now taken.
+    paddingHorizontal: spacing.screenPaddingHorizontal,
   },
   filterRow: {
     flexDirection: 'row',
@@ -772,29 +765,7 @@ const styles = StyleSheet.create({
     // eyebrow in a row: it follows a chip rather than the content inset.
     marginLeft: spacing.space1,
   },
-  reset: {
-    justifyContent: 'center',
-    alignSelf: 'stretch',
-    paddingLeft: spacing.space3,
-  },
-  advancedToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.space2,
-    // A touch target, stated rather than inherited from a 15pt line of text:
-    // this row's content is `typeScale.label` at 12/15, so without it the
-    // control is a 15pt band nobody can hit. It stretches the full width for
-    // the same reason — the rejected `alignSelf: 'flex-start'` looks tidier in
-    // a screenshot and asks for aim from somebody holding a pan.
-    minHeight: spacing.touchTargetMin,
-    // NOT a scrolling row, so it pays its own screen inset — the rule the
-    // container's comment states for every child that does not scroll.
-    paddingHorizontal: spacing.screenPaddingHorizontal,
-  },
-  advancedGlyphExpanded: {
-    // A quarter turn clockwise: `chevron-right` becomes the chevron-down every
-    // open disclosure draws. See `DISCLOSURE_GLYPH` for why a rotation and not
-    // a second glyph name; it is also compositor-only, so nothing reflows.
-    transform: [{ rotate: '90deg' }],
-  },
+  // `reset`, `advancedToggle` and `advancedGlyphExpanded` styled "Wissen" and
+  // the "Geavanceerd" row, and went with them (9 september 2026).
+  // react-native/no-unused-styles is what caught all three.
 });

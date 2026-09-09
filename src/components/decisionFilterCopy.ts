@@ -133,23 +133,25 @@ export const DECISION_FILTER_TIME_EYEBROW = 'Hoeveel tijd?';
  */
 export const DECISION_FILTER_TOGGLE_LABEL = 'Filters';
 
-/** "Wissen" — the same word for the same gesture as Mijn recepten's reset, so a household that learns it once has learned it. */
-export const DECISION_FILTER_RESET_LABEL = 'Wissen';
-
-/**
- * The reset's spoken label, and THE ONE PLACE THESE TWO SCREENS SHOULD NOT
- * MATCH. The library's says "Wis de zoekopdracht en alle filters", because
- * there it clears a typed query as well as four chip axes. This screen has no
- * query, and its `DecisionFilters` lives for exactly one evening —
- * (tabs)/index.tsx:400 resets it to `NO_DECISION_FILTERS` on every load. So
- * this label says "voor vanavond": a household must not read a reset button
- * on the decision screen as touching anything it saved.
+/*
+ * ⚠ `DECISION_FILTER_RESET_LABEL` ("Wissen") AND ITS SPOKEN COUNTERPART STOOD
+ * HERE AND ARE GONE — 9 september 2026, on the owner's instruction: "it also
+ * says 'wissen' below it which I do not want, remove the 'wissen' button."
  *
- * The words are unchanged from the literal this replaced (DecisionFilterBar
- * .tsx:215 before this change), so nothing a household hears moved when the
- * sentence became testable.
+ * THEY ARE DELETED RATHER THAN LEFT EXPORTED, and that is the point of this
+ * note. A copy constant for a control nobody draws is vocabulary that reads
+ * as shipped, and this module exists precisely so the words on this screen
+ * are the words a test can find. Keeping them would let the next reader
+ * believe Kiezen still has a reset.
+ *
+ * WHAT REPLACED THE GESTURE, so nobody restores this believing it was simply
+ * lost: `NoCandidateState.tsx:122-129` draws its own "Filters wissen" as a
+ * PRIMARY button when a narrowing empties the rotation, which is the only
+ * case the reset genuinely rescued. The spoken label deleted here read "Wis
+ * alle filters voor vanavond", and the "voor vanavond" was load-bearing —
+ * these filters live one evening and reset on every load, so any future reset
+ * on this screen owes the reader that same distinction.
  */
-export const DECISION_FILTER_RESET_A11Y_LABEL = 'Wis alle filters voor vanavond';
 
 /**
  * AND semantics, spoken out loud rather than left for a screen-reader user to

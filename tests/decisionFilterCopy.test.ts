@@ -17,10 +17,9 @@
  */
 
 import { describe, expect, test } from 'vitest';
+import * as decisionCopy from '@/components/decisionFilterCopy';
 import {
   DECISION_FILTER_MOODS_EYEBROW,
-  DECISION_FILTER_RESET_A11Y_LABEL,
-  DECISION_FILTER_RESET_LABEL,
   DECISION_FILTER_TAGS_EYEBROW,
   DECISION_FILTER_TIME_EYEBROW,
   DECISION_FILTER_TOGGLE_LABEL,
@@ -32,7 +31,7 @@ import {
   LIBRARY_FILTER_MOODS_EYEBROW,
   LIBRARY_FILTER_TAGS_EYEBROW,
   LIBRARY_FILTER_TIME_EYEBROW,
-  describeAdvancedFilters,
+  describeLibraryFilters,
   describeDishMoodChip,
   describeDishTagChip,
 } from '@/components/libraryFilterCopy';
@@ -69,7 +68,6 @@ describe('sentence case in source — the component applies textTransform, not t
       DECISION_FILTER_MOODS_EYEBROW,
       DECISION_FILTER_TIME_EYEBROW,
       DECISION_FILTER_TOGGLE_LABEL,
-      DECISION_FILTER_RESET_LABEL,
     ]) {
       expect(word).not.toBe(word.toUpperCase());
     }
@@ -135,7 +133,7 @@ describe('the count on the shut control — the guard that makes hiding the row 
     // implementations turns that into a failing test the moment either side
     // is edited.
     for (const count of [-1, 0, 1, 2, 3, 17]) {
-      expect(describeDecisionFilters(count).activeBadge).toBe(describeAdvancedFilters(count).activeBadge);
+      expect(describeDecisionFilters(count).activeBadge).toBe(describeLibraryFilters(count).activeBadge);
     }
   });
 });
@@ -149,7 +147,7 @@ describe('the spoken label names what the fold hides', () => {
   });
 
   test('it is composed from the eyebrows themselves, so a fourth axis cannot leave it listing three', () => {
-    // Same posture as describeAdvancedFilters: prose naming the axes would be
+    // Same posture as describeLibraryFilters: prose naming the axes would be
     // a second place the contents of this fold are written down, and the one
     // no compiler watches. Asserting the ORDER is what proves composition:
     // hand-written prose would not have to agree with the row order.
@@ -190,22 +188,24 @@ describe('chip labels spell out AND vs OR, in the library’s exact words', () =
   });
 });
 
-describe('"Wissen"', () => {
-  test('is the same word Mijn recepten uses for the same gesture', () => {
-    expect(DECISION_FILTER_RESET_LABEL).toBe('Wissen');
-  });
-
-  test('its spoken label says these filters are tonight’s, not the library’s saved search', () => {
-    // The one place the two screens deliberately differ: Mijn recepten clears
-    // a query and four axes ("Wis de zoekopdracht en alle filters"); Kiezen
-    // clears a DecisionFilters that lives for one evening and is reset by
-    // every load ((tabs)/index.tsx:393). Saying "voor vanavond" is what keeps
-    // a household from reading this as a settings change.
-    expect(DECISION_FILTER_RESET_A11Y_LABEL).toBe('Wis alle filters voor vanavond');
-    expect(DECISION_FILTER_RESET_A11Y_LABEL).toMatch(/vanavond/);
-  });
-
-  test('it does not promise to clear a search box — this screen has none', () => {
-    expect(DECISION_FILTER_RESET_A11Y_LABEL).not.toMatch(/zoekopdracht/i);
+/**
+ * ⚠ A `describe('"Wissen"')` BLOCK STOOD HERE — three tests pinning the reset
+ * label, its "voor vanavond" spoken form, and its refusal to promise a search
+ * box this screen does not have. The owner had the control removed on
+ * 9 september 2026, its two constants went with it, and those assertions had
+ * nothing left to assert.
+ *
+ * ONE ROW SURVIVES THE DELETION, and it is the useful half: this module must
+ * not grow a reset back without somebody reading the note where the constants
+ * used to be. The gesture is drawn by `NoCandidateState` now, on the one
+ * state where it mattered — a narrowing that emptied the rotation.
+ */
+describe('the reset is gone and does not creep back', () => {
+  test('no exported word is a bare "Wissen" — that control lives on NoCandidateState now', () => {
+    const exported: readonly unknown[] = Object.values(decisionCopy);
+    const sentences = exported.filter((value): value is string => typeof value === 'string');
+    for (const sentence of sentences) {
+      expect(sentence.toLowerCase()).not.toBe('wissen');
+    }
   });
 });

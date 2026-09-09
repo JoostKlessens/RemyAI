@@ -1,16 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import {
-  LIBRARY_FILTER_ADVANCED_LABEL,
   LIBRARY_FILTER_COURSES_EYEBROW,
   LIBRARY_FILTER_MOODS_EYEBROW,
   LIBRARY_FILTER_PLAN_EYEBROW,
-  LIBRARY_FILTER_RESET_A11Y_LABEL,
-  LIBRARY_FILTER_RESET_LABEL,
   LIBRARY_FILTER_TAGS_EYEBROW,
   LIBRARY_FILTER_TIME_EYEBROW,
   LIBRARY_SEARCH_PLACEHOLDER,
   LIBRARY_TIME_CAP_UNTIMED_NOTE,
-  describeAdvancedFilters,
+  describeLibraryFilters,
   describeDishCourseChip,
   describeDishMoodChip,
   describeDishTagChip,
@@ -102,15 +99,18 @@ describe('eyebrows', () => {
       LIBRARY_FILTER_TIME_EYEBROW,
       LIBRARY_FILTER_TAGS_EYEBROW,
       LIBRARY_FILTER_MOODS_EYEBROW,
-      LIBRARY_FILTER_RESET_LABEL,
     ]) {
       expect(eyebrow).not.toBe(eyebrow.toUpperCase());
     }
   });
 
-  test('"Wissen" tells a screen reader it clears BOTH halves, not just the typed text', () => {
-    expect(LIBRARY_FILTER_RESET_A11Y_LABEL).toBe('Wis de zoekopdracht en alle filters');
-  });
+  /*
+   * ⚠ A "Wissen" TEST STOOD HERE. The reset went on 9 september 2026, when
+   * this screen was told to take Kiezen's shape and Kiezen's own reset was
+   * removed at the owner's request. `LibrarySearchEmptyState` still clears
+   * everything on the one state where a reader is genuinely stuck
+   * (recipes.tsx:438), which is what makes the deletion affordable.
+   */
 
   test('the search field still says it searches on title, which the owner asked to leave alone', () => {
     expect(LIBRARY_SEARCH_PLACEHOLDER).toBe('Zoek op titel');
@@ -184,53 +184,69 @@ describe('the two new eyebrows', () => {
   });
 });
 
-describe('the "Geavanceerd" opening — the words on the fold the owner asked for', () => {
-  test('uses his own word, translated and not replaced', () => {
-    expect(LIBRARY_FILTER_ADVANCED_LABEL).toBe('Geavanceerd');
-    expect(describeAdvancedFilters(0).label).toBe(LIBRARY_FILTER_ADVANCED_LABEL);
-    expect(describeAdvancedFilters(3).label).toBe(LIBRARY_FILTER_ADVANCED_LABEL);
-  });
-
-  test('is sentence case in source, like every other label this bar draws', () => {
-    expect(LIBRARY_FILTER_ADVANCED_LABEL).not.toBe(LIBRARY_FILTER_ADVANCED_LABEL.toUpperCase());
-  });
-
-  test('says nothing about counts when nothing behind the fold is set', () => {
-    const copy = describeAdvancedFilters(0);
+/**
+ * ⚠ THIS BLOCK USED TO BE ABOUT "Geavanceerd", AND THAT CONTROL IS GONE —
+ * 9 september 2026: "Only leave the searchbar at the top and the rest under
+ * the filter button." Every axis is behind one funnel now, so there is no
+ * ordinary tier for a second one to be advanced OF, and the two tests that
+ * pinned the word `Geavanceerd` and its sentence case went with it.
+ *
+ * WHAT SURVIVES IS THE HALF THAT WAS NEVER ABOUT THE WORD: the count, its
+ * Dutch plural, its refusal to render a negative, and the spoken label being
+ * COMPOSED from the eyebrows rather than hand-written. That composition rule
+ * is why widening the fold from two axes to five was a two-line change here
+ * instead of a sentence somebody had to remember to rewrite.
+ */
+describe('the filter opening — the count and the sentence, now that every axis is behind it', () => {
+  test('says nothing about counts when nothing is set', () => {
+    const copy = describeLibraryFilters(0);
     expect(copy.activeBadge).toBeNull();
     expect(copy.accessibilityLabel).not.toMatch(/actief/);
   });
 
   test('COUNTS a filter that is set but out of sight — the whole reason a fold is allowed here at all', () => {
-    const copy = describeAdvancedFilters(2);
+    const copy = describeLibraryFilters(2);
     expect(copy.activeBadge).toBe('2 filters actief');
     expect(copy.accessibilityLabel).toContain('2 filters actief');
   });
 
   test('one is singular — Dutch does not forgive "1 filters"', () => {
-    expect(describeAdvancedFilters(1).activeBadge).toBe('1 filter actief');
-    expect(describeAdvancedFilters(1).activeBadge).not.toMatch(/1 filters/);
+    expect(describeLibraryFilters(1).activeBadge).toBe('1 filter actief');
+    expect(describeLibraryFilters(1).activeBadge).not.toMatch(/1 filters/);
   });
 
   test('a count below zero reads as nothing set, never as a badge saying "-1 filters actief"', () => {
-    expect(describeAdvancedFilters(-1).activeBadge).toBeNull();
+    expect(describeLibraryFilters(-1).activeBadge).toBeNull();
   });
 
-  test('the spoken label names BOTH hidden axes, in the row\u2019s own words', () => {
+  test('the spoken label names ALL FIVE hidden axes, in the rows own words', () => {
     // Composed from the eyebrows themselves, so moving a third axis behind
     // this fold cannot leave the label confidently listing two.
-    const spoken = describeAdvancedFilters(0).accessibilityLabel;
+    const spoken = describeLibraryFilters(0).accessibilityLabel;
+    // ALL FIVE now, not two. This assertion is the reason the fold could grow
+    // from two axes to five without anybody rewriting a sentence: had the
+    // prose been hand-written it would still be listing "Wanneer? Welke
+    // gang?", and nothing would have failed.
+    expect(spoken).toContain(LIBRARY_FILTER_TIME_EYEBROW);
+    expect(spoken).toContain(LIBRARY_FILTER_TAGS_EYEBROW);
+    expect(spoken).toContain(LIBRARY_FILTER_MOODS_EYEBROW);
     expect(spoken).toContain(LIBRARY_FILTER_PLAN_EYEBROW);
     expect(spoken).toContain(LIBRARY_FILTER_COURSES_EYEBROW);
   });
 
-  test('it names only what is hidden — the axes that stayed in the ordinary bar are not in it', () => {
-    const spoken = describeAdvancedFilters(1).accessibilityLabel;
-    expect(spoken).not.toContain(LIBRARY_FILTER_TAGS_EYEBROW);
-    expect(spoken).not.toContain(LIBRARY_FILTER_MOODS_EYEBROW);
+  test('it names only what is hidden — and the query is the one thing that is not', () => {
+    // ⚠ INVERTED, AND THE INVERSION IS THE CHANGE. This used to assert the
+    // tag and mood eyebrows were ABSENT, because those axes were on screen
+    // and naming them would claim something was hidden when it was not. They
+    // are hidden now — the rule did not move, the fold did. What must stay
+    // out is the QUERY, the one control still outside the funnel.
+    const spoken = describeLibraryFilters(1).accessibilityLabel;
+    expect(spoken.toLowerCase()).not.toContain('zoek');
   });
 
-  test('the visible word never carries the number — the badge is a separate string a narrow row may drop', () => {
-    expect(describeAdvancedFilters(4).label).not.toMatch(/\d/);
-  });
+  /*
+   * ⚠ A TEST PINNING `describeLibraryFilters(n).label` STOOD HERE. There is
+   * no `label` any more: the control is `FilterTrigger`'s funnel glyph, and a
+   * glyph carries no word for a number to creep into.
+   */
 });

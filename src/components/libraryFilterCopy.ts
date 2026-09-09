@@ -192,9 +192,26 @@ export const LIBRARY_FILTER_PLAN_EYEBROW = 'Wanneer?';
  */
 export const LIBRARY_FILTER_COURSES_EYEBROW = 'Welke gang?';
 
-/** "Wissen" resets the whole `LibrarySearchState` — query and chips together — which is why its spoken label names both. */
-export const LIBRARY_FILTER_RESET_LABEL = 'Wissen';
-export const LIBRARY_FILTER_RESET_A11Y_LABEL = 'Wis de zoekopdracht en alle filters';
+/*
+ * ⚠ `LIBRARY_FILTER_RESET_LABEL` ("Wissen") AND ITS SPOKEN FORM STOOD HERE
+ * AND ARE GONE — 9 september 2026, following Kiezen, where the owner asked
+ * for the same control to go ("remove the 'wissen' button"). This screen was
+ * told to take Kiezen's shape, and a reset that exists on one of two matching
+ * bars is the drift, not the feature.
+ *
+ * WHAT STILL CLEARS EVERYTHING, so nobody restores this thinking the gesture
+ * was lost: `recipes.tsx:438` renders `LibrarySearchEmptyState` with
+ * `onClear={() => setSearch(NO_LIBRARY_SEARCH)}` whenever a search or filter
+ * empties the grid — the one state where a reader is genuinely stuck, and a
+ * louder control than this word ever was.
+ *
+ * ⚠ WHAT IS GENUINELY LOST, and it is not nothing: clearing several axes at
+ * once while results still exist. That is one tap per chip now, plus the
+ * field's own ✕ for the query. The count on the funnel still says how many
+ * are on. The deleted spoken label read "Wis de zoekopdracht en alle
+ * filters" — it named BOTH because it cleared both, and any future reset here
+ * owes the reader that same honesty.
+ */
 
 /**
  * The time row is single-select over `number | null`, so `ChipGroup` gets a
@@ -324,47 +341,69 @@ export function describeSchedulingChip(label: string): string {
 // available as the filters set.
 // ---------------------------------------------------------------------------
 
-/** What the opening says when it is shut and when it is open — one word, because the state is carried by a chevron and by `accessibilityState`, not by re-labelling the control. */
-export const LIBRARY_FILTER_ADVANCED_LABEL = 'Geavanceerd';
+/*
+ * ⚠ `LIBRARY_FILTER_ADVANCED_LABEL` ("Geavanceerd") STOOD HERE AND IS GONE —
+ * 9 september 2026. The owner asked for this screen to take Kiezen's shape:
+ * "Only leave the searchbar at the top and the rest under the filter button."
+ *
+ * A DISCLOSURE INSIDE A DRAWER IS NOT A HIERARCHY, IT IS A SECOND LATCH. With
+ * every axis behind the funnel there is no ordinary tier left for "advanced"
+ * to be advanced OF — the word only meant something while the tag row and the
+ * clock sat outside it. LIB-09 split this bar in two tiers for a bar that was
+ * always open; that premise is gone, and the split goes with it.
+ */
 
-export interface LibraryAdvancedFilterCopy {
-  /** The visible word on the control. */
-  readonly label: string;
-  /** The visible count, or `null` when nothing behind the fold is set — the absence of the badge and the absence of the spoken sentence are the same statement, made once. */
+export interface LibraryFilterCopy {
+  /**
+   * The visible count, or `null` when nothing is set — the absence of the
+   * badge and the absence of the spoken sentence are the same statement, made
+   * once.
+   *
+   * ⚠ THERE IS NO `label` ANY MORE. The control is `FilterTrigger`'s funnel
+   * glyph, the same one Kiezen draws, and a glyph has no word to carry. What
+   * used to be `label: 'Geavanceerd'` was the disclosure's own text.
+   */
   readonly activeBadge: string | null;
   /** What a screen reader says: what is inside, then what is on. */
   readonly accessibilityLabel: string;
 }
 
 /**
- * `activeFilterCount` is how many chips are selected BEHIND the fold —
- * `anySchedulingStates.length + anyDishCourses.length` at the call site, and
- * deliberately not `isLibrarySearchActive`, which counts the query, the tag
- * chips and the time cap as well. Those three are on screen; a badge that
- * counted them would tell the household that something is hidden when nothing
- * is.
+ * `activeFilterCount` is now every axis BUT the query — the time cap, the tag
+ * chips, the moods, the plan states and the courses. All five are behind the
+ * funnel since 9 september 2026, so counting them is the honest answer to
+ * "how much is hidden".
  *
- * THE SPOKEN LABEL NAMES THE TWO AXES BY REUSING THEIR OWN EYEBROWS rather
- * than by describing them in fresh prose ("wanneer en welke gang"). Prose
- * would be a SECOND place the contents of this fold are written down, and the
- * one that no test and no compiler watches: move a third axis behind the
- * opening and the hand-written sentence keeps confidently listing two. Reading
- * "Geavanceerde filters: Wanneer? Welke gang?" is two questions in a row,
- * which is slightly odd out loud and exactly what the household sees the
+ * ⚠ IT USED TO COUNT TWO, and the rule was the opposite one: count only what
+ * is folded, "deliberately not `isLibrarySearchActive`, which counts the
+ * query, the tag chips and the time cap as well. Those three are on screen; a
+ * badge that counted them would tell the household that something is hidden
+ * when nothing is." That rule did not change — the fold did. The query is
+ * still excluded, and still for exactly that reason: it is the one control
+ * left outside.
+ *
+ * THE SPOKEN LABEL NAMES THE AXES BY REUSING THEIR OWN EYEBROWS rather than
+ * by describing them in fresh prose. Prose would be a SECOND place the
+ * contents of this fold are written down, and the one that no test and no
+ * compiler watches — this function's previous version predicted its own
+ * failure in as many words ("move a third axis behind the opening and the
+ * hand-written sentence keeps confidently listing two"), and that is precisely
+ * what happened here. Reusing the eyebrows is what made the repair mechanical.
+ *
+ * Reading five questions in a row is a mouthful out loud, and it is exactly what the household sees the
  * moment the fold opens — the same words, in the same order.
  *
  * SINGULAR AND PLURAL ARE BOTH WRITTEN OUT because Dutch does not forgive
  * "1 filters" and this string is read by people, not by a pluralization
  * library this app does not have.
  */
-export function describeAdvancedFilters(activeFilterCount: number): LibraryAdvancedFilterCopy {
-  const inside = `Geavanceerde filters: ${LIBRARY_FILTER_PLAN_EYEBROW} ${LIBRARY_FILTER_COURSES_EYEBROW}`;
+export function describeLibraryFilters(activeFilterCount: number): LibraryFilterCopy {
+  const inside = `Filters: ${LIBRARY_FILTER_TIME_EYEBROW} ${LIBRARY_FILTER_TAGS_EYEBROW} ${LIBRARY_FILTER_MOODS_EYEBROW} ${LIBRARY_FILTER_PLAN_EYEBROW} ${LIBRARY_FILTER_COURSES_EYEBROW}`;
   if (activeFilterCount <= 0) {
-    return { label: LIBRARY_FILTER_ADVANCED_LABEL, activeBadge: null, accessibilityLabel: inside };
+    return { activeBadge: null, accessibilityLabel: inside };
   }
   const counted = activeFilterCount === 1 ? '1 filter actief' : `${activeFilterCount} filters actief`;
   return {
-    label: LIBRARY_FILTER_ADVANCED_LABEL,
     activeBadge: counted,
     accessibilityLabel: `${inside} ${counted}.`,
   };
