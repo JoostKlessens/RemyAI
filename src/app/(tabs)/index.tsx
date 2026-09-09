@@ -150,10 +150,10 @@ import { OutcomeCard } from '@/components/OutcomeCard';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { VanavondActionRow } from '@/components/VanavondActionRow';
 import { decide, type DecisionRequestWithProof } from '@/domain/decide';
-import { collectAvailableDishMoods } from '@/domain/dishMoods';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import { selectOfferableMeals } from '@/domain/offerablePool';
 import { buildFriendProofLine } from '@/domain/reason';
+import { collectSelectableDecisionDishMoods, collectSelectableDecisionDishTags } from '@/domain/recipeSearch';
 import type {
   Decision,
   DecisionFilters,
@@ -207,12 +207,17 @@ interface LiveSession {
   readonly decisionRow: Decision | null;
   readonly mealById: ReadonlyMap<MealId, Meal>;
   /**
-   * Every dish category present on at least one candidate meal, so the
-   * filter bar only offers narrowings that can actually return something —
-   * see DecisionFilterBar's header.
+   * The meals tonight's chips are allowed to describe: `selectOfferableMeals`
+   * (src/domain/offerablePool.ts), the household's standing gates already
+   * applied. THE POOL, NOT THE CHIPS — until 9 September 2026 this held two
+   * arrays of tags and moods collected here, once, at load, and the bar
+   * re-offered all of them after every tap (docs/LONGLIST.md GAP-33: choose
+   * two chips no dish shares and the answer is `filtered_out` with nothing
+   * saying which chip did it). The chips are now derived per render in
+   * `VanavondScreen`, against the filters the household has set — session
+   * state this loader cannot see, for the reason `requestBase` omits it.
    */
-  readonly availableDishTags: readonly string[];
-  readonly availableDishMoods: readonly string[];
+  readonly offerableMeals: readonly Meal[];
 }
 
 async function loadLiveSession(): Promise<LiveSession> {
@@ -263,32 +268,20 @@ async function loadLiveSession(): Promise<LiveSession> {
   const existingDecision = await repository.getDecisionByDate(householdId, targetDate);
   const decisionRow = existingDecision ?? (await createTodayDecisionIfSuggested(repository, requestBase, householdId));
 
-  // PD-009. The chips describe the meals that survive the household's
-  // STANDING gates, not the whole library — `selectOfferableMeals` carries
-  // the measurement and the claim it corrects. One pass, read by both rows:
-  // two calls would run the same three filters twice over the whole library
-  // for an answer that cannot differ.
-  const offerable = selectOfferableMeals(candidateMeals, household, members, restrictions);
-
   return {
     householdId,
     requestBase,
     decisionRow,
     mealById: new Map(candidateMeals.map((meal) => [meal.id, meal])),
-    availableDishTags: collectAvailableDishTags(offerable),
-    availableDishMoods: collectAvailableDishMoods(offerable),
+    // PD-009. The chips describe the meals that survive the household's
+    // STANDING gates, not the whole library — `selectOfferableMeals` carries
+    // the measurement and the claim it corrects. Run once, here, because
+    // these gates depend on nothing a chip can change; the per-tap narrowing
+    // over this pool is `VanavondScreen`'s. (A private copy of
+    // `collectAvailableDishTags` stood below this function until GAP-33
+    // closed; the domain's own is what the screen calls now.)
+    offerableMeals: selectOfferableMeals(candidateMeals, household, members, restrictions),
   };
-}
-
-/** Deduplicated union of every candidate meal's dish categories — order is irrelevant, DecisionFilterBar re-sorts. */
-function collectAvailableDishTags(candidateMeals: readonly Meal[]): readonly string[] {
-  const tags = new Set<string>();
-  for (const meal of candidateMeals) {
-    for (const tag of meal.dishTags) {
-      tags.add(tag);
-    }
-  }
-  return [...tags];
 }
 
 async function createTodayDecisionIfSuggested(
@@ -439,6 +432,22 @@ export default function VanavondScreen(): JSX.Element {
   const currentResult = useMemo(
     () => resolveCurrentResult(devScenario, sessionIndex, session, excludedMealIds, filters),
     [devScenario, sessionIndex, session, excludedMealIds, filters],
+  );
+  /**
+   * GAP-33. The chip rows, re-derived against the filters the household has
+   * already set — per render, not once at load, because the AND axis is what
+   * makes a chip a dead end: with "pasta" chosen, every tag no pasta dish
+   * carries is a control that can only ever answer `filtered_out`. Both
+   * collectors union the selection back in, so the chip that undoes an
+   * empty pool never leaves the screen. src/domain/recipeSearch.ts carries
+   * the rule, and why this is not the library's collector reused.
+   */
+  const selectableChips = useMemo(
+    () => ({
+      dishTags: collectSelectableDecisionDishTags(session?.offerableMeals ?? [], filters),
+      dishMoods: collectSelectableDecisionDishMoods(session?.offerableMeals ?? [], filters),
+    }),
+    [session, filters],
   );
   const effectivePhase: ScreenPhase = devScenario === 'error' ? 'error' : phase;
   const isEmptyRotation = currentResult.kind === 'no_candidate' && currentResult.reason === 'empty_rotation';
@@ -623,8 +632,8 @@ export default function VanavondScreen(): JSX.Element {
       {showFilterBar && isFilterOpen ? (
         <DecisionFilterBar
           filters={filters}
-          availableDishTags={session?.availableDishTags ?? []}
-          availableDishMoods={session?.availableDishMoods ?? []}
+          availableDishTags={selectableChips.dishTags}
+          availableDishMoods={selectableChips.dishMoods}
           onChange={handleChangeFilters}
         />
       ) : null}

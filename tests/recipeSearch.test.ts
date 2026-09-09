@@ -4,6 +4,8 @@ import {
   NO_LIBRARY_SEARCH,
   collectAvailableDishCourses,
   collectAvailableDishTags,
+  collectSelectableDecisionDishMoods,
+  collectSelectableDecisionDishTags,
   collectSelectableDishCourses,
   collectSelectableDishMoods,
   collectSelectableDishTags,
@@ -13,10 +15,17 @@ import {
   matchesTitleQuery,
   type LibrarySearchState,
 } from '@/domain/recipeSearch';
+import { NO_DECISION_FILTERS } from '@/domain/exclusions';
+import type { DecisionFilters } from '@/domain/types';
 import { makeMeal } from './fixtures';
 
 function search(overrides: Partial<LibrarySearchState> = {}): LibrarySearchState {
   return { ...NO_LIBRARY_SEARCH, ...overrides };
+}
+
+/** Tonight's filters, Kiezen's shape — `DecisionFilters`, not a library search. */
+function tonight(overrides: Partial<DecisionFilters> = {}): DecisionFilters {
+  return { ...NO_DECISION_FILTERS, ...overrides };
 }
 
 describe('matchesTitleQuery', () => {
@@ -430,5 +439,153 @@ describe('collectSelectableDishCourses', () => {
       { meal: makeMeal({ id: 'm-2', dishTags: ['soep'], dishCourse: 'voorgerecht' }) },
     ];
     expect(collectSelectableDishCourses(rows, search({ requiredDishTags: ['soep'] }))).toEqual(['voorgerecht']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Kiezen's chip rows, narrowed against tonight's selection — GAP-33's open
+// half. The rule is the one the three collectors above state (the AND axis
+// narrows with its selection included, the OR axis with its own selection
+// dropped, and the selection is always unioned back in), applied to
+// `DecisionFilters` over the offerable pool rather than `LibrarySearchState`
+// over rows. The last test in each block is the one that keeps the two pairs
+// from drifting: on the three axes both screens share they must answer
+// identically, so a rule changed in one pair and not the other goes red.
+// ---------------------------------------------------------------------------
+
+/** A pool that exercises all three shared axes at once, for the agreement tests below. */
+const SHARED_AXES_POOL = [
+  makeMeal({ id: 'm-1', dishTags: ['pasta', 'vegetarisch'], dishMoods: ['zomers'], estimatedMinutes: 15 }),
+  makeMeal({ id: 'm-2', dishTags: ['soep'], dishMoods: ['winters'], estimatedMinutes: 40 }),
+  makeMeal({ id: 'm-3', dishTags: ['kip', 'pasta'], dishMoods: ['licht'], estimatedMinutes: null }),
+];
+
+/** The same filters, in the library's shape — every extra library axis at its identity value. */
+function asLibrarySearch(filters: DecisionFilters): LibrarySearchState {
+  return { ...NO_LIBRARY_SEARCH, ...filters };
+}
+
+describe('collectSelectableDecisionDishTags — Kiezen', () => {
+  test('offers every tag in the offerable pool when nothing is selected', () => {
+    const meals = [makeMeal({ id: 'm-1', dishTags: ['pasta', 'vegetarisch'] }), makeMeal({ id: 'm-2', dishTags: ['soep'] })];
+    expect([...collectSelectableDecisionDishTags(meals, NO_DECISION_FILTERS)].sort()).toEqual([
+      'pasta',
+      'soep',
+      'vegetarisch',
+    ]);
+  });
+
+  test('drops a tag that co-occurs with nothing selected — the two-chip dead end GAP-33 is about', () => {
+    const meals = [
+      makeMeal({ id: 'm-pasta-veg', dishTags: ['pasta', 'vegetarisch'] }),
+      makeMeal({ id: 'm-soep', dishTags: ['soep'] }),
+    ];
+    // With "pasta" chosen, "soep" could only ever produce `filtered_out`.
+    expect([...collectSelectableDecisionDishTags(meals, tonight({ requiredDishTags: ['pasta'] }))].sort()).toEqual([
+      'pasta',
+      'vegetarisch',
+    ]);
+  });
+
+  test('keeps a selected tag on offer even when no meal survives it — the chip that undoes `filtered_out`', () => {
+    const meals = [makeMeal({ id: 'm-pasta', dishTags: ['pasta'] })];
+    expect([...collectSelectableDecisionDishTags(meals, tonight({ requiredDishTags: ['pasta', 'soep'] }))].sort()).toEqual([
+      'pasta',
+      'soep',
+    ]);
+  });
+
+  test("narrows against tonight's time cap, and an untimed meal loses under it — exclusions.ts's asymmetry, inherited", () => {
+    const meals = [
+      makeMeal({ id: 'm-quick', dishTags: ['pasta'], estimatedMinutes: 15 }),
+      makeMeal({ id: 'm-slow', dishTags: ['stamppot'], estimatedMinutes: 90 }),
+      makeMeal({ id: 'm-untimed', dishTags: ['soep'], estimatedMinutes: null }),
+    ];
+    expect(collectSelectableDecisionDishTags(meals, tonight({ maxMinutes: 20 }))).toEqual(['pasta']);
+  });
+
+  test('narrows against the mood axis — between the two axes it is AND', () => {
+    const meals = [
+      makeMeal({ id: 'm-1', dishTags: ['pasta'], dishMoods: ['zomers'] }),
+      makeMeal({ id: 'm-2', dishTags: ['soep'], dishMoods: ['winters'] }),
+    ];
+    expect(collectSelectableDecisionDishTags(meals, tonight({ anyDishMoods: ['zomers'] }))).toEqual(['pasta']);
+  });
+
+  test('never reads ingredientTags — allergen data is not a chip, on the one screen where PD-006 gates the pool', () => {
+    const meals = [makeMeal({ id: 'm-1', dishTags: ['pasta'], ingredientTags: ['pinda'] })];
+    expect(collectSelectableDecisionDishTags(meals, NO_DECISION_FILTERS)).toEqual(['pasta']);
+  });
+
+  test('agrees with the library collector on the three axes both screens share', () => {
+    const states: readonly DecisionFilters[] = [
+      NO_DECISION_FILTERS,
+      tonight({ requiredDishTags: ['pasta'] }),
+      tonight({ requiredDishTags: ['pasta', 'soep'] }),
+      tonight({ anyDishMoods: ['zomers', 'winters'] }),
+      tonight({ maxMinutes: 20 }),
+      tonight({ maxMinutes: 45, requiredDishTags: ['pasta'], anyDishMoods: ['licht'] }),
+    ];
+    const rows = SHARED_AXES_POOL.map((meal) => ({ meal }));
+    for (const filters of states) {
+      expect([...collectSelectableDecisionDishTags(SHARED_AXES_POOL, filters)].sort()).toEqual(
+        [...collectSelectableDishTags(rows, asLibrarySearch(filters))].sort(),
+      );
+    }
+  });
+});
+
+describe('collectSelectableDecisionDishMoods — Kiezen', () => {
+  test('ignores its OWN selection, because moods are ORed and each extra chip widens the pool', () => {
+    const meals = [makeMeal({ id: 'm-zomers', dishMoods: ['zomers'] }), makeMeal({ id: 'm-winters', dishMoods: ['winters'] })];
+    expect([...collectSelectableDecisionDishMoods(meals, tonight({ anyDishMoods: ['zomers'] }))].sort()).toEqual([
+      'winters',
+      'zomers',
+    ]);
+  });
+
+  test('still narrows against the tag axis', () => {
+    const meals = [
+      makeMeal({ id: 'm-1', dishTags: ['pasta'], dishMoods: ['zomers'] }),
+      makeMeal({ id: 'm-2', dishTags: ['soep'], dishMoods: ['winters'] }),
+    ];
+    expect(collectSelectableDecisionDishMoods(meals, tonight({ requiredDishTags: ['pasta'] }))).toEqual(['zomers']);
+  });
+
+  test("narrows against tonight's time cap", () => {
+    const meals = [
+      makeMeal({ id: 'm-quick', dishMoods: ['licht'], estimatedMinutes: 15 }),
+      makeMeal({ id: 'm-slow', dishMoods: ['soul-food'], estimatedMinutes: 90 }),
+    ];
+    expect(collectSelectableDecisionDishMoods(meals, tonight({ maxMinutes: 20 }))).toEqual(['licht']);
+  });
+
+  test('keeps a selected mood on offer even when the other axes leave it standing on nothing', () => {
+    const meals = [makeMeal({ id: 'm-1', dishTags: ['pasta'], dishMoods: ['zomers'] })];
+    expect(collectSelectableDecisionDishMoods(meals, tonight({ requiredDishTags: ['soep'], anyDishMoods: ['winters'] }))).toEqual([
+      'winters',
+    ]);
+  });
+
+  test('is empty for a pool nobody has described yet — the row hides itself rather than offering six dead chips', () => {
+    const meals = [makeMeal({ id: 'm-1', dishTags: ['pasta'] }), makeMeal({ id: 'm-2', dishTags: ['soep'] })];
+    expect(collectSelectableDecisionDishMoods(meals, NO_DECISION_FILTERS)).toEqual([]);
+  });
+
+  test('agrees with the library collector on the three axes both screens share', () => {
+    const states: readonly DecisionFilters[] = [
+      NO_DECISION_FILTERS,
+      tonight({ requiredDishTags: ['pasta'] }),
+      tonight({ anyDishMoods: ['zomers'] }),
+      tonight({ anyDishMoods: ['zomers', 'winters'], requiredDishTags: ['soep'] }),
+      tonight({ maxMinutes: 20 }),
+      tonight({ maxMinutes: 45, requiredDishTags: ['pasta'], anyDishMoods: ['licht'] }),
+    ];
+    const rows = SHARED_AXES_POOL.map((meal) => ({ meal }));
+    for (const filters of states) {
+      expect([...collectSelectableDecisionDishMoods(SHARED_AXES_POOL, filters)].sort()).toEqual(
+        [...collectSelectableDishMoods(rows, asLibrarySearch(filters))].sort(),
+      );
+    }
   });
 });

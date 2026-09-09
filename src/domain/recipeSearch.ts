@@ -73,13 +73,20 @@
  * coincidence of reuse — a dish title typed into a search box is free text
  * exactly the way a hand-typed dislike tag is, and both need the same
  * answer to "did the user mean the same word, accent or not".
+ *
+ * SINCE 9 SEPTEMBER 2026 THE LAST TWO EXPORTS SERVE KIEZEN, NOT THE LIBRARY.
+ * `collectSelectableDecisionDishTags` and `collectSelectableDecisionDishMoods`
+ * apply the chip-narrowing rule this module arrived at for Mijn recepten to
+ * `DecisionFilters` over the offerable pool; the comment above them carries
+ * why they are two lines here rather than the library's collectors widened.
+ * Nothing above them is Kiezen's.
  */
 
 import { readMealDishCourse } from './dishCourses';
 import { collectAvailableDishMoods } from './dishMoods';
 import { filterByDecisionFilters } from './exclusions';
 import { normalizeTag } from './normalizeTag';
-import type { Meal } from './types';
+import type { DecisionFilters, Meal } from './types';
 
 /**
  * Tonight's-filters shape (`DecisionFilters`) is not reused wholesale — the
@@ -336,13 +343,15 @@ export function filterLibraryRows<TRow extends { readonly meal: Meal }>(
  * narrowed `readonly Meal[]` that `collectSelectableDishTags` hands in below
  * still infers `Meal` for `TRow`.
  *
- * ⚠ THIS IS THE FUNCTION docs/LONGLIST.md GAP-33 IS ABOUT, AND A THIRD COPY
- * IS THE ONE THAT WOULD HAVE HURT. Kiezen still keeps a private duplicate of
- * this body (`src/app/(tabs)/index.tsx:283`); that is GAP-33's open half and
- * it is not this package's file to fix. A third copy, written for Trending
- * because the parameter type was one word too narrow, would have turned a
- * two-copy defect into a three-copy one — which is exactly what GAP-33 warns
- * the next author about.
+ * ⚠ THIS IS THE FUNCTION docs/LONGLIST.md GAP-33 WAS ABOUT, AND A THIRD COPY
+ * IS THE ONE THAT WOULD HAVE HURT. Kiezen kept a private duplicate of this
+ * body in `src/app/(tabs)/index.tsx` until 9 September 2026; that was GAP-33's
+ * open half, and `collectSelectableDecisionDishTags` at the bottom of this
+ * file — which calls THIS function — is what closed it. A third copy, written
+ * for Trending because the parameter type was one word too narrow, would have
+ * turned a two-copy defect into a three-copy one — which is exactly what
+ * GAP-33 warned the next author about, and the reason the Kiezen pair is two
+ * one-liners over shared primitives rather than a fourth body.
  *
  * WHAT IT STILL DOES NOT DO is narrow against the current selection; that is
  * `collectSelectableDishTags` below, whose Trending equivalent is
@@ -421,6 +430,10 @@ export function collectAvailableDishCourses(meals: readonly Meal[]): readonly st
 // `filterLibraryGrid` (src/components/libraryGridFilter.ts) is what does that
 // and is the only intended caller; taking the rows as a parameter rather than
 // re-deriving them is what keeps this module free of the component edge.
+//
+// KIEZEN HAS THE SAME RULE OVER A DIFFERENT SHAPE — the two collectors at the
+// bottom of this file, and the comment there for why they are not these three
+// widened.
 // ---------------------------------------------------------------------------
 
 /** The rows surviving `search`, with `override` applied on top — the one primitive all three collectors share. */
@@ -467,5 +480,71 @@ export function collectSelectableDishCourses<TRow extends { readonly meal: Meal 
   return unionWithSelection(
     search.anyDishCourses,
     collectAvailableDishCourses(narrowedMeals(rows, search, { anyDishCourses: [] })),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// THE SAME RULE FOR KIEZEN — docs/LONGLIST.md GAP-33's open half, closed
+// 9 September 2026. `DecisionFilterBar` used to be handed chips collected
+// ONCE, at load, from the whole offerable pool, and re-offered all of them
+// after every tap: choose "pasta" and "soep" there and `decide()` answered
+// `filtered_out` with nothing on screen saying which chip was the dead end.
+// These two close that on the decision surface the way the three above
+// closed it on the library.
+//
+// WHY A SECOND PAIR, AND NOT THE THREE ABOVE WIDENED TO TAKE `DecisionFilters`.
+// Widening was the obvious move — it is how `collectAvailableDishTags` reached
+// Trending — and it was measured before it was rejected. `LibrarySearchState`
+// is a structural superset of `DecisionFilters`: the three fields they share
+// have the same names, types and meanings, and `filterLibraryMeals` already
+// hands them straight to `filterByDecisionFilters`. So a collector typed on
+// `DecisionFilters & Partial<LibrarySearchState>`, filling the library's
+// extra axes from `NO_LIBRARY_SEARCH`, compiles for both screens and answers
+// correctly today. It is the wrong shape for one reason that outweighs the two
+// exports it saves: Kiezen's chips would then be narrowed by
+// `filterLibraryMeals` — a title match and a course read that `decide()` never
+// runs — and their agreement with the engine would rest on every library-only
+// axis keeping an identity default forever. offerablePool.ts spends its header
+// on exactly this: the pool the chips describe and the pool the engine narrows
+// have to be THE SAME POOL, computed by the same function, or they come to
+// differ by one rule somebody adds to one of them. So the narrowing here is
+// `filterByDecisionFilters` itself, `decide()`'s own third pass, and nothing
+// else. (The row shape was a second mismatch — the three above are generic
+// over `{ readonly meal: Meal }` and Kiezen holds bare `Meal`s — bridgeable
+// with a `meals.map((meal) => ({ meal }))` in a route module no test can
+// import; it did not decide the question, the narrowing function did.)
+//
+// WHAT IS SHARED IS EVERYTHING THAT COULD DRIFT: `collectAvailableDishTags`
+// and `collectAvailableDishMoods` (the bodies GAP-33 was about),
+// `unionWithSelection` (the chip that undoes an empty pool), and the AND/OR
+// rule stated in the block above. What is per screen is one line each — which
+// narrowing function, over which state. tests/recipeSearch.test.ts asserts the
+// two pairs answer identically on the three axes both screens share, so a
+// rule changed in one and not the other goes red rather than quietly
+// splitting the two screens' behaviour.
+//
+// THE MEALS HANDED IN MUST ALREADY BE THE OFFERABLE POOL — `selectOfferableMeals`
+// (offerablePool.ts), which runs the standing gates (`decide()`'s first two
+// passes) this module cannot see, exactly as the three above take rows the
+// scheduling filter has already thinned. The screen holds that pool on its
+// session and calls these per render, where the filters are known.
+//
+// ⚠ THE TIME CAP IS NARROWED AGAINST BUT NEVER NARROWED ITSELF, here as on the
+// other two screens: `TimeCapPicker` is a five-minute ladder rather than a set
+// of values to intersect, so the clock alone can still empty the pool —
+// trendingFilter.ts measured that on the demo seed — and `filtered_out` with
+// `NoCandidateState`'s "Filters wissen" is what answers it.
+// ---------------------------------------------------------------------------
+
+/** The dish tags a household could add to tonight's filters and still be offered a dish — the AND axis, narrowed with its own selection included, plus what is already chosen. */
+export function collectSelectableDecisionDishTags(meals: readonly Meal[], filters: DecisionFilters): readonly string[] {
+  return unionWithSelection(filters.requiredDishTags, collectAvailableDishTags(filterByDecisionFilters(meals, filters)));
+}
+
+/** The moods worth offering tonight — the OR axis, narrowed with its own selection dropped because each extra mood widens the pool, plus what is already chosen. */
+export function collectSelectableDecisionDishMoods(meals: readonly Meal[], filters: DecisionFilters): readonly string[] {
+  return unionWithSelection(
+    filters.anyDishMoods,
+    collectAvailableDishMoods(filterByDecisionFilters(meals, { ...filters, anyDishMoods: [] })),
   );
 }

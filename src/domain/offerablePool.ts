@@ -48,6 +48,22 @@
  * honestly in one tap: `decide()` returns `filtered_out`, `NoCandidateState`
  * says so, and `Wissen` undoes it.
  *
+ * ⚠ THE COMBINATION HALF IS CLOSED SINCE 9 SEPTEMBER 2026 (docs/LONGLIST.md
+ * GAP-33), AND THE SENTENCE THAT PRICED IT IS LEFT STANDING BECAUSE THE PRICE
+ * WAS WRONG. "Re-deriving every chip against every other chip on each tap"
+ * is one `filterByDecisionFilters` pass per chip row over THIS pool — the
+ * pass `decide()` runs on the same render anyway — and Mijn recepten had
+ * been paying it per render since LIB-07. `collectSelectableDecisionDishTags`
+ * and `collectSelectableDecisionDishMoods` (src/domain/recipeSearch.ts) do
+ * it for Kiezen, over the meals this function returns. The split is now
+ * exact: this module answers "which meals may a chip describe at all"
+ * (standing gates, once per load), those two answer "which of them survive
+ * what is already tapped" (per render). What is still true above is the
+ * cap: `TimeCapPicker` is a ladder and not a set of chips, so the clock
+ * alone can empty the pool, and `filtered_out` with `NoCandidateState`'s
+ * "Filters wissen" is still the answer to that — the bar's own `Wissen` was
+ * withdrawn the same day.
+ *
  * ===========================================================================
  * IT IS `decide()`'s OWN FIRST TWO PASSES, IMPORTED
  * ===========================================================================

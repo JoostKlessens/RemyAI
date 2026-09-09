@@ -34,8 +34,9 @@
  *    restrictions, for `weeknightTimeBudgetMinutes`, and, for a household
  *    with any allergen restriction, every meal whose `allergenTagStatus` is
  *    not `'verified'`, which is most of them because PD-006 fails safe to
- *    `'unknown'`. `offerableMeals` in (tabs)/index.tsx now runs those passes
- *    before the tags are collected; it carries the measurement.
+ *    `'unknown'`. `selectOfferableMeals` (src/domain/offerablePool.ts) now
+ *    runs those passes and (tabs)/index.tsx keeps the result on its session
+ *    as `offerableMeals`; that module carries the measurement.
  *
  *    WHAT IT STILL DOES NOT PROMISE, said plainly this time: a COMBINATION
  *    can return nothing where no single part does — "pasta" AND
@@ -43,6 +44,23 @@
  *    away would mean re-deriving every chip against every other chip and
  *    against the cap on every tap, and `filtered_out` already names the
  *    state while `Wissen` undoes it in one tap.
+ *
+ *    ⚠ THAT PARAGRAPH WAS HALF RIGHT, AND THE WRONG HALF CLOSED ON
+ *    9 SEPTEMBER 2026 (docs/LONGLIST.md GAP-33). "Re-deriving every chip
+ *    against every other chip on every tap" is exactly what both props now
+ *    carry: (tabs)/index.tsx computes them per render through
+ *    `collectSelectableDecisionDishTags` / `...Moods`
+ *    (src/domain/recipeSearch.ts), narrowed by the filters already set and
+ *    with the selection unioned back in, so a chip that would only ever
+ *    answer `filtered_out` is not offered and the chip that undoes an empty
+ *    pool is never taken away. The cost it priced as prohibitive is one
+ *    `filterByDecisionFilters` pass per row over the offerable pool — the
+ *    pass `decide()` runs on the same render anyway — and Mijn recepten had
+ *    been paying it per render since LIB-07. What survives is the CAP:
+ *    `TimeCapPicker` is a ladder, not a set of chips, so the clock alone can
+ *    still empty the pool, and `filtered_out`'s own "Filters wissen" (guard
+ *    THREE below) is still the answer to that. The `Wissen` the paragraph
+ *    leaned on was this bar's own, withdrawn the same day — guard TWO.
  *
  *    ⚠ THE PARAGRAPH BELOW WAS OVERRULED BY THE OWNER ON 2026-09-07, AND IT
  *    IS LEFT STANDING RATHER THAN DELETED. It is the argument he overruled;
@@ -182,7 +200,7 @@
  * recipes.tsx. Neither half of that is true on this screen: `load()` resets
  * the filters on every mount (index.tsx:400), and setting a filter cannot
  * unmount this bar. `showFilterBar` is `effectivePhase === 'ready' &&
- * !isEmptyRotation` (index.tsx:437-438): no chip touches the load phase, and
+ * !isEmptyRotation` (index.tsx:453-454): no chip touches the load phase, and
  * `decide()` returns `empty_rotation` from `unarchived.length === 0` BEFORE it
  * has looked at the filters at all (decide.ts:127-130). Filtering produces
  * `filtered_out`, which keeps the bar on screen. So this drawer starts shut,
@@ -224,24 +242,29 @@ import { iconForDishTag } from './dishTagIcons';
 export interface DecisionFilterBarProps {
   readonly filters: DecisionFilters;
   /**
-   * Dish tags present on at least one meal in the OFFERABLE pool —
-   * `selectOfferableMeals` (src/domain/offerablePool.ts), not the raw
-   * library; see restraint 1 above for the claim that correction repairs.
+   * Dish tags a household could add to `filters` and still be offered a
+   * dish, plus the ones already chosen. Collected per render from the
+   * OFFERABLE pool — `selectOfferableMeals` (src/domain/offerablePool.ts),
+   * not the raw library; restraint 1 above carries the claim that corrected
+   * — narrowed by `filters` itself, because the axis is ANDed
+   * (`collectSelectableDecisionDishTags`, src/domain/recipeSearch.ts).
    * Order is ignored — the row always renders in `DISH_TAGS` order so the
-   * chips don't rearrange themselves as the library grows.
+   * chips don't rearrange themselves as the library grows or the selection
+   * changes.
    */
   readonly availableDishTags: readonly string[];
   /**
    * The second axis (src/domain/dishMoods.ts): moods at least one meal in
    * the offerable pool has actually been described with, from
-   * `collectAvailableDishMoods`. Same narrowing rule as
-   * `availableDishTags` above, and it matters more here, because this axis
-   * starts EMPTY for every existing library — nobody has described
-   * anything yet — so an unconditional row of six chips would be six taps
-   * that could only ever produce `filtered_out`. An empty array hides the
-   * row entirely, which is the honest rendering of "there is nothing to
-   * filter on yet", and the row appears on its own once people start
-   * answering the outcome card.
+   * `collectSelectableDecisionDishMoods` — narrowed by the OTHER axes and
+   * never by its own selection, because moods are ORed and each extra chip
+   * widens the pool. Same pool rule as `availableDishTags` above, and it
+   * matters more here, because this axis starts EMPTY for every existing
+   * library — nobody has described anything yet — so an unconditional row
+   * of six chips would be six taps that could only ever produce
+   * `filtered_out`. An empty array hides the row entirely, which is the
+   * honest rendering of "there is nothing to filter on yet", and the row
+   * appears on its own once people start answering the outcome card.
    */
   readonly availableDishMoods: readonly string[];
   readonly onChange: (filters: DecisionFilters) => void;
