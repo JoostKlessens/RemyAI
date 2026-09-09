@@ -1,4 +1,14 @@
 /**
+ * ⚠ 10 SEPTEMBER 2026: THIS MODULE HAS A PRODUCTION CALLER AGAIN. GAP-34
+ * (docs/LONGLIST.md) gave `categorizeIngredient` and `splitIntoWords` a
+ * reader in src/domain/dislikedIngredients.ts — a typed dislike that names
+ * a KIND (`vis`, `vlees`) reaches every ingredient of that kind through
+ * this table, and every dislike is matched on the whole words this file
+ * argues for below. The block that follows was true for three days and is
+ * kept as the record of why the module survived them; the GAP-45 decision
+ * it defers to is now about `ingredientCategoryIcons.ts` and the icons
+ * only, not about this file.
+ *
  * ⚠ ZERO PRODUCTION CALLERS SINCE 7 SEPTEMBER 2026. READ THIS FIRST.
  *
  * `categorizeIngredient` had exactly one call site — the ingredient list on
@@ -467,7 +477,12 @@ const CATEGORY_BY_WORD: Readonly<Record<string, IngredientCategory>> = {
   jam: 'zoet',
 };
 
-function splitIntoWords(normalizedName: string): readonly string[] {
+/**
+ * Exported since GAP-34 so dislikedIngredients.ts splits a dislike and an
+ * ingredient line by the one rule this table is built on; a second
+ * splitter there would be a second definition of "a word".
+ */
+export function splitIntoWords(normalizedName: string): readonly string[] {
   return normalizedName.split(/[^a-z0-9]+/).filter((word) => word.length > 0);
 }
 

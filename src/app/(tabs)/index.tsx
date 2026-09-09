@@ -149,33 +149,26 @@ import { NoCandidateState } from '@/components/NoCandidateState';
 import { OutcomeCard } from '@/components/OutcomeCard';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { VanavondActionRow } from '@/components/VanavondActionRow';
-import { decide, type DecisionRequestWithProof } from '@/domain/decide';
+import { decide } from '@/domain/decide';
 import { NO_DECISION_FILTERS } from '@/domain/exclusions';
-import { selectOfferableMeals } from '@/domain/offerablePool';
 import { buildFriendProofLine } from '@/domain/reason';
 import { collectSelectableDecisionDishMoods, collectSelectableDecisionDishTags } from '@/domain/recipeSearch';
 import type {
   Decision,
   DecisionFilters,
   DecisionResult,
-  HouseholdId,
   Meal,
   MealId,
 } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
-import { loadFriendProof } from '@/lib/friendProof';
 import { hapticRealCommit } from '@/lib/haptics';
-import { daysAgoIso, ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
-import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import { supabase } from '@/lib/supabase';
+import { loadLiveSession, type LiveSession } from '@/lib/liveSession';
+import { getAppRepository, todayIso } from '@/lib/repository';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
 import { getColors, resolveDuration, spacing } from '@/theme/tokens';
 import { DEV_SCENARIO_ROWS_VISIBLE } from '@/lib/devFlags';
 
 type ScreenPhase = 'loading' | 'error' | 'ready';
-
-/** How far back "recent" decisions/cook history reach for novelty-tier classification — see novelty.ts. */
-const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
 
 /**
  * How long "Dit koken" holds the screen before Kookmodus takes over.
@@ -193,122 +186,6 @@ const RECENT_DECISIONS_LOOKBACK_DAYS = 60;
  * merely sooner.
  */
 const ACCEPT_STROKE_HOLD_MS = 180;
-
-interface LiveSession {
-  readonly householdId: HouseholdId;
-  /**
-   * PD-009: `filters` is omitted alongside `excludedMealIds` because both
-   * change *within* a session without any reload. The loaded household data
-   * is the stable part; what the user asks for tonight is not, and baking a
-   * filter into `requestBase` would mean re-fetching the whole household to
-   * un-tap a chip.
-   */
-  readonly requestBase: Omit<DecisionRequestWithProof, 'excludedMealIds' | 'filters'>;
-  readonly decisionRow: Decision | null;
-  readonly mealById: ReadonlyMap<MealId, Meal>;
-  /**
-   * The meals tonight's chips are allowed to describe: `selectOfferableMeals`
-   * (src/domain/offerablePool.ts), the household's standing gates already
-   * applied. THE POOL, NOT THE CHIPS — until 9 September 2026 this held two
-   * arrays of tags and moods collected here, once, at load, and the bar
-   * re-offered all of them after every tap (docs/LONGLIST.md GAP-33: choose
-   * two chips no dish shares and the answer is `filtered_out` with nothing
-   * saying which chip did it). The chips are now derived per render in
-   * `VanavondScreen`, against the filters the household has set — session
-   * state this loader cannot see, for the reason `requestBase` omits it.
-   */
-  readonly offerableMeals: readonly Meal[];
-}
-
-async function loadLiveSession(): Promise<LiveSession> {
-  await ensureSeeded();
-  const repository = getAppRepository();
-  const householdId = await repository.getCurrentHouseholdId();
-  const targetDate = todayIso();
-
-  const [household, members, restrictions, candidateMeals, recentCookEvents, thisWeekSaves, somedaySaves] =
-    await Promise.all([
-      repository.getHousehold(householdId),
-      repository.listMembers(householdId),
-      repository.listRestrictions(householdId),
-      repository.listHouseholdMeals(householdId),
-      repository.listCookEvents(householdId),
-      repository.listPendingSaves(householdId, 'this_week'),
-      repository.listPendingSaves(householdId, 'someday'),
-    ]);
-  if (household === null) {
-    throw new Error('Household not found after seeding.');
-  }
-  // In parallel: the last local read, and the one remote read this screen
-  // makes. `loadFriendProof` never rejects (see its header) so it cannot
-  // take the decision down with it, and it is handed the SUPABASE social
-  // repository deliberately — cook proof is a cross-household fact living
-  // in the `shared_cooks` view, and the local implementation answers `[]`
-  // by design ("there is no friend's kitchen in here to read"). Ranglijst
-  // already reaches for its own cross-household table this way while the
-  // rest of the app is local-first; this is the same seam.
-  const [recentDecisions, friendProof] = await Promise.all([
-    repository.listRecentDecisions(householdId, daysAgoIso(RECENT_DECISIONS_LOOKBACK_DAYS)),
-    loadFriendProof(createSupabaseSocialRepository(supabase), candidateMeals),
-  ]);
-
-  const requestBase: Omit<DecisionRequestWithProof, 'excludedMealIds' | 'filters'> = {
-    household,
-    members,
-    restrictions,
-    candidateMeals,
-    recentCookEvents,
-    pendingThisWeekSaves: thisWeekSaves,
-    pendingSomedaySaves: somedaySaves,
-    recentDecisions,
-    targetDate,
-    friendProof,
-  };
-
-  const existingDecision = await repository.getDecisionByDate(householdId, targetDate);
-  const decisionRow = existingDecision ?? (await createTodayDecisionIfSuggested(repository, requestBase, householdId));
-
-  return {
-    householdId,
-    requestBase,
-    decisionRow,
-    mealById: new Map(candidateMeals.map((meal) => [meal.id, meal])),
-    // PD-009. The chips describe the meals that survive the household's
-    // STANDING gates, not the whole library — `selectOfferableMeals` carries
-    // the measurement and the claim it corrects. Run once, here, because
-    // these gates depend on nothing a chip can change; the per-tap narrowing
-    // over this pool is `VanavondScreen`'s. (A private copy of
-    // `collectAvailableDishTags` stood below this function until GAP-33
-    // closed; the domain's own is what the screen calls now.)
-    offerableMeals: selectOfferableMeals(candidateMeals, household, members, restrictions),
-  };
-}
-
-async function createTodayDecisionIfSuggested(
-  repository: ReturnType<typeof getAppRepository>,
-  requestBase: Omit<DecisionRequestWithProof, 'excludedMealIds' | 'filters'>,
-  householdId: HouseholdId,
-): Promise<Decision | null> {
-  // PD-009, deliberately unfiltered: this is the household's offer *for the
-  // day* — the row the scheduled Edge Function will eventually write at
-  // 16:00, before anyone has touched a chip. Persisting a filtered offer
-  // would freeze a passing mood ("iets met soep", tapped once) into the
-  // permanent record of what Remy suggested, and would make the
-  // accept-rate metric in plan §8 unreadable. Filters live only in this
-  // screen's state and are applied on every subsequent `decide()` below.
-  const result = decide({ ...requestBase, excludedMealIds: [], filters: NO_DECISION_FILTERS });
-  if (result.kind !== 'suggestion') {
-    return null;
-  }
-  return repository.createDecision({
-    householdId,
-    decisionDate: requestBase.targetDate,
-    mealId: result.mealId,
-    initialMealId: result.mealId,
-    reasonCode: result.reasonCode,
-    reasonText: result.reasonText,
-  });
-}
 
 function resolveCurrentResult(
   devScenario: DevScenario,
@@ -356,7 +233,7 @@ export default function VanavondScreen(): JSX.Element {
   const [session, setSession] = useState<LiveSession | null>(null);
   const [excludedMealIds, setExcludedMealIds] = useState<readonly MealId[]>([]);
   // PD-009. Session state, never persisted and never written to the
-  // decision row — see `createTodayDecisionIfSuggested`.
+  // decision row — see `createTodayDecisionIfSuggested` in src/lib/liveSession.ts.
   const [filters, setFilters] = useState<DecisionFilters>(NO_DECISION_FILTERS);
   const [showOutcomeOverlay, setShowOutcomeOverlay] = useState(false);
   const [pendingOutcomeDecision, setPendingOutcomeDecision] = useState<Decision | null>(null);

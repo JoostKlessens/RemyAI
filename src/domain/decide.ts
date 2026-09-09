@@ -135,6 +135,7 @@ export function decide(request: DecisionRequestWithProof): DecisionResult {
     request.household,
     request.members,
     request.restrictions,
+    request.ingredientsByMeal,
   );
   if (restrictionEligible.length === 0) {
     // Meals exist, but restrictions/time budget removed every one of them.

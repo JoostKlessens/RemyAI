@@ -15,6 +15,7 @@ import type {
   DecisionFilters,
   Household,
   Meal,
+  MealIngredient,
   Member,
   Restriction,
   Save,
@@ -85,6 +86,25 @@ export function makeMeal(overrides: Partial<Meal> = {}): Meal {
     thumbnailUrl: null,
     archivedAt: null,
     createdAt: DEFAULT_CREATED_AT,
+    ...overrides,
+  };
+}
+
+/**
+ * One ingredient ROW, the shape the repository hands back. `name` is the
+ * line as a recipe prints it — quantity, unit and preparation note included
+ * (`'250 g paddenstoelen, in plakjes'`) — because that is what the dislike
+ * matcher (src/domain/dislikedIngredients.ts) has to survive.
+ */
+export function makeMealIngredient(overrides: Partial<MealIngredient> = {}): MealIngredient {
+  return {
+    id: 'ingredient-1',
+    mealId: 'meal-1',
+    name: '250 g paddenstoelen',
+    quantity: null,
+    unit: null,
+    allergenTags: [],
+    sortOrder: 0,
     ...overrides,
   };
 }
@@ -161,6 +181,9 @@ export function makeDecisionRequest(
     members: [makeMember({ householdId: household.id })],
     restrictions: [],
     candidateMeals: [makeMeal({ householdId: household.id })],
+    // GAP-34: empty, like `friendProof` — a test that says nothing about
+    // ingredients exercises a library whose ingredient rows were never read.
+    ingredientsByMeal: new Map(),
     recentCookEvents: [],
     pendingThisWeekSaves: [],
     pendingSomedaySaves: [],

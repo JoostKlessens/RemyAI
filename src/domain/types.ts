@@ -702,6 +702,24 @@ export interface DecisionRequest {
   readonly restrictions: readonly Restriction[];
   /** Meals eligible for this household: household's own + curated, already filtered for archivedAt = null. */
   readonly candidateMeals: readonly Meal[];
+  /**
+   * GAP-34 — every ingredient row of `candidateMeals`, keyed by meal id, so
+   * a typed dislike (`paddenstoelen`) can be matched against what a dish is
+   * actually made of. `Meal` carries no ingredients, and `ingredientTags`
+   * above is the EU-14 ALLERGEN union that must never be merged with names
+   * (see that field), so ingredient NAMES travel beside the meals rather
+   * than on them. Read by src/domain/dislikedIngredients.ts and nothing
+   * else; the allergen path never looks here.
+   *
+   * REQUIRED, like `filters` and `friendProof`: an optional map with a quiet
+   * empty default is exactly how dislikes did nothing for months. A meal
+   * absent from the map has no known ingredients and is NOT excluded — see
+   * dislikedIngredients.ts for why that direction is right here and would
+   * be wrong for allergens. `Pick<MealIngredient, 'name'>` rather than the
+   * whole row, because the name is the one thing the gate reads and a
+   * canonical recipe's rows (no meal id, no allergen tags) fit it too.
+   */
+  readonly ingredientsByMeal: ReadonlyMap<MealId, readonly Pick<MealIngredient, 'name'>[]>;
   /** Enough recent history to compute "not_recent" and "variety" — window size is an engine concern. */
   readonly recentCookEvents: readonly CookEvent[];
   /** Saves with intent "this_week" not yet served back as a decision. */

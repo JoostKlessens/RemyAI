@@ -32,6 +32,23 @@
  *
  * ---
  *
+ * GAP-34 (10 September 2026) — a dislike now also reads INGREDIENT NAMES.
+ *
+ * `hasExcludedTag` below compares a restriction against `Meal.ingredientTags`,
+ * which is the EU-14 allergen union and nothing else, so a typed dislike
+ * (`paddenstoelen`) matched nothing for months. The fix is a SECOND
+ * predicate, `hasDislikedIngredient` (dislikedIngredients.ts), over the
+ * ingredient rows `DecisionRequest.ingredientsByMeal` carries — composed
+ * with AND in `filterByRestrictionsAndTimeBudget`, never folded into the
+ * tag check. The two look at different inputs (rows vs. tags), different
+ * restriction types (dislikes only vs. both) and fail in different
+ * directions: an unknown ingredient word KEEPS a dish there, while an
+ * unknown allergen status EXCLUDES one here (PD-006). Merging names into
+ * `ingredientTags` was the obvious fix and is forbidden in types.ts for
+ * exactly that reason.
+ *
+ * ---
+ *
  * Allergen semantics — EXCLUSION ONLY:
  *
  * `Restriction.excludesTag` (type 'allergen') only ever removes a meal
@@ -90,6 +107,7 @@ import type {
   Restriction,
 } from './types';
 import { readMealDishMoods } from './dishMoods';
+import { collectDislikeTerms, hasDislikedIngredient, type IngredientsByMeal } from './dislikedIngredients';
 import { normalizeTag } from './normalizeTag';
 
 /**
@@ -182,18 +200,24 @@ export function filterUnarchived(meals: readonly Meal[]): readonly Meal[] {
  * separate so `decide.ts` can tell "nothing survives restrictions/time"
  * (`all_excluded`) apart from "something survives but it's already been
  * offered today" (`swaps_exhausted`).
+ *
+ * `ingredientsByMeal` feeds the dislike-by-name predicate ONLY (GAP-34,
+ * module note above); the tag and allergen-status checks never read it.
  */
 export function filterByRestrictionsAndTimeBudget(
   meals: readonly Meal[],
   household: Household,
   members: readonly Member[],
   restrictions: readonly Restriction[],
+  ingredientsByMeal: IngredientsByMeal,
 ): readonly Meal[] {
   const excludedTags = collectExcludedTags(members, restrictions);
+  const dislikeTerms = collectDislikeTerms(members, restrictions);
   const requiresVerifiedAllergenStatus = hasAllergenRestriction(members, restrictions);
   return meals.filter(
     (meal) =>
       !hasExcludedTag(meal, excludedTags) &&
+      !hasDislikedIngredient(ingredientsByMeal.get(meal.id) ?? [], dislikeTerms) &&
       isWithinTimeBudget(meal, household) &&
       isAllergenStatusEligible(meal, requiresVerifiedAllergenStatus),
   );

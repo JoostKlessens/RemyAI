@@ -1,4 +1,11 @@
 /**
+ * ⚠ 10 SEPTEMBER 2026: `ingredientCategories.ts` HAS A PRODUCTION CALLER
+ * AGAIN — src/domain/dislikedIngredients.ts (GAP-34) matches a typed
+ * dislike on `splitIntoWords` and reaches a kind-shaped dislike (`vis`)
+ * through `categorizeIngredient`. The paragraph below still holds for
+ * `ingredientCategoryIcons.ts`, and this file now guards live behaviour
+ * for the first module and a kept-but-dark one for the second.
+ *
  * ⚠ THE TWO MODULES UNDER TEST HAVE ZERO PRODUCTION CALLERS SINCE
  * 7 SEPTEMBER 2026, and these tests are deliberately still here.
  *

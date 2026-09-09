@@ -17,7 +17,8 @@ bracht er 13 bij, GAP-32/55 er 54, met drie nieuwe testbestanden.
 **Wat er die avond landde:** GAP-33 (Kiezen narrowt zijn chips mee,
 `cd4d09d`), GAP-32/55 (`Bewaren` plus het `recipes` → `meals`-kopieerpad,
 `5767bda`), en twee correcties op dit document zelf — zie `feffdfe` en
-`3632188`. **GAP-34 draaide nog toen dit geschreven werd.**
+`3632188`. **GAP-34 is op 10 september 2026 geland** — zie de rij in
+LONGLIST.md; de `Meal.ingredientTags`-route is bewust níet gekozen.
 
 ⚠ **TWEE DINGEN DIE DIT DOCUMENT VOORSCHREEF ZIJN AFGEWEZEN, allebei omdat
 de voorgeschreven reparatie het defect zou hebben INGEVOERD dat ze wilde
@@ -1718,6 +1719,10 @@ gedaan. De rest is werk.
    wordt. De kern eronder: **`MealIngredient.name` wordt door geen enkel
    filter in de hele app gelezen**, alleen voor weergave. Er is dus geen
    ingrediëntfilter; er is een allergenenfilter dat eruitziet als één.
+   ✅ **Gerepareerd op 10 september 2026 (GAP-34):** een tweede predicaat
+   over `MealIngredient.name`, naast en nooit in het allergenenpad —
+   `src/domain/dislikedIngredients.ts`, en de rijen reizen mee op
+   `DecisionRequest.ingredientsByMeal`. Geen migratie nodig.
 
 8. **De iconen** (GAP-19) — ✅ **twee keer af, en de tweede keer verving de
    eerste.** Op 7 september kreeg de seam een tweede fontfamilie; op

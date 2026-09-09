@@ -9,6 +9,7 @@ import {
   makeDecisionRequest,
   makeHousehold,
   makeMeal,
+  makeMealIngredient,
   makeMember,
   makeRestriction,
   makeSave,
@@ -718,5 +719,26 @@ describe('decide — assembleFriendProof feeds it directly (the seam)', () => {
 
     expect(friendProof.size).toBe(0);
     expect(result.kind === 'suggestion' && result.reasonCode).toBe('variety');
+  });
+});
+
+describe('decide — dislikes reach ingredient NAMES (GAP-34)', () => {
+  test('returns all_excluded when the only dish names a disliked ingredient in its rows, not its tags', () => {
+    const request = makeDecisionRequest({
+      restrictions: [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'paddenstoelen' })],
+      candidateMeals: [makeMeal({ id: 'meal-mushrooms', ingredientTags: [] })],
+      ingredientsByMeal: new Map([['meal-mushrooms', [makeMealIngredient({ mealId: 'meal-mushrooms' })]]]),
+    });
+
+    expect(decide(request)).toEqual({ kind: 'no_candidate', reason: 'all_excluded' });
+  });
+
+  test('the same request without ingredient rows still suggests — the map, not the tags, carries the exclusion', () => {
+    const request = makeDecisionRequest({
+      restrictions: [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'paddenstoelen' })],
+      candidateMeals: [makeMeal({ id: 'meal-mushrooms', ingredientTags: [] })],
+    });
+
+    expect(decide(request).kind).toBe('suggestion');
   });
 });

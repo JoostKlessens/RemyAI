@@ -12,22 +12,24 @@
 
 import { describe, expect, test } from 'vitest';
 import { selectOfferableMeals } from '@/domain/offerablePool';
-import { makeHousehold, makeMeal, makeMember, makeRestriction } from './fixtures';
+import { makeHousehold, makeMeal, makeMealIngredient, makeMember, makeRestriction } from './fixtures';
 
 const HOUSEHOLD = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
 const MEMBER = makeMember();
+/** GAP-34: the pre-existing cases say nothing about ingredient rows, so they hand in none. */
+const NO_INGREDIENTS = new Map();
 
 describe('selectOfferableMeals', () => {
   test('keeps a meal that survives every standing gate', () => {
     const meal = makeMeal({ id: 'meal-1', estimatedMinutes: 20 });
 
-    expect(selectOfferableMeals([meal], HOUSEHOLD, [MEMBER], [])).toEqual([meal]);
+    expect(selectOfferableMeals([meal], HOUSEHOLD, [MEMBER], [], NO_INGREDIENTS)).toEqual([meal]);
   });
 
   test('drops an archived meal', () => {
     const archived = makeMeal({ id: 'meal-archived', archivedAt: '2026-01-02T00:00:00.000Z' });
 
-    expect(selectOfferableMeals([archived], HOUSEHOLD, [MEMBER], [])).toEqual([]);
+    expect(selectOfferableMeals([archived], HOUSEHOLD, [MEMBER], [], NO_INGREDIENTS)).toEqual([]);
   });
 
   /**
@@ -39,13 +41,13 @@ describe('selectOfferableMeals', () => {
   test('drops a meal over the household weeknight time budget', () => {
     const long = makeMeal({ id: 'meal-long', estimatedMinutes: 50 });
 
-    expect(selectOfferableMeals([long], HOUSEHOLD, [MEMBER], [])).toEqual([]);
+    expect(selectOfferableMeals([long], HOUSEHOLD, [MEMBER], [], NO_INGREDIENTS)).toEqual([]);
   });
 
   test('keeps a meal with no recorded duration, which the budget cannot judge', () => {
     const untimed = makeMeal({ id: 'meal-untimed', estimatedMinutes: null });
 
-    expect(selectOfferableMeals([untimed], HOUSEHOLD, [MEMBER], [])).toEqual([untimed]);
+    expect(selectOfferableMeals([untimed], HOUSEHOLD, [MEMBER], [], NO_INGREDIENTS)).toEqual([untimed]);
   });
 
   test('drops a meal carrying an excluded allergen tag', () => {
@@ -53,7 +55,7 @@ describe('selectOfferableMeals', () => {
     const safe = makeMeal({ id: 'meal-safe' });
     const restriction = makeRestriction({ excludesTag: 'peanuts' });
 
-    expect(selectOfferableMeals([peanuts, safe], HOUSEHOLD, [MEMBER], [restriction])).toEqual([safe]);
+    expect(selectOfferableMeals([peanuts, safe], HOUSEHOLD, [MEMBER], [restriction], NO_INGREDIENTS)).toEqual([safe]);
   });
 
   /**
@@ -67,21 +69,36 @@ describe('selectOfferableMeals', () => {
     const verified = makeMeal({ id: 'meal-verified', allergenTagStatus: 'verified' });
     const restriction = makeRestriction({ type: 'allergen', excludesTag: 'peanuts' });
 
-    expect(selectOfferableMeals([unknown, verified], HOUSEHOLD, [MEMBER], [restriction])).toEqual([verified]);
+    expect(selectOfferableMeals([unknown, verified], HOUSEHOLD, [MEMBER], [restriction], NO_INGREDIENTS)).toEqual([verified]);
   });
 
   test('keeps an unverified meal when nobody in the household has an allergen restriction', () => {
     const unknown = makeMeal({ id: 'meal-unknown', allergenTagStatus: 'unknown' });
 
-    expect(selectOfferableMeals([unknown], HOUSEHOLD, [MEMBER], [])).toEqual([unknown]);
+    expect(selectOfferableMeals([unknown], HOUSEHOLD, [MEMBER], [], NO_INGREDIENTS)).toEqual([unknown]);
   });
 
   test('never mutates the array it was handed', () => {
     const meals = [makeMeal({ id: 'meal-1' }), makeMeal({ id: 'meal-2', estimatedMinutes: 90 })];
     const before = [...meals];
 
-    selectOfferableMeals(meals, HOUSEHOLD, [MEMBER], []);
+    selectOfferableMeals(meals, HOUSEHOLD, [MEMBER], [], NO_INGREDIENTS);
 
     expect(meals).toEqual(before);
+  });
+
+  /**
+   * GAP-34. The chip pool and the decision pool have to be the same pool,
+   * and the dislike-by-name gate is one of the standing gates: a category
+   * that only exists on a dish the household said it dislikes would be a
+   * guaranteed-empty narrowing all over again.
+   */
+  test('drops a meal whose ingredient rows name a disliked ingredient', () => {
+    const mushrooms = makeMeal({ id: 'meal-mushrooms' });
+    const safe = makeMeal({ id: 'meal-safe' });
+    const dislike = makeRestriction({ type: 'dislike', excludesTag: 'paddenstoelen' });
+    const ingredientsByMeal = new Map([['meal-mushrooms', [makeMealIngredient({ mealId: 'meal-mushrooms' })]]]);
+
+    expect(selectOfferableMeals([mushrooms, safe], HOUSEHOLD, [MEMBER], [dislike], ingredientsByMeal)).toEqual([safe]);
   });
 });

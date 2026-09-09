@@ -7,7 +7,17 @@ import {
   filterUnarchived,
   NO_DECISION_FILTERS,
 } from '@/domain/exclusions';
-import { makeDecisionFilters, makeHousehold, makeMeal, makeMember, makeRestriction } from './fixtures';
+import {
+  makeDecisionFilters,
+  makeHousehold,
+  makeMeal,
+  makeMealIngredient,
+  makeMember,
+  makeRestriction,
+} from './fixtures';
+
+/** GAP-34: the pre-existing suites say nothing about ingredient rows, so they hand in none. */
+const NO_INGREDIENTS = new Map();
 
 describe('collectExcludedTags', () => {
   test('combines tags across multiple household members', () => {
@@ -67,7 +77,7 @@ describe('filterByRestrictionsAndTimeBudget — allergen exclusion', () => {
       makeMeal({ id: 'meal-shellfish', ingredientTags: ['shellfish', 'rice'] }),
     ];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-safe']);
   });
@@ -80,7 +90,7 @@ describe('filterByRestrictionsAndTimeBudget — allergen exclusion', () => {
     ];
     const meals = [makeMeal({ id: 'meal-peanut', ingredientTags: ['peanuts'] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result).toHaveLength(0);
   });
@@ -94,7 +104,7 @@ describe('filterByRestrictionsAndTimeBudget — allergen exclusion', () => {
     const restrictions = [makeRestriction({ memberId: 'member-1', excludesTag: 'peanuts' })];
     const meals = [makeMeal({ id: 'meal-untagged', ingredientTags: [] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-untagged']);
   });
@@ -112,7 +122,7 @@ describe('filterByRestrictionsAndTimeBudget — dislike exclusion', () => {
       makeMeal({ id: 'meal-disliked', ingredientTags: ['mushrooms'] }),
     ];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-liked']);
   });
@@ -127,7 +137,7 @@ describe('filterByRestrictionsAndTimeBudget — time budget exclusion', () => {
       makeMeal({ id: 'meal-slow', estimatedMinutes: 45 }),
     ];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, []);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, [], NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-quick']);
   });
@@ -136,7 +146,7 @@ describe('filterByRestrictionsAndTimeBudget — time budget exclusion', () => {
     const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
     const meals = [makeMeal({ id: 'meal-boundary', estimatedMinutes: 30 })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, [makeMember()], []);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, [makeMember()], [], NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-boundary']);
   });
@@ -145,7 +155,7 @@ describe('filterByRestrictionsAndTimeBudget — time budget exclusion', () => {
     const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
     const meals = [makeMeal({ id: 'meal-unknown-time', estimatedMinutes: null })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, [makeMember()], []);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, [makeMember()], [], NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-unknown-time']);
   });
@@ -158,7 +168,7 @@ describe('filterByRestrictionsAndTimeBudget — tag normalization (Finding 1b)',
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'allergen', excludesTag: 'Noten' })];
     const meals = [makeMeal({ id: 'meal-noten', ingredientTags: ['noten'] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result).toHaveLength(0);
   });
@@ -169,7 +179,7 @@ describe('filterByRestrictionsAndTimeBudget — tag normalization (Finding 1b)',
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'crème' })];
     const meals = [makeMeal({ id: 'meal-creme', ingredientTags: ['creme'] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result).toHaveLength(0);
   });
@@ -192,7 +202,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'mushrooms' })];
     const meals = [makeMeal({ id: 'meal-unknown', allergenTagStatus: 'unknown', ingredientTags: [] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-unknown']);
   });
@@ -201,7 +211,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     const household = makeHousehold({ weeknightTimeBudgetMinutes: 60 });
     const meals = [makeMeal({ id: 'meal-unknown', allergenTagStatus: 'unknown' })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, [makeMember()], []);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, [makeMember()], [], NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-unknown']);
   });
@@ -212,7 +222,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'allergen', excludesTag: 'noten' })];
     const meals = [makeMeal({ id: 'meal-unknown', allergenTagStatus: 'unknown', ingredientTags: [] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result).toHaveLength(0);
   });
@@ -223,7 +233,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'allergen', excludesTag: 'noten' })];
     const meals = [makeMeal({ id: 'meal-verified', allergenTagStatus: 'verified', ingredientTags: [] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-verified']);
   });
@@ -236,7 +246,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     // undefined, not the fixture's 'verified' default.
     const mealWithoutStatus = makeMeal({ id: 'meal-legacy', allergenTagStatus: undefined });
 
-    const result = filterByRestrictionsAndTimeBudget([mealWithoutStatus], household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget([mealWithoutStatus], household, members, restrictions, NO_INGREDIENTS);
 
     expect(result).toHaveLength(0);
   });
@@ -247,7 +257,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'allergen', excludesTag: 'noten' })];
     const meals = [makeMeal({ id: 'meal-verified-noten', allergenTagStatus: 'verified', ingredientTags: ['noten'] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result).toHaveLength(0);
   });
@@ -258,7 +268,7 @@ describe('filterByRestrictionsAndTimeBudget — PD-006 allergen tag tri-state ga
     const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'paddenstoelen' })];
     const meals = [makeMeal({ id: 'meal-unknown', allergenTagStatus: 'unknown', ingredientTags: [] })];
 
-    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions);
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-unknown']);
   });
@@ -335,7 +345,7 @@ describe('filterByDecisionFilters — maxMinutes (PD-009)', () => {
     const meal = makeMeal({ id: 'meal-unknown-time', estimatedMinutes: null });
     const household = makeHousehold({ weeknightTimeBudgetMinutes: 30 });
 
-    const budgetSurvivors = filterByRestrictionsAndTimeBudget([meal], household, [makeMember()], []);
+    const budgetSurvivors = filterByRestrictionsAndTimeBudget([meal], household, [makeMember()], [], NO_INGREDIENTS);
     const filterSurvivors = filterByDecisionFilters([meal], makeDecisionFilters({ maxMinutes: 30 }));
 
     expect(budgetSurvivors.map((survivor) => survivor.id)).toEqual(['meal-unknown-time']);
@@ -552,5 +562,64 @@ describe('NO_DECISION_FILTERS (PD-009)', () => {
     const result = filterByDecisionFilters(meals, NO_DECISION_FILTERS);
 
     expect(result.map((meal) => meal.id)).toEqual(['meal-untagged', 'meal-long']);
+  });
+});
+
+describe('filterByRestrictionsAndTimeBudget — dislike exclusion by INGREDIENT NAME (GAP-34)', () => {
+  const household = makeHousehold({ weeknightTimeBudgetMinutes: 60 });
+  const members = [makeMember({ id: 'member-1' })];
+
+  test("the owner's case: a typed paddenstoelen excludes a dish whose ingredient rows name them", () => {
+    const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'paddenstoelen' })];
+    const meals = [makeMeal({ id: 'meal-mushroom' }), makeMeal({ id: 'meal-chicken' })];
+    const ingredientsByMeal = new Map([
+      ['meal-mushroom', [makeMealIngredient({ mealId: 'meal-mushroom', name: '250 g paddenstoelen, in plakjes' })]],
+      ['meal-chicken', [makeMealIngredient({ mealId: 'meal-chicken', name: '400 g kipfilet' })]],
+    ]);
+
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, ingredientsByMeal);
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-chicken']);
+  });
+
+  test('a meal with no ingredient rows in the map is kept — unknown fails toward NOT excluding on this path', () => {
+    const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'paddenstoelen' })];
+    const meals = [makeMeal({ id: 'meal-title-only' })];
+
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-title-only']);
+  });
+
+  test('whole words only: a dislike of boter does not exclude a dish with boterhamworst', () => {
+    const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'boter' })];
+    const meals = [makeMeal({ id: 'meal-worst' })];
+    const ingredientsByMeal = new Map([['meal-worst', [makeMealIngredient({ mealId: 'meal-worst', name: 'boterhamworst' })]]]);
+
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, ingredientsByMeal);
+
+    expect(result.map((meal) => meal.id)).toEqual(['meal-worst']);
+  });
+
+  test('an ALLERGEN restriction never reads ingredient names — a verified, untagged meal survives a name hit', () => {
+    const restrictions = [makeRestriction({ memberId: 'member-1', type: 'allergen', excludesTag: 'noten' })];
+    const meals = [makeMeal({ id: 'meal-walnut', ingredientTags: [], allergenTagStatus: 'verified' })];
+    const ingredientsByMeal = new Map([['meal-walnut', [makeMealIngredient({ mealId: 'meal-walnut', name: '50 g noten' })]]]);
+
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, ingredientsByMeal);
+
+    // Not a safety claim about the dish: PD-006 says the allergen answer is
+    // the verified tag tri-state and nothing else, and an unverified free-text
+    // name must never be mistaken for having checked.
+    expect(result.map((meal) => meal.id)).toEqual(['meal-walnut']);
+  });
+
+  test('a dislike still excludes on the allergen TAG the way it always did — both paths are hard', () => {
+    const restrictions = [makeRestriction({ memberId: 'member-1', type: 'dislike', excludesTag: 'noten' })];
+    const meals = [makeMeal({ id: 'meal-tagged', ingredientTags: ['noten'] })];
+
+    const result = filterByRestrictionsAndTimeBudget(meals, household, members, restrictions, NO_INGREDIENTS);
+
+    expect(result).toEqual([]);
   });
 });

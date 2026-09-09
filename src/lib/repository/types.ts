@@ -494,6 +494,7 @@ export interface RemyRepository {
 
   /** Household's own (unarchived) + curated meals — mirrors the candidate-meal query comment on the `meals` table in 0001_init.sql. */
   listHouseholdMeals(householdId: HouseholdId): Promise<readonly Meal[]>;
+  listHouseholdMealIngredients(householdId: HouseholdId): Promise<readonly MealIngredient[]>; // GAP-34: the rows of exactly the meals above, in one read
   getMeal(mealId: MealId): Promise<Meal | null>;
   getMealIngredients(mealId: MealId): Promise<readonly MealIngredient[]>;
   getMealSteps(mealId: MealId): Promise<readonly MealStep[]>;
@@ -675,7 +676,6 @@ export interface RemyRepository {
    * ever set by somebody who actually ate the food.
    */
   addMealDishMood(mealId: MealId, mood: string): Promise<Meal>;
-
 
   /**
    * Every save for this household, regardless of intent, whether its meal

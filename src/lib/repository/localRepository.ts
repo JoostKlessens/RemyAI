@@ -99,6 +99,7 @@ import {
   getMealCookProofExclusion,
   getMealIngredients,
   getMealSteps,
+  listHouseholdMealIngredients,
   listHouseholdMeals,
   setMealCookProofExclusion,
   updateMealRecipe,
@@ -203,6 +204,7 @@ export function createLocalRepository(store: KeyValueStore, mirror: MirrorJobSin
     removeRestriction: (restrictionId) => removeRestriction(tables, restrictionId),
 
     listHouseholdMeals: (householdId) => listHouseholdMeals(tables, householdId),
+    listHouseholdMealIngredients: (householdId) => listHouseholdMealIngredients(tables, householdId),
     getMeal: (mealId) => getMeal(tables, mealId),
     getMealIngredients: (mealId) => getMealIngredients(tables, mealId),
     getMealSteps: (mealId) => getMealSteps(tables, mealId),

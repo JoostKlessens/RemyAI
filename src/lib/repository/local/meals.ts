@@ -122,6 +122,25 @@ export async function listHouseholdMeals(tables: RepositoryTables, householdId: 
     .map(toMealRow);
 }
 
+/**
+ * GAP-34 — every ingredient row of the meals `listHouseholdMeals` returns,
+ * in one read. Scoped THROUGH that function rather than by a household
+ * test of its own, so "the household's meals" has one definition here and
+ * the dislike gate can never see a row that function would not have
+ * listed — an archived meal's, another household's.
+ */
+export async function listHouseholdMealIngredients(
+  tables: RepositoryTables,
+  householdId: string,
+): Promise<readonly MealIngredient[]> {
+  const [meals, ingredients] = await Promise.all([
+    listHouseholdMeals(tables, householdId),
+    tables.mealIngredients.list(),
+  ]);
+  const mealIds = new Set(meals.map((meal) => meal.id));
+  return ingredients.filter((ingredient) => mealIds.has(ingredient.mealId));
+}
+
 export async function getMeal(tables: RepositoryTables, mealId: MealId): Promise<Meal | null> {
   const meals = await tables.meals.list();
   const meal = meals.find((entry) => entry.id === mealId);

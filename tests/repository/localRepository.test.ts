@@ -292,6 +292,31 @@ describe('localRepository — meals (+ ingredients, + steps)', () => {
     expect(meals.some((meal) => meal.householdId === null)).toBe(true);
   });
 
+  /**
+   * GAP-34: the dislike gate needs every ingredient row of the candidate
+   * pool in one read, scoped exactly like `listHouseholdMeals` — one
+   * definition of "the household's meals", not a second that drifts.
+   */
+  test("listHouseholdMealIngredients returns the rows of the household's own meals and none of another household's", async () => {
+    await repository.createMeal(
+      makeCreateMealInput({
+        householdId: HOUSEHOLD_ID,
+        title: 'Eigen gerecht',
+        ingredients: [{ name: '250 g paddenstoelen', quantity: null, unit: null, sortOrder: 0 }],
+      }),
+    );
+    await repository.createMeal(
+      makeCreateMealInput({
+        householdId: 'other-household',
+        title: 'Niet van mij',
+        ingredients: [{ name: '400 g zalmfilet', quantity: null, unit: null, sortOrder: 0 }],
+      }),
+    );
+
+    const rows = await repository.listHouseholdMealIngredients(HOUSEHOLD_ID);
+
+    expect(rows.map((row) => row.name)).toEqual(['250 g paddenstoelen']);
+  });
   test("listHouseholdMeals excludes another household's meals", async () => {
     await repository.createMeal(makeCreateMealInput({ householdId: 'other-household', title: 'Niet van mij' }));
 

@@ -79,11 +79,12 @@
  * Pure: no I/O, no throwing, no React, and it never mutates its argument.
  */
 
+import type { IngredientsByMeal } from './dislikedIngredients';
 import { filterByRestrictionsAndTimeBudget, filterUnarchived } from './exclusions';
 import type { Household, Meal, Member, Restriction } from './types';
 
 /**
- * Takes the four values apart rather than a `DecisionRequest`, so a caller
+ * Takes the five values apart rather than a `DecisionRequest`, so a caller
  * holding a partially-built request (index.tsx's `requestBase` omits
  * `excludedMealIds` and `filters` on purpose) can call it without assembling
  * fields this answer does not depend on.
@@ -93,6 +94,13 @@ export function selectOfferableMeals(
   household: Household,
   members: readonly Member[],
   restrictions: readonly Restriction[],
+  ingredientsByMeal: IngredientsByMeal,
 ): readonly Meal[] {
-  return filterByRestrictionsAndTimeBudget(filterUnarchived(candidateMeals), household, members, restrictions);
+  return filterByRestrictionsAndTimeBudget(
+    filterUnarchived(candidateMeals),
+    household,
+    members,
+    restrictions,
+    ingredientsByMeal,
+  );
 }
