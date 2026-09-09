@@ -105,7 +105,12 @@ export const ADD_FRIEND_ENTRY_ACCESSIBILITY_LABEL = 'Vriend toevoegen met een ge
 /** §4.4's `title2`. The screen is titled for the subject; the act is the primary button. */
 export const ADD_FRIEND_TITLE = 'Vrienden';
 
-export const ADD_FRIEND_BACK_LABEL = 'Terug';
+/* `ADD_FRIEND_BACK_LABEL` ('Terug') was removed on 9 September 2026 — the
+   control is a `BackButton` arrow now. This screen's header used to record
+   that its back word disagreed with eight other screens, and that reconciling
+   them was "a decision about every back-word in the app across three copy
+   modules" it declined to make. This is that decision, taken the cheap way:
+   no word, nothing left to disagree about. */
 
 /**
  * States the mechanism before offering it, so nobody hunts for a search

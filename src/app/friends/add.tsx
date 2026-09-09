@@ -116,7 +116,6 @@ import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'expo-router';
 import {
   AccessibilityInfo,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -126,7 +125,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  ADD_FRIEND_BACK_LABEL,
   ADD_FRIEND_INTRO,
   ADD_FRIEND_LOADING,
   ADD_FRIEND_LOAD_FAILED,
@@ -157,6 +155,7 @@ import {
   type IncomingRequestRow,
   type OutgoingRequestRow,
 } from '@/components/addFriendCopy';
+import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/Button';
 import { CookSharingAskSheet } from '@/components/CookSharingAskSheet';
 import { IncomingRow, OutgoingRow, PartyName, SectionLabel, SectionNote } from '@/components/FriendRequestRows';
@@ -478,32 +477,26 @@ export default function AddFriendScreen(): JSX.Element {
           every back-word in the app across three copy modules, not a side
           effect of moving one View. */}
       <View style={styles.header}>
-        {/* `hitSlop` FOR A REPORT WHOSE CAUSE IS NOT FOUND, and it is worth
-            being precise about which half is which. The owner reported on
-            8 September that Terug on this screen "soms" does not respond.
-            Four explanations were measured and ruled out: the missing
-            `edges` prop (harmless — the default is all four), the hitbox
-            (already 44x44, the norm), this header being different from the
-            others (it is byte-for-byte the same), and `router.back()` having
-            nowhere to go (both doors here are a `push`). So this is not a
-            fix; it is the cheapest widening of the target that cannot make
-            anything worse, applied while the cause is still open.
+        {/* THE `hitSlop` IS GONE AND THE WORD WITH IT — 9 SEPTEMBER 2026.
+            What stood here defended an 8pt slop added "while the cause is
+            still open", on a row it correctly measured as already 44x44. The
+            cause is no longer open (see the handler below), so the slop was
+            protecting nothing, and the owner's remaining complaint was that
+            the control is "nog steeds lastig te klikken" — aiming, not
+            reach. `BackButton` answers that: the same 44pt box, but a 20pt
+            arrow centred in it instead of a 14pt word in `textMuted` sitting
+            against its left edge. BackButton.tsx carries why those are two
+            different defects and why only the second one was left.
 
-            THE SAME VALUE GOES ON ALL FOUR SCREENS THAT DRAW THIS ROW —
-            recipe/[mealId].tsx, import/paste.tsx and settings.tsx — because
-            the row is provably identical on all four, and repairing one
-            would make the other three quietly different in a way no test
-            would notice. 8 rather than 4 is the larger of the two values
-            already in this codebase (MemberRow, OutcomeCard); 44 stays the
-            floor and nothing shrinks.
-
-            WHAT IT ACTUALLY BUYS, reasoned from the layout and not measured
-            on a device: on iOS a touch outside the PARENT's bounds does not
-            reach the child, and this header row is only as tall as its 8pt
-            top padding plus the button. So the gain is upward — into that
-            padding, up to the top of the safe area — and sideways, while
-            downward it stops where the row does. */}
-        <Pressable
+            IT ALSO ENDS THE FOUR-COPY PROBLEM the old comment kept naming.
+            recipe/[mealId].tsx, settings.tsx and friends/[feedItemId].tsx
+            drew the identical row and now share this component; the header
+            above this View flagged the resulting word-salad ("Terug",
+            "Terug", "Sluiten") as "a decision about every back-word in the
+            app" and declined to make it. A glyph makes it moot.
+            import/paste.tsx keeps its word on purpose — "Annuleren" abandons
+            an import in progress, which is not this gesture. */}
+        <BackButton
           /*
             `canGoBack()` FIRST, AND THIS IS THE SECOND ATTEMPT AT THIS BUG.
             The owner reported on 8 September that the back control does
@@ -526,21 +519,20 @@ export default function AddFriendScreen(): JSX.Element {
             this screen belongs to — every entry point that pushes it comes
             from there or from a sheet on top of it.
 
-            ⚠ STILL NOT A CONFIRMED DIAGNOSIS. It is a real defect on a real
-            path, and it may not be HIS path. What would settle it in twenty
-            seconds is docs/TOESTELTEST.md §8c: the same control on
-            Instellingen, which is the same row on the same presentation. If
-            back works there and not here, it is this screen; if it fails
-            there too, it is the row or the modal.
+            ✅ CONFIRMED ON A DEVICE, 9 SEPTEMBER 2026. Asked to press it
+            again, the owner answered "hij werkt" — and, asked the §8c
+            question in the same breath, reported that Instellingen works
+            too. That is the twenty-second measurement this paragraph used to
+            ask for, and it settles the diagnosis above rather than merely
+            failing to contradict it: the no-op `back()` was the cause and
+            `canGoBack()` is the fix. Open point A in docs/HANDOVER.md is
+            closed. What survived is a different complaint — "nog steeds
+            lastig te klikken" — which is about aiming, and is answered by
+            the arrow rather than by this handler.
           */
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/friends'))}
-          accessibilityRole="button"
           accessibilityLabel="Terug naar het vorige scherm"
-          hitSlop={8}
-          style={styles.back}
-        >
-          <Text style={[typeScale.button, { color: colors.textSecondary }]}>{ADD_FRIEND_BACK_LABEL}</Text>
-        </Pressable>
+        />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -783,17 +775,6 @@ const styles = StyleSheet.create({
     // If §8c shows the sibling screens fail too, the fix belongs in all
     // four and this divergence should close rather than spread by copying.
     paddingTop: spacing.space6,
-  },
-  back: {
-    // `minWidth` as well as `minHeight` now, matching the two models: the
-    // label is short enough that the 44pt floor is doing real work on the
-    // horizontal axis too. `alignSelf: 'flex-start'` went with the move
-    // — it was there to stop this Pressable stretching the full width of
-    // the ScrollView's column, and a `flexDirection: 'row'` header stretches
-    // nothing horizontally.
-    minHeight: spacing.touchTargetMin,
-    minWidth: spacing.touchTargetMin,
-    justifyContent: 'center',
   },
   title: {
     marginTop: spacing.space2,

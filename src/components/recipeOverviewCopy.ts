@@ -65,7 +65,12 @@ import { META_SEPARATOR } from './friendCardVocabulary';
 // Chrome
 // ---------------------------------------------------------------------------
 
-export const RECIPE_OVERVIEW_BACK_LABEL = 'Terug';
+/* `RECIPE_OVERVIEW_BACK_LABEL` ('Terug') was removed on 9 September 2026: the
+   control is a `BackButton` arrow now, so this screen renders no back word at
+   all. It leaves `RECIPE_OVERVIEW_STRINGS` with it — a string the app cannot
+   display is not a string that list should keep claiming for. What a screen
+   reader hears is unchanged and lives in the constant just below, which is
+   where that meaning already was. */
 
 /**
  * Names the destination, not the direction. The screen is reached from Mijn
@@ -282,7 +287,6 @@ export function readRecipeOverviewDishMoods(dishMoods: readonly string[]): reado
  * visible in a diff.
  */
 export const RECIPE_OVERVIEW_STRINGS: readonly string[] = [
-  RECIPE_OVERVIEW_BACK_LABEL,
   RECIPE_OVERVIEW_BACK_ACCESSIBILITY_LABEL,
   RECIPE_OVERVIEW_LOADING_LABEL,
   RECIPE_OVERVIEW_LOAD_FAILED,

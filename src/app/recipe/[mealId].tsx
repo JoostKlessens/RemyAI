@@ -173,10 +173,11 @@
 
 import { useCallback, useReducer, useState, type JSX } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { readMealDishMoods } from '@/domain/dishMoods';
 import type { HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
+import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/Button';
 import { RecipeIngredientList } from '@/components/RecipeIngredientList';
 import { iconForDishTag } from '@/components/dishTagIcons';
@@ -193,7 +194,6 @@ import { LIBRARY_TILE_SEND_ACCESSIBILITY_LABEL, LIBRARY_TILE_SEND_LABEL } from '
 import { RECIPE_EDIT_ROW_ACCESSIBILITY_LABEL, RECIPE_EDIT_ROW_LABEL } from '@/components/recipeEditCopy';
 import {
   RECIPE_OVERVIEW_BACK_ACCESSIBILITY_LABEL,
-  RECIPE_OVERVIEW_BACK_LABEL,
   RECIPE_OVERVIEW_COOK_ACCESSIBILITY_LABEL,
   RECIPE_OVERVIEW_COOK_LABEL,
   RECIPE_OVERVIEW_INGREDIENTS_HEADING,
@@ -412,22 +412,14 @@ export default function RecipeOverviewScreen(): JSX.Element {
 
   const backRow = (
     <View style={styles.header}>
-      {/* `hitSlop` HERE BECAUSE THE ROW IS SHARED, not because this screen
-          was reported. The owner's 8 September report was about
-          friends/add.tsx, whose cause has NOT been found; that screen's
-          header lists what was ruled out. This row is byte-for-byte the
-          same one, so widening the target there and not here would make
-          four identical rows quietly behave in two ways. 44pt stays the
-          floor and nothing shrinks. */}
-      <Pressable
-        onPress={() => router.back()}
-        accessibilityRole="button"
-        accessibilityLabel={RECIPE_OVERVIEW_BACK_ACCESSIBILITY_LABEL}
-        hitSlop={8}
-        style={styles.backButton}
-      >
-        <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>{RECIPE_OVERVIEW_BACK_LABEL}</Text>
-      </Pressable>
+      {/* ONE COMPONENT NOW, 9 SEPTEMBER 2026. What stood here argued that
+          this row was byte-for-byte identical on four screens and that
+          repairing one without the others would make them "quietly behave
+          in two ways" — true, and now enforced by there only being one of
+          them. The measurement that comment carried survives in
+          BackButton.tsx: the 44pt box was already met here, so the arrow is
+          a change to the VISIBLE target and not to the touch target. */}
+      <BackButton onPress={() => router.back()} accessibilityLabel={RECIPE_OVERVIEW_BACK_ACCESSIBILITY_LABEL} />
     </View>
   );
 
@@ -639,11 +631,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
     paddingTop: spacing.space2,
-  },
-  backButton: {
-    minHeight: spacing.touchTargetMin,
-    minWidth: spacing.touchTargetMin,
-    justifyContent: 'center',
   },
   centered: {
     flex: 1,

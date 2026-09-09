@@ -56,8 +56,9 @@
 import type { JSX } from 'react';
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/Button';
 import { CookSharingSection } from '@/components/CookSharingSection';
 import { MemberPreferencesSection } from '@/components/MemberPreferencesSection';
@@ -338,22 +339,20 @@ export default function SettingsScreen(): JSX.Element {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
-        {/* `hitSlop` HERE BECAUSE THE ROW IS SHARED, not because this screen
-            was reported. The owner's 8 September report was about
-            friends/add.tsx, whose cause has NOT been found; that screen's
-            header lists what was ruled out. This row is byte-for-byte the
-            same one, so widening the target there and not here would make
-            four identical rows quietly behave in two ways. 44pt stays the
-            floor and nothing shrinks. */}
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Sluiten, terug naar Mijn recepten"
-          hitSlop={8}
-          style={styles.closeButton}
-        >
-          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Sluiten</Text>
-        </Pressable>
+        {/* THE WORD "SLUITEN" IS GONE, AND SO IS THE `hitSlop`. Both were
+            here because this row was one of four hand-copied twins; the
+            comment that used to sit at this spot said exactly that, and
+            warned against repairing one without the others. `BackButton` is
+            that repair applied to all four at once — a real 44pt box instead
+            of a 20pt label wearing an 8pt slop, and one arrow instead of the
+            three different words these four rows used for one gesture. The
+            Dutch moves into `accessibilityLabel`, unshortened.
+
+            THIS SCREEN IS ALSO HALF OF THE MEASUREMENT THAT CLOSED OPEN
+            POINT A. docs/TOESTELTEST.md §8c asked whether this same tap works
+            here when it appeared not to on friends/add. Asked on 9 September,
+            the owner's answer was that both work. */}
+        <BackButton onPress={() => router.back()} accessibilityLabel="Sluiten, terug naar Mijn recepten" />
       </View>
 
       {phase === 'error' ? (
@@ -480,11 +479,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
     paddingTop: spacing.space2,
-  },
-  closeButton: {
-    minHeight: spacing.touchTargetMin,
-    minWidth: spacing.touchTargetMin,
-    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,

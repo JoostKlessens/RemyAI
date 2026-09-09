@@ -58,6 +58,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FIXTURE_TARGET_DATE, getFriendFeedFixture, parseFriendFeedScenario } from '@/fixtures/friendFeedFixtures';
+import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/Button';
 import { CreatorAttribution } from '@/components/CreatorAttribution';
 import {
@@ -114,14 +115,13 @@ export default function SharedRecipeScreen(): JSX.Element {
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Terug naar wat vrienden deelden"
-          style={styles.backButton}
-        >
-          <Text style={[typeScale.bodySmall, { color: colors.textMuted }]}>Terug</Text>
-        </Pressable>
+        {/* The fourth and last of the hand-copied back rows, folded into
+            `BackButton` on 9 September 2026 with the other three. This one
+            never carried the `hitSlop` the others grew, which is itself the
+            argument for the component: the row was described in three
+            separate headers as "byte-for-byte the same" and it had already
+            drifted. */}
+        <BackButton onPress={() => router.back()} accessibilityLabel="Terug naar wat vrienden deelden" />
       </View>
 
       {resolved === null ? (
@@ -295,11 +295,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
     paddingTop: spacing.space2,
-  },
-  backButton: {
-    minHeight: spacing.touchTargetMin,
-    minWidth: spacing.touchTargetMin,
-    justifyContent: 'center',
   },
   scrollContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
