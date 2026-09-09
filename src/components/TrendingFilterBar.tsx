@@ -46,10 +46,20 @@
  *    "Filters: Hoeveel tijd? Ingrediënten Waar heb je zin in?" from the
  *    eyebrows themselves — good design there, and a sentence that would
  *    announce a mood row this screen does not have.
- * 3. ITS CHIPS ARE NOT NARROWED AGAINST THE SELECTION. That is
+ * 3. ~~ITS CHIPS ARE NOT NARROWED AGAINST THE SELECTION. That is
  *    docs/LONGLIST.md GAP-33's open half, and this bar does narrow (see
  *    `selectableDishTags` below). A shared component would have to do both,
- *    on two different state shapes, which is the second parameter.
+ *    on two different state shapes, which is the second parameter.~~
+ *    ⚠ FALSE SINCE 9 SEPTEMBER 2026, AND KEPT RATHER THAN DELETED BECAUSE
+ *    THE SENTENCE AFTER IT STILL DECIDES THE QUESTION. GAP-33 closed:
+ *    Kiezen narrows too, through `collectSelectableDecisionDishTags` /
+ *    `…DishMoods` (src/domain/recipeSearch.ts). So all three bars narrow
+ *    now and this is no longer a DIFFERENCE between them. What survives is
+ *    the half of the old reason that was never about narrowing at all — the
+ *    two state shapes: this bar narrows a `BoardFilter` over
+ *    `BoardRowModel`, Kiezen a `DecisionFilters` over `Meal`, and a
+ *    canonical recipe has no `Meal` row anywhere. Reasons 1 and 2 above are
+ *    untouched and still carry the decision on their own.
  *
  * What IS shared is everything below the axis level: `Chip`, `IconChip`,
  * `ChipGroup`, `TimeCapPicker`, `Icon`, `iconForDishTag`, the rotated
