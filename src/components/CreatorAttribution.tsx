@@ -46,11 +46,15 @@ export function CreatorAttribution(props: CreatorAttributionProps): JSX.Element 
       style={styles.row}
       hitSlop={4}
     >
-      {/* A3: accentOnMuted, not accent — accent only clears 3:1 against
-          accentMuted (a fill), these initials are text and need 4.5:1,
-          matching MemberRow's identical avatar-initial chip. */}
-      <View style={[styles.avatar, { backgroundColor: colors.accentMuted }]}>
-        <Text style={[typeScale.bodySmall, { color: colors.accentOnMuted }]}>{initial}</Text>
+      {/* A raised disc with a green letter, not a green disc — 9 September
+          2026, and changed here BECAUSE this chip is required to be identical
+          to MemberRow's. That file carries the measurement: `accentMuted`
+          stood 1.70 L* from the light page while carrying chroma 0.110
+          against a 0.003-0.009 neutral ramp, so it read as a colour rather
+          than as a shape. `accent` on `surfaceRaised` is 6.48:1 light /
+          6.87:1 dark, still clearing 1.4.3's 4.5:1 for these initials. */}
+      <View style={[styles.avatar, { backgroundColor: colors.surfaceRaised }]}>
+        <Text style={[typeScale.bodySmall, { color: colors.accent }]}>{initial}</Text>
       </View>
       <View style={styles.identity}>
         <Text style={[typeScale.title3, { color: colors.textPrimary }]}>{creator.displayName}</Text>

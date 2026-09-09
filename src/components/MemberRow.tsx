@@ -20,10 +20,30 @@ export function MemberRow(props: MemberRowProps): JSX.Element {
 
   return (
     <View style={[styles.row, { borderBottomColor: colors.border }]}>
-      <View style={[styles.avatar, { backgroundColor: colors.accentMuted }]}>
-        {/* A3: accentOnMuted, not accent — accent only clears 3:1 against
-            accentMuted (a fill), these initials are text and need 4.5:1. */}
-        <Text style={[typeScale.title3, { color: colors.accentOnMuted }]}>{initial}</Text>
+      <View style={[styles.avatar, { backgroundColor: colors.surfaceRaised }]}>
+        {/*
+          A RAISED DISC WITH A GREEN LETTER, NOT A GREEN DISC — 9 September
+          2026. What stood here filled the circle with `accentMuted` and drew
+          the initial in `accentOnMuted`. Measured against the page this row
+          actually sits on (settings.tsx renders on `background`, no card),
+          that fill was doing the opposite of its job in the light scheme:
+          `accentMuted` is CIE L* 93.33 against the ground's 91.62, so the
+          disc stood 1.70 L* / 1.05:1 from the page and was barely a shape at
+          all — while carrying OKLab chroma 0.110 against a neutral ramp that
+          runs 0.003-0.009. It was invisible as a form and the loudest thing
+          on the screen as a colour, which is why it started to stand out
+          once the neutrals were desaturated on 9 September.
+
+          `surfaceRaised` gives the disc 8.38 L* of separation in light and
+          14.12 in dark — more than the palette's own load-bearing
+          background -> surface step (6.80) — at chroma 0.000. The green is
+          not lost, it moves: from a 40 pt filled disc to one letter, where
+          it identifies instead of shouting. `accent` on `surfaceRaised`
+          measures 6.48:1 light and 6.87:1 dark, both clearing 1.4.3's 4.5:1
+          for text, which is the floor the old comment here was right to
+          insist on.
+        */}
+        <Text style={[typeScale.title3, { color: colors.accent }]}>{initial}</Text>
       </View>
       <Text style={[typeScale.body, styles.name, { color: colors.textPrimary }]}>{displayName}</Text>
       {onRemove ? (
