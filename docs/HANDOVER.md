@@ -3,19 +3,30 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
-**Stand:** 8 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`16d9e1c` gecommit. **De werkboom is NIET schoon** — de vriendenronde van
-8 september 's ochtends staat ongecommit in de boom (zie *Wat er op
-8 september gebeurde*, deel twee). Vier checks groen, gedraaid en niet
-overgeschreven uit de vorige stand: typecheck 0, lint 0, `check:functions` 0,
-**3313 tests over 137 bestanden**.
+**Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
+`961217e` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
+regels. **Alles staat op `origin`**: `git rev-list --left-right --count
+origin/feat/live-import-and-plan-phases...HEAD` geeft `0	0`.
 
-⚠ **Vier commits staan nog niet op `origin`.** Gemeten met `git rev-list
---left-right --count origin/feat/live-import-and-plan-phases...HEAD`, dat
-`0	4` teruggeeft. `origin` staat op `13db125`; wat daarna kwam — `775cb59`,
-`7bac986`, `7718b9f`, `16d9e1c` — leeft alleen hier. Op 7 september is er wél
-gepusht (zestien commits, `8f49b3b..13db125`), dus dit is een verse
-achterstand en niet de oude.
+**Vijf poorten groen**, alle vijf gedraaid op 9 september en niet
+overgeschreven uit de vorige stand: typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3315 tests over 137 bestanden**.
+
+⚠ **ER IS EEN VIJFDE POORT BIJGEKOMEN en die staat niet in het rijtje dat dit
+document je al drie dagen laat opzeggen.** `npm run check:seed` valideert de
+uuid-literals in de seed zonder database. Hij bestaat omdat een grep-keten die
+hetzelfde beweerde te doen **omgekeerd afging**: `grep -v` eindigt met exit 1
+als er niets overblijft, dus nul fouten betekende "mislukt" en één gevonden
+fout "geslaagd". Draai hem mee.
+
+**De database is bij, en dat is voor het eerst in dit document écht gemeten
+in plaats van afgeleid.** `npx supabase migration list` geeft `0001` t/m
+`0019`, `local` en `remote` gelijk voor alle negentien. Dat is de meting zelf
+en geen gevolgtrekking uit "ik heb het gepusht" — het onderscheid waar dit
+project twee dagen aan verloor.
+
+**Zeventien commits sinds de vorige handover-ronde** (`4d3d7d8..961217e`),
+allemaal op 8 september. Wat ze deden staat hieronder.
 
 **EN HIER STOND EEN BEWERING DIE ONWAAR BLEEK, IN DE MEEST LEERZAME RICHTING.**
 Dit document zei dagenlang, in hoofdletters: "niets van dit alles staat op
@@ -32,9 +43,10 @@ een correcte meting aan een verkeerde vraag hangt.** Vraag welke, of meet ze
 allebei: `git rev-list --left-right --count origin/<branch>...HEAD` voor de
 ene, `npx supabase migration list` voor de andere.
 
-**De database is bij: `0001` t/m `0018` draaien, local én remote.** Nagemeten
-op 8 september; er staat niets klaar dat nog toegepast moet worden. `0018`
-(ingrediëntsecties) is door de eigenaar zelf gedraaid.
+**De database is bij: `0001` t/m `0019` draaien, local én remote.** Nagemeten
+op 9 september met `npx supabase migration list`; er staat niets klaar dat nog
+toegepast moet worden. `0018` (ingrediëntsecties) en `0019`
+(`suggested_friends()`) zijn allebei door de eigenaar gedraaid.
 
 ⚠ **ÉÉN DING IS HALF GEBOUWD EN DAT IS HET EERSTE WAT JE MOET WETEN.** De
 eigenaar vroeg om een cijfervraag die pas twaalf uur na het koken verschijnt.
@@ -90,10 +102,17 @@ omdat elke bevinding erin een *patroon* is dat zich herhaalt.
 ## Wat er draait
 
 **De infrastructuur staat, en is nagemeten in plaats van aangenomen.**
-Migraties `0001` t/m **`0018`** draaien tegen de live database — nagemeten op
-7 september met `npx supabase migration list`, dat leest en niets wijzigt, en
-dat voor alle achttien `local` en `remote` gelijk teruggeeft. Er staat niets
+Migraties `0001` t/m **`0019`** draaien tegen de live database — nagemeten op
+9 september met `npx supabase migration list`, dat leest en niets wijzigt, en
+dat voor alle negentien `local` en `remote` gelijk teruggeeft. Er staat niets
 meer klaar dat nog gedraaid moet worden.
+
+⚠ **EN SINDS 8 SEPTEMBER IS DIT SCHEMA VOOR HET EERST VANAF NUL OPGEBOUWD.**
+`npm run db:reset` tegen een lokale stack speelt alle negentien migraties af
+tegen een LEGE database, exit 0. Die vraag was nooit gesteld en het antwoord
+was tot die dag onbekend — twee reviewrondes over `0019` kwamen niet verder
+dan "geen blokkerende fout gevonden", wat iets anders is dan "hij draait".
+`docs/LOKAAL-DRAAIEN.md` beschrijft de lus.
 
 ⚠ **EN DAAR HOORT `0018` BIJ, WAT DE VIERDE KEER IS DAT DIT MIS GING.**
 `0018_ingredient_sections.sql` — de nullable `section` op `meal_ingredients`
@@ -139,18 +158,32 @@ npx expo start
 Expo Go uit de App Store, QR scannen, telefoon en laptop op dezelfde wifi.
 Bij netwerkisolatie: `npx expo start --tunnel`.
 
-**Vier checks, allemaal groen:**
+**Vijf poorten, allemaal groen:**
 
 ```
 npm run typecheck        exit 0
 npm run check:functions  exit 0
 npm run lint             exit 0
-npm test                 3313 tests / 137 bestanden
+npm run check:seed       exit 0     <- NIEUW op 8 september
+npm test                 3315 tests / 137 bestanden
 ```
 
-⚠ Hier stond **3249 over 135** en dáárvoor **3137 over 130**. Het nieuwe
-bestand is `tests/friendSuggestions.test.ts` (24 tests, de vriendenronde van
-8 september). **Gedraaid, niet opgehoogd** — dezelfde discipline als hieronder.
+⚠ **`check:seed` IS DE VIJFDE EN HIJ BESTAAT OM EEN REDEN DIE HET ONTHOUDEN
+WAARD IS.** De seed viel op 8 september om met `22P02: invalid input syntax
+for type uuid` — drieëntwintig id's met een `h`, `m`, `r` of `s` erin, en geen
+van die vier is hexadecimaal. Vier van de negen tabellen konden dus nooit een
+rij schrijven. Wat het vond was niet "kijk beter": **een uuid-literal heeft een
+datatype dat je niet kunt zien zonder hem te parsen.** De eerste reparatie was
+een grep-keten in het commentaar, en die ging OMGEKEERD af — `grep -v` eindigt
+met exit 1 als er niets overblijft. `scripts/check-seed-uuids.mjs` kiest zijn
+eigen exitcode, draait op cmd.exe zonder Git Bash, en is beide kanten op
+getest.
+
+⚠ Hier stond **3313 over 137**, dáárvoor **3249 over 135**, dáárvoor **3137
+over 130**. De testbestanden die 8 september opleverde zijn
+`tests/friendSuggestions.test.ts` (24) en `tests/trendingFilter.test.ts`; de
+rest van de aanwas zit in bestaande bestanden. **Gedraaid, niet opgehoogd** —
+dezelfde discipline als hieronder.
 De drie testbestanden van de ronde ervoor zijn
 `tests/decisionFilterCopy.test.ts`, `tests/vanavondActionCopy.test.ts` en
 `tests/ingredientSections.test.ts`; de rest van de aanwas zit in bestaande
@@ -816,7 +849,10 @@ spread — een `{...common}` erachter zou hem terugzetten.
 
 ### Later op 8 september: de Vrienden-tab, en een refusal die is teruggedraaid
 
-**Ongecommit in de boom.** Vier checks groen (3273 over 136).
+**Gecommit en gepusht** (`a228ad1`, `aa2fc8e`, `e17a5af`, `09a96d5`). Vier
+poorten groen op het moment van die ronde: 3273 over 136. ⚠ Deze regel zei
+"ongecommit in de boom" tot 9 september; dat was waar toen ze geschreven werd
+en niet meer toen de dag afliep.
 
 De eigenaar, na de ochtendronde: *"op de vrienden tab bovenaan vriend
 toevoegen, die mag weg en de zin daaronder ook … ik wil dat je de look van
@@ -887,6 +923,77 @@ de `numeric(4,2)`-grenzen uit `0008`, het `blocked`-terminale trigger-gedrag,
 en dat de trigger `auth.uid() is null` doorlaat zodat de seed idempotent
 opnieuw kan draaien. Dat is niet hetzelfde als gedraaid. **Het is de eerste
 plek waar dit stuk kan stukgaan.**
+
+### 8 september, de rest van de dag: vier bugs, twee schermen, drie omkeringen
+
+Dertien commits na de vriendenronde. Alles gepusht, boom schoon.
+
+**HET VRIENDSCHAPSVERZOEK ACCEPTEREN KON NOOIT WERKEN, en de oorzaak zat waar
+niemand keek.** `actOnFriendship` stuurde één `.upsert(row, { onConflict:
+'id' })`. PostgREST maakt daar `INSERT ... ON CONFLICT DO UPDATE` van, en **voor
+die statementvorm toetst Postgres de `WITH CHECK` van de INSERT-policy op de
+voorgestelde rij** — ook als het conflict de UPDATE-tak neemt.
+`friendships_insert` (0007) laat exact twee vormen toe: `pending` met mij als
+requester, of `blocked` met mij als blokkeerder. Een accept schrijft `accepted`
+met de ánder als requester, dus die viel altijd af met 42501 — net als
+weigeren, opnieuw vragen en blokkeren van een bestaande rij.
+
+Een NIEUW verzoek werkte wél, want dat is echt een INSERT van een pending-rij
+met de aanroeper als requester. Dat is waarom dit maanden onopgemerkt bleef:
+de helft die je kon gebruiken werkte. Bewezen vóór de reparatie tegen een
+lokale stack met een echte sessie — upsert 403, dezelfde overgang als PATCH
+200, en `guard_friendship_transition()` liet hem gewoon door. De trigger was
+de voor de hand liggende verdachte en was onschuldig. De policy verbreden is
+bewust afgewezen: dat ruilt een beveiligingseigenschap voor één codepad.
+
+⚠ **DE TERUGKNOP IS NOG STEEDS NIET OPGELOST, en dat is de belangrijkste
+openstaande bug op een toestel.** Vijf verklaringen gemeten, vijf afgevallen,
+waaronder alle drie de voor de hand liggende: de ontbrekende `edges`-prop is
+onschadelijk (de default is álle vier), de hitbox was al 44 × 44, en de
+`initialWindowMetrics`-fix — die de eerste frames van een `fullScreenModal`
+juist zet — is door de eigenaar zelf gefalsifieerd ("De terug knop werkt nog
+niet"). Wat er nu ligt: de rij staat 24pt lager in plaats van 8pt (hij vroeg
+er twee keer om), en `router.back()` valt terug op `router.replace('/friends')`
+als er niets op de stack staat. Dat laatste is een echt defect op een echt
+pad — een reload in Expo Go maakt `/friends/add` de eerste route — maar het
+is niet bewezen zíjn pad.
+
+**De goedkoopste meting die dit beslist, en ze is nog niet gedaan:** dezelfde
+terugknop op **Instellingen**. Zelfde rij, zelfde `fullScreenModal`. Werkt hij
+daar wel en op `/friends/add` niet, dan is het dat scherm; faalt hij daar ook,
+dan is het de gedeelde rij of de modal en hoort de fix op alle vier. Staat als
+`TOESTELTEST.md` §8c.
+
+**TRENDING IS EEN SCROLLFEED GEWORDEN, en dat draait drie opgeschreven
+weigeringen terug.** PD-014 is geamendeerd tot PD-014a met de zes voorwaarden
+stuk voor stuk nagelopen; DESIGN.md en DESIGN-SOCIAL.md dragen een banner. Wat
+overeind bleef en niet mag schuiven: **de volgorde blijft de ranglijst** — op
+stemmen, met `LEADERBOARD_MIN_VOTES` — en wordt geen recency en geen
+personalisatie. Alleen de VORM veranderde.
+
+Drie dingen die op elkaar leken en het niet waren, en ze uit elkaar houden was
+het meeste werk: "geen foto" was óók een schermdefect (`BoardRowModel` droeg
+`thumbnailUrl` al en de rij tekende nooit een `<Image>`), "niet aanklikbaar"
+was een besluit, en de scrollfeed was een productwijziging.
+
+**Beide scopes tekenen nu dezelfde kaart.** De voorwaarde die het bestand zelf
+had opgeschreven — `dishTags` en `estimatedMinutes` op `KringRecipe` — bleek
+drie regels in de fixtures. Wat verschillend BLIJFT: `Iedereen` zegt "8,72 ·
+204 stemmen" met een stemvloer, `Vrienden` zegt "8,5 · Sanne en Joris" zonder
+vloer. Twee vrienden die een gerecht noemen is bewijs, twee vreemden niet.
+
+**De filters zijn een trechter geworden, op Trending én op Kiezen.** Beide
+balken droegen een eigen 44pt-opening met het woord `Filters` en een chevron;
+op Kiezen was dat een band chrome boven het gerecht, op het scherm waarvan de
+hele stelling is dat het je ÉÉN ding toont. `FilterTrigger` is nu gedeeld.
+
+**De koksmuts is weg bij niet-gekookt.** Hij tekende dezelfde muts of je het
+gerecht had gemaakt of niet en scheidde die twee betekenissen alleen op
+vulkleur — dus hij droeg geen informatie, en hij vuurde op de gewóne toestand.
+Hij blijft voor "gekookt, geen cijfer", waar hij wél iets zegt.
+
+⚠ **`KringRow` HEEFT NU NUL AANROEPERS.** Behouden mét banner en reden; de
+banner zegt er expliciet bij dat aanwezigheid geen bewijs van gebruik is.
 
 **Wat deze dag over agents leerde, los van de code:** de CEO die de ronde
 verdeelde corrigeerde vier fouten in zijn eigen opdracht (regelaantallen,
@@ -1036,8 +1143,40 @@ dat is nu ingevuld met de meting én het werkende alternatief
 
 ## Wat er nu open ligt
 
-Punt 1 is half gebouwd en heeft een beslissing die al genomen is; punt 2 kost
-geen code maar één handeling. De rest is werk.
+⚠ **LEES EERST DEZE VIJF, ZE ZIJN NIEUW OP 8 SEPTEMBER EN DE GENUMMERDE LIJST
+ERONDER IS OUDER.** Punt 2 hieronder is inmiddels gedaan; de nummering is
+bewust niet hernummerd, omdat commits en codecommentaar ernaar verwijzen.
+
+**A. De terugknop op `/friends/add` werkt nog steeds niet, en de meting die
+het beslist kost twintig seconden.** Doe dezelfde terugtik op **Instellingen**
+— zelfde rij, zelfde `fullScreenModal`. Werkt hij daar wel, dan ligt het aan
+dat scherm; faalt hij daar ook, dan aan de gedeelde rij of de modal. Vijf
+verklaringen zijn al gemeten en afgevallen; zie de dagsectie hierboven, en
+`TOESTELTEST.md` §8c. **Doe dit vóór er nog een hypothese bij komt.**
+
+**B. Draai `demo_social_teardown.sql` vóór er vrienden op de app komen.**
+`suggested_friends()` leest `recipe_ratings` globaal, dus drie demo-profielen
+verschijnen bij elke echte tester in "Misschien ken je".
+
+**C. De Trending-feed is drie kaarten diep op de demo-data**, door
+`LEADERBOARD_MIN_VOTES = 3`. Dat is niet de Instagram-ervaring die gevraagd
+is, en de vloer verlagen maakt de ranglijst minder waar. Openstaande
+beslissing van de eigenaar, geen bug.
+
+**D. Een tik op een Trending-kaart heeft nog geen bestemming** (GAP-55). Er is
+geen scherm dat een canoniek recept toont en geen pad dat er een kopie van
+maakt. Die schuld bestond al — PD-014's vierde voorwaarde werd ook vóór deze
+ronde niet gehaald — maar was onzichtbaar zolang de rij niet reageerde.
+
+**E. Foto's op Trending zie je pas bij een echt geïmporteerd recept.** De
+demo-seed kan er geen krijgen: oEmbed-URL's zijn kortlevend en ondertekend, en
+kopiëren mag niet (PD-007). Elke demo-kaart toont een monogram en dat is
+correct gedrag.
+
+---
+
+Punt 1 is half gebouwd en heeft een beslissing die al genomen is; punt 2 is
+gedaan. De rest is werk.
 
 1. ⚠ **DE CIJFERVRAAG NA TWAALF UUR — HET DOMEIN STAAT, DE SHEET NIET.** Dit
    is het enige onaffe werk in de boom en het is met opzet zo achtergelaten:
@@ -1076,8 +1215,20 @@ geen code maar één handeling. De rest is werk.
    een `date` zonder tijd en had het nooit gekund. **Er is geen migratie
    nodig**; de kolom was er al en niemand las hem.
 
-2. ⚠ **TWEE DINGEN IN SUPABASE ZETTEN — DIT IS HET ENIGE DAT DE EIGENAAR
-   ZELF MOET DOEN, en zonder allebei blijft Vrienden er leeg uitzien.**
+2. ✅ ~~**TWEE DINGEN IN SUPABASE ZETTEN**~~ — **ALLEBEI GEDAAN OP
+   8 SEPTEMBER, en dit punt staat er nog als verantwoording en niet als
+   opdracht.** De migratie is gepusht (`0001` t/m `0019`, gemeten) en de seed
+   is gedraaid, lokaal én tegen productie, met de zes verwachte aantallen
+   terug. Lees het hieronder voor wat er IN de demo-data zit — dat is nog
+   steeds waar en je hebt het nodig om de Vrienden-tab te beoordelen — en
+   niet voor wat je nog moet doen.
+
+   ⚠ **EN ÉÉN DING DAT WÉL NOG MOET, VÓÓR ER VRIENDEN OP DE APP KOMEN:**
+   `suggested_friends()` leest `recipe_ratings` globaal, dus de demo-profielen
+   verschijnen bij elke echte tester in "Misschien ken je". Sinds de
+   stemdrempel zijn dat er drie (Sanne 4 stemmen, Bram 4, Daan 6 — nageteld).
+   Draai `demo_social_teardown.sql` vóór de vriendentest. Staat ook in
+   `MEETPLAN.md` als regel nul.
 
    **(a) `npx supabase db push`** — migratie **`0019_friend_suggestions.sql`**
    staat klaar en is local-only. Zij maakt `suggested_friends()`, waar het
@@ -1212,13 +1363,19 @@ geen code maar één handeling. De rest is werk.
    plafond geworden in plaats van een vaste maat.
 
 4. ~~**`npx supabase db push` draaien.**~~ **Gedaan door de eigenaar.**
-   Nagemeten op 8 september: `0001` t/m `0018`, `local` en `remote` gelijk
-   voor alle achttien. ⚠ Deze regel is in dit document VIER keer onwaar
+   Nagemeten op 9 september: `0001` t/m `0019`, `local` en `remote` gelijk
+   voor alle negentien. ⚠ Deze regel is in dit document VIER keer onwaar
    geweest, drie keer te pessimistisch (`0011`/`0012`, `0014`, `0015`/`0016`)
    en één keer te optimistisch omgekeerd — op 8 september stond hier dat
    `0018` nog local-only was, op een meting die 's middags klopte en 's avonds
    niet meer. Draai `npx supabase migration list` vóór je hier iets beweert;
    het leest en wijzigt niets.
+
+   ✅ **En op 8 september is die discipline voor het eerst betaald in plaats
+   van beleden.** Er staat nu een lokale stack (`npm run db:start`), dus de
+   vraag "draait deze SQL?" is te beantwoorden zonder hem op productie te
+   plakken — wat deze week twee keer misging, één keer met drieëntwintig
+   ongeldige uuid-literals.
 
 5. **De app op een toestel doorlopen, en dit blijft punt één met stip** — nu
    met zeven verse dingen erbij die niemand heeft gezien. In volgorde van
