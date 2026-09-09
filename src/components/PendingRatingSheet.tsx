@@ -145,7 +145,11 @@ export function PendingRatingSheet(props: PendingRatingSheetProps): JSX.Element 
           styles.sheet,
           { backgroundColor: colors.surfaceRaised, paddingBottom: spacing.space6 + insets.bottom },
         ]}
-        accessibilityViewIsModal
+        // NO `accessibilityViewIsModal` HERE, matching every other sheet in
+        // this app (`CookSharingAskSheet`, `SendRecipeSheet`, …). RN's
+        // `<Modal>` already carries the modal semantics, and adding the prop
+        // on only one of five sheets would be a lone divergence rather than
+        // a decision.
         accessibilityLabel={buildPendingRatingAccessibilityLabel(prompt.mealTitle)}
       >
         <Text style={[typeScale.title3, styles.title, { color: colors.textPrimary }]}>
