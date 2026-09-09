@@ -40,16 +40,25 @@ committing to a wholly different, ownable visual identity.
 **Explicitly avoided**, per the founder's brief: cream+serif+terracotta,
 near-black+acid-green, purple-to-blue gradients, Inter/Space Grotesk,
 emoji section markers, uniform rounded cards with an accent bar. The
-palette is near-white with a green cast (not beige, not grey); accent is
-green (not orange/terracotta) and `danger` stays red, far darker and far
-warmer, so the two never trade places; nothing here uses a gradient except
-the pre-existing flat-alpha `videoScrim`.
+palette is near-white and near-neutral (not beige, not a coloured wash);
+accent is green (not orange/terracotta) and `danger` stays red, far darker
+and far warmer, so the two never trade places; nothing here uses a gradient
+except the pre-existing flat-alpha `videoScrim`.
+
+⚠ **The light ground carried a green cast until 9 September 2026 and no
+longer does.** It measured chroma 0.029 at hue 150 — the same hue as
+`accent`, `border` and every text token, inside a nine-degree band — which
+meant the accent had nothing neutral to read against. The neutrals were
+desaturated at constant CIE L*, so every contrast assertion and the whole
+surface ladder held unchanged. tokens.ts's "THE NEUTRALS LOST THEIR CAST"
+carries the measurement and the two alternatives that were rejected on
+arithmetic.
 
 **Light and dark are both designed, not inverted.** Light is a light table
-under daylight — near-white paper (`#D9ECDC` page, `#FFFFFF` sheets),
+under daylight — near-white paper (`#E4E8E5` page, `#FFFFFF` sheets),
 near-black ink. Dark is the edit bay, safelight off — deep green-graphite
-(`#19201A`), not brown-charcoal and not OLED black, carrying the same leaf
-hue as the light scheme rather than dropping it, with every saturated hue
+(`#19201A`), not brown-charcoal and not OLED black, keeping a trace of the
+leaf hue that the light scheme has now given up, with every saturated hue
 re-tuned brighter for that ground rather than mechanically inverted; see
 tokens.ts's inline comments for why.
 
@@ -68,15 +77,15 @@ differed and nobody noticed for two days.
 
 | Token | Hex | Role |
 | :-- | :-- | :-- |
-| `background` | `#D9ECDC` | the page — near-white with a green cast |
-| `surface` | `#F7FBF7` | cards, rows, panels — effectively white |
+| `background` | `#E4E8E5` | the page — near-white, near-neutral |
+| `surface` | `#F9FBF9` | cards, rows, panels — effectively white |
 | `surfaceRaised` | `#FFFFFF` | the only pure white: sheets, the outcome card |
-| `surfaceSunken` | `#C6DEC9` | wells — unselected chips, inputs, grid gutters |
-| `border` | `#A9C6AE` | decorative hairline |
-| `borderStrong` | `#59765F` | interactive boundaries (WCAG 1.4.11) |
-| `textPrimary` | `#141E15` | reading text |
-| `textSecondary` | `#445446` | metadata, sub-labels |
-| `textMuted` | `#4F5F52` | helper copy, timestamps |
+| `surfaceSunken` | `#D5D9D5` | wells — unselected chips, inputs, grid gutters |
+| `border` | `#BBC0BC` | decorative hairline |
+| `borderStrong` | `#6B706C` | interactive boundaries (WCAG 1.4.11) |
+| `textPrimary` | `#1A1C1B` | reading text |
+| `textSecondary` | `#4D514E` | metadata, sub-labels |
+| `textMuted` | `#585C59` | helper copy, timestamps |
 | `accent` | `#006D35` | **marking green** — the moment a choice is made |
 | `onAccent` | `#FFFFFF` | on an `accent` fill |
 | `accentMuted` | `#ABFEC8` | selected-chip fill, badges |

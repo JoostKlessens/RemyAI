@@ -127,22 +127,24 @@ def write_contact_sheet() -> None:
     page = _PAGE.format(
         total=len(ALL_ICONS),
         swatches=_swatch_row(),
-        # The three grounds these actually land on, read out of the tokens the
-        # parallel white-and-green revision just committed — NOT invented here,
-        # and NOT plain white: `background` turned out to be a pale mint
-        # (#D9ECDC), which is a warmer-cooler clash risk for every cream fill in
-        # the set and therefore the single most useful thing to show.
+        # The three grounds these actually land on, read out of tokens.ts —
+        # NOT invented here, and NOT plain white. `background` was a pale mint
+        # (#D9ECDC) until 9 September 2026, which made it a warmer-cooler clash
+        # risk for every cream fill in the set; the neutrals were desaturated
+        # that day and it is now #E4E8E5, so that clash is gone and this row is
+        # kept for the opposite reason — a near-neutral ground is where a
+        # coloured drawing has to hold its own without help.
         dense_white=_dense_row(
             ALL_ICONS, "#FFFFFF",
             "Alle 45 op 16 pt, op surfaceRaised (#FFFFFF) — de kaart waar de meeste iconen op staan.",
         ),
         dense_surface=_dense_row(
-            ALL_ICONS, "#D9ECDC",
-            "Dezelfde rij op background (#D9ECDC) — de nieuwe groene grond, niet wit.",
+            ALL_ICONS, "#E4E8E5",
+            "Dezelfde rij op background (#E4E8E5) — de grond, sinds 9 september bijna neutraal.",
         ),
         dense_sunken=_dense_row(
-            ALL_ICONS, "#C6DEC9",
-            "En op surfaceSunken (#C6DEC9) — de put van een niet-geselecteerde chip.",
+            ALL_ICONS, "#D5D9D5",
+            "En op surfaceSunken (#D5D9D5) — de put van een niet-geselecteerde chip.",
         ),
         sections="".join(sections),
     )

@@ -270,9 +270,9 @@ export interface ColorTokens {
  * description of a surface step: WCAG contrast compresses hard at the top
  * of the range, while CIE L* stays perceptually even. Measured:
  *
- *   light   surfaceSunken -> background    1.156:1  dL* 5.41  (was 1.169 / 5.62)
- *           background    -> surface       1.183:1  dL* 6.58  (was 1.183 / 6.32)
- *           surface       -> surfaceRaised 1.045:1  dL* 1.77  (was 1.172 / 6.26)
+ *   light   surfaceSunken -> background    1.153:1  dL* 5.33  (was 1.156 / 5.41)
+ *           background    -> surface       1.190:1  dL* 6.80  (was 1.183 / 6.58)
+ *           surface       -> surfaceRaised 1.040:1  dL* 1.58  (was 1.045 / 1.77)
  *   dark    surfaceSunken -> background    1.177:1  dL* 8.07
  *           background    -> surface       1.219:1  dL* 7.42
  *           surface       -> surfaceRaised 1.244:1  dL* 6.70
@@ -292,6 +292,48 @@ export interface ColorTokens {
  * have bought nothing visible. If a future component does put a raised card
  * on a plain `surface`, this is the assumption it breaks.
  *
+ * THE NEUTRALS LOST THEIR CAST — 9 SEPTEMBER 2026, AND IT TOOK A
+ * MEASUREMENT RATHER THAN AN OPINION. Twelve screenshots of the running app
+ * were held against these values, and the finding was not about any single
+ * token: every colour measured — seven light neutrals plus `accent` and
+ * `accentMuted` — sat between hue 146 and 155. Nine degrees. Nothing in the
+ * light scheme differed from anything else in HUE, so the only axis left to
+ * separate a card from a page, or a caption from an accent, was lightness,
+ * and the ladder above has already spent that budget down to 5.33 L*.
+ *
+ * The cast was supposed to buy something, and the note this replaces said
+ * what: "the cast is what stops white + green accents from reading as a
+ * default template with a colour swapped in." That risk is real and it was
+ * traded away knowingly. What the cast cost is that `accent` stopped reading
+ * as a colour at all — at chroma 0.029 the ground is faintly the same green
+ * as the button, and a hue only reads as a hue when something neutral sits
+ * beside it. On the pair that matters most, `accent` against `textMuted`:
+ * OKLab distance 0.095 before, 0.116 after, with both lightnesses untouched.
+ *
+ * DESATURATED AT CONSTANT CIE L*, WHICH IS THE WHOLE TRICK AND NOT A DETAIL.
+ * Every WCAG ratio is a function of relative luminance, and CIE L* is a
+ * function of luminance alone — so holding L* fixed holds every contrast
+ * assertion in tests/contrast.test.ts AND the surface ladder, which is
+ * asserted in L*. Only chroma moves. The first attempt held OKLCH L instead,
+ * which drops L* by about 0.3, and that was enough to put `accent` on
+ * `surfaceSunken` at 4.49 against a floor of 4.5. Same idea, one failing
+ * test: the axis you hold fixed is the entire difference.
+ *
+ * NOT DONE, AND WHY. (a) A near-white ground at L* 97, which is what the
+ * audit that prompted this asked for. Arithmetically impossible while
+ * `surfaceRaised` is #FFFFFF, because background -> surface must clear
+ * 6.3 L*: the ceiling for the page is L* 93.70 and it sits at 91.6. (b)
+ * Raising `textMuted` to separate it from `accent` by lightness — it fails
+ * 4.5:1 on `surface` above roughly L* 47 (4.31 at L* 50). Both were tried on
+ * paper first, which is the only reason neither became a commit.
+ *
+ * THE DARK SCHEME IS UNTOUCHED, and that is the corroboration rather than an
+ * omission. Its neutrals already sat at chroma 0.009-0.021 where light's
+ * ground, wells and borders sat at 0.029-0.046; asked to compare the two on
+ * a device, the owner's answer was that dark "ziet er misschien wel beter
+ * uit, het is een stuk rustiger zo". This change is that number applied to
+ * the other scheme.
+ *
  * THE 4 SEPTEMBER LESSON, KEPT. That revision existed only because a
  * makeover shipped with all 26 tokens per scheme differing from the palette
  * its own research had chosen, and nobody noticed for two days. The defence
@@ -306,25 +348,25 @@ export interface ColorTokens {
  * which imports these constants instead of copying them.
  */
 const lightColors = {
-  // The page. A near-white with a green cast rather than a grey one: this
-  // is the "wit" in the brief, and the cast is what stops white + green
-  // accents from reading as a default template with a colour swapped in.
-  background: '#D9ECDC',
+  // The page. Near-white, and since 9 September 2026 near-NEUTRAL: chroma
+  // 0.005, down from 0.029. "THE NEUTRALS LOST THEIR CAST" above carries the
+  // measurement that forced it and what the cast was meant to buy.
+  background: '#E4E8E5',
   // Cards, rows, panels — effectively white, and the surface most of the
   // reading happens on.
-  surface: '#F7FBF7',
+  surface: '#F9FBF9',
   // The only pure white in the light scheme, reserved for things genuinely
   // lifted off the page: sheets over the scrim, the outcome card.
   surfaceRaised: '#FFFFFF',
   // Recessed wells. Always drawn with a `border` in practice (Chip.tsx:191),
   // which is why this step is allowed to be the shallower one.
-  surfaceSunken: '#C6DEC9',
-  border: '#A9C6AE',
-  borderStrong: '#59765F',
+  surfaceSunken: '#D5D9D5',
+  border: '#BBC0BC',
+  borderStrong: '#6B706C',
 
-  textPrimary: '#141E15',
-  textSecondary: '#445446',
-  textMuted: '#4F5F52',
+  textPrimary: '#1A1C1B',
+  textSecondary: '#4D514E',
+  textMuted: '#585C59',
 
   // Marking green: the brighter, saturated one. L* 39.9, chroma 0.123.
   accent: '#006D35',
