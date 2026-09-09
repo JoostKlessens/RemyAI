@@ -4,10 +4,15 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`a5ef8f2` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
-regels. ⚠ **Meet de push zelf**: er zijn 's middags vier commits bij gekomen
-(`2c47995`, `3372895`, `f4f22f5`, `a5ef8f2`), en dit blok is al vier keer in de
-verkeerde richting ingevuld.
+`b2054e9` en de docs erna. **De werkboom is schoon** — `git status --short`
+geeft nul regels. ⚠ **Meet de push zelf**: er zijn 's middags en 's avonds
+negen commits bij gekomen, en dit blok is al vier keer in de verkeerde
+richting ingevuld.
+
+**Vijf poorten groen**: typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3338 tests over 139 bestanden**. ⚠ Dat zijn er zes minder
+dan eerder vandaag en dat is geen regressie: `Wissen` en `Geavanceerd` zijn
+weg, dus hun assertions ook — er staan drie smallere voor in de plaats.
 
 ⚠ **HET ENIGE ONAFFE WERK IN DE BOOM IS WEG.** GAP-46 — de cijfervraag pas
 twaalf uur na het koken — is afgebouwd: het domein had sinds de dag dat het
@@ -1273,14 +1278,41 @@ enige relatie tot het woord dat het markeert. Hij krimpt nu om de titel, zoals
    de sectie hieronder.
 2. ✅ ~~**`accentMuted` zit nog op de avatarcirkels en het
    toestemmingsvinkje.**~~ **Gedaan, `3372895`.**
-3. **Fase 3, en die wacht op een beslissing van de eigenaar.** De Fable-audit
-   over onderscheidend vermogen stelt één ding centraal: **draai de volgorde
-   van het beeld om.** De 45 gekleurde tekeningen in `design/icons-v2/` zijn
-   de foto van het gerecht, en een videostill vervaagt er bovenop *als* die er
-   is. Dan is een bibliotheek die al haar thumbnails kwijt is niet kapot maar
-   gewoon zichzelf. Dat is de enige beeldstrategie die de juridische positie
-   van dit product overleeft. ⚠ Correctie op het plan: `react-native-svg`
-   **is** geïnstalleerd (15.15.4), dus dit kost geen dependency.
+3. ⏸ ~~**Fase 3, en die wacht op een beslissing van de eigenaar.**~~
+   **BEANTWOORD OP 9 SEPTEMBER 2026: niet nu, en de eigenaar heeft een ander
+   antwoord op het probleem.** Zijn woorden: *"I do not actually think this
+   will be a big problem, we can later ask people to upload a picture
+   themselves and replace the recipe with that when needed."*
+
+   **De vraag was:** draai de volgorde van het beeld om — de 45 gekleurde
+   tekeningen worden de basis en een videostill vervaagt er bovenop *als* die
+   er is, zodat een bibliotheek die haar thumbnails kwijt is niet kapot lijkt
+   maar gewoon zichzelf is.
+
+   **Waarom het antwoord verdedigbaar is en niet alleen goedkoper.** De
+   aanleiding blijft staan en is gemeten: `useThumbnailFallback.ts` legt vast
+   dat oEmbed-thumbnails **kortlevend en ondertekend** zijn
+   (`p16-sign.tiktokcdn.com`) en dat opnieuw hosten niet mag
+   (`research/13-legal-tos.md`), dus het aandeel tegels zonder bruikbaar beeld
+   *"is not a property of how the recipes were imported, it is a function of
+   how long ago, and it climbs toward all of them"*. Een eigen foto lost dat
+   bij de wortel op waar de tekening het alleen verbergt: het beeld is dan van
+   het huishouden, verloopt niet, en is per gerecht verschillend — precies de
+   twee kosten die de tekeningenroute wél had (etensfotografie verkopen
+   recepten, en zeventien tags betekent dat dertig pastagerechten dezelfde
+   tekening krijgen).
+
+   ⚠ **WAT DIT DUS NIET IS: een afwijzing van de tekeningen.** Ze blijven de
+   val-terug, en de kale hoofdletter in een grijs vlak blijft wat een tegel
+   zonder foto vandaag toont. Wie dit oppakt bouwt **uploaden**, niet de
+   omkering. ⚠ Correctie op het oude plan die blijft gelden:
+   `react-native-svg` **is** geïnstalleerd (15.15.4).
+
+   **Wat een uploadroute wél gaat kosten, zodat niemand denkt dat het gratis
+   is:** camera- en fotobibliotheek-permissie, opslag die dit product nu
+   nergens heeft (elke `<Image>` is vandaag een hotlink), en een beslissing
+   over waar die bytes staan. Dat is een grotere ronde dan fase 3 was, en de
+   21 lege toestanden uit WS4 §5.3-5.5 blijven er los van openstaan.
 4. ✅ ~~**Eén beslissing die alleen de eigenaar mag nemen:** "8,84" afronden
    naar "8,8" keert `DESIGN.md` §9 en PD-014 om.~~ **BEANTWOORD OP
    9 SEPTEMBER 2026: de eigenaar houdt twee decimalen.** *"I want to keep the
@@ -1956,6 +1988,36 @@ rijen.
 
 **`a5ef8f2`** — `accessibilityViewIsModal` van de sheet af; geen van de vier
 andere sheets zet hem, en `<Modal>` draagt die semantiek al.
+
+**`b2054e9` — één trechter op elk scherm, en `Wissen` is weg (GAP-59).** Twee
+instructies van de eigenaar, laat op de dag. **De reden dat `Wissen` mocht
+verdwijnen is een meting en geen smaak:** `DecisionFilterBar`s header droeg
+hem als "guard twee" tegen een filter dat aan staat maar niet te zien is, en
+dat blijkt niet de dragende waarborg — het geval dat hij beschermt, een
+versmalling die het aanbod leegmaakt, wordt een scherm lager beantwoord
+zonder hem. `NoCandidateState.tsx:122-129` tekent zijn eigen "Filters wissen"
+als PRIMARY knop, en de bibliotheek doet hetzelfde via
+`LibrarySearchEmptyState`s `onClear` (`recipes.tsx:438`). ⚠ **Wat wél
+verdwijnt:** meerdere chips in één keer wissen terwijl er nog resultaten
+zijn — dat is nu een tik per chip.
+
+**Mijn recepten neemt Kiezens vorm over**, en daarmee vervalt `Geavanceerd`:
+een disclosure ín een lade is geen hiërarchie maar een tweede grendel. LIB-09
+splitste die balk in twee lagen voor een balk die altijd open stond, en die
+premisse is weg. **Twee dingen die de balk erbij wint:** de zoekbalk krijgt de
+hele regel terug — waarmee ook het web-artefact van vanochtend verdwijnt, want
+er staat niets meer naast — en de tijdschuif krijgt achter de lade de volle
+breedte in plaats van een halve regel, de ruil die `LibrarySearchBar` zelf als
+*"worth putting back in front of the owner"* had opgeschreven.
+
+⚠ **EN ÉÉN COMMENTAAR VOORSPELDE ZIJN EIGEN FOUT, WOORDELIJK.**
+`describeAdvancedFilters` (nu `describeLibraryFilters`) noemde twee assen en
+schreef erbij: *"move a third axis behind the opening and the hand-written
+sentence keeps confidently listing two."* Dat is precies wat hier gebeurde —
+en omdat die zin uit de eyebrows wordt sámengesteld in plaats van
+uitgeschreven, kostte het verbreden naar vijf assen twee regels en faalde er
+niets stilletjes. Dit is het tegenovergestelde van de defecten die dit
+document meestal optekent.
 
 ### De screenshots, en wat ze bevestigden
 
