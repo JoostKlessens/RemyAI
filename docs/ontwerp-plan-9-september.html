@@ -335,8 +335,17 @@
       <ul>
         <li><b>Vriendenkaart en trendingkaart</b> terug naar &eacute;&eacute;n beeld,
           &eacute;&eacute;n titel, &eacute;&eacute;n regel context, &eacute;&eacute;n actie.</li>
-        <li><b>Sticky headers een grond geven</b> &mdash; nu scrollt tekst zichtbaar onder de
-          terugknop door op elke <code>fullScreenModal</code>. De enige echte bug in de lijst.</li>
+        <li><b>&#9888; INGETROKKEN &mdash; dit was geen bug.</b> Hier stond: &ldquo;Sticky headers
+          een grond geven &mdash; nu scrollt tekst zichtbaar onder de terugknop door op elke
+          <code>fullScreenModal</code>. De enige echte bug in de lijst.&rdquo; Nagemeten op
+          9 september in <code>recipe/[mealId].tsx:459-462</code>: <code>backRow</code> is een
+          <em>broer b&oacute;ven</em> de <code>ScrollView</code>, binnen een
+          <code>SafeAreaView</code> met <code>flex: 1</code> en een dekkende achtergrond. Er
+          scrolt niets onder de knop door. Wat de screenshot toont is de kniprand van de
+          <code>ScrollView</code> zelf &mdash; precies wat een scrollcontainer hoort te doen &mdash;
+          en die is hier als overlap gelezen. Wat er w&eacute;l aan mankeert is cosmetisch: de knip
+          zit strak, en 12&ndash;16&nbsp;pt extra <code>paddingTop</code> op
+          <code>scrollContent</code> lost het op. Laag, niet kritiek.</li>
         <li><b><code>elevation</code> op kaarten</b> &mdash; nu 1 van 84 aanroepen; de token
           bestaat, hij wordt alleen niet gebruikt.</li>
         <li><b>Cijfers afronden</b> &mdash; &ldquo;8,84&rdquo; wordt &ldquo;8,8&rdquo;,
