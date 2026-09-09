@@ -234,7 +234,7 @@ function ActionRow(props: ActionRowProps): JSX.Element {
         <Text style={[typeScale.bodySmall, styles.note, { color: colors.danger }]}>{row.errorNote}</Text>
       ) : null}
       {row.footnote !== null ? (
-        <Text style={[typeScale.caption, styles.note, { color: colors.textMuted }]}>{row.footnote}</Text>
+        <Text style={[typeScale.bodySmall, styles.note, { color: colors.textMuted }]}>{row.footnote}</Text>
       ) : null}
     </View>
   );

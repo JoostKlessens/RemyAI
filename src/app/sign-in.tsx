@@ -126,7 +126,11 @@ export default function SignInScreen(): JSX.Element {
           />
         </View>
 
-        <Text style={[typeScale.caption, styles.footnote, { color: colors.textMuted }]}>
+        {/* Sans, not the mono `caption` this used to be. It is the promise
+            the screen's whole argument rests on, said in two sentences —
+            prose, and the only part of it a monospace could have been
+            earning its place on is the word "zes". */}
+        <Text style={[typeScale.bodySmall, styles.footnote, { color: colors.textMuted }]}>
           Geen wachtwoord. Je krijgt zes cijfers die je één keer gebruikt.
         </Text>
 
@@ -255,7 +259,7 @@ function CodeSentState(props: CodeSentStateProps): JSX.Element {
         </View>
 
         <View style={[styles.rule, { backgroundColor: colors.border }]} />
-        <Text style={[typeScale.caption, styles.footnote, { color: colors.textMuted }]}>
+        <Text style={[typeScale.bodySmall, styles.footnote, { color: colors.textMuted }]}>
           Niets gekregen? Kijk in je spam, of gebruik een ander adres.
         </Text>
         <View style={styles.action}>

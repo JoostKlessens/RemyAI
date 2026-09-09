@@ -718,13 +718,22 @@ export default function ImportConfirmScreen(): JSX.Element {
         {creatorCredit !== null || friendProofLine !== null ? (
           <View style={styles.creatorBlock}>
             {creatorCredit}
-            {/* §2.3: one quiet line directly under the credit — `caption`
-                mono, `textMuted`, because a derived fact should read as
-                burned-in metadata rather than as prose the app is telling
-                you. Nothing else on the screen moves for it, and when
-                there is no proof there is no line at all. */}
+            {/* §2.3: one quiet line directly under the credit, `textMuted`.
+                Nothing else on the screen moves for it, and when there is no
+                proof there is no line at all.
+
+                IT WAS THE MONO `caption` UNTIL 9 SEPTEMBER 2026, on the
+                argument that "a derived fact should read as burned-in
+                metadata rather than as prose the app is telling you". The
+                string does not support that. `friendProofText` in
+                src/domain/reason.ts builds it, and that function's own
+                header calls it "THE ONLY REASON THAT IS A FULL SENTENCE" —
+                subject, verb, full stop, e.g. "Sanne heeft dit ook gemaakt
+                en gaf het een 8,5." It was already prose the app is telling
+                you; only the face was arguing otherwise. Quiet still comes
+                from `textMuted` and from its position under the credit. */}
             {friendProofLine !== null ? (
-              <Text style={[typeScale.caption, styles.proofFootnote, { color: colors.textMuted }]}>
+              <Text style={[typeScale.bodySmall, styles.proofFootnote, { color: colors.textMuted }]}>
                 {friendProofLine}
               </Text>
             ) : null}
@@ -871,15 +880,19 @@ export default function ImportConfirmScreen(): JSX.Element {
             the household what each answer would DO; with the question gone,
             that telling has to land somewhere or the flow ends in a screen
             change nobody explained. Under the button rather than above it,
-            in `caption`/`textMuted`, so it reads as a consequence of the
+            in `bodySmall`/`textMuted`, so it reads as a consequence of the
             control it sits beneath rather than as a second instruction
             competing with `guidance.subtitle` at the top of the scroll.
+            Position and colour are what make it secondary; it was the mono
+            `caption` until 9 September 2026, and three sentences of
+            instructions do not become metadata by being set in a terminal
+            face.
 
             HIDDEN ONCE THE DUPLICATE NOTICE IS UP, because then it is
             false: nothing was saved, so nothing is on its way round. That
             branch already owns the footer and says what happened. */}
         {duplicateTitle === null ? (
-          <Text style={[typeScale.caption, styles.destinationNote, { color: colors.textMuted }]}>
+          <Text style={[typeScale.bodySmall, styles.destinationNote, { color: colors.textMuted }]}>
             {IMPORT_SAVE_DESTINATION_NOTE}
           </Text>
         ) : null}

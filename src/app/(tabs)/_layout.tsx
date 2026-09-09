@@ -64,16 +64,55 @@
  * That space is already being spent — on a placeholder glyph. A real icon
  * costs nothing extra; it replaces ⏷.
  *
+ * THE LABELS ARE SANS SINCE 9 SEPTEMBER 2026, AND A WIDTH MEASUREMENT IS
+ * WHAT PAID FOR IT. They were `typeScale.caption` — IBM Plex Mono at 12pt —
+ * which put the four navigation words in a terminal face under every screen
+ * in the app, and a monospace face is this design system's voice for
+ * measured things, not for the names of places. `typeScale.bodySmall`
+ * (Archivo 400 at 14pt) replaces it. Nothing else about this bar moves: same
+ * order, same tints, still no icons.
+ *
+ * IT IS BIGGER TYPE AND A NARROWER ROW AT THE SAME TIME, which is the reason
+ * the swap costs nothing here. Advance widths read out of the shipped TTFs'
+ * `hmtx` table, x-height and cap height out of `OS/2`, against a slot of
+ * `width / 4 - 2 × 5` (the item's own `padding: 5`) — 88.25pt at 393pt,
+ * 83.75pt at 375pt, 70.00pt at 320pt:
+ *
+ *   label            mono 12pt   sans 14pt
+ *   Kiezen              43.20       42.62
+ *   Recepten            57.60       60.44
+ *   Vrienden            57.60       55.92
+ *   Vrienden · 2        86.40       74.37
+ *   Vrienden · 12       93.60       81.66
+ *   Trending            57.60       55.44
+ *
+ * In mono `Vrienden · 2` was already over the 375pt slot and `Vrienden · 12`
+ * over both; in sans both fit. The one label that grows is `Recepten`, by
+ * 2.84pt, and it still clears the narrowest slot this app supports with
+ * 9.56pt to spare. Apparent size goes UP rather than down while doing it:
+ * x-height 7.36pt against mono's 6.19pt, cap height 9.60pt against 8.38pt.
+ * A 14pt label is also four points above react-navigation's own 10pt
+ * `labelBeneath` default, which this bar has always overridden.
+ *
  * THE ONE LABEL THAT IS NOT A CONSTANT: `Vrienden` (PD-020.1). While
  * directed sends are waiting it reads `Vrienden · 2`, and that count is
  * part of the LABEL STRING rather than a badge drawn beside it. The
  * distinction is the whole decision. A badge is a small coloured thing
  * that appears in the corner of the eye and asks to be cleared; this is a
- * burned-in frame counter, set in the same monospace `typeScale.caption`
- * as the word it follows, in the same colour as every other tab. No dot,
+ * count set in the same face and the same colour as the word it follows,
+ * the way a number printed inside a caption is not a notification. No dot,
  * no `danger` red, no colour of any kind, no animation — the only place
  * this count is allowed to move is the entrance of the cards it refers
  * to, one screen in.
+ *
+ * THE COUNT GAVE UP ITS MONOSPACE TO GET THAT, AND IT IS A REAL COST. The
+ * paragraph above used to argue the number read as a burned-in frame
+ * counter because it was set in the same monospace as the word. It is not,
+ * any more, and no proportional face can make it one. What survives is the
+ * half that was load-bearing: the count lives inside the label string, so
+ * it cannot appear, pulse or clear on its own. Digits in a proportional
+ * face also stop sitting on a fixed rhythm, which is why the ceiling in
+ * gekooktPresentation.ts is a width guard and not a decorative cap.
  *
  * ONLY DIRECTED SENDS FEED IT. Ambient cook proof never does, however many
  * friends cooked something today: `useUnseenSendCount` reads
@@ -112,7 +151,9 @@ export default function TabsLayout(): JSX.Element {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
         },
-        tabBarLabelStyle: typeScale.caption,
+        // Sans, not mono — see the file header for the width and x-height
+        // measurements, and for what the `Vrienden · 2` count gives up.
+        tabBarLabelStyle: typeScale.bodySmall,
         // Hides the placeholder ⏷ described in the file header. NOT a
         // statement that this bar will never have icons — when a real
         // glyph set exists (GAP-19) this line goes and four `tabBarIcon`
@@ -133,12 +174,18 @@ export default function TabsLayout(): JSX.Element {
           // "Recepten", not "Mijn recepten", and this is a defect fix
           // rather than a rename. The label is `numberOfLines: 1` in
           // react-navigation's `Label.js`, so it truncates rather than
-          // wrapping or shrinking — and the arithmetic says it always did:
-          // `typeScale.caption` is IBM Plex Mono at 12pt, every glyph
-          // advance is 600/1000 em, so 13 characters is 13 × 0.6 × 12 =
-          // 93.6pt against a slot of `width / 4 - 2 × 5` = 88.25pt at
-          // 393pt and 83.75pt at 375pt. It has been showing an ellipsis on
-          // every supported phone since it was written.
+          // wrapping or shrinking — and the arithmetic said it always did.
+          // Under the mono this bar used to carry, every glyph advance was
+          // 600/1000 em, so 13 characters came to 13 × 0.6 × 12 = 93.6pt
+          // against a slot of `width / 4 - 2 × 5` = 88.25pt at 393pt and
+          // 83.75pt at 375pt. It had been showing an ellipsis on every
+          // supported phone since it was written.
+          //
+          // THE SANS DID NOT MAKE THE LONG FORM FIT, which is why this
+          // shortening stays. "Mijn recepten" measures 83.85pt in Archivo
+          // 400 at 14pt: inside the 393pt slot, and 0.10pt over the 375pt
+          // one. A fix that works on the larger half of the phones is not a
+          // fix, and "Recepten" at 60.44pt needs no phone-size caveat.
           //
           // The same precedent is already in this file, four lines down:
           // Trending's tab label is shorter than its screen header for
@@ -166,8 +213,11 @@ export default function TabsLayout(): JSX.Element {
         options={{
           // The label is "Trending" while the screen header reads "Trending
           // recipes" — the one place in the app where the two differ,
-          // because this label shares a monospace caption line with three
-          // other words and the longer form does not fit it (DESIGN.md §9).
+          // because this label shares one row with three other words and the
+          // longer form does not fit its quarter of it (DESIGN.md §9). That
+          // held when the row was monospace and it still holds now it is
+          // not: "Trending recipes" measures 103.85pt in Archivo 400 at
+          // 14pt against an 88.25pt slot on a 393pt phone.
           // The route segment stays `ranglijst`: it is not user-facing, and
           // renaming a route is how deep links and history entries break.
           title: 'Trending',

@@ -131,7 +131,7 @@ function MemberPreferences(props: MemberPreferencesProps): JSX.Element {
             vocabulary={EU_ALLERGENS}
           />
         ) : (
-          <Text style={[typeScale.caption, styles.consentHint, { color: colors.textMuted }]}>
+          <Text style={[typeScale.bodySmall, styles.consentHint, { color: colors.textMuted }]}>
             Geef eerst toestemming hierboven om allergenen toe te voegen.
           </Text>
         )}

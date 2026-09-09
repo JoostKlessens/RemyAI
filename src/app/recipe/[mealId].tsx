@@ -561,8 +561,14 @@ export default function RecipeOverviewScreen(): JSX.Element {
               says, and a household that learns it only by opening
               /boodschappen has learned it too late. The button's spoken
               label already carries it (`withExplainer`), so this line is
-              what gives a sighted user the same sentence. */}
-          <Text style={[typeScale.caption, styles.actionExplainer, { color: colors.textMuted }]}>
+              what gives a sighted user the same sentence.
+
+              AND IT IS SET AS A SENTENCE SINCE 9 SEPTEMBER 2026. It was the
+              mono `caption`, which is this system's face for something
+              measured; `withExplainer` composes these exact words into one
+              spoken sentence with the button label, and a listener and a
+              reader should not be handed two different registers of it. */}
+          <Text style={[typeScale.bodySmall, styles.actionExplainer, { color: colors.textMuted }]}>
             {schedulingRow.explainer}
           </Text>
           {/* `danger`, and never a toast: a failed write is something the

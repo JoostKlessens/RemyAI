@@ -214,7 +214,7 @@ export function CookSharingAskSheet(props: CookSharingAskSheetProps): JSX.Elemen
             accessibilityLabel={buildCookSharingToggleAccessibilityLabel(shareCooksWithFriends)}
             onToggle={handleToggle}
           />
-          <Text style={[typeScale.caption, styles.hint, { color: colors.textMuted }]}>
+          <Text style={[typeScale.bodySmall, styles.hint, { color: colors.textMuted }]}>
             {COOK_SHARING_ASK_CONTROL_HINT}
           </Text>
 

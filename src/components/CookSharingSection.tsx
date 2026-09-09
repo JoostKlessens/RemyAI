@@ -111,7 +111,7 @@ export function CookSharingSection(props: CookSharingSectionProps): JSX.Element 
             accessibilityLabel={buildCookSharingToggleAccessibilityLabel(shareCooksWithFriends)}
             onToggle={() => onChange(!shareCooksWithFriends)}
           />
-          <Text style={[typeScale.caption, styles.state, { color: colors.textMuted }]}>
+          <Text style={[typeScale.bodySmall, styles.state, { color: colors.textMuted }]}>
             {describeCookSharingState(shareCooksWithFriends)}
           </Text>
         </View>

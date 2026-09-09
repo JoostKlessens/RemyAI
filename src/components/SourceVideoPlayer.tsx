@@ -217,7 +217,7 @@ function EmbedFallback(props: {
       </View>
 
       {note === null ? null : (
-        <Text style={[typeScale.caption, styles.note, { color: colors.textMuted }]}>{note}</Text>
+        <Text style={[typeScale.bodySmall, styles.note, { color: colors.textMuted }]}>{note}</Text>
       )}
 
       {linkUrl === null || linkLabel === null ? null : (
@@ -234,7 +234,7 @@ function EmbedFallback(props: {
       )}
 
       {status === 'failed' ? (
-        <Text style={[typeScale.caption, styles.note, { color: colors.danger }]}>
+        <Text style={[typeScale.bodySmall, styles.note, { color: colors.danger }]}>
           Openen lukte niet. Probeer het opnieuw.
         </Text>
       ) : null}

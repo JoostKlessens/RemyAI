@@ -95,16 +95,26 @@ export function getGekooktCardKey(card: GekooktCard): string {
  * DECIDED HERE, NOT INHERITED. §8 specifies the label as `Vrienden · 2`
  * and records no cap or overflow rule at all, so this constant is a
  * decision taken to ship the feature and it needs ratifying rather than
- * assuming. The argument for having one: the tab label is a mono
- * `typeScale.caption` sharing one row with three other words, so a
- * four-character count is a layout failure on a narrow phone — and the
- * count is unbounded in principle, since it only clears when somebody
- * opens the tab and a dormant account accumulates. The argument for 99
- * specifically: it is the largest count that fits the same width as the
- * realistic ones, and "99+" reads as a plain overflow rather than as an
- * alarm. Three digits is not realistic for directed sends between
- * mutually accepted friends, which is why this is a guard rather than a
- * feature.
+ * assuming. The argument for having one: the tab label shares one row with
+ * three other words, so a four-character count is a layout failure on a
+ * narrow phone — and the count is unbounded in principle, since it only
+ * clears when somebody opens the tab and a dormant account accumulates.
+ * The argument for 99 specifically: it is the largest count that fits the
+ * same width as the realistic ones, and "99+" reads as a plain overflow
+ * rather than as an alarm. Three digits is not realistic for directed
+ * sends between mutually accepted friends, which is why this is a guard
+ * rather than a feature.
+ *
+ * THE FACE CHANGED UNDER THIS ARGUMENT ON 9 SEPTEMBER 2026 AND THE
+ * ARGUMENT SURVIVED IT. This used to open "the tab label is a mono
+ * `typeScale.caption`"; (tabs)/_layout.tsx now sets the bar in
+ * `typeScale.bodySmall`, Archivo 400 at 14pt, and carries the full width
+ * table. The two numbers that matter here: `Vrienden · 12` went from
+ * 93.60pt to 81.66pt and now fits the 88.25pt slot a 393pt phone gives it,
+ * while `Vrienden · 99+` went from 100.80pt to 91.22pt and still does not.
+ * The sans bought room for the realistic counts and none for the fourth
+ * character — which is the boundary this constant was drawn at, in the face
+ * it was drawn for.
  */
 export const UNSEEN_TAB_COUNT_CEILING = 99;
 
@@ -164,12 +174,20 @@ export function collectUnseenSendMealIds(sends: readonly IncomingSend[]): Readon
 /**
  * The tab label: `Vrienden`, or `Vrienden · 2` while sends are waiting.
  *
- * A BURNED-IN FRAME COUNTER, NOT A BADGE. No dot, no `danger` red, no
- * colour of any kind, no animation — the count is part of the label
- * string and inherits the tab's own `typeScale.caption`, which is
- * monospace, so the number sits on the same rhythm as the word. A badge
- * would be a small red thing that appears and disappears in the corner of
- * the eye, which is the exact attention mechanic this product refuses.
+ * PART OF THE LABEL, NOT A BADGE. No dot, no `danger` red, no colour of
+ * any kind, no animation — the count is inside the label string and
+ * inherits whatever face the tab bar is set in, so it cannot appear,
+ * pulse or clear on its own. A badge would be a small red thing that
+ * arrives and leaves in the corner of the eye, which is the exact
+ * attention mechanic this product refuses.
+ *
+ * IT USED TO SAY "A BURNED-IN FRAME COUNTER" AND LEAN ON THE MONOSPACE for
+ * the rest of the argument: the tab inherited `typeScale.caption`, so the
+ * digits sat on the same fixed rhythm as the word. The bar is
+ * `typeScale.bodySmall` since 9 September 2026 and that half is simply
+ * gone — a proportional face gives a count no rhythm to sit on. Only the
+ * containment argument above is still doing work, and it was always the
+ * half that mattered.
  *
  * With nothing waiting the label is EXACTLY "Vrienden", byte for byte —
  * not "Vrienden · 0", not "Vrienden ·". A zero is still a number to

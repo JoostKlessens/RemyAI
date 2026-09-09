@@ -180,7 +180,7 @@ export function SuggestionSection(props: SuggestionSectionProps): JSX.Element {
         </>
       )}
       {message === null ? null : (
-        <Text style={[typeScale.caption, styles.message, { color: colors.danger }]}>{message}</Text>
+        <Text style={[typeScale.bodySmall, styles.message, { color: colors.danger }]}>{message}</Text>
       )}
       <Pressable
         onPress={onSearch}

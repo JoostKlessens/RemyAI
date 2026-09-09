@@ -693,7 +693,7 @@ function BoardEndNote(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  return <Text style={[typeScale.caption, styles.endNote, { color: colors.textMuted }]}>{BOARD_END_COPY}</Text>;
+  return <Text style={[typeScale.bodySmall, styles.endNote, { color: colors.textMuted }]}>{BOARD_END_COPY}</Text>;
 }
 
 /** The same full stop, in the friends list's own words (DESIGN-SOCIAL §2.2 pins the copy). */
@@ -701,7 +701,7 @@ function FriendsBoardEndNote(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  return <Text style={[typeScale.caption, styles.endNote, { color: colors.textMuted }]}>{KRING_END_COPY}</Text>;
+  return <Text style={[typeScale.bodySmall, styles.endNote, { color: colors.textMuted }]}>{KRING_END_COPY}</Text>;
 }
 
 /**
@@ -719,7 +719,15 @@ function EmptyBoardState(): JSX.Element {
     <View style={styles.empty}>
       <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>Nog niets beoordeeld</Text>
       <Text style={[typeScale.bodySmall, styles.emptyBody, { color: colors.textMuted }]}>{BOARD_EMPTY_COPY}</Text>
-      <Text style={[typeScale.caption, styles.emptyFootnote, { color: colors.textMuted }]}>
+      {/* THESE TWO NOW SHARE A FACE, AND THAT IS THE PRICE PAID HERE. The
+          footnote was the mono `caption`, so the difference between the
+          statement and its qualifier was carried by the typeface. Both are
+          running sentences, so mono was the wrong tool for the job; what
+          separates them now is `emptyFootnote`'s 16pt top margin and the
+          fact that one names the state and the other explains it. If that
+          proves too flat in the hand, the fix is `textMuted` -> a quieter
+          step or a smaller footnote token, NOT the mono back. */}
+      <Text style={[typeScale.bodySmall, styles.emptyFootnote, { color: colors.textMuted }]}>
         Een recept komt hier pas op zodra genoeg mensen het beoordeeld hebben.
       </Text>
     </View>
@@ -787,7 +795,7 @@ function TrendingNotice(props: { readonly title: string; readonly body: string |
     <View style={styles.empty}>
       <Text style={[typeScale.title2, styles.emptyTitle, { color: colors.textPrimary }]}>{props.title}</Text>
       {props.body === null ? null : (
-        <Text style={[typeScale.caption, styles.emptyFootnote, { color: colors.textMuted }]}>{props.body}</Text>
+        <Text style={[typeScale.bodySmall, styles.emptyFootnote, { color: colors.textMuted }]}>{props.body}</Text>
       )}
     </View>
   );

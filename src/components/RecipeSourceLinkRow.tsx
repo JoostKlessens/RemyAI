@@ -72,7 +72,7 @@ export function RecipeSourceLinkRow(props: RecipeSourceLinkRowProps): JSX.Elemen
         <Icon name="external-link" size={GLYPH_SIZE} color={colors.textMuted} />
       </Pressable>
       {hasFailedToOpen ? (
-        <Text style={[typeScale.caption, styles.openFailed, { color: colors.danger }]}>
+        <Text style={[typeScale.bodySmall, styles.openFailed, { color: colors.danger }]}>
           {RECIPE_OVERVIEW_SOURCE_OPEN_FAILED_NOTE}
         </Text>
       ) : null}

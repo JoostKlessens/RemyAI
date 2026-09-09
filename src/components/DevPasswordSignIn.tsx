@@ -78,7 +78,14 @@ export function DevPasswordSignIn(): JSX.Element {
       <Text style={[typeScale.label, styles.heading, { color: colors.textMuted }]}>
         ALLEEN IN ONTWIKKELING
       </Text>
-      <Text style={[typeScale.caption, styles.hint, { color: colors.textMuted }]}>
+      {/* QUIET IS NOT THE SAME AS MACHINE-VOICED, which is what the mono
+          `caption` this used to carry made it. Three sentences of
+          instructions to a human are prose however small they are set, and
+          the heading above still says in a tracked uppercase `label` exactly
+          what this block is. The quiet comes from the rule, the muted
+          colour and the position under the real form — none of which the
+          font was doing. */}
+      <Text style={[typeScale.bodySmall, styles.hint, { color: colors.textMuted }]}>
         Inloggen met een wachtwoord, om de mail te omzeilen. Maak de gebruiker aan in Supabase onder
         Authentication - Users, met Auto Confirm User aan. Deze sectie zit niet in een echte build.
       </Text>
@@ -128,7 +135,7 @@ export function DevPasswordSignIn(): JSX.Element {
       />
 
       {error !== 'none' ? (
-        <Text style={[typeScale.caption, styles.error, { color: colors.danger }]}>
+        <Text style={[typeScale.bodySmall, styles.error, { color: colors.danger }]}>
           {describeDevSignInError(error)}
         </Text>
       ) : null}

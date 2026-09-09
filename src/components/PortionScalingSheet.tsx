@@ -240,7 +240,7 @@ function ScaledIngredientList(props: ScaledIngredientListProps): JSX.Element {
         ))}
       </ScrollView>
       {tally !== null ? (
-        <Text style={[typeScale.caption, styles.tally, { color: colors.textSecondary }]}>{tally}</Text>
+        <Text style={[typeScale.bodySmall, styles.tally, { color: colors.textSecondary }]}>{tally}</Text>
       ) : null}
     </View>
   );

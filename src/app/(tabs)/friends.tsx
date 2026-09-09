@@ -689,7 +689,7 @@ function FeedEndNote(): JSX.Element {
   const colors = getColors(scheme);
 
   return (
-    <Text style={[typeScale.caption, styles.endNote, { color: colors.textMuted }]}>
+    <Text style={[typeScale.bodySmall, styles.endNote, { color: colors.textMuted }]}>
       Dat is alles wat er gedeeld is.
     </Text>
   );
@@ -759,7 +759,7 @@ function FriendsNotice(props: { readonly title: string; readonly body: string | 
     <View style={styles.notice}>
       <Text style={[typeScale.title2, styles.noticeTitle, { color: colors.textPrimary }]}>{props.title}</Text>
       {props.body === null ? null : (
-        <Text style={[typeScale.caption, styles.noticeBody, { color: colors.textMuted }]}>{props.body}</Text>
+        <Text style={[typeScale.bodySmall, styles.noticeBody, { color: colors.textMuted }]}>{props.body}</Text>
       )}
     </View>
   );

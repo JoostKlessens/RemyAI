@@ -83,7 +83,7 @@ export function SourceTextPanel(props: SourceTextPanelProps): JSX.Element | null
               something while its heading promises the whole would be the
               quiet kind of wrong this codebase spends its comments on. */}
           {copy.truncationNotice !== null ? (
-            <Text style={[typeScale.caption, styles.truncation, { color: colors.textMuted }]}>
+            <Text style={[typeScale.bodySmall, styles.truncation, { color: colors.textMuted }]}>
               {copy.truncationNotice}
             </Text>
           ) : null}

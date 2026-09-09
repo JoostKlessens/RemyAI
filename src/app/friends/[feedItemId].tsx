@@ -244,7 +244,7 @@ function SharedRecipeBody(props: { readonly resolved: ResolvedSharedRecipe }): J
           collision: if this caveat only appeared beside a warning, its
           absence would read as "gecontroleerd en schoon" — the exact
           inference the tri-state exists to prevent. */}
-      <Text style={[typeScale.caption, styles.tagCaveat, { color: colors.textMuted }]}>
+      <Text style={[typeScale.bodySmall, styles.tagCaveat, { color: colors.textMuted }]}>
         Allergietags komen van wie dit deelde — niet van jullie eigen controle.
       </Text>
 
@@ -279,7 +279,7 @@ function SharedRecipeBody(props: { readonly resolved: ResolvedSharedRecipe }): J
         <Feather name="external-link" size={16} color={colors.textMuted} />
       </Pressable>
       {hasFailedToOpen ? (
-        <Text style={[typeScale.caption, styles.openFailed, { color: colors.danger }]}>
+        <Text style={[typeScale.bodySmall, styles.openFailed, { color: colors.danger }]}>
           Openen lukte niet. Probeer het opnieuw.
         </Text>
       ) : null}
