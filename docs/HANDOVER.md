@@ -4,9 +4,16 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`1746766` gecommit **en gepusht**. **De werkboom is schoon** — `git status
---short` geeft nul regels — en `git rev-list --left-right --count
-origin/feat/live-import-and-plan-phases...HEAD` geeft `0	0`.
+`a5ef8f2` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
+regels. ⚠ **Meet de push zelf**: er zijn 's middags vier commits bij gekomen
+(`2c47995`, `3372895`, `f4f22f5`, `a5ef8f2`), en dit blok is al vier keer in de
+verkeerde richting ingevuld.
+
+⚠ **HET ENIGE ONAFFE WERK IN DE BOOM IS WEG.** GAP-46 — de cijfervraag pas
+twaalf uur na het koken — is afgebouwd: het domein had sinds de dag dat het
+geschreven werd nul aanroepers, en die staan er nu. `OutcomeCard` vraagt het
+cijfer niet meer; `PendingRatingSheet` doet dat bij het openen van de app. Zie
+*Wat er op 9 september 's middags gebeurde* onderaan.
 
 ⚠ **DIT BLOK STOND VANDAAG EEN UUR LANG OP `0	3`, EN DAT WAS TOEN WAAR.**
 Acht commits zijn op 9 september in twee rondes gepusht: `d9a37d6..862a778`
@@ -1261,13 +1268,11 @@ enige relatie tot het woord dat het markeert. Hij krimpt nu om de titel, zoals
 
 ### Wat er NIET gedaan is en als eerste aan de beurt is
 
-1. **GAP-58 — de actieve filterstaat wordt niet getekend.** `Icon.tsx:107`
-   gooit `color` weg voor alle 45 tekeningen, dus `FilterTrigger`'s
-   `accent`-staat komt nooit aan. Zie de LONGLIST voor de reparatie en voor de
-   tweede meting die verklaart waarom het niemand opviel.
-2. **`accentMuted` zit nog op de avatarcirkels en het toestemmingsvinkje** in
-   Instellingen — op de grijze grond zijn dat nu de felste dingen op het
-   scherm. Stond in fase 2 van het plan en is niet meegenomen.
+1. ✅ ~~**GAP-58 — de actieve filterstaat wordt niet getekend.**~~ **Gedaan op
+   9 september, `2c47995`** — en de reparatie die hier stond is afgewezen. Zie
+   de sectie hieronder.
+2. ✅ ~~**`accentMuted` zit nog op de avatarcirkels en het
+   toestemmingsvinkje.**~~ **Gedaan, `3372895`.**
 3. **Fase 3, en die wacht op een beslissing van de eigenaar.** De Fable-audit
    over onderscheidend vermogen stelt één ding centraal: **draai de volgorde
    van het beeld om.** De 45 gekleurde tekeningen in `design/icons-v2/` zijn
@@ -1853,6 +1858,108 @@ op vastgelegde gronden — WS4 verbiedt gezichten in illustratie, WS5 verbiedt
 attract loops. Eén audit ontwierp hem voor de importwachttijd, de enige plek
 waar geen van beide regels reikt. `STYLING-PLAN.md` heeft beide kanten, plus
 de naamkwestie rond `remyapp.io` die WS1 opwerpt.
+
+---
+
+## Wat er op 9 september 's middags gebeurde
+
+**Vier commits, `2c47995` t/m `a5ef8f2`, vijf poorten groen na afloop**
+(typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3344 tests over
+139 bestanden** — gedraaid, niet opgehoogd; hier stond 3315 over 137).
+
+**`2c47995` — GAP-58, en de voorgeschreven reparatie is AFGEWEZEN.** Dat is
+het leerzame deel. De bevinding klopte: `Icon` gooit `color` weg voor elke
+naam met een tekening, en dat is elke naam, dus de trechter zag er identiek
+uit met en zonder filter. **Maar de LONGLIST schreef voor om de zestien
+UI-glyphs monochroom te maken, en dat draait een beslissing om die
+`design/icons-v2/tools/palette.py` vóluit opschrijft**: die zestien zijn ink
+line-work met één groen element, *"the part that is the point of the control:
+the tick, the plus, the marked day, **the active filter**"*, met `warning` in
+amber *"because a warning that reads as the accent colour is a warning nobody
+heeds"*. Nagemeten over de set klopt die alinea: 14 van de 16 gebruiken alleen
+INK/INK_SOFT/WHITE/CREAM plus het groen, alleen `timer` en `warning` grijpen
+naar amber. **Het groene element wás dus al de actieve staat — het werd alleen
+onvoorwaardelijk getekend.** Monochroom maken had `warning` zijn amber gekost
+om één trechter te repareren.
+
+Wat er staat is de ontbrekende helft van een bestaand kanaal:
+`iconArtwork/controlState.ts` wisselt de accentvulling naar `WHITE` als de
+control uit staat. **Alleen vullingen, nooit streken** — `check` is één
+GREEN-streek en zou anders verdwijnen in plaats van dimmen. Handgeschreven
+`.ts`, want `drawings.ts` en `palette.ts` zijn gegenereerd en `IconArtwork.tsx`
+is voor de testrun onbereikbaar. ⚠ De tweede helft (`GREEN` boven 0,120
+tillen) is bewust niet gedaan: die vloer bewaakt het **token**paar
+`accent`/`positive`, en `palette.py` betoogt dat de icoonkleuren een andere
+woordenschat zijn.
+
+**Nog een meting die het opruimen waard is:** van de twaalf `<Icon>`-
+aanroepplekken geven er **tien een constante** mee. Die verloren nooit iets.
+Het ging om één glyph.
+
+**`3372895` — de avatarschijf en het toestemmingsvinkje.** Allebei met een
+getal en niet met smaak. De schijf: `accentMuted` is CIE L\* 93,33 tegen de
+grond van 91,62 (settings tekent op `background`, zonder kaart), dus hij stond
+**1,70 L\* / 1,05:1** van de pagina af terwijl hij OKLab-chroma **0,110** droeg
+op een neutrale ladder van 0,003-0,009. **Onzichtbaar als vorm, het luidste
+ding op het scherm als kleur.** Nu `surfaceRaised`: 8,38 L\* licht en 14,12
+donker, meer dan de eigen dragende `background → surface` stap van 6,80, bij
+chroma 0,000 — het groen verhuist van een schijf van 40pt naar één letter
+(6,48:1 / 6,87:1, ruim over 4,5:1). Drie bestanden, want alle drie de chips
+schrijven in hun eigen commentaar dat ze identiek aan elkaar moeten zijn.
+
+Het vinkje had dezelfde vorm van fout als de segmentknop van `e3029f0`:
+aangevinkt zat `accentMuted` tussen zijn eigen uitgevinkte staat (98,42) en de
+pagina (91,62) in, van geen van beide meer dan 5 L\* gescheiden. Nu `accent`
+met een `surfaceRaised` vinkje — 51,72 L\* ónder de pagina in licht, contrast
+5,24:1 tegen 1,05:1 eerder, waarmee het voor het eerst 1.4.11's 3:1 haalt.
+
+**`f4f22f5` — GAP-46, de cijfervraag na twaalf uur.** Het domein stond met 16
+tests en nul aanroepers; die staan er nu. Alleen het **cijfer** is van
+`OutcomeCard` af — "Gemaakt!", de groene haarlijn, het deel-vinkje, de moodrij
+en `Stuur door` blijven, want die gaan over de kooksessie die net gebeurd is.
+Nieuw: `src/lib/pendingRating.ts`, `PendingRatingSheet.tsx`,
+`pendingRatingCopy.ts` en een `PendingRatingGate` naast
+`HouseholdBootstrapGate`. Die gate draait **bij mount en niet op elke
+foreground**: zijn zin is "de eerste keer dat je de app opent", en een sheet
+die terugkomt zodra je even weg kijkt is een zeurpiet.
+
+⚠ **EEN ASYMMETRIE DIE NIEMAND HAD GEZIEN, en die hierdoor vanzelf weg is.**
+`(tabs)/index.tsx`'s `handleOutcomeRate` schreef **alleen** het private cijfer,
+zonder `castPublicVote` ernaast, terwijl `cook/[mealId].tsx` er twee schreef.
+Een gerecht dat je vanaf Kiezen beoordeelde bereikte Ranglijst dus **nooit**,
+en hetzelfde gerecht vanuit Kookmodus wel. Geen test kon dat zien, want er viel
+niets te testen. Eén sheet stelt de vraag, `recordPendingRating` schrijft beide
+rijen.
+
+**`a5ef8f2`** — `accessibilityViewIsModal` van de sheet af; geen van de vier
+andere sheets zet hem, en `<Modal>` draagt die semantiek al.
+
+### De screenshots, en wat ze bevestigden
+
+Zelfde opstelling als 's ochtends: `npx expo start --web`, Playwright op
+393×852 bij `deviceScaleFactor: 3`. **De app seedt zelf alleen een huishouden
+— gemeten, `remy:meals` bestaat niet tot iets het schrijft** — dus de
+bibliotheek is met tien gerechten, twee huisgenoten en één kooksessie van
+dertien uur oud op de `remy:`-sleutels gezet. Twee tijdelijke ingrepen (een
+`return` in `AuthGate`, en de `canUseApp`-poort van `PendingRatingGate`
+overbrugd omdat de webbuild geen sessie heeft), **allebei teruggedraaid vóór
+er iets gecommit werd** — nagemeten, `git diff` liet daarna alleen de echte
+wijziging zien.
+
+Bevestigd: de trechter dicht is een inktomtrek met witte body, open een groen
+gevulde trechter met de telling ernaast — **vóór vandaag waren die twee frames
+identiek**. De avatarschijven lezen als witte schijven met een groene letter.
+Het aangevinkte toestemmingsvakje is een massief groen blokje met een wit
+vinkje. En de cijfersheet komt op met de titel, de uitleg van het uitstel, de
+vraag, de schaal, `Klaar` en `Niet nu`.
+
+⚠ **Wat de screenshots NIET bewijzen**, onveranderd sinds vanochtend: schaduw,
+`Animated`, haptics, veeggedrag en de echte tabbalk zijn Chromium en geen
+toestel. ⚠ **Twee dingen die tijdens de ronde opvielen en géén regressie zijn:**
+de overlap tussen zoekveld en tijdschuif op Mijn recepten is het bekende
+web-artefact, en de LogBox-waarschuwing *"React does not recognize the
+`im…`"* is `importantForAccessibility` dat react-native-web aan de DOM
+doorgeeft — hij stond er al en raakt acht bestaande componenten.
 
 ---
 
