@@ -3,7 +3,37 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
-**Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
+**Stand: 9 september 2026, LAAT OP DE AVOND — dit blok vervangt het blok
+eronder, dat tot en met `72eccde` liep.** Branch
+`feat/live-import-and-plan-phases`, t/m **`5767bda` gecommit en BEWUST NIET
+GEPUSHT**: dit is nachtwerk dat de eigenaar 's ochtends zelf wil kunnen
+bekijken voordat het de remote raakt. Vijf commits bovenop `72eccde`.
+
+**Vijf poorten groen, alle vijf zelf gedraaid ná de laatste commit:**
+typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3405 tests over
+142 bestanden**. De uitgangsmeting die avond was 3338 over 139 — GAP-33
+bracht er 13 bij, GAP-32/55 er 54, met drie nieuwe testbestanden.
+
+**Wat er die avond landde:** GAP-33 (Kiezen narrowt zijn chips mee,
+`cd4d09d`), GAP-32/55 (`Bewaren` plus het `recipes` → `meals`-kopieerpad,
+`5767bda`), en twee correcties op dit document zelf — zie `feffdfe` en
+`3632188`. **GAP-34 draaide nog toen dit geschreven werd.**
+
+⚠ **TWEE DINGEN DIE DIT DOCUMENT VOORSCHREEF ZIJN AFGEWEZEN, allebei omdat
+de voorgeschreven reparatie het defect zou hebben INGEVOERD dat ze wilde
+oplossen**: `claim-handle.tsx` heeft geen uitgang nódig (`gestureEnabled:
+false` staat er met opzet), en `dev-embed-probe.tsx` had geen kale `back()`
+moeten krijgen. Zie *Schulden die nergens anders staan*. Dat is dezelfde
+vorm als de migratiestand: een correcte meting aan een verkeerde vraag.
+
+⚠ **`check:functions` is GEEN functielengte-controle** en dit document heeft
+dat nooit rechtgezet: het is `tsc -p supabase/functions/tsconfig.json`. De
+regel "functies onder 50 regels" heeft hier geen enkele poort.
+
+---
+
+**Stand (VERLOPEN, 9 september overdag):** branch
+`feat/live-import-and-plan-phases`, t/m
 `72eccde` gecommit en gepusht — **tien commits die dag** (`f53d18d..72eccde`).
 **De werkboom is schoon** — `git status --short` geeft nul regels, en
 `git rev-list --left-right --count origin/…​...HEAD` gaf `0	0` ná de push.
@@ -1649,8 +1679,21 @@ gedaan. De rest is werk.
    Doe ook de throttle-test (21 imports binnen tien minuten; de 21e hoort
    `import_throttled` te krijgen).
 
-6. **De filterbug is nog maar half weg, en Ronde B heeft hem goedkoper
-   gemaakt in plaats van hem op te lossen** (GAP-33). De bibliotheek
+6. ✅ ~~**De filterbug is nog maar half weg, en Ronde B heeft hem goedkoper
+   gemaakt in plaats van hem op te lossen**~~ **(GAP-33) — DICHT OP
+   9 SEPTEMBER 2026, `cd4d09d`.** Kiezen narrowt nu mee. De AND-as narrowt
+   mét zijn eigen selectie, de OR-as zonder, allebei unioneren de selectie
+   terug; ze narrowen met `filterByDecisionFilters` — `decide()`'s eigen
+   pass — en niet met `filterLibraryMeals`, want `offerablePool.ts` eist
+   dezelfde vijver door dezelfde functie. De privékopie is weg.
+   ⚠ **En de reden die hier drie dagen stond om het te laten liggen was
+   onwaar**: twee koppen beweerden dat narrowing prohibitief duur zou zijn
+   ("elke chip tegen elke andere chip, bij elke tik"). Het is één pass over
+   de offerable pool die op die render toch al draait, en Mijn recepten
+   betaalde hem sinds LIB-07 al per render. De oude tekst hieronder blijft
+   staan omdat de vórm van de fout het bewaren waard is.
+
+   ~~Oude tekst:~~ **De filterbug is nog maar half weg** (GAP-33). De bibliotheek
    herberekent zijn chips tegen wat de andere filters overlaten; **Kiezen
    doet dat niet.** Kies daar twee chips die niet samen voorkomen en je
    krijgt nog steeds een leeg resultaat. Het is geen overname van één
@@ -1852,7 +1895,21 @@ gedaan. De rest is werk.
    icoonvak wordt toch al getekend, dus een echt icoon kost nul punten — met
    twee families is er nu ook iets om erin te zetten.
 
-9. **`Bewaren` op de gedeelde receptpagina** (GAP-32). De Vrienden-tab is op
+9. 🟡 **`Bewaren` op de gedeelde receptpagina** (GAP-32) — **DE KNOP EN HET
+   SCHRIJFPAD ERONDER STAAN SINDS 9 SEPTEMBER 2026, `5767bda`.** De blokkade
+   was niet de knop: er was in deze codebase géén schrijfpad dat een
+   `recipes`-rij naar `meals` kopieerde. Dat is er nu
+   (`src/domain/social/recipeCopy.ts` + `getCanonicalRecipe` op de interface
+   én beide implementaties), met `allergenTagStatus` als LITERAAL `'unknown'`
+   op het type zodat de compiler PD-010 bewaakt. **Geen migratie nodig** —
+   0006's trigger dwingt hetzelfde serverzijdig af, nagemeten.
+   ⚠ **Wat nog open staat:** bewijskaarten krijgen nog steeds geen
+   `onPress`, en de LEESHELFT van dat scherm draait nog op fixtures op elke
+   build. Dat laatste is bewust zo gelaten en niet vergeten: live produceert
+   vandaag geen kaart die erheen routeert, dus een `__DEV__`-poort zou een
+   leeg scherm opleveren. De schrijfhelft is wél echt.
+
+   ~~Oude tekst:~~ **`Bewaren` op de gedeelde receptpagina** (GAP-32). De Vrienden-tab is op
    echte data grotendeels inert: bewijskaarten krijgen geen `onPress`,
    `/friends/[feedItemId]` draait op fixtures — en op **elke** build, niet
    alleen in dev, want dat scherm heeft geen `__DEV__`-poort — en de enige
@@ -2171,11 +2228,33 @@ goedkopere: het raakt acht routebestanden en drie copy-modules, en het
 overruled twee vastgelegde onderscheiden (`Annuleren` op een editor is niet
 `Terug` op een leesscherm).
 
-⚠ **Het dertiende scherm is `claim-handle.tsx`, en dat heeft helemaal geen
-uitgang.** Nagemeten met `grep -c "router\."`: **nul** treffers in het hele
+⚠ ~~**Het dertiende scherm is `claim-handle.tsx`, en dat heeft helemaal geen
+uitgang.**~~ **NAGEMETEN OP 9 SEPTEMBER 2026: DE METING KLOPT, DE
+GEVOLGTREKKING NIET — en dat is voor de vijfde keer dezelfde vorm in dit
+document.** Nul `router.`-treffers is hier geen ontbrekende uitgang maar een
+ontwerp dat op drie plaatsen vastligt: `_layout.tsx:244` zet
+`gestureEnabled: false` op dit scherm — opzet die je niet per ongeluk typt —
+`_layout.tsx:288` stuurt je hierheen met `router.replace('/claim-handle')`
+zodra `resolveSessionState` `needs_profile` geeft, en
+`sessionRevalidation.ts:10` zegt het met zoveel woorden: *"the claim-handle
+screen deliberately does not navigate"*. De reden staat in de kop van het
+scherm zelf: `profiles` is de rij waar elke sociale RLS-policy in
+`0007_social.sql` tegenaan joint, dus zónder die rij geeft de halve app stil
+niets terug. **Een terugknop hier is een uitgang naar een kapotte staat.**
+Wie GAP-43 oppakt slaat dit scherm dus over; er is niets te repareren, er is
+een regel te schrappen. ~~Oude tekst:~~ Nagemeten met `grep -c "router\."`: **nul** treffers in het hele
 bestand — geen `router.back()`, geen `router.replace()`, geen `Annuleren`.
 Zijn enige control is `Klaar`, die opslaat. Dit stond in geen enkel
 overzicht, en het is de enige echte doodlopende route in de app.
+
+⚠ **DE `router.back()` DIE HIERONDER WORDT VOORGESCHREVEN IS OP 9 SEPTEMBER
+AFGEWEZEN, EN DE REPARATIE IS EEN ANDERE GEWORDEN (`feffdfe`).** Dit scherm
+wordt via een deeplink geopend (`exp://<lan-ip>:8081/--/dev-embed-probe`),
+dus er is meestal geen stack om te poppen: een kale `back()` is daar
+precies de no-op die GAP-53 op `/friends/add` al een keer heeft gekost.
+Het is `canGoBack() ? back() : replace('/')` geworden — dezelfde vorm als
+`BackButton.tsx`, met de tab-root als terugval in plaats van `/friends`,
+en dat is waarom dit scherm dat component nóg steeds niet gebruikt.
 
 ⚠ **En er is een veertiende scherm dat nergens geteld werd:**
 `src/app/dev-embed-probe.tsx`, 296 regels, dev-only. Het heeft dezelfde
