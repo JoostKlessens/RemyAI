@@ -457,6 +457,48 @@ in dezelfde wijziging bijwerken — niet stilletjes.
 
 ---
 
+## Beantwoord op 9 september, met bewijs
+
+### DEC-04 — het bord houdt twee decimalen
+
+**Gevraagd door de ontwerpronde van 9 september**, als de enige overgebleven
+keuze die alleen de eigenaar mocht maken: "8,84" afronden naar "8,8" zou
+`DESIGN.md` §9 en PD-014 omkeren.
+
+**Antwoord: nee, twee decimalen blijven.** De eigenaar, letterlijk: *"I want
+to keep the 2 decimal grading."*
+
+**Er is geen codewijziging.** `LEADERBOARD_SCORE_DECIMALS` staat al op `2` en
+beide documenten blijven onaangeraakt. Dit staat hier omdat een vraag die
+gesteld én beantwoord is anders over een maand opnieuw gesteld wordt.
+
+**⚠ WAT AFRONDEN WERKELIJK GEKOST HAD, en dit is de reden dat het een echte
+vraag was en geen opmaakkwestie.** Die constante staat in het **domein** en
+niet in de presentatielaag, en `leaderboard.ts:67-81` legt uit waarom: de
+score wordt op die precisie afgerond **vóórdat er gesorteerd wordt**, zodat
+"het getal dat het bord ordende" en "het getal op het scherm" dezelfde waarde
+zijn in plaats van twee waarden die toevallig overeenkomen. Twee decimalen
+zijn dus de **sorteersleutel**. Naar één afronden had de VOLGORDE van het
+bord veranderd en een hoop paren tot echte gelijkstand laten vallen, die dan
+op het stemmenaantal uiteenvallen.
+
+**⚠ EN ER ZIJN TWEE GETALLEN, MET BEWUST TEGENGESTELDE PRECISIE — trek ze
+niet gelijk.** PRODUCT-DECISIONS.md vat het in één zin: *"Precision follows
+the instrument, not the screen."*
+
+| Getal | Decimalen | Waarom |
+|---|---|---|
+| Eén stem (PD-008a) | 1 | "een 7,5" is hoe mensen het zeggen |
+| Kringgemiddelde — "8,5 · Sanne en Joris" | 1 | een handvol mensen mét naam |
+| Het bord — "8,72 · 204 stemmen" | 2 | een gemiddelde van honderden draagt dat werkelijk |
+
+Dat document zegt er letterlijk bij: *"Two decimals on a handful of known
+votes is false precision wearing the board's clothes."* **Deze beslissing
+gaat alleen over het BORD.** De kring blijft op één decimaal; wie dát ook wil
+omzetten neemt een tweede, aparte beslissing en haalt die zin onderuit.
+
+---
+
 ## OPS-01/02 — het Expo-upgradeplan
 
 **Gevraagd: een plan, geen blinde bump.** Hier is het.

@@ -1286,6 +1286,8 @@ enige relatie tot het woord dat het markeert. Hij krimpt nu om de titel, zoals
    9 SEPTEMBER 2026: de eigenaar houdt twee decimalen.** *"I want to keep the
    2 decimal grading."* Geen codewijziging — `LEADERBOARD_SCORE_DECIMALS = 2`
    staat er al en `DESIGN.md` §9 en PD-014 blijven onaangeraakt.
+   **Vastgelegd als DEC-04 in `OPEN-BESLISSINGEN.md`**, want dát document
+   bezit de beslissingen; hier staat alleen dát hij genomen is.
 
    ⚠ **Waarom dit géén weggegooide vraag was, en waarom afronden duurder
    was dan het leek.** Die constante staat in het DOMEIN en niet in de

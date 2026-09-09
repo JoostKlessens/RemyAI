@@ -10,18 +10,23 @@ boodschappenmand bij Albert Heijn of Jumbo. De overlap met Remy is uitsluitend
 de import; hun tweede helft (boodschappen, prijzen, supermarktkoppeling) is
 grotendeels bewust niet overgenomen.
 
-**Stand:** 8 september 2026, `feat/live-import-and-plan-phases`, t/m
-`16d9e1c` gecommit. **De werkboom is schoon** — nul regels uit
-`git status --short`. Vier checks groen: typecheck 0, lint 0,
-`check:functions` 0, **3249 tests over 135 bestanden**, gedraaid en niet
-opgehoogd.
+**Stand:** 9 september 2026, `feat/live-import-and-plan-phases`, t/m
+`a7720b2` gecommit **én gepusht**. **De werkboom is schoon** — nul regels uit
+`git status --short` — en `git rev-list --left-right --count
+origin/feat/live-import-and-plan-phases...HEAD` geeft `0	0`, gemeten ná de
+push en niet ervoor. **Vijf poorten groen**: typecheck 0, lint 0,
+`check:functions` 0, `check:seed` 0, **3344 tests over 139 bestanden**,
+gedraaid en niet opgehoogd (hier stond 3249 over 135).
 
-⚠ **`✅` BETEKENT VANDAAG "GECOMMIT", NIET "GEPUSHT", EN DAT IS GEMETEN.**
-`git rev-list --left-right --count
-origin/feat/live-import-and-plan-phases...HEAD` geeft `0	4`: vier commits
-vooruit, nul achter, met `origin` op `13db125`. Op 7 september is er wél
-gepusht (`8f49b3b..13db125`, zestien commits), dus dit is een verse
-achterstand: `775cb59`, `7bac986`, `7718b9f` en `16d9e1c` staan alleen lokaal.
+⚠ **HET RIJTJE IS VIJF EN GEEN VIER.** `check:seed` kwam er op 9 september bij
+en dit document liet je er dagenlang vier opzeggen. Draai hem mee.
+
+⚠ **`✅` BETEKENT VANDAAG WEL DEGELIJK "GEPUSHT" — en meet dat zelf opnieuw.**
+Dit blok heeft de andere kant op gestaan en is al vier keer in de verkeerde
+richting ingevuld; de meting hierboven is van ná de laatste push van
+9 september (`f53d18d..a7720b2`, zes commits). En onthoud dat "pushen" hier
+twee dingen betekent: dit gaat over git, `npx supabase migration list` gaat
+over de database.
 
 ⚠ **EN "PUSHEN" BETEKENT HIER TWEE DINGEN.** Dit document heeft op
 7 september beweerd dat de eigenaar dacht gepusht te hebben terwijl er elf
@@ -394,6 +399,7 @@ Dat document stelt de vraag; dit document draagt de code. De vertaling:
 | J — hoe vraag je het aan een huishouden dat al vrienden heeft? | PRF-05 |
 | DEC-01 — Instagram, beantwoord met nee | SRC-04, SRC-06 |
 | DEC-02 — meten in oktober, dan pas beslissen | SRC-09, meetbron IMP-07 |
+| DEC-04 — het bord houdt twee decimalen, beantwoord op 9 september | geen code; `LEADERBOARD_SCORE_DECIMALS` stond al op 2 |
 | OPS-01/02 — het Expo-upgradeplan | OPS-01, OPS-02, ontgrendelt ENT-01 |
 
 ---
@@ -403,6 +409,16 @@ Dat document stelt de vraag; dit document draagt de code. De vertaling:
 Bijgewerkt na de sessies van 2 en 3 september. Geland sinds de vorige versie:
 RCP-01, ENT-05, IMP-09, GAP-07, GAP-10, OPS-08 (gedraaid) en de ESLint-helft
 van OPS-09. Geschrapt: ENT-03. Beslist: GAP-08 blijft optioneel.
+
+**Bijgewerkt op 9 september 2026.** Geland die middag: **GAP-58** (de trechter
+tekent zijn actieve staat, en de reparatie die dit document zelf voorschreef
+is afgewezen — lees die regel), **GAP-46** (de cijfervraag na twaalf uur, van
+domein-zonder-aanroepers naar een sheet) en het laatste stuk fase 2
+(`accentMuted` van de avatarschijven en het toestemmingsvinkje af). Beslist:
+**DEC-04**, het bord houdt twee decimalen. Punt 0 hieronder is beantwoord.
+
+⚠ **Er staat nu niets meer half in de boom.** GAP-46 was het laatste onaffe
+werk; wat overblijft is óf onbegonnen óf geblokkeerd, niet halverwege.
 
 ~~**Er staat geen enkele beslissing van de eigenaar meer in de weg.** Dat was
 sinds augustus niet zo.~~ **(HERZIEN, 6 september 2026: er staan er weer twee,
@@ -433,14 +449,18 @@ renderpad. Dat blijkt op een toestel of nergens.
 
 ### Daarna, op volgorde van hefboom
 
-0. ⚠ **De terugknop-meting op Instellingen (GAP-53), en die staat vóór alles
-   omdat hij twintig seconden kost en vijf hypotheses vervangt.** Dezelfde
-   terugtik op Instellingen — zelfde rij, zelfde `fullScreenModal`. Werkt hij
-   daar wel, dan is het `/friends/add`; faalt hij daar ook, dan is het de
-   gedeelde rij of de modal en hoort de fix op alle vier de schermen. Er zijn
-   al vijf verklaringen gemeten en gevallen; een zesde bedenken vóór deze
-   meting is precies het patroon dat deze week twee keer geld kostte. Staat
-   als `TOESTELTEST.md` §8c.
+0. ✅ ~~**De terugknop-meting op Instellingen (GAP-53).**~~ **GEDAAN OP
+   9 SEPTEMBER, en de meting van twintig seconden deed precies wat ervan
+   beloofd was.** De eigenaar is gevraagd wat hier stond. Over `/friends/add`:
+   *"Hij werkt maar is nog steeds lastig te klikken"*; over Instellingen:
+   *"Deze knop werkt wel"*. Dat bevestigt de `canGoBack()`-diagnose in plaats
+   van haar alleen niet te weerspreken. **Dit punt heeft drie dagen bovenaan
+   gestaan op een premisse die met één vraag te falsificeren was** — vijf
+   verklaringen gemeten en gevallen, terwijl de goedkoopste stap was om het
+   te vrágen. ⚠ Wat ervan overbleef is een ánder defect en niet het raakvlak:
+   alle vier de rijen zaten al op 44pt, dus de doos was nooit te klein; het
+   ZICHTBARE doel was dat wel, en `BackButton.tsx` (`3a3796e`) maakt er een
+   pijl van 20pt in `textPrimary` van.
 
 1. **De app op een toestel zetten en er doorheen lopen.** `npx expo start`,
    Expo Go, en dan één echte import door de flow plus de throttle-test (21
