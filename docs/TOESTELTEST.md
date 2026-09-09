@@ -67,8 +67,23 @@ is inmiddels naar binnen verplaatst zodat de throw in een `try` valt en als
 `{ kind: 'unavailable' }` terugkomt. **Dat is uit broncode afgeleid en nooit op
 een toestel gezien.** Deze test is de eerste keer.
 
-- [ ] **Wat je doet:** `npx expo start` op de laptop. Expo Go op een
-      **Android**-toestel, QR scannen, wachten tot de bundel binnen is.
+- [ ] **Wat je doet:** `npm run start:log` op de laptop — **niet**
+      `npx expo start`. Expo Go op een **Android**-toestel, QR scannen,
+      wachten tot de bundel binnen is.
+
+      ⚠ **WAAROM `start:log` EN NIET `expo start`.** Het is dezelfde server,
+      maar hij schrijft alles wat de Metro-console toont óók naar
+      `dev-server.log` in de projectmap. Daarmee kan een assistent de log
+      achteraf zélf lezen in plaats van jou te vragen hem over te typen — en
+      precies dat overtypen is wat OPS-10, OPS-11 en OPS-12 gekost hebben.
+      Die drie zijn alle drie uit deze regels gevonden. Het bestand valt onder
+      de `*.log`-regel in `.gitignore` en wordt bij elke start overschreven,
+      zodat "stond deze waarschuwing bij DEZE start" een beantwoordbare vraag
+      blijft. De interactieve toetsen (`r`, `j`, `m`) werken gewoon.
+
+      ⚠ **Wat er NIET in staat:** een native crash die de app onder de
+      JS-laag omlegt. Metro ziet die niet en dit bestand dus ook niet. Dat
+      vraagt macOS met Xcode, of `idevicesyslog` op Windows.
 
 - [ ] **Wat je hoort te zien:** de app opent. Het inlogscherm of, als je al
       ingelogd bent, Kiezen. In de Metro-console mag een gele waarschuwing over
