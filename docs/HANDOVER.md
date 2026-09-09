@@ -5,20 +5,29 @@ niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand: 9 september 2026, LAAT OP DE AVOND — dit blok vervangt het blok
 eronder, dat tot en met `72eccde` liep.** Branch
-`feat/live-import-and-plan-phases`, t/m **`5767bda` gecommit en BEWUST NIET
+`feat/live-import-and-plan-phases`, t/m **`5d06b7b` gecommit en BEWUST NIET
 GEPUSHT**: dit is nachtwerk dat de eigenaar 's ochtends zelf wil kunnen
-bekijken voordat het de remote raakt. Vijf commits bovenop `72eccde`.
+bekijken voordat het de remote raakt. Zeven commits bovenop `72eccde`.
 
 **Vijf poorten groen, alle vijf zelf gedraaid ná de laatste commit:**
-typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3405 tests over
-142 bestanden**. De uitgangsmeting die avond was 3338 over 139 — GAP-33
-bracht er 13 bij, GAP-32/55 er 54, met drie nieuwe testbestanden.
+typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3433 tests over
+143 bestanden**, gemeten op 10 september ná `5d06b7b`. De uitgangsmeting op
+9 september 's avonds was 3338 over 139 — GAP-33 bracht er 13 bij,
+GAP-32/55 er 54 en GAP-34 er 28, met vier nieuwe testbestanden.
 
-**Wat er die avond landde:** GAP-33 (Kiezen narrowt zijn chips mee,
-`cd4d09d`), GAP-32/55 (`Bewaren` plus het `recipes` → `meals`-kopieerpad,
-`5767bda`), en twee correcties op dit document zelf — zie `feffdfe` en
-`3632188`. **GAP-34 is op 10 september 2026 geland** — zie de rij in
-LONGLIST.md; de `Meal.ingredientTags`-route is bewust níet gekozen.
+**Wat er die nacht landde — alle drie de kritieke stukken:** GAP-33 (Kiezen
+narrowt zijn chips mee, `cd4d09d`), GAP-32/55 (`Bewaren` plus het
+`recipes` → `meals`-kopieerpad, `5767bda`) en GAP-34 (dislikes sluiten uit op
+ingrediëntnaam, `5d06b7b` — de `Meal.ingredientTags`-route is bewust NIET
+gekozen). Plus twee correcties op dit document zelf, `feffdfe` en `3632188`.
+
+**OPS-16 viel als bijvangst dicht:** `(tabs)/index.tsx` ging van 825 naar 702
+regels doordat de laadfunctie naar `src/lib/liveSession.ts` verhuisde.
+⚠ **`src/app/import/confirm.tsx` (963) is nu de ENIGE die over het plafond
+van 800 zit.**
+
+⚠ **Er staat niets half in de boom.** `git status --short` gaf nul regels ná
+de laatste commit, zelf gemeten en niet afgeleid.
 
 ⚠ **TWEE DINGEN DIE DIT DOCUMENT VOORSCHREEF ZIJN AFGEWEZEN, allebei omdat
 de voorgeschreven reparatie het defect zou hebben INGEVOERD dat ze wilde
@@ -1712,7 +1721,21 @@ gedaan. De rest is werk.
    ervóór was hij duurder.** Dat is de reden om hem te laten liggen, en niet
    dat er geen tijd was.
 
-7. **Dislikes doen letterlijk niets, en dat is groter dan een filter.** Je
+7. ✅ ~~**Dislikes doen letterlijk niets, en dat is groter dan een filter.**~~
+   **DICHT OP 10 SEPTEMBER 2026, `5d06b7b`.** De namen reizen nu mee met de
+   maaltijden — `DecisionRequest.ingredientsByMeal`, verplicht en niet
+   optioneel, want een optionele map met een stille lege default is precies
+   hoe dit maandenlang niets deed. Eén nieuw predicaat
+   (`src/domain/dislikedIngredients.ts`), naast en nooit in het
+   allergenenpad. Hele woorden, nooit substrings.
+   ⚠ **De diagnose hieronder klopte en de begroting niet:** er was geen
+   kolom, geen migratie en geen backfill nodig. En de faalrichtingen zijn
+   bewust tegengesteld — onbekend HÓÚDT het gerecht bij een dislike en
+   sluit UIT bij een allergeen — wat de reden is dat de twee nooit één
+   predicaat delen. Een test spijkert dat vast: een allergeen `noten` op een
+   geverifieerde maaltijd met `50 g noten` in de ingrediëntregel overleeft.
+
+   ~~Oude tekst:~~ **Dislikes doen letterlijk niets.** Je
    typt `paddenstoelen` — het voorbeeld dat de app zelf voorstelt — en het
    sluit nooit iets uit, want dislikes worden vergeleken met
    `Meal.ingredientTags`, dat alleen uit de EU-14 allergenenlijst gevuld

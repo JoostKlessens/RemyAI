@@ -135,55 +135,40 @@ te schrappen uit de schuldenlijst.
 
 ## Wat er af is
 
-**Gemeten, niet afgeleid.** Elk pakket apart gestaged en apart gecommit; de
-agents committen zelf niet.
+**Alle drie de kritieke stukken zijn geland.** Elk pakket apart gestaged en
+apart gecommit; de agents hebben zelf niet gecommit of gestaged.
 
 | Commit | Wat |
 |---|---|
-| `cd4d09d` | **GAP-33 — Kiezen narrowt zijn chips mee.** 13 tests erbij, 3338 → 3351. AND-as narrowt mét zijn selectie, OR-as zonder, allebei unioneren de selectie terug. Narrowt met `filterByDecisionFilters` (`decide()`'s eigen pass), niet met `filterLibraryMeals` |
-| `feffdfe` | De sluitknop van `dev-embed-probe.tsx` is `canGoBack() ? back() : replace('/')` geworden |
-| `3632188` | `TrendingFilterBar`'s derde reden is onwaar geworden door GAP-33; doorgestreept, reden 1 en 2 dragen het oordeel nog |
+| `cd4d09d` | **GAP-33 — Kiezen narrowt zijn chips mee.** +13 tests |
+| `feffdfe` | Sluitknop embed-probe: `canGoBack() ? back() : replace('/')` |
+| `3632188` | `TrendingFilterBar`'s derde reden onwaar geworden; doorgestreept |
+| `5767bda` | **GAP-32/55 — `Bewaren` plus het `recipes` → `meals`-kopieerpad.** +54 tests |
+| `eca0cf1` | De stand van de avond, en twee afgewezen voorschriften |
+| `4bfbcd8` | De sessielimiet van 00:40 |
+| `5d06b7b` | **GAP-34 — dislikes sluiten uit op ingrediëntnaam.** +28 tests, OPS-16 dicht |
 
-⚠ **Twee dingen die HANDOVER.md voorschreef zijn AFGEWEZEN, allebei omdat de
-voorgeschreven reparatie het defect zou hebben ingevoerd dat ze wilde
-oplossen.** Zie de twee secties hierboven: `claim-handle.tsx` heeft geen
-uitgang nódig, en `dev-embed-probe.tsx` had geen kale `back()` moeten krijgen.
-Dat is dezelfde vorm die dit project deze week vier keer bij de migratiestand
-had — een correcte meting aan een verkeerde vraag gehangen.
+**Eindmeting, zelf gedraaid ná `5d06b7b`:** typecheck 0, lint 0,
+`check:functions` 0, `check:seed` 0, **3433 tests over 143 bestanden**.
+Werkboom schoon. **Niet gepusht** — bewust.
 
-⚠ **`src/app/(tabs)/index.tsx` stond op HEAD al op 816 regels, over het
-plafond van 800, en staat na GAP-33 op 825.** Niet door deze wijziging
-veroorzaakt — hij was er al overheen — maar het is de tweede plek na
-`import/confirm.tsx` (963) die opgesplitst moet worden. Hoort als eigen regel
-in `LONGLIST.md`.
+## Wat de eigenaar moet weten
 
-### De limiet is één keer geraakt, en dat kostte een lege ronde
-
-**10 september, 00:40 (Europe/Amsterdam):** de eerste GAP-34-agent is
-afgebroken op een sessielimiet vóórdat hij ook maar één bestand had gelezen.
-Hij liet **niets** in de boom achter — `git status --short` gaf nul regels, en
-dat is nagemeten en niet aangenomen.
-
-Om **01:13** is de eerste geplande wake-up gevuurd, zijn de vijf poorten
-opnieuw gemeten (typecheck 0, lint 0, `check:functions` 0, `check:seed` 0,
-**3405 tests over 142 bestanden** — gelijk aan de stand van vóór de limiet) en
-is GAP-34 opnieuw uitgezet, met in de opdracht de instructie om zich te
-begroten: liever één volledige groene plak dan breed rondkijken.
-
-⚠ **Wat dit leert over de opzet, en niet alleen over deze nacht:** de
-wake-ups deden precies waarvoor ze stonden, maar ze zijn sessiegebonden. Was
-de CLI zelf gestopt in plaats van alleen de agent, dan had niets ze
-herstart. **Dit bestand is daarom de echte overdracht** — het staat sinds
-`eca0cf1` in git en overleeft de sessie wél.
-
-### Nog onderweg
-
-- **GAP-32/55** (`Bewaren` + het `recipes` → `meals`-schrijfpad) draait nog op
-  een Fable-agent. Zijn RED-fase is zichtbaar in de boom: `recipeCopy`,
-  `saveRecipeCopy`, `sharedRecipeSaveCopy` en de twee social-repository-tests
-  falen omdat hun modules nog niet bestaan. **Dat is TDD die werkt, geen
-  kapotte boom** — maar het betekent wel dat een volledige `npm test` op dit
-  moment rood is en dat alleen daar.
-- **GAP-34** is bewust NIET gestart zolang GAP-32/55 loopt: allebei raken ze
-  vermoedelijk `src/domain/types.ts`, en dat is precies de gedeelde grootheid
-  waar 8 september op stukliep.
+1. **Er is niets gepusht en er is geen migratie gedraaid.** Alle drie de
+   stukken bleken er geen nodig te hebben; bij GAP-32/55 is dat nagemeten:
+   0006's trigger `meals_recipe_copy_starts_unverified` dwingt PD-010 al
+   serverzijdig af.
+2. **Drie voorschriften uit de documenten zijn afgewezen**, alle drie omdat de
+   voorgeschreven reparatie het defect zou hebben ingevoerd dat ze wilde
+   oplossen: de terugknop op `claim-handle.tsx`, de kale `back()` op de
+   embed-probe, en GAP-34's begroting (kolom + migratie + backfill, terwijl
+   geen van drieën nodig was).
+3. **GAP-45 is smaller geworden en de telling is twee keer bijgesteld.**
+   `ingredientCategories.ts` heeft nu een echte aanroeper en valt buiten die
+   beslissing; `mainIngredients.ts` niet, want zijn `NameableIngredient` eist
+   een `sortOrder` die het dislike-predicaat nooit leest.
+4. **Wat GAP-34 bewust NIET doet, en in tests staat:** geen synoniemenlijst,
+   dus `paddenstoelen` vindt `champignons` niet, en meervouden zijn een eigen
+   woord. De ingrediënt-zoekbalk is niet gebouwd.
+5. **Nog steeds onbevestigd op een toestel.** Niets van deze nacht is op een
+   scherm gezien. `TOESTELTEST.md` blijft punt één, en Android bovenaan.
