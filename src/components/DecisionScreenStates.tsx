@@ -18,9 +18,14 @@
  *
  * THE SKELETON DOES NOT SHIMMER, and that is a rule rather than an omission
  * (DESIGN.md §1: "a calm `surfaceSunken` bar (~70% width, no shimmer)"). It
- * holds the dish name's exact line height so the reveal does not move the
- * eyebrow above it, and the eyebrow renders immediately because "KIEZEN" is
- * true before anything has been decided.
+ * holds the dish name's exact line height, so the reveal moves nothing
+ * sideways or down when the name lands.
+ *
+ * ⚠ THE SENTENCE THAT STOOD HERE WAS ABOUT AN EYEBROW THAT NO LONGER EXISTS.
+ * It read that the skeleton keeps the reveal from moving "the eyebrow above
+ * it, and the eyebrow renders immediately because 'KIEZEN' is true before
+ * anything has been decided" — a good argument for a label `DecisionCard`
+ * had already deleted on 7 September. See the body for how it was found.
  */
 
 import type { JSX } from 'react';
@@ -34,7 +39,20 @@ export function DecisionLoadingSkeleton(): JSX.Element {
 
   return (
     <View style={styles.heroBlock}>
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>KIEZEN</Text>
+      {/* ⚠ THE `KIEZEN` EYEBROW WAS REMOVED ON 9 SEPTEMBER 2026, AND IT HAD
+          BEEN A GHOST FOR TWO DAYS. `DecisionCard` dropped its own eyebrow on
+          7 September — that file's header says so in capitals — and this
+          skeleton kept drawing one. So every launch opened on a word that the
+          reveal then deleted: the app's most-measured screen introduced itself
+          with a label that was no longer part of it.
+
+          Nobody had written this down anywhere, which is why it survived. It
+          was found by photographing the running screens rather than by reading
+          the source, and it is the clearest argument this session produced for
+          doing that.
+
+          The bar alone is the honest pause. It stands in the dish name's own
+          line height, so nothing jumps when the name arrives. */}
       <View style={[styles.skeletonBar, { backgroundColor: colors.surfaceSunken }]} />
     </View>
   );
@@ -70,11 +88,6 @@ const styles = StyleSheet.create({
   heroBlock: {
     flex: 1,
     justifyContent: 'center',
-  },
-  eyebrow: {
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginBottom: spacing.space3,
   },
   skeletonBar: {
     alignSelf: 'center',

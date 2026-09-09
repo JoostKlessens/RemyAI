@@ -519,6 +519,11 @@ const styles = StyleSheet.create({
   dishTitleWrap: {
     position: 'relative',
     alignItems: 'center',
+    // Shrink-wraps to the title's widest line so `acceptStroke` can span the
+    // WORD rather than a fixed share of the column — see that style below for
+    // what it replaced. `alignItems: 'center'` still centres the text inside;
+    // this only stops the wrapper itself from filling the parent's width.
+    alignSelf: 'center',
     marginBottom: spacing.space5,
   },
   dishTitle: {
@@ -526,9 +531,24 @@ const styles = StyleSheet.create({
   },
   acceptStroke: {
     position: 'absolute',
-    left: '22.5%',
-    right: '22.5%',
-    bottom: -spacing.space2,
+    // ⚠ WAS `left: '22.5%'` / `right: '22.5%'` UNTIL 9 SEPTEMBER 2026, which
+    // is to say it was 55% of the WRAPPER and had nothing to do with the word
+    // it marks. Under a short name ("Kip kerrie met rijst") the pencil line
+    // ran wider than the text; under a two-line name it underlined the middle
+    // of nothing. A grease-pencil mark that does not follow the word is not a
+    // mark, it is a rule.
+    //
+    // `dishTitleWrap` now shrink-wraps, so 0/0 spans exactly the title's
+    // widest line. Same construction as OutcomeCard's `gemaaktWrap`, whose
+    // comment states the principle: "the stroke has to stop where 'Gemaakt!'
+    // stops, because a line running the full width of the card is a divider
+    // rule, a different mark entirely." Three components draw this family of
+    // marks; now all three draw it the same way.
+    left: 0,
+    right: 0,
+    // 4pt, matching OutcomeCard's `gemaaktStroke` and FriendProofCard's
+    // closed-loop stroke. This one sat at 8 and was the odd one of the three.
+    bottom: -spacing.space1,
     height: 2,
     // Draws left-to-right like a pencil mark, rather than growing out
     // from its own middle, which is what an untouched scaleX does.
