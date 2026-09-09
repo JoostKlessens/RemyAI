@@ -4,9 +4,18 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`961217e` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
-regels. **Alles staat op `origin`**: `git rev-list --left-right --count
-origin/feat/live-import-and-plan-phases...HEAD` geeft `0	0`.
+`8d26807` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
+regels.
+
+⚠ **ER STAAN DRIE COMMITS LOKAAL DIE NIET OP `origin` STAAN.**
+`git rev-list --left-right --count origin/feat/live-import-and-plan-phases...HEAD`
+geeft `0	3`: `121336e` (het palet), `3a3796e` (de terugknop) en `8d26807`
+(de documenten). Dit blok zei drie dagen lang `0	0`, en dat was toen waar; het
+is nu onwaar. Dit document heeft precies deze fout eerder in de andere
+richting gemaakt en er twee dagen aan verloren, dus: **meet het opnieuw
+voordat je hier iets over aanneemt**, en onthoud dat "pushen" in dit project
+twee dingen betekent — deze meting gaat over git, `npx supabase migration
+list` gaat over de database.
 
 **Vijf poorten groen**, alle vijf gedraaid op 9 september en niet
 overgeschreven uit de vorige stand: typecheck 0, lint 0, `check:functions` 0,
@@ -1141,18 +1150,112 @@ dat is nu ingevuld met de meting én het werkende alternatief
 
 ---
 
+## Wat er op 9 september gebeurde: de app is voor het eerst bekeken
+
+**De eigenaar vroeg om een ontwerpreview en of er screenshots gemaakt konden
+worden. Dat kon, en dat is de belangrijkste nieuwe capaciteit in dit
+document.** `react-native-web` stond al in `package.json`, dus
+`npx expo start --web` bundelt de echte app, en Playwright fotografeert hem op
+393 × 852 pt bij `deviceScaleFactor: 3`. De bibliotheek is gevuld door tien
+recepten rechtstreeks op de `remy:`-sleutels in `localStorage` te schrijven;
+de sociale schermen draaien op hun eigen fixtures. Twaalf schermen staan in
+`docs/ontwerp-audit-9-september.html`, met het plan ernaast in
+`docs/ontwerp-plan-9-september.html`.
+
+⚠ **WAT DIT WEL EN NIET BEWIJST, want dat is de hele waarde ervan.** Kleur,
+type, maatvoering, hiërarchie en lege ruimte komen uit `tokens.ts` en zijn
+gewoon waar. Schaduwen, `Animated`, haptics, veeggedrag en de echte tabbalk
+zijn het níét — dat is Chromium, geen toestel. Twee tijdelijke ingrepen waren
+nodig (één `return;` in `AuthGate`, `DEV_SCENARIO_ROWS_VISIBLE` op `true`) en
+allebei zijn ze teruggedraaid vóór er iets gecommit werd.
+
+**Drie commits, alle vijf poorten groen na afloop** (typecheck 0, lint 0,
+`check:functions` 0, `check:seed` 0, 3315 tests over 137 bestanden — gedraaid
+tegen de gecommitte stand, niet opgehoogd).
+
+**`121336e` — het palet verliest zijn groene waas.** De diagnose was een
+getal en geen smaak: alle acht lichte neutralen lagen samen met `accent` en
+`accentMuted` in een band van negen hue-graden (146-155). Er was dus nergens
+tintverschil, en groen op een knop kon niet als kleur lezen omdat er niets
+neutraals naast stond. Chroma van `background` van 0.029 naar 0.005.
+
+⚠ **ONTZADIGD BIJ GELIJKBLIJVENDE CIE L\*, EN DAT IS DE HELE TRUC.**
+WCAG-contrast is een functie van luminantie en CIE L\* is dat ook, dus
+helderheid vasthouden houdt élke contrastassertie én de oppervlakteladder
+staande. **`tests/contrast.test.ts` is ongewijzigd en groen** — dat hij niet
+aangeraakt hoefde te worden ís het bewijs. Ladder 5.33 / 6.80 / 1.58 tegen
+vloeren 5.0 / 6.3 / 1.5. Een eerdere poging hield OKLCH-L vast in plaats van
+CIE L\*, wat L\* met ~0.3 laat zakken, en dat was genoeg om `accent` op
+`surfaceSunken` op 4.49 te zetten tegen een vloer van 4.5. De as die je
+vasthoudt is het verschil.
+
+⚠ **TWEE AANBEVELINGEN UIT DE AUDIT BLEKEN DOOR DE EIGEN POORTEN VERBODEN, en
+dat is de leerzaamste uitkomst van de dag.** De audit vroeg om een bijna-witte
+grond op L\* 97: onmogelijk zolang `surfaceRaised` `#FFFFFF` is, want
+`background → surface` moet 6.3 L\* halen, dus het plafond voor de pagina is
+L\* 93.70. En hij vroeg `textMuted` omhoog om hem van `accent` te scheiden:
+boven ongeveer L\* 47 zakt die door de 4.5:1-poort. **Het commentaar boven die
+vloer had dit voorzien** — het zegt dat hij bestaat omdat "a white-on-white app
+with no visible surface step is the known way this exact change goes wrong".
+Een reviewer die de tests niet leest, beveelt hier het verbodene aan.
+
+**`3a3796e` — een terugknop in plaats van vier.** Zie punt A hierboven voor
+wat er dicht ging en wat er overbleef.
+
+**`8d26807` — ENT-01 verbreed, OPS-14 toegevoegd.** De share extension is
+opnieuw gevraagd, nu met YouTube erbij; geamendeerd in plaats van
+gedupliceerd, omdat commits naar die code bij naam verwijzen. Nieuw daarin:
+de extensie hoeft niets te parsen (`urlParsing.ts` kent `vm.tiktok.com`,
+`vt.tiktok.com`, `youtu.be` en `youtube.com/shorts` al bij naam), en er is een
+kandidaat, `expo-share-intent@8.0.1`. OPS-14 is een Greptile-account, met de
+twee voorwaarden die niet bestaan: een betaald account en pull requests —
+`git log --merges` geeft nul treffers.
+
+**Wat de eigenaar op een toestel bevestigde**, en het is meer dan punt A: de
+overlap tussen zoekveld en tijdschuif op Mijn recepten is een **web-artefact**
+en gebeurt niet op de telefoon; de tabbalk loopt **niet** over; de kaartranden
+op Vrienden zijn **goed zichtbaar** in daglicht (mijn audit noemde ze te vaag
+— dat was fout); en dark mode valt niet uit elkaar, integendeel: *"dit ziet er
+misschien wel beter uit, het is een stuk rustiger zo"*. Die laatste is dezelfde
+meting als het palet hierboven — de donkere neutralen zaten al op chroma
+0.009-0.021 waar de lichte op 0.029-0.046 zaten.
+
+**Wat NIET gedaan is, en als eerste aan de beurt is:** fase 2 uit het plan.
+`SegmentedControl.tsx:57` vult het geselecteerde segment met `accentMuted` op
+een `surfaceSunken`-baan, waardoor de selectie *lichter* is dan de
+niet-selectie — één component, zichtbaar op Instellingen, Importeren en de
+tijdkeuze, en op de nieuwe grijze grond schreeuwt het. Daarnaast monospace
+terugbrengen tot data (de tabbalk staat in 12pt IBM Plex Mono) en een echte
+uitgeschakelde knoptoestand.
+
+---
+
 ## Wat er nu open ligt
 
 ⚠ **LEES EERST DEZE VIJF, ZE ZIJN NIEUW OP 8 SEPTEMBER EN DE GENUMMERDE LIJST
 ERONDER IS OUDER.** Punt 2 hieronder is inmiddels gedaan; de nummering is
 bewust niet hernummerd, omdat commits en codecommentaar ernaar verwijzen.
 
-**A. De terugknop op `/friends/add` werkt nog steeds niet, en de meting die
-het beslist kost twintig seconden.** Doe dezelfde terugtik op **Instellingen**
-— zelfde rij, zelfde `fullScreenModal`. Werkt hij daar wel, dan ligt het aan
-dat scherm; faalt hij daar ook, dan aan de gedeelde rij of de modal. Vijf
-verklaringen zijn al gemeten en afgevallen; zie de dagsectie hierboven, en
-`TOESTELTEST.md` §8c. **Doe dit vóór er nog een hypothese bij komt.**
+**A. ✅ DICHT — de terugknop werkt, en de meting van twintig seconden is
+gedaan.** Op 9 september is de eigenaar precies gevraagd wat hier stond, en
+zijn antwoord was *"Hij werkt maar is nog steeds lastig te klikken"* — en in
+dezelfde ronde, over de knop op **Instellingen**: *"Deze knop werkt wel"*.
+Dat is `TOESTELTEST.md` §8c, beantwoord. **Het bevestigt de `canGoBack()`-
+diagnose in plaats van haar alleen niet te weerspreken**: `router.back()` was
+een no-op wanneer `/friends/add` de eerste route was die de app oploste, en
+`canGoBack() ? back() : replace('/friends')` is de reparatie. Dit punt heeft
+drie dagen boven aan deze lijst gestaan op een premisse die met één vraag te
+falsificeren was.
+
+⚠ **Wat er wél van overbleef is een ander defect, en het is niet het
+raakvlak.** "Lastig te klikken" ging over mikken, niet over reiken: alle vier
+de rijen zetten `minWidth`/`minHeight` al op 44 — nagemeten, vier van de vier
+— dus de doos was nooit te klein. Het ZICHTBARE doel was dat wel: een woord
+van 14pt in `textMuted`, links uitgelijnd in een doos waarvan niets de rand
+tekent. `src/components/BackButton.tsx` (commit `3a3796e`) vervangt dat door
+een pijl van 20pt, gecentreerd, in `textPrimary` — zonder één pixel extra
+raakvlak. **Als het daarna nog steeds hapert, ligt het aan de hoogte van de
+header en niet aan de knop**, en dat is de volgende plek om te kijken.
 
 **B. Draai `demo_social_teardown.sql` vóór er vrienden op de app komen.**
 `suggested_friends()` leest `recipe_ratings` globaal, dus drie demo-profielen
