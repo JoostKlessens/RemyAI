@@ -157,6 +157,25 @@ veroorzaakt — hij was er al overheen — maar het is de tweede plek na
 `import/confirm.tsx` (963) die opgesplitst moet worden. Hoort als eigen regel
 in `LONGLIST.md`.
 
+### De limiet is één keer geraakt, en dat kostte een lege ronde
+
+**10 september, 00:40 (Europe/Amsterdam):** de eerste GAP-34-agent is
+afgebroken op een sessielimiet vóórdat hij ook maar één bestand had gelezen.
+Hij liet **niets** in de boom achter — `git status --short` gaf nul regels, en
+dat is nagemeten en niet aangenomen.
+
+Om **01:13** is de eerste geplande wake-up gevuurd, zijn de vijf poorten
+opnieuw gemeten (typecheck 0, lint 0, `check:functions` 0, `check:seed` 0,
+**3405 tests over 142 bestanden** — gelijk aan de stand van vóór de limiet) en
+is GAP-34 opnieuw uitgezet, met in de opdracht de instructie om zich te
+begroten: liever één volledige groene plak dan breed rondkijken.
+
+⚠ **Wat dit leert over de opzet, en niet alleen over deze nacht:** de
+wake-ups deden precies waarvoor ze stonden, maar ze zijn sessiegebonden. Was
+de CLI zelf gestopt in plaats van alleen de agent, dan had niets ze
+herstart. **Dit bestand is daarom de echte overdracht** — het staat sinds
+`eca0cf1` in git en overleeft de sessie wél.
+
 ### Nog onderweg
 
 - **GAP-32/55** (`Bewaren` + het `recipes` → `meals`-schrijfpad) draait nog op
