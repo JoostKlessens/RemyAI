@@ -23,6 +23,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { CANONICAL_RECIPE_COLUMNS } from '@/lib/repository/social/supabaseRowMapping';
 import { BOARD_RATING_ROW_CEILING, SEND_NOTE_MAX_LENGTH } from '@/lib/repository/social/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -302,6 +303,105 @@ describe('reading canonical recipes', () => {
         estimatedMinutes: 25,
       },
     ]);
+  });
+});
+
+describe('reading one canonical recipe in full', () => {
+  const recipeRow = {
+    id: 'r-1',
+    title: 'Ramen',
+    platform: 'tiktok',
+    author_name: 'noedelnoah',
+    author_url: 'https://www.tiktok.com/@noedelnoah',
+    thumbnail_url: null,
+    dish_tags: ['noedels', 'soep'],
+    estimated_minutes: 25,
+    servings: 2,
+    normalized_url: 'https://www.tiktok.com/@noedelnoah/video/1',
+  };
+
+  /**
+   * The read GAP-55 measured as missing: `listCanonicalRecipes` is a list
+   * projection and deliberately carries no ingredients or steps. This one
+   * does, from the two child tables 0006 already grants SELECT on, so no
+   * migration stands between the screen and the copy.
+   */
+  test('reads the row and both child tables, in recipe order, by the one id it was given', async () => {
+    const fake = makeClient([
+      ok(recipeRow),
+      ok([
+        { recipe_id: 'r-1', name: 'ei', quantity: '2', unit: null, sort_order: 1, section: 'Topping' },
+        { recipe_id: 'r-1', name: 'noedels', quantity: '200', unit: 'g', sort_order: 0, section: null },
+      ]),
+      ok([
+        { recipe_id: 'r-1', step_number: 2, instruction: 'Ei erbij.' },
+        { recipe_id: 'r-1', step_number: 1, instruction: 'Bouillon koken.' },
+      ]),
+    ]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    const recipe = await repository.getCanonicalRecipe('r-1');
+
+    expect(fake.tables).toEqual(['recipes', 'recipe_ingredients', 'recipe_steps']);
+    expect(fake.log).toContain(`select(${CANONICAL_RECIPE_COLUMNS})`);
+    expect(fake.log).toContain('eq(id,r-1)');
+    expect(fake.log.filter((entry) => entry === 'eq(recipe_id,r-1)')).toHaveLength(2);
+    expect(recipe).toEqual({
+      recipeId: 'r-1',
+      title: 'Ramen',
+      platform: 'tiktok',
+      authorName: 'noedelnoah',
+      authorUrl: 'https://www.tiktok.com/@noedelnoah',
+      thumbnailUrl: null,
+      dishTags: ['noedels', 'soep'],
+      estimatedMinutes: 25,
+      servings: 2,
+      sourceUrl: 'https://www.tiktok.com/@noedelnoah/video/1',
+      ingredients: [
+        { name: 'noedels', quantity: '200', unit: 'g', sortOrder: 0, section: null },
+        { name: 'ei', quantity: '2', unit: null, sortOrder: 1, section: 'Topping' },
+      ],
+      steps: [
+        { stepNumber: 1, instruction: 'Bouillon koken.' },
+        { stepNumber: 2, instruction: 'Ei erbij.' },
+      ],
+    });
+  });
+
+  test('never selects `*` on any of the three tables', async () => {
+    const fake = makeClient([ok(recipeRow), ok([]), ok([])]);
+    await createSupabaseSocialRepository(fake.client).getCanonicalRecipe('r-1');
+
+    const selects = fake.log.filter((entry) => entry.startsWith('select('));
+    expect(selects).toHaveLength(3);
+    expect(selects).not.toContain('select(*)');
+  });
+
+  test('an id the database does not hold answers null, and the child tables are never asked', async () => {
+    const fake = makeClient([ok(null)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    expect(await repository.getCanonicalRecipe('r-404')).toBeNull();
+    expect(fake.tables).toEqual(['recipes']);
+  });
+
+  /** A row older than 0018 carries no `section` key at all; the domain reads "no heading" as null, never undefined. */
+  test('a section the row does not carry becomes null rather than undefined', async () => {
+    const fake = makeClient([
+      ok(recipeRow),
+      ok([{ recipe_id: 'r-1', name: 'noedels', quantity: null, unit: null, sort_order: 0 }]),
+      ok([]),
+    ]);
+    const recipe = await createSupabaseSocialRepository(fake.client).getCanonicalRecipe('r-1');
+
+    expect(recipe?.ingredients[0]?.section).toBeNull();
+  });
+
+  test('a refused read throws with the operation named and the Postgres code kept', async () => {
+    const fake = makeClient([{ data: null, error: { message: 'permission denied', code: '42501' } }]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    await expect(repository.getCanonicalRecipe('r-1')).rejects.toThrow(/canonical recipe.*42501/i);
   });
 });
 

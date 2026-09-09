@@ -188,8 +188,25 @@ const FIXTURE_CREATORS: readonly Creator[] = [
 
 type SharedMealFields = Pick<
   Meal,
-  'id' | 'householdId' | 'title' | 'estimatedMinutes' | 'servings' | 'ingredientTags' | 'dishTags' | 'sourceUrl' | 'sourcePlatform' | 'thumbnailUrl'
+  'id' | 'householdId' | 'title' | 'estimatedMinutes' | 'servings' | 'ingredientTags' | 'dishTags' | 'sourceUrl' | 'sourcePlatform' | 'thumbnailUrl' | 'recipeId'
 >;
+
+/**
+ * The canonical `recipes` rows the fixture dishes were copied from — the ids
+ * `Bewaren` on the detail screen hands to the real write path (§3.3). THEY
+ * EXIST IN NO DATABASE, DELIBERATELY: uuid-shaped so Postgres parses them,
+ * unlike any seed id so nobody mistakes them for demo data that loads.
+ * `getCanonicalRecipe` answers null and the screen shows its not-found line.
+ * Pointing at the seed's recipes would save a dish with a different title
+ * than the one on screen; writing the fixture itself with an id no Postgres
+ * holds would park a mirror entry forever (backfillMirrorOutbox.ts, 22P02).
+ */
+const FIXTURE_RECIPE_IDS = {
+  traybake: 'f1c7f1c7-0000-4000-8000-000000000001',
+  pesto: 'f1c7f1c7-0000-4000-8000-000000000002',
+  ramen: 'f1c7f1c7-0000-4000-8000-000000000003',
+  focaccia: 'f1c7f1c7-0000-4000-8000-000000000004',
+} as const;
 
 /** Every shared meal carries these same columns; only the recipe-specific fields above differ. */
 function makeSharedMeal(fields: SharedMealFields): Meal {
@@ -216,6 +233,7 @@ export const FIXTURE_MEALS: readonly Meal[] = [
     sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/7412998877665',
     sourcePlatform: 'tiktok',
     thumbnailUrl: 'https://p16-sign.tiktokcdn.com/traybake-kip-citroen~tplv-thumb.jpg',
+    recipeId: FIXTURE_RECIPE_IDS.traybake,
   }),
   makeSharedMeal({
     id: 'meal-friend-pesto',
@@ -233,6 +251,7 @@ export const FIXTURE_MEALS: readonly Meal[] = [
     // none (src/lib/oembed.ts), so this exercises the monogram fallback on
     // a real failure mode rather than an invented one.
     thumbnailUrl: null,
+    recipeId: FIXTURE_RECIPE_IDS.pesto,
   }),
   makeSharedMeal({
     id: 'meal-friend-ramen',
@@ -245,6 +264,7 @@ export const FIXTURE_MEALS: readonly Meal[] = [
     sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/7413001122334',
     sourcePlatform: 'tiktok',
     thumbnailUrl: 'https://p16-sign.tiktokcdn.com/miso-ramen-ei~tplv-thumb.jpg',
+    recipeId: FIXTURE_RECIPE_IDS.ramen,
   }),
   makeSharedMeal({
     id: 'meal-friend-focaccia',
@@ -257,6 +277,7 @@ export const FIXTURE_MEALS: readonly Meal[] = [
     sourceUrl: 'https://www.tiktok.com/@bakkerbram/video/7410000111222',
     sourcePlatform: 'tiktok',
     thumbnailUrl: 'https://p16-sign.tiktokcdn.com/focaccia-rozemarijn~tplv-thumb.jpg',
+    recipeId: FIXTURE_RECIPE_IDS.focaccia,
   }),
 ];
 

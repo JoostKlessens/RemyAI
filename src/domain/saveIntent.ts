@@ -98,6 +98,26 @@ export const SAVE_INTENTS = ['this_week', 'someday', 'none'] as const satisfies 
 export const IMPORT_DEFAULT_SAVE_INTENT: SaveIntent = 'someday';
 
 /**
+ * The intents a surface that still ASKS "wanneer?" may write — `SaveIntent`
+ * minus the graveyard. The shared recipe screen's `Bewaren`
+ * (DESIGN-SOCIAL.md §3.3) is that surface: it opens `SaveIntentSheet`,
+ * which offers exactly these two, and hands the answer to a write typed
+ * against this rather than against the full union, so a `'none'` can never
+ * be constructed there even by a future edit to the sheet.
+ */
+export type SchedulableSaveIntent = Exclude<SaveIntent, 'none'>;
+
+/**
+ * The type guard between the sheet's `SaveIntent` and the write's
+ * `SchedulableSaveIntent`. Defined ON `guaranteesEventualSuggestion` rather
+ * than beside it, so the predicate and the type cannot disagree about which
+ * intents keep PD-004a's promise.
+ */
+export function isSchedulableSaveIntent(intent: SaveIntent): intent is SchedulableSaveIntent {
+  return guaranteesEventualSuggestion(intent);
+}
+
+/**
  * Whether the decision engine is GUARANTEED to eventually offer a dish saved
  * with this intent — PD-004a's promise, expressed as a predicate rather than
  * as a sentence in a document.

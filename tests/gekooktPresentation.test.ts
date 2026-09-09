@@ -87,6 +87,7 @@ function makeSendCard(mealId: string): FriendRecipeCardModel {
     servings: 2,
     rating: 4,
     friendName: 'Joris',
+    canonicalRecipeId: null,
     creator: CREATOR,
     sourceUrl: 'https://www.tiktok.com/@kokenmetkees/video/1',
     keyIngredients: null,

@@ -23,7 +23,12 @@
 
 import { describe, expect, test } from 'vitest';
 import { decide } from '@/domain/decide';
-import { IMPORT_DEFAULT_SAVE_INTENT, SAVE_INTENTS, guaranteesEventualSuggestion } from '@/domain/saveIntent';
+import {
+  IMPORT_DEFAULT_SAVE_INTENT,
+  SAVE_INTENTS,
+  guaranteesEventualSuggestion,
+  isSchedulableSaveIntent,
+} from '@/domain/saveIntent';
 import {
   SAVED_THIS_WEEK_BOOST,
   SOMEDAY_SAVE_BASE_BOOST,
@@ -91,6 +96,22 @@ describe('guaranteesEventualSuggestion', () => {
       expect(typeof guaranteesEventualSuggestion(intent)).toBe('boolean');
     }
     expect(SAVE_INTENTS).toContain(IMPORT_DEFAULT_SAVE_INTENT);
+  });
+});
+
+describe('isSchedulableSaveIntent', () => {
+  /**
+   * The type guard a surface that ASKS "wanneer?" narrows through — the
+   * shared recipe screen's `Bewaren` hands `SaveIntentSheet`'s answer to a
+   * write that only accepts intents PD-004a promises will come around. It
+   * is defined on `guaranteesEventualSuggestion` rather than beside it, so
+   * the predicate and the type can never disagree about which those are.
+   */
+  test('narrows to exactly the intents guaranteesEventualSuggestion accepts', () => {
+    for (const intent of SAVE_INTENTS) {
+      expect(isSchedulableSaveIntent(intent)).toBe(guaranteesEventualSuggestion(intent));
+    }
+    expect(isSchedulableSaveIntent('none')).toBe(false);
   });
 });
 

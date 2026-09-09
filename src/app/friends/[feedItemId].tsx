@@ -21,16 +21,29 @@
  *      plus one remote thumbnail reference; playback happens on the
  *      creator's own platform, always.
  *
- * WHY THERE IS NO "OPSLAAN" BUTTON YET. PD-004 measures this product on
- * save-to-cook, so a save is plainly where this screen is heading — but
- * saving a shared recipe means writing a meal into this household's
- * library, and PD-010 is explicit that a copied meal must start at
- * `allergenTagStatus: 'unknown'`, because someone else's "verified" is not
- * evidence for your kitchen. That write belongs with the real sharing
- * model in src/domain/social/**, which another agent is building right
- * now. A button here that merely looked like it saved would be worse than
- * no button, so this phase ships the reading half honestly and leaves the
- * writing half to the phase that can do it properly.
+ * `BEWAREN` (DESIGN-SOCIAL.md §3.3, §4.3). The one reaction, in the thumb
+ * zone under the scroll: a full-width primary that opens the existing
+ * `SaveIntentSheet` unchanged — `Deze week` / `Ooit`, no third option —
+ * and hands the answer to `saveRecipeCopy` (src/lib), which reads the
+ * canonical `recipes` row and writes this household's copy starting at
+ * `allergenTagStatus: 'unknown'`, exactly as PD-010 requires
+ * (src/domain/social/recipeCopy.ts keeps that promise; 0006's trigger keeps
+ * it again server-side). After the write lands the control re-renders as
+ * `positiveMuted` fill with `positive` text, `Bewaard`. The card keeps its
+ * ranked place in the feed; nothing here hides it.
+ *
+ * THE SAVE ZONE SITS OUTSIDE THE SCROLL, and that is PD-010.2 rather than
+ * layout taste: the original-post link stays directly under the last step
+ * in document order, and a control pinned below the scroll can never push
+ * it below the fold. Same shape as `/recipe/[mealId]`'s `Koken` footer.
+ *
+ * THE SAVE IS KEYED ON THE SENDER'S CANONICAL RECIPE, which the card carries
+ * off their meal (`FriendRecipeCardModel.canonicalRecipeId` — see that
+ * field on why it is not called `recipeId`). A friend's hand-entered dish
+ * has none — there is no canonical row to copy — and the zone says so
+ * under a disabled primary rather than offering a save that cannot land.
+ * Copying a sender's OWN version (their `meals` row, readable through
+ * `has_active_send_to_me`) is a separate change and not this one.
  *
  * WHY THIS IS NOT COOK MODE. Tapping a friend's card must never open
  * `/cook/[mealId]`: these meal ids belong to the friends' households and
@@ -46,16 +59,23 @@
  * all: a send without one is ordinary, and a proof card opening this same
  * screen never has one.
  *
- * FIXTURES ONLY (`@/fixtures/friendFeedFixtures`) — no fetch, no
- * repository, no Supabase. And, unlike Vrienden and Trending, NOT behind
- * `DEV_SCENARIO_ROWS_VISIBLE`: this screen has no live read to fall back
- * to, so the fixture is what ships until one exists.
+ * FIXTURES ONLY FOR THE RECIPE ON SCREEN (`@/fixtures/friendFeedFixtures`)
+ * — the reading half still has no live source, on every build and behind
+ * no flag, because the list that routes here produces no live send cards
+ * yet (src/lib/gekooktSource.ts explains the `Creator`-versus-attribution
+ * gap), so nothing reaches this screen outside the `__DEV__` scenarios
+ * except a deep link. THE SAVE IS NOT A FIXTURE: `Bewaren` reads
+ * `recipes` through the Supabase social repository and writes through the
+ * app repository. On a fixture card that read answers null — the fixture
+ * ids exist in no database, by design (see `FIXTURE_RECIPE_IDS`) — and the
+ * zone shows its not-found line. When this screen gains a live read, the
+ * save works unchanged.
  */
 
-import { useMemo, type JSX } from 'react';
+import { useCallback, useMemo, useReducer, type JSX } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FIXTURE_TARGET_DATE, getFriendFeedFixture, parseFriendFeedScenario } from '@/fixtures/friendFeedFixtures';
 import { BackButton } from '@/components/BackButton';
@@ -69,8 +89,26 @@ import {
   formatIngredientLine,
   type FriendRecipeCardModel,
 } from '@/components/friendFeedPresentation';
+import { SaveIntentSheet } from '@/components/SaveIntentSheet';
+import {
+  IDLE_SHARED_RECIPE_SAVE,
+  SHARED_RECIPE_SAVED_ACCESSIBILITY_LABEL,
+  SHARED_RECIPE_SAVE_ACCESSIBILITY_LABEL,
+  describeSharedRecipeSaveAnnouncement,
+  describeSharedRecipeSaveControl,
+  reduceSharedRecipeSave,
+  type SharedRecipeSaveControl,
+  type SharedRecipeSaveState,
+} from '@/components/sharedRecipeSaveCopy';
 import { useOpenExternalLink } from '@/components/useOpenExternalLink';
-import type { MealIngredient, MealStep } from '@/domain/types';
+import { isSchedulableSaveIntent } from '@/domain/saveIntent';
+import type { RecipeId } from '@/domain/social/types';
+import type { MealIngredient, MealStep, SaveIntent } from '@/domain/types';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { getAppRepository } from '@/lib/repository';
+import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { saveRecipeCopy } from '@/lib/saveRecipeCopy';
+import { supabase } from '@/lib/supabase';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 interface ResolvedSharedRecipe {
@@ -112,8 +150,11 @@ export default function SharedRecipeScreen(): JSX.Element {
     };
   }, [feedItemId, rawScenario]);
 
+  // All four edges now, where this screen used to leave the bottom to its
+  // scroll padding: the save zone is pinned under the scroll, and it has to
+  // clear the home indicator the way `/recipe/[mealId]`'s footer does.
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         {/* The fourth and last of the hand-copied back rows, folded into
             `BackButton` on 9 September 2026 with the other three. This one
@@ -127,7 +168,7 @@ export default function SharedRecipeScreen(): JSX.Element {
       {resolved === null ? (
         <UnavailableRecipeState onBack={() => router.back()} />
       ) : (
-        <SharedRecipeBody resolved={resolved} />
+        <SharedRecipeWithSave resolved={resolved} />
       )}
     </SafeAreaView>
   );
@@ -153,6 +194,128 @@ function UnavailableRecipeState(props: { readonly onBack: () => void }): JSX.Ele
         De maker heeft het teruggetrokken, of de post is verwijderd.
       </Text>
       <Button label="Terug" variant="secondary" onPress={onBack} accessibilityLabel="Terug naar wat vrienden deelden" />
+    </View>
+  );
+}
+
+/**
+ * The body, the thumb-zone save under it, and the sheet between them. Split
+ * from `SharedRecipeScreen` so the save hook runs only once a card has
+ * resolved — a save keyed on a recipe that is not on screen has no
+ * business existing.
+ */
+function SharedRecipeWithSave(props: { readonly resolved: ResolvedSharedRecipe }): JSX.Element {
+  const { resolved } = props;
+  const reduceMotionEnabled = useReduceMotion();
+  const save = useSharedRecipeSave(resolved.card.canonicalRecipeId);
+
+  return (
+    <>
+      <SharedRecipeBody resolved={resolved} />
+      <SharedRecipeSaveZone control={save.control} isFailure={save.state.kind === 'failed'} onPress={save.press} />
+      <SaveIntentSheet
+        visible={save.state.kind === 'choosing'}
+        dishTitle={resolved.card.title}
+        onSelectIntent={save.chooseIntent}
+        onDismiss={save.dismiss}
+        reduceMotionEnabled={reduceMotionEnabled}
+      />
+    </>
+  );
+}
+
+interface SharedRecipeSaveHandle {
+  readonly state: SharedRecipeSaveState;
+  readonly control: SharedRecipeSaveControl;
+  readonly press: () => void;
+  readonly dismiss: () => void;
+  readonly chooseIntent: (intent: SaveIntent) => void;
+}
+
+/**
+ * `Bewaren` -> sheet -> write -> `Bewaard`, as one reducer and one effect.
+ * Every transition is `reduceSharedRecipeSave`'s (tested); this only
+ * dispatches, and performs the single write through `saveRecipeCopy`,
+ * which reports rather than throws, so there is no error path to forget.
+ */
+function useSharedRecipeSave(recipeId: RecipeId | null): SharedRecipeSaveHandle {
+  const [state, dispatch] = useReducer(reduceSharedRecipeSave, IDLE_SHARED_RECIPE_SAVE);
+
+  const chooseIntent = useCallback(
+    (intent: SaveIntent): void => {
+      // The sheet's contract is `SaveIntent`; the write's is the schedulable
+      // half of it. A `'none'` cannot arrive from the two rows the sheet
+      // offers, and if it ever did the honest answer is to write nothing.
+      if (recipeId === null || !isSchedulableSaveIntent(intent)) {
+        dispatch({ type: 'sheet-dismissed' });
+        return;
+      }
+      dispatch({ type: 'intent-chosen' });
+      void saveRecipeCopy(createSupabaseSocialRepository(supabase), getAppRepository(), recipeId, intent).then(
+        (outcome) => {
+          dispatch({ type: 'write-settled', outcome });
+          // The sheet already said "Bewaard: …" the instant a row was
+          // tapped, before the write. This confirms it, or corrects it.
+          AccessibilityInfo.announceForAccessibility(describeSharedRecipeSaveAnnouncement(outcome));
+        },
+      );
+    },
+    [recipeId],
+  );
+
+  return {
+    state,
+    control: describeSharedRecipeSaveControl(state, recipeId !== null),
+    press: () => dispatch({ type: 'save-pressed' }),
+    dismiss: () => dispatch({ type: 'sheet-dismissed' }),
+    chooseIntent,
+  };
+}
+
+/**
+ * The thumb zone (§3.3: "full width, inside `spacing.thumbZoneMinHeight`").
+ * A completed save is a state, not an action, so it is drawn as the
+ * `positiveMuted` / `positive` pair `RecipeTile`'s badge and
+ * `FriendProofCard`'s chip use, rather than as a disabled button pretending
+ * to be one — at the button's own height, so the zone does not jump when
+ * the write lands.
+ */
+function SharedRecipeSaveZone(props: {
+  readonly control: SharedRecipeSaveControl;
+  readonly isFailure: boolean;
+  readonly onPress: () => void;
+}): JSX.Element {
+  const { control, isFailure, onPress } = props;
+  const scheme = useColorScheme();
+  const colors = getColors(scheme);
+
+  return (
+    <View style={[styles.saveZone, { borderTopColor: colors.border }]}>
+      {control.kind === 'completed' ? (
+        <View
+          style={[styles.savedState, { backgroundColor: colors.positiveMuted }]}
+          accessibilityRole="text"
+          accessibilityLabel={SHARED_RECIPE_SAVED_ACCESSIBILITY_LABEL}
+        >
+          <Text style={[typeScale.button, { color: colors.positive }]}>{control.label}</Text>
+        </View>
+      ) : (
+        <>
+          <Button
+            label={control.label}
+            variant="primary"
+            onPress={onPress}
+            disabled={control.disabled}
+            loading={control.loading}
+            accessibilityLabel={SHARED_RECIPE_SAVE_ACCESSIBILITY_LABEL}
+          />
+          {control.note !== null ? (
+            <Text style={[typeScale.bodySmall, styles.saveNote, { color: isFailure ? colors.danger : colors.textMuted }]}>
+              {control.note}
+            </Text>
+          ) : null}
+        </>
+      )}
     </View>
   );
 }
@@ -362,6 +525,27 @@ const styles = StyleSheet.create({
   },
   openFailed: {
     marginTop: spacing.space2,
+  },
+  saveZone: {
+    minHeight: spacing.thumbZoneMinHeight,
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    paddingHorizontal: spacing.screenPaddingHorizontal,
+    paddingTop: spacing.space4,
+    paddingBottom: spacing.space4,
+  },
+  savedState: {
+    // The button's own minimum, so `Bewaren` and `Bewaard` occupy the same
+    // box and the zone does not jump when the write lands.
+    minHeight: spacing.touchTargetMin + 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.space4,
+    borderRadius: radii.radiusMd,
+  },
+  saveNote: {
+    marginTop: spacing.space2,
+    textAlign: 'center',
   },
   unavailable: {
     flex: 1,

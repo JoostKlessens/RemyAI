@@ -44,7 +44,7 @@ import type { CreatorPlatform } from '@/domain/feed/types';
 // something worse than either.
 import type { SuggestedFriendRow as DomainSuggestedFriendRow } from '@/domain/social/friendSuggestions';
 import type { Friendship, FriendshipStatus, Profile, RecipeRating } from '@/domain/social/types';
-import type { CanonicalRecipeSummary, IncomingSend, RecipeShare, SentMeal } from './types';
+import type { CanonicalRecipe, CanonicalRecipeSummary, IncomingSend, RecipeShare, SentMeal } from './types';
 
 /**
  * Postgres row shapes, written out rather than inferred. `supabase.ts`
@@ -111,6 +111,47 @@ export interface RecipeRow {
   readonly dish_tags: readonly string[];
   readonly estimated_minutes: number | null;
 }
+
+/**
+ * `RecipeRow` plus the three columns only the FULL read asks for. A
+ * separate shape rather than three optionals on `RecipeRow`, so the list
+ * read cannot half-fill this one and have the difference land as
+ * `undefined` on a screen.
+ */
+export interface CanonicalRecipeDetailRow extends RecipeRow {
+  readonly normalized_url: string;
+  readonly author_url: string | null;
+  readonly servings: number | null;
+}
+
+export interface RecipeIngredientRow {
+  readonly recipe_id: string;
+  readonly name: string;
+  readonly quantity: string | null;
+  readonly unit: string | null;
+  readonly sort_order: number;
+  /**
+   * Optional on the ROW, not the column: 0018 added it as plain `text`, so
+   * a row carries null or a heading — but a row is only as wide as its
+   * `.select()`, and the mapper reads an absent key as "no heading" rather
+   * than letting `undefined` reach the domain.
+   */
+  readonly section?: string | null;
+}
+
+export interface RecipeStepRow {
+  readonly recipe_id: string;
+  readonly step_number: number;
+  readonly instruction: string;
+}
+
+/** Spelled out rather than `*`, exactly as `SENT_MEAL_COLUMNS` is: the column list is the only place a projection is decided. */
+export const CANONICAL_RECIPE_COLUMNS =
+  'id, title, platform, author_name, author_url, thumbnail_url, dish_tags, estimated_minutes, servings, normalized_url';
+
+export const CANONICAL_RECIPE_INGREDIENT_COLUMNS = 'recipe_id, name, quantity, unit, sort_order, section';
+
+export const CANONICAL_RECIPE_STEP_COLUMNS = 'recipe_id, step_number, instruction';
 
 /**
  * The three columns `listMealsSentToMe` needs off a `recipe_shares` row —
@@ -293,6 +334,37 @@ export function toCanonicalRecipe(row: RecipeRow): CanonicalRecipeSummary {
     // would then read as "this recipe has no tags".
     dishTags: row.dish_tags,
     estimatedMinutes: row.estimated_minutes,
+  };
+}
+
+/**
+ * One canonical recipe, assembled from the three reads. The summary half is
+ * `toCanonicalRecipe`'s verbatim, so the list and the full read cannot
+ * disagree about a title or a platform; the children are sorted here, as
+ * `toSentMeal` sorts ingredients, so no caller ever has to.
+ */
+export function toCanonicalRecipeDetail(
+  row: CanonicalRecipeDetailRow,
+  ingredients: readonly RecipeIngredientRow[],
+  steps: readonly RecipeStepRow[],
+): CanonicalRecipe {
+  return {
+    ...toCanonicalRecipe(row),
+    sourceUrl: row.normalized_url,
+    authorUrl: row.author_url,
+    servings: row.servings,
+    ingredients: [...ingredients]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((ingredient) => ({
+        name: ingredient.name,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        sortOrder: ingredient.sort_order,
+        section: ingredient.section ?? null,
+      })),
+    steps: [...steps]
+      .sort((a, b) => a.step_number - b.step_number)
+      .map((step) => ({ stepNumber: step.step_number, instruction: step.instruction })),
   };
 }
 

@@ -64,6 +64,7 @@ import {
   type KeyIngredientsSummary,
 } from './friendCardVocabulary';
 import type { Creator, CreatorId, CreatorPlatform, FeedItem, FeedItemId } from '@/domain/feed/types';
+import type { RecipeId } from '@/domain/social/types';
 import type { Household, IsoDateString, Meal, MealId, MealIngredient, Member, Restriction } from '@/domain/types';
 
 /**
@@ -189,6 +190,24 @@ export interface FriendRecipeCardModel {
    * argument, and gekooktPresentation.ts for the band it makes possible.
    */
   readonly note: string | null;
+  /**
+   * The sender's `meals.recipe_id` (0006) — the canonical row `Bewaren` on
+   * the shared recipe screen copies from (DESIGN-SOCIAL.md §3.3), carried
+   * off the meal exactly as `SentMeal.recipeId` is. Null for a hand-entered
+   * dish, which has no shared object to copy again; the screen then says so
+   * rather than offering a save that cannot land.
+   *
+   * NOT NAMED `recipeId`, AND THE NAME IS LOAD-BEARING. `isProofCard`
+   * (gekooktPresentation.ts) tells the two card kinds apart on
+   * `'recipeId' in card`, because a proof card IS a canonical recipe and a
+   * send card IS somebody's meal — the identifier each holds is its
+   * identity. This field is an attribute of that meal, not the card's
+   * identity, and giving it the discriminator's name would make every send
+   * card narrow as proof and render with the wrong component under the
+   * wrong permissions. tests/gekooktPresentation.test.ts caught exactly
+   * that on 9 September 2026.
+   */
+  readonly canonicalRecipeId: RecipeId | null;
   /** The original video's creator — carried whole, since PD-010 requires attribution on the card AND on the recipe. */
   readonly creator: Creator;
   readonly sourceUrl: string;
@@ -256,6 +275,9 @@ function buildCardModel(item: FeedItem, source: FriendFeedSource): FriendRecipeC
     rating: share.rating,
     friendName: share.friendName,
     note: share.note,
+    // `?? null` for `Meal.recipeId`'s own reason: a row written before 0006
+    // has no key, and a missing key means the same thing as null.
+    canonicalRecipeId: meal.recipeId ?? null,
     creator,
     sourceUrl: item.sourceUrl,
     keyIngredients: summarizeKeyIngredients(source.ingredientsByMealId.get(meal.id) ?? []),

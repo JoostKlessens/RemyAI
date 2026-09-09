@@ -86,6 +86,20 @@ describe('the fixture set demonstrates what it claims to', () => {
       expect(card.sourceUrl.startsWith('https://')).toBe(true);
     }
   });
+
+  /**
+   * Every fixture dish came out of a creator's post, so each names the
+   * canonical `recipes` row it was copied from — the id `Bewaren` on the
+   * detail screen hands to the real write path (DESIGN-SOCIAL §3.3). The
+   * ids exist in no database, deliberately: the read answers null and the
+   * screen shows its not-found state rather than writing a demo dish, with
+   * an id no Postgres holds, into a household's real library.
+   */
+  test('every servable card names a canonical recipe id, so Bewaren reaches the real write path', () => {
+    for (const card of assembleScenario('gedeeld')) {
+      expect(card.canonicalRecipeId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    }
+  });
 });
 
 /**

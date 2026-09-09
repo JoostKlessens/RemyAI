@@ -357,6 +357,33 @@ describe('buildFriendRecipeCardModels', () => {
     expect(model?.collidingTags).toEqual(['noten']);
   });
 
+  /**
+   * The id `Bewaren` on the shared recipe screen copies from (DESIGN-SOCIAL
+   * §3.3). Carried off the sender's meal exactly as `SentMeal.recipeId` is,
+   * and null for the hand-entered majority — a copy of nothing has no
+   * canonical row to be copied again from.
+   */
+  test("carries the sender's canonical recipe id, or null when their dish is a copy of nothing", () => {
+    const linked = buildFriendRecipeCardModels(makeSource({ meals: [makeMeal({ id: 'meal-1', recipeId: 'recipe-7' })] }));
+    expect(linked[0]?.canonicalRecipeId).toBe('recipe-7');
+
+    const typed = buildFriendRecipeCardModels(makeSource({ meals: [makeMeal({ id: 'meal-1', recipeId: null })] }));
+    expect(typed[0]?.canonicalRecipeId).toBeNull();
+
+    const legacy = buildFriendRecipeCardModels(makeSource({ meals: [makeMeal({ id: 'meal-1' })] }));
+    expect(legacy[0]?.canonicalRecipeId).toBeNull();
+  });
+
+  /**
+   * The name is the discriminator: `isProofCard` (gekooktPresentation.ts)
+   * narrows on `'recipeId' in card`. A send card that grew a key by that
+   * name would render as proof, under proof's permissions.
+   */
+  test('never carries a key called `recipeId` — that name is the proof card’s identity', () => {
+    const [model] = buildFriendRecipeCardModels(makeSource({ meals: [makeMeal({ id: 'meal-1', recipeId: 'recipe-7' })] }));
+    expect(model !== undefined && 'recipeId' in model).toBe(false);
+  });
+
   test('skips an item with no linked meal — PD-010 promises a card that opens a full recipe', () => {
     const source = makeSource({ items: [makeFeedItem({ mealId: null })] });
 

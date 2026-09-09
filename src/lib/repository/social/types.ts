@@ -91,6 +91,47 @@ export interface CanonicalRecipeSummary {
   readonly estimatedMinutes: number | null;
 }
 
+export interface CanonicalRecipeIngredient {
+  readonly name: string;
+  readonly quantity: string | null;
+  readonly unit: string | null;
+  /** Recipe order. The implementations sort by it, so a caller never has to. */
+  readonly sortOrder: number;
+  /** `recipe_ingredients.section` (0018) — the source's own sub-recipe heading, or null for the one-list majority. */
+  readonly section: string | null;
+}
+
+export interface CanonicalRecipeStep {
+  readonly stepNumber: number;
+  readonly instruction: string;
+}
+
+/**
+ * A canonical `recipes` row (0006) IN FULL — the summary above, plus what
+ * a recipe screen renders and a copy needs: the address, the servings, and
+ * the two child tables. The read GAP-55 measured as missing on 8 September
+ * 2026, and the input `buildMealCopy` (src/domain/social/recipeCopy.ts)
+ * turns into this household's own `meals` row.
+ *
+ * STILL NOT A `Meal`, AND STILL NO ALLERGEN FIELD, for the summary's
+ * reason: a canonical recipe holds no household's check, so a copy built
+ * from this starts at `'unknown'` with nothing to inherit. Compare
+ * `SentMeal` below, which carries a sender's `ingredientTags` as a
+ * PRESENCE claim — that is a household's own data travelling under §3.5's
+ * rules; this is shared data that never had any.
+ *
+ * `sourceUrl` is `recipes.normalized_url`, the row's deduplication key,
+ * and it doubles as PD-010.2's original-post link on the copy.
+ */
+export interface CanonicalRecipe extends CanonicalRecipeSummary {
+  readonly sourceUrl: string;
+  /** `recipes.author_url` — PD-010.1's profile link. Null when the source reported none. */
+  readonly authorUrl: string | null;
+  readonly servings: number | null;
+  readonly ingredients: readonly CanonicalRecipeIngredient[];
+  readonly steps: readonly CanonicalRecipeStep[];
+}
+
 /**
  * The ceiling on a whole-table rating read, above which the board stops
  * being able to tell the truth.
@@ -668,4 +709,26 @@ export interface RemySocialRepository {
    * board's job in that case is to drop the row, not to fail the screen.
    */
   listCanonicalRecipes(recipeIds: readonly RecipeId[]): Promise<readonly CanonicalRecipeSummary[]>;
+
+  /**
+   * One canonical recipe in full — ingredients and steps included — for
+   * the screen that shows it and the write that copies it
+   * (src/domain/social/recipeCopy.ts, composed in src/lib/saveRecipeCopy.ts).
+   *
+   * NOT A WIDENING OF `listCanonicalRecipes`, deliberately: that read is a
+   * list projection and its own comment says why dragging two child tables
+   * into every row would be wrong. This one is asked for a single id by a
+   * screen already looking at that recipe.
+   *
+   * NOTHING NEW IS EXPOSED. `recipes`, `recipe_ingredients` and
+   * `recipe_steps` all grant SELECT to any authenticated reader (0006,
+   * `can_read_recipe`), which is the same fact PD-014 rests its whole
+   * safety argument on — so no migration stands between this method and
+   * the copy.
+   *
+   * `null` when the id names no row: the recipe was withdrawn, or deleted
+   * underneath a share (`meals.recipe_id` is `on delete set null`). A
+   * caller answers that with its not-found state, never by copying a blank.
+   */
+  getCanonicalRecipe(recipeId: RecipeId): Promise<CanonicalRecipe | null>;
 }

@@ -49,6 +49,7 @@ import type { KeyValueStore } from '../keyValueStore';
 import { createTableAccessor, type TableAccessor } from '../table';
 import {
   normalizeSendNote,
+  type CanonicalRecipe,
   type CanonicalRecipeSummary,
   type FriendCook,
   type IncomingSend,
@@ -698,6 +699,16 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
       // board wants from a store that structurally cannot answer.
       void recipeIds;
       return [];
+    },
+
+    async getCanonicalRecipe(recipeId: RecipeId): Promise<CanonicalRecipe | null> {
+      // Null, for `listCanonicalRecipes`'s reason one row at a time: there
+      // is no canonical recipe on this device to read, and inventing one
+      // would let a local test copy a dish the real backend cannot find.
+      // `null` is precisely the answer Postgres gives for a withdrawn
+      // recipe, so a caller built against this store already handles it.
+      void recipeId;
+      return null;
     },
   };
 }

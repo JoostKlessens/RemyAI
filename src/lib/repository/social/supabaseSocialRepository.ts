@@ -56,6 +56,7 @@ import {
   normalizeSendNote,
   type FriendCook,
   type IncomingSend,
+  type CanonicalRecipe,
   type CanonicalRecipeSummary,
   type RateRecipeInput,
   type RecipeShare,
@@ -68,10 +69,17 @@ import {
 // out when this file passed 800 lines; see that module's header on why the
 // seam sits exactly there.
 import {
+  CANONICAL_RECIPE_COLUMNS,
+  CANONICAL_RECIPE_INGREDIENT_COLUMNS,
+  CANONICAL_RECIPE_STEP_COLUMNS,
   SENT_MEAL_COLUMNS,
   SENT_MEAL_INGREDIENT_COLUMNS,
   fail,
   toCanonicalRecipe,
+  toCanonicalRecipeDetail,
+  type CanonicalRecipeDetailRow,
+  type RecipeIngredientRow,
+  type RecipeStepRow,
   toFriendship,
   toIncomingSend,
   toProfile,
@@ -692,6 +700,48 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
         fail('Reading canonical recipes', error);
       }
       return ((data ?? []) as RecipeRow[]).map(toCanonicalRecipe);
+    },
+
+    async getCanonicalRecipe(recipeId: RecipeId): Promise<CanonicalRecipe | null> {
+      // THE ROW FIRST, THE CHILDREN ONLY IF IT EXISTS. A missing recipe is
+      // an ordinary answer (withdrawn, or deleted under a share), and two
+      // reads about a row that is not there would be two round trips spent
+      // learning nothing. `maybeSingle`, never `single`: an absent row is
+      // null here, not an error.
+      const { data, error } = await client
+        .from('recipes')
+        .select(CANONICAL_RECIPE_COLUMNS)
+        .eq('id', recipeId)
+        .maybeSingle();
+
+      if (error) {
+        fail('Reading a canonical recipe', error);
+      }
+      if (data === null) {
+        return null;
+      }
+
+      // Both child tables are readable through `can_read_recipe` (0006),
+      // which asks only that the parent exist and the caller be signed in —
+      // the parent just answered, so these cannot be refused for a reason
+      // the first read would not already have hit.
+      const [ingredientResult, stepResult] = await Promise.all([
+        client.from('recipe_ingredients').select(CANONICAL_RECIPE_INGREDIENT_COLUMNS).eq('recipe_id', recipeId),
+        client.from('recipe_steps').select(CANONICAL_RECIPE_STEP_COLUMNS).eq('recipe_id', recipeId),
+      ]);
+
+      if (ingredientResult.error) {
+        fail('Reading the ingredients of a canonical recipe', ingredientResult.error);
+      }
+      if (stepResult.error) {
+        fail('Reading the steps of a canonical recipe', stepResult.error);
+      }
+
+      return toCanonicalRecipeDetail(
+        data as CanonicalRecipeDetailRow,
+        (ingredientResult.data as RecipeIngredientRow[] | null) ?? [],
+        (stepResult.data as RecipeStepRow[] | null) ?? [],
+      );
     },
   };
 }

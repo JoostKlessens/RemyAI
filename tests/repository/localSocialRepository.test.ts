@@ -719,3 +719,16 @@ describe('votes that may be shown with a name', () => {
     });
   });
 });
+
+describe('canonical recipes', () => {
+  /**
+   * Canonical recipes live only in Postgres — `recipes` (0006) is written by
+   * the parse-recipe edge function with the service role and has no local
+   * mirror, deliberately. The full read answers exactly what the list read
+   * answers: nothing, honestly, rather than a recipe invented on device.
+   */
+  test('getCanonicalRecipe answers null, for the same reason listCanonicalRecipes answers empty', async () => {
+    expect(await repository.getCanonicalRecipe('recipe-1')).toBeNull();
+    expect(await repository.listCanonicalRecipes(['recipe-1'])).toEqual([]);
+  });
+});

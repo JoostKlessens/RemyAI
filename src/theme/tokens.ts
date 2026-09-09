@@ -653,12 +653,14 @@ export interface SpacingTokens {
    * stopped being stacked and became two halves of ONE line — so the band
    * that row needs is a single button tall now, not two.
    *
-   * AND NOTHING READS THIS TOKEN. `grep thumbZoneMinHeight` finds only the
-   * declaration here and the value below; Kiezen's `actionZone` is sized
-   * by its own padding, with `heroBlock` taking the slack. So "must fit"
-   * described a constraint nothing was checking. Kept rather than deleted,
-   * because 96 is a measured floor worth having the day a screen wants to
-   * assert it — but stated honestly, so nobody reads it as live.
+   * ONE SCREEN READS THIS TOKEN NOW, AND FOR A WHILE NONE DID. Until
+   * 9 September 2026 `grep thumbZoneMinHeight` found only the declaration
+   * here and the value below; Kiezen's `actionZone` is sized by its own
+   * padding, with `heroBlock` taking the slack, so "must fit" described a
+   * constraint nothing was checking. The shared recipe screen's save zone
+   * (src/app/friends/[feedItemId].tsx — DESIGN-SOCIAL.md §3.3, "full width,
+   * inside `spacing.thumbZoneMinHeight`") is the first `minHeight` to
+   * assert it. Kiezen still does not.
    */
   readonly thumbZoneMinHeight: number;
   /** Minimum touch target size (WCAG 2.5.5 / iOS HIG), in points. */
