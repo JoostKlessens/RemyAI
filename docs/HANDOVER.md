@@ -4,18 +4,17 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`8d26807` gecommit. **De werkboom is schoon** — `git status --short` geeft nul
-regels.
+`1746766` gecommit **en gepusht**. **De werkboom is schoon** — `git status
+--short` geeft nul regels — en `git rev-list --left-right --count
+origin/feat/live-import-and-plan-phases...HEAD` geeft `0	0`.
 
-⚠ **ER STAAN DRIE COMMITS LOKAAL DIE NIET OP `origin` STAAN.**
-`git rev-list --left-right --count origin/feat/live-import-and-plan-phases...HEAD`
-geeft `0	3`: `121336e` (het palet), `3a3796e` (de terugknop) en `8d26807`
-(de documenten). Dit blok zei drie dagen lang `0	0`, en dat was toen waar; het
-is nu onwaar. Dit document heeft precies deze fout eerder in de andere
-richting gemaakt en er twee dagen aan verloren, dus: **meet het opnieuw
-voordat je hier iets over aanneemt**, en onthoud dat "pushen" in dit project
-twee dingen betekent — deze meting gaat over git, `npx supabase migration
-list` gaat over de database.
+⚠ **DIT BLOK STOND VANDAAG EEN UUR LANG OP `0	3`, EN DAT WAS TOEN WAAR.**
+Acht commits zijn op 9 september in twee rondes gepusht: `d9a37d6..862a778`
+en `862a778..1746766`. Deze waarschuwing blijft staan omdat dit document
+dezelfde regel al vier keer in de verkeerde richting heeft ingevuld — **meet
+hem opnieuw voordat je hier iets over aanneemt**, en onthoud dat "pushen" in
+dit project twee dingen betekent: deze meting gaat over git, `npx supabase
+migration list` gaat over de database.
 
 **Vijf poorten groen**, alle vijf gedraaid op 9 september en niet
 overgeschreven uit de vorige stand: typecheck 0, lint 0, `check:functions` 0,
@@ -1220,13 +1219,65 @@ misschien wel beter uit, het is een stuk rustiger zo"*. Die laatste is dezelfde
 meting als het palet hierboven — de donkere neutralen zaten al op chroma
 0.009-0.021 waar de lichte op 0.029-0.046 zaten.
 
-**Wat NIET gedaan is, en als eerste aan de beurt is:** fase 2 uit het plan.
-`SegmentedControl.tsx:57` vult het geselecteerde segment met `accentMuted` op
-een `surfaceSunken`-baan, waardoor de selectie *lichter* is dan de
-niet-selectie — één component, zichtbaar op Instellingen, Importeren en de
-tijdkeuze, en op de nieuwe grijze grond schreeuwt het. Daarnaast monospace
-terugbrengen tot data (de tabbalk staat in 12pt IBM Plex Mono) en een echte
-uitgeschakelde knoptoestand.
+### Fase 2, later op 9 september: vier commits, drie parallelle agents
+
+**`fd7670b` — het pijltje groter en lager, en terugswipen.** Het raakvlak van
+44 naar 48 en een spacingstap omlaag, allebei op verzoek ná het op een toestel
+te hebben gezien. Dat weerspreekt de meting van die ochtend niet maar vult
+haar aan: 44 haalde de vloer, en **een vloer is een minimum, geen optimum**.
+En terugswipen bleek een eigenschap van de *presentatie*: een
+`fullScreenModal` is `UIModalPresentationFullScreen` en kent geen interactieve
+dismissal, dus `gestureEnabled` had daar niets aan te zetten. Het bewijs stond
+al in `_layout.tsx` — `recipe/[mealId]` is er nooit in gedeclareerd, was dus
+altijd een card push, en dat is precies waarom terugswipen dáár wel werkte.
+`friends/add`, `friends/[feedItemId]` en `settings` volgen die vorm nu.
+⚠ **Niet op een toestel geverifieerd.**
+
+**`e3029f0` — selectie en uitgeschakeld krijgen hun eigen gewicht.** Twee
+componenten waarin de nadruk omgekeerd stond, allebei met een getal weerlegd.
+`SegmentedControl` zette de selectie op `accentMuted` (CIE L\* 93,33) op een
+baan van 86,29: **7,03 L\* lichter dan de niet-selectie.** Nu een verhoogde
+tegel. En `Button`'s uitgeschakelde staat was `opacity: 0.5`, wat een
+verzadigde vulling niet dimt maar **verplaatst**: `accent` op halve dekking
+composiet naar `#72AB8D`, een OKLab-afstand van **0,230** van `accent` — verder
+dan de 0,138 die dit palet tussen zijn twéé semantische groenen bewaakt. Het
+was een derde groen, met een labelcontrast van 2,40:1 onder de vloer.
+
+**`7df3455` — monospace terug naar data.** 106 mono-aanroepplekken naar 79;
+26 plekken om, geen enkele string aangeraakt. ⚠ **De tabbalk is gemeten en
+niet geschat**: de `hmtx`- en `OS/2`-tabellen van de meegeleverde TTFs zijn
+uitgelezen, en de wissel naar 14pt Archivo **repareert twee bestaande
+overlopen** — `Vrienden · 2` van 86,40 naar 74,37 in een slot van 83,75, en
+`Vrienden · 12` van 93,60 naar 81,66.
+
+**`1746766` — twee defecten die alleen zichtbaar waren op een foto.** Een
+Fable-audit vond ze door naar de schermen te kijken. (a) De skeleton op Kiezen
+tekende `KIEZEN` als eyebrow terwijl `DecisionCard` die op 7 september had
+verwijderd: **elke start opende op een woord dat de onthulling daarna
+wegnam**, op het scherm dat in seconden gemeten wordt, en nergens genoteerd.
+(b) `acceptStroke` stond op `left/right: 22.5%` — 55% van de wrapper, zonder
+enige relatie tot het woord dat het markeert. Hij krimpt nu om de titel, zoals
+`OutcomeCard` al deed.
+
+### Wat er NIET gedaan is en als eerste aan de beurt is
+
+1. **GAP-58 — de actieve filterstaat wordt niet getekend.** `Icon.tsx:107`
+   gooit `color` weg voor alle 45 tekeningen, dus `FilterTrigger`'s
+   `accent`-staat komt nooit aan. Zie de LONGLIST voor de reparatie en voor de
+   tweede meting die verklaart waarom het niemand opviel.
+2. **`accentMuted` zit nog op de avatarcirkels en het toestemmingsvinkje** in
+   Instellingen — op de grijze grond zijn dat nu de felste dingen op het
+   scherm. Stond in fase 2 van het plan en is niet meegenomen.
+3. **Fase 3, en die wacht op een beslissing van de eigenaar.** De Fable-audit
+   over onderscheidend vermogen stelt één ding centraal: **draai de volgorde
+   van het beeld om.** De 45 gekleurde tekeningen in `design/icons-v2/` zijn
+   de foto van het gerecht, en een videostill vervaagt er bovenop *als* die er
+   is. Dan is een bibliotheek die al haar thumbnails kwijt is niet kapot maar
+   gewoon zichzelf. Dat is de enige beeldstrategie die de juridische positie
+   van dit product overleeft. ⚠ Correctie op het plan: `react-native-svg`
+   **is** geïnstalleerd (15.15.4), dus dit kost geen dependency.
+4. **Eén beslissing die alleen de eigenaar mag nemen:** "8,84" afronden naar
+   "8,8" keert `DESIGN.md` §9 en PD-014 om.
 
 ---
 
