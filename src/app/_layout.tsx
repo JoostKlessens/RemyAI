@@ -158,8 +158,47 @@ export default function RootLayout(): JSX.Element | null {
             the id "add"; the ordering here is so a reader meets the
             specific route before the catch-all, the way the file system
             lists them. */}
-        <Stack.Screen name="friends/add" options={{ presentation: 'fullScreenModal' }} />
-        <Stack.Screen name="friends/[feedItemId]" options={{ presentation: 'fullScreenModal' }} />
+        {/* ⚠ THESE TWO STOPPED BEING `fullScreenModal` ON 9 SEPTEMBER 2026,
+            AND SO DID `settings` BELOW. The owner asked to be able to swipe
+            back, and on iOS that gesture is a property of the PRESENTATION
+            rather than a flag you can add: a `fullScreenModal` maps to
+            `UIModalPresentationFullScreen`, which has no interactive
+            dismissal, so `gestureEnabled` has nothing to enable there. A card
+            push carries the edge-swipe natively, with no dependency —
+            `react-native-gesture-handler` is NOT installed and this change
+            deliberately does not add it.
+
+            THE EVIDENCE THAT THIS IS THE RIGHT SHAPE WAS ALREADY IN THIS
+            FILE. `recipe/[mealId]` is not declared here at all, so it has
+            been an ordinary card push all along — which is exactly why back
+            already swiped there and nowhere else. `deze-week` and
+            `boodschappen` below make the argument in words: "ordinary
+            pushes: they are places in the app rather than interruptions of
+            it". These three are the same kind of place. You go to them, and
+            you come back.
+
+            NOTHING ABOUT THE TAB BAR CHANGES, which is the thing to check
+            before believing this is safe. Tab-free comes from these routes
+            being SIBLINGS of the `(tabs)` group in this Stack — see this
+            file's header — and not from `presentation`. A card push still
+            covers the tabs completely; only the transition differs, from
+            bottom-up to right-to-left.
+
+            WHAT KEEPS ITS MODAL, because the rule is not "swipe everywhere":
+            `cook/[mealId]` (a swipe out of a half-cooked recipe is a lost
+            session, and that screen's own comment at line 674 names its
+            presentation), `recipe-edit/[mealId]` and the two import screens
+            (all three hold unsaved work), and `sign-in`/`claim-handle`, which
+            additionally pin `gestureEnabled: false` because there is nowhere
+            to go back TO.
+
+            ⚠ NOT VERIFIED ON A DEVICE. This is reasoned from the navigator's
+            presentation semantics, not measured — the one thing a web render
+            cannot show. It is the first thing to check on the next phone
+            pass, alongside whether the right-to-left transition suits these
+            three. */}
+        <Stack.Screen name="friends/add" />
+        <Stack.Screen name="friends/[feedItemId]" />
         {/* RCP-03. Full-screen over the tabs, the same treatment
             import/confirm gets below and for the same reason: it is one
             focused editing task you go into and come back from, and the
@@ -184,7 +223,14 @@ export default function RootLayout(): JSX.Element | null {
         <Stack.Screen name="recipe-edit/[mealId]" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/paste" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="import/confirm" options={{ presentation: 'fullScreenModal' }} />
-        <Stack.Screen name="settings" options={{ presentation: 'fullScreenModal' }} />
+        {/* The third of the three that gave up `fullScreenModal` for the back
+            swipe — see the block above `friends/add` for the argument. This
+            one is the least controversial of them: settings is a plain form
+            you open from Mijn recepten and return to Mijn recepten from, it
+            holds no half-finished work that a stray swipe could lose, and
+            every field on it writes through on change rather than on a save
+            button. */}
+        <Stack.Screen name="settings" />
         <Stack.Screen name="sign-in" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
         <Stack.Screen name="claim-handle" options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
       </Stack>

@@ -78,8 +78,41 @@ import { getColors, spacing } from '@/theme/tokens';
 
 /** WS4's UI-glyph band is 16-20pt; this is the top of it, because it is the only glyph on the row. */
 const GLYPH_SIZE = 20;
+
+/**
+ * 48, not `spacing.touchTargetMin`'s 44 — AND THE REASON IS THE ONLY KIND
+ * THIS FILE ACCEPTS: somebody used it. The header above argues, correctly and
+ * with a measurement, that 44 already met the floor and that the remaining
+ * complaint was about aiming rather than reach. The owner then held the built
+ * arrow on a device and said it was "nog steeds niet helemaal goed", asking
+ * for a slightly larger box set slightly lower.
+ *
+ * BOTH THINGS ARE TRUE AND THAT IS THE LESSON. A floor is a minimum, not an
+ * optimum, and a measurement that says "compliant" cannot answer
+ * "comfortable". A thumb arriving from the bottom of a 6.3-inch screen reaches
+ * the top-left corner at an angle rather than square on, and four points of
+ * extra radius there cost nothing. `spacing.space12` rather than a literal:
+ * 48 is already a step on the scale.
+ */
+const TOUCH_SIZE = spacing.space12;
+
+/**
+ * Lowered by one spacing step, also on request. It moves the glyph off the
+ * very top of the safe area, where it sat against the visual weight of the
+ * status bar, and drops it nearer the optical centre of the rows these four
+ * headers actually draw.
+ *
+ * IT LIVES HERE RATHER THAN IN THE FOUR `header` STYLES, which is the whole
+ * point of having this component. Those four headers already disagreed about
+ * their own top padding — `space2` on settings, `space6` on friends/add — so
+ * nudging each of them by hand would have re-created exactly the drift this
+ * file was built to end. One offset, applied everywhere, and each header keeps
+ * whatever padding it had.
+ */
+const TOP_OFFSET = spacing.space2;
+
 /** Half the slack between the touch target and the glyph — see the header on optical alignment. */
-const OPTICAL_INSET = (spacing.touchTargetMin - GLYPH_SIZE) / 2;
+const OPTICAL_INSET = (TOUCH_SIZE - GLYPH_SIZE) / 2;
 
 export interface BackButtonProps {
   readonly onPress: () => void;
@@ -115,9 +148,10 @@ export function BackButton(props: BackButtonProps): JSX.Element {
 
 const styles = StyleSheet.create({
   button: {
-    minWidth: spacing.touchTargetMin,
-    minHeight: spacing.touchTargetMin,
+    minWidth: TOUCH_SIZE,
+    minHeight: TOUCH_SIZE,
     marginLeft: -OPTICAL_INSET,
+    marginTop: TOP_OFFSET,
     alignItems: 'center',
     justifyContent: 'center',
   },
