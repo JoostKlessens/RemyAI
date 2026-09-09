@@ -226,7 +226,12 @@ export default function DevEmbedProbeScreen(): JSX.Element {
         ))}
 
         <Pressable
-          onPress={() => router.replace('/')}
+          // Entered by deeplink (exp://<lan-ip>:8081/--/dev-embed-probe), so
+          // there is usually no stack to pop: a bare `back()` is the no-op
+          // GAP-53 already paid for on /friends/add. Guarded, same shape as
+          // BackButton.tsx, which is why this screen still does not use it:
+          // its fallback is the tab root, not /friends.
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           accessibilityRole="button"
           accessibilityLabel="Terug naar de app"
           style={[styles.closeRow, { borderColor: colors.borderStrong }]}
