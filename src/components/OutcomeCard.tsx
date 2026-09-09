@@ -48,51 +48,49 @@
  * THE MOOD ROW — the owner's "blokjes voor categorien", and the one thing
  * on this card meant to be seen by anybody else.
  *
- * There are now two answers in the follow-up phase and they are not the
- * same kind of thing:
+ * ⚠ THE GRADE IS NOT ON THIS CARD ANY MORE — 9 SEPTEMBER 2026, GAP-46.
+ * This block used to describe TWO answers in the follow-up phase. It
+ * describes one:
  *
- *   the grade (`onRate`)       -> `cook_events.rating`, PRIVATE, a number
- *                              -> AND one `recipe_ratings` vote, PUBLIC,
- *                                 the same number without a name
  *   the mood  (`onChooseMood`) -> the meal's `dishMoods`, PUBLIC, a word
  *
- * PD-019 is why these are separate callbacks writing separate tables
- * rather than one richer answer. A grade whose author knows others can
- * see it BY NAME is a grade that gets inflated, and an inflated grade
- * feeding the decision engine corrupts every later suggestion. A mood
- * carries no number and no mood outranks another, so there is nothing in
- * it to inflate. Nothing here derives one value from another, and the
- * separate prop signatures make that structural rather than a promise.
+ * The owner's instruction, verbatim: "Daarnaast wil ik dat je pas een
+ * cijfer kan geven de eerste keer dat je de app opent na 12 uur sinds het
+ * afronden van het recept. Anders heb je het waarschijnlijk nog helemaal
+ * niet gegeten." He is right about this card specifically: it appears the
+ * moment the pan comes off the heat, so a grade given on it is a grade for
+ * the COOKING and not for the meal. `PendingRatingSheet` now asks, twelve
+ * hours later, against `src/domain/cookRating.ts`'s rule.
  *
- * THE SECOND ARROW ON `onRate` IS NEW, AND THIS BLOCK USED TO SAY THE
- * NUMBER "STAYS HOME". It no longer does, and leaving that sentence in
- * the file that COLLECTS the grade would be exactly the defect this
- * codebase keeps finding — a comment arguing for a rule nobody built.
- * The owner's instruction, verbatim: "the rating should also be
- * represented in the global ranking of a recipe." The host now hands the
- * same value to `castPublicVote` (src/domain/social/publicVote.ts), which
- * writes one vote on the canonical recipe.
+ * WHAT LEFT AND WHAT STAYED, because only one thing moved. Gone: the
+ * scale, the grade's own draft state, the commit haptic, the spoken
+ * announcement of a recorded number, and the exit beat that ran on it.
+ * Staying exactly where they were: the "Gemaakt!" confirmation and its
+ * green hairline, the per-cook sharing checkbox, the mood row and `Stuur
+ * door`. Each of those is about the COOK, which has just happened; the
+ * grade was the only thing here about a meal nobody had eaten yet.
  *
- * Two things keep PD-019's argument standing rather than merely surviving
- * it. The private COLUMN still never crosses a household boundary —
- * `shared_cooks` omits it outright. And no surface that prints a NAME
- * beside a number reads it either: Ranglijst averages anonymously, and de
- * kring reads `namable_recipe_votes` (0016), which drops a vote whose
- * dish was unticked on this very card.
+ * WHAT THIS COSTS THE CARD, NAMED. "Klaar" no longer carries an answer —
+ * it is only a way out now, which is why its two-state accessibility label
+ * went with the scale. And the card no longer animates itself closed on a
+ * commit, because nothing commits here any more; it dismisses, which is
+ * what its close button always did.
  *
- * NONE OF WHICH IS THIS COMPONENT'S BUSINESS. It calls `onRate` once with
- * one number, exactly as before. The second write lives with the host,
- * because "does this meal have a canonical recipe" and "who is signed in"
- * are repository reads, and this card refuses those.
+ * PD-019 STILL GOVERNS THE GRADE, one file over rather than here: a grade
+ * whose author knows others can see it BY NAME is a grade that gets
+ * inflated, and an inflated grade feeding the decision engine corrupts
+ * every later suggestion. The private `cook_events.rating` and the
+ * anonymous `recipe_ratings` vote therefore stay separate writes;
+ * `src/lib/pendingRating.ts`'s `recordPendingRating` owns that pair now
+ * and carries the argument with it.
  *
- * WHY IT DOES NOT BREAK "one tap either way". The rule this card is built
- * on is that skipping the grade must cost exactly what answering it
- * costs, and it still does: one gesture on the scale, one tap on "Klaar".
- * The mood row is neither — it is optional, it records nothing about the
- * grade, it gates nothing, and ignoring it costs zero taps because you
- * simply never touch it. What it does change is the card's HEIGHT, and
- * that is the real cost: six chips wrap to two or three lines on a narrow
- * phone at large Dynamic Type, above a scale and two buttons. The
+ * WHY THE MOOD ROW DOES NOT BREAK "one tap either way". The rule this card
+ * is built on is that skipping must cost exactly what answering costs, and
+ * it still does — one tap on "Klaar". The mood row is optional, it records
+ * nothing about a grade, it gates nothing, and ignoring it costs zero taps
+ * because you simply never touch it. What it does change is the card's
+ * HEIGHT, and that is the real cost: six chips wrap to two or three lines
+ * on a narrow phone at large Dynamic Type. The
  * vocabulary is capped at six for exactly this reason
  * (tests/dishMoods.test.ts asserts the cap), and neither host scrolls
  * this card — so if it overflows on a real device the honest fix is a
@@ -110,7 +108,9 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { DISH_MOODS } from '@/domain/dishMoods';
-import { hapticCompleted, hapticRealCommit, hapticSmallCommit } from '@/lib/haptics';
+// `hapticRealCommit` went with the grade (GAP-46): WS5 §3.2 puts it on "a
+// grade commits", and nothing on this card commits one any more.
+import { hapticCompleted, hapticSmallCommit } from '@/lib/haptics';
 import { elevation, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';
 import { Chip } from './Chip';
@@ -120,22 +120,15 @@ import {
   COOK_SHARING_THIS_COOK_LABEL,
   buildCookSharingThisCookAccessibilityLabel,
 } from './cookSharingCopy';
-import { RatingScale } from './RatingScale';
-import { RATING_QUESTION, RATING_SKIP_LABEL, describeRatingAnnouncement, formatGrade } from './ratingScaleCopy';
-import { OUTCOME_SEND_ACCESSIBILITY_LABEL, OUTCOME_SEND_LABEL } from './sendRecipeSheetCopy';
+// `RatingScale` and ratingScaleCopy are NOT imported any more (GAP-46). The
+// grade left this card for `PendingRatingSheet`; `OUTCOME_DONE_LABEL` below
+// is this card's own way out, which is all "Klaar" ever has to mean here.
+import { OUTCOME_DONE_LABEL, OUTCOME_SEND_ACCESSIBILITY_LABEL, OUTCOME_SEND_LABEL } from './sendRecipeSheetCopy';
 
 export interface OutcomeCardProps {
   readonly dishTitle: string;
   /** Fires the moment "Ja" / "Nog niet" is tapped, regardless of what happens after. */
   readonly onCooked: (cooked: boolean) => void;
-  /**
-   * Fires only from the follow-up phase, after `onCooked(true)`, and only
-   * when a score was actually given — dismissing without one is a
-   * legitimate end state that reports nothing at all. The number is a raw
-   * score on src/domain/rating.ts's scale; projecting it onto
-   * `wouldRepeat` is the repository's job, never the caller's.
-   */
-  readonly onRate: (rating: number) => void;
   /**
    * DESIGN-SOCIAL.md §3.1's first entry point into the Sturen sheet:
    * "the moment after rating your own cook", offered as one tertiary
@@ -215,13 +208,14 @@ export interface OutcomeCardProps {
    * the product is doing, dressed as a courtesy: it implies there is
    * something to withhold.
    *
-   * NOT DISABLED BY `isCommitting`, the same call `onChooseMood` and
-   * `onSendRecipe` make. The scale and "Klaar" are frozen during the exit
-   * beat so it cannot record a second, different grade — a real hazard,
-   * because a grade is one value and the last write wins. This is not
-   * that: each tap writes the current state of one boolean on one meal
-   * row, so a tap during the hold records one more true thing about what
-   * the person wants rather than contradicting anything.
+   * NEVER FROZEN, and since GAP-46 nothing on this card is. There used to
+   * be an exit beat after a grade committed, during which the scale and
+   * "Klaar" were disabled so it could not record a second, different
+   * number; this row was deliberately left tappable through it, because
+   * each tap writes the current state of one boolean on one meal row and
+   * so records one more true thing rather than contradicting anything.
+   * The grade left for `PendingRatingSheet`, the beat went with it, and
+   * this row's reasoning outlived both.
    */
   readonly onChangeCookProofSharing?: (shareThisCook: boolean) => void;
   readonly onSendRecipe?: () => void;
@@ -260,7 +254,6 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
   const {
     dishTitle,
     onCooked,
-    onRate,
     onChooseMood,
     onChangeCookProofSharing,
     onSendRecipe,
@@ -271,8 +264,6 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const [phase, setPhase] = useState<Phase>('prompt');
-  /** Non-null once a score is committed — freezes the controls so the exit beat cannot record a second, different answer. */
-  const [ratedValue, setRatedValue] = useState<number | null>(null);
   /**
    * Which mood is showing as chosen. Local, and deliberately NOT the
    * source of truth — `onChooseMood` has already written by the time this
@@ -301,23 +292,6 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
    * household may have changed on another screen since.
    */
   const [shareThisCook, setShareThisCook] = useState(true);
-  /**
-   * The grade the finger has moved to but nobody has recorded yet.
-   *
-   * IT LIVES HERE AND NOT IN `RatingScale` BECAUSE `Klaar` LIVES HERE.
-   * The scale used to write a grade the instant a finger lifted, so a
-   * mis-touch was a permanent number and a closed card. Now the scale only
-   * ever drafts, and the one button below decides: a draft becomes a
-   * grade, no draft becomes a quiet exit.
-   *
-   * PD-008's rule is untouched by this — "skipping must cost exactly what
-   * answering costs" — because it is still a single tap either way, on the
-   * same button. What changed is that the tap is now a DECISION rather than
-   * a side effect of letting go, which is the only reading under which the
-   * scale's own header ("a rating which nags is a rating that gets lied
-   * to") survives contact with a thumb on a 44pt strip.
-   */
-  const [draftRating, setDraftRating] = useState<number | null>(null);
 
   const entrance = useRef(new Animated.Value(0)).current;
   const wash = useRef(new Animated.Value(0)).current;
@@ -375,75 +349,42 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
     ]).start();
     // WS5 §4.5: the moment the entire product exists to reach, and until
     // now the largest file in the repository had no haptic in it at all.
-    // Fired here rather than from the animation's completion callback for
-    // the same reason `onRate` is persisted immediately: an app
-    // backgrounded mid-beat never runs that callback.
+    // Fired here rather than from the animation's completion callback,
+    // because an app backgrounded mid-beat never runs that callback.
     hapticCompleted();
     setPhase('followUp');
     // A1: the card morphs in place (no new screen, no focus change a
     // screen reader would naturally pick up), so the follow-up phase
     // needs its own explicit announcement — and it must name EVERY
-    // control that is on screen. Announcing only the grade would leave a
-    // screen-reader user to discover a whole chip row by swiping into it,
-    // which is how an optional control becomes an invisible one.
+    // control that is on screen, or an optional control becomes an
+    // invisible one that has to be found by swiping.
+    //
+    // ⚠ THE GRADE IS NO LONGER ANNOUNCED HERE (GAP-46) and this sentence
+    // shrank with the card. It used to end on `RATING_QUESTION`, which is
+    // now asked by `PendingRatingSheet` twelve hours later; leaving it in
+    // would promise a scale that is not on screen.
     //
     // The sharing row is announced FIRST and in the order it is rendered,
     // and it is the one item here that is not a question. It arrives
     // already ticked, so a reader who never hears it has consented by not
     // being told — which is the failure mode a spoken announcement exists
     // to prevent, and the reason this sentence leads rather than trails.
-    const followUpQuestions =
-      onChooseMood === undefined ? RATING_QUESTION : `${MOOD_QUESTION} ${RATING_QUESTION}`;
+    const followUpQuestions = onChooseMood === undefined ? '' : MOOD_QUESTION;
     const sharingNotice = onChangeCookProofSharing === undefined ? '' : `${COOK_SHARING_THIS_COOK_LABEL} `;
-    AccessibilityInfo.announceForAccessibility(`Gemaakt! ${sharingNotice}${followUpQuestions}`);
+    AccessibilityInfo.announceForAccessibility(`Gemaakt! ${sharingNotice}${followUpQuestions}`.trimEnd());
   };
 
   /**
-   * The one exit, and it is one tap whichever answer it carries. A draft
-   * on the scale is recorded; no draft closes with nothing written, which
-   * is a complete and permitted end to this card rather than an abandoned
-   * one.
+   * The one exit, and since GAP-46 it carries no answer at all.
+   *
+   * It used to commit a drafted grade or close without one; the grade left
+   * this card, so what is left is a dismissal — the same thing the close
+   * button in the corner has always done. It stays a `Button` rather than
+   * becoming a second close affordance because the follow-up phase needs a
+   * way out that reads as finishing rather than as abandoning.
    */
   const handleFinish = (): void => {
-    if (draftRating === null) {
-      onDismiss();
-      return;
-    }
-    handleRate(draftRating);
-  };
-
-  const handleRate = (rating: number): void => {
-    if (ratedValue !== null) {
-      return;
-    }
-    setRatedValue(rating);
-    // The commit haptic, moved here from the scale's release handler along
-    // with the commit itself: WS5 §3.2 puts `impactAsync(Medium)` on "a
-    // grade commits", and this is now the only place a grade commits.
-    hapticRealCommit();
-    // Persisted immediately rather than from the exit animation's
-    // completion callback: the write must not depend on an animation
-    // finishing, which it never does if the app is backgrounded mid-beat.
-    onRate(rating);
-    // The card closes on its own from here, so there is no confirmation
-    // surface a screen reader would land on — this is the only chance to
-    // say what was recorded and what it means for future suggestions.
-    AccessibilityInfo.announceForAccessibility(describeRatingAnnouncement(rating));
-    Animated.sequence([
-      // Long enough that the selected chip is genuinely seen, short
-      // enough that it never reads as a loading state. Both legs collapse
-      // to 0 under reduce-motion, so the card cuts away instantly rather
-      // than merely faster.
-      Animated.delay(resolveDuration(motion.durationNormal, reduceMotionEnabled)),
-      Animated.timing(entrance, {
-        toValue: 0,
-        duration: resolveDuration(motion.durationFast, reduceMotionEnabled),
-        easing: Easing.bezier(...motion.easingAccelerate),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onDismiss();
-    });
+    onDismiss();
   };
 
   /**
@@ -462,13 +403,12 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
    * a no-op at the repository anyway, and re-announcing would say
    * something happened when nothing did.
    *
-   * DELIBERATELY NOT DISABLED BY `isCommitting`, unlike the scale and
-   * "Klaar" beside it. Those are frozen so the exit beat cannot record a
-   * second, different grade — a real hazard, because the grade is a
-   * single value that the last write wins. A mood is not: the set only
-   * ever grows, so a tap during the hold adds one more true thing rather
-   * than contradicting anything. It is the same call `onSendRecipe` makes
-   * one prop over, for the same reason.
+   * NEVER FROZEN, and since GAP-46 there is nothing left to freeze it
+   * against. The scale and "Klaar" used to be disabled during the exit
+   * beat that followed a committed grade, because a grade is a single
+   * value where the last write wins; a mood is not, since the set only
+   * ever grows. Both the grade and the beat are gone — the mood row's
+   * reasoning is unchanged and now simply universal on this card.
    */
   const handleChooseMood = (mood: string): void => {
     if (onChooseMood === undefined || chosenMood === mood) {
@@ -519,7 +459,6 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
   };
 
   const scale = entrance.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] });
-  const isCommitting = ratedValue !== null;
 
   return (
     <Animated.View
@@ -537,7 +476,11 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
         onPress={onDismiss}
         accessibilityRole="button"
         accessibilityLabel="Sluiten"
-        disabled={isCommitting}
+        // NO LONGER FROZEN MID-COMMIT (GAP-46). This carried
+        // `disabled={isCommitting}` so the exit beat that ran after a grade
+        // could not be interrupted into recording a second, different
+        // answer. Nothing on this card commits any more, so there is no
+        // beat to protect and nothing to freeze.
         style={styles.closeButton}
         hitSlop={8}
       >
@@ -610,19 +553,19 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
               putting the audience question between them would file it
               under the wrong heading.
 
-              And it MUST be above `RatingScale` regardless, for the same
-              reason the mood row is: a grade is TERMINAL on this card, so
-              anything rendered below the scale is unreachable for
-              everybody who answers the question the card exists to ask.
-              A privacy control nobody who rates can reach is not a
-              control.
+              It also USED to have to sit above `RatingScale`, because a
+              grade was terminal here and started an exit beat — so anything
+              below the scale was unreachable for everybody who answered the
+              question the card existed to ask. GAP-46 moved the grade out,
+              so that constraint is gone; the position stays on the first
+              reason alone, which was always the better one.
 
               NO STATE LINE UNDER IT, unlike the settings section's "Staat
               aan. / Staat uit." The box's own tick carries the state here
               and `accessibilityState.checked` speaks it, and this card's
-              header treats height as a hard constraint — six mood chips, a
-              scale and two buttons already stack below this point at 200%
-              Dynamic Type, on a card neither host scrolls. */}
+              header treats height as a hard constraint — six mood chips and
+              two buttons still stack below this point at 200% Dynamic Type,
+              on a card neither host scrolls. */}
           {onChangeCookProofSharing !== undefined ? (
             <View style={styles.cookProofRow}>
               <ConsentCheckboxRow
@@ -633,12 +576,11 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
               />
             </View>
           ) : null}
-          {/* The mood row sits ABOVE the scale, and it has to. A grade is
-              TERMINAL on this card — tapping one records and starts the
-              exit beat — so anything rendered below `RatingScale` is
-              unreachable for everybody who answers the question the card
-              exists to ask. Above it, both answers are available and
-              neither costs the other anything.
+          {/* This row used to sit above the rating scale because it HAD to:
+              a grade was terminal on this card, so anything rendered below
+              it was unreachable for everybody who answered. GAP-46 took the
+              scale away and with it that constraint — the mood row is now
+              simply the last question here, and it is the only one.
 
               ITS OWN `surfaceRaised` PANEL, sitting on the `positiveMuted`
               wash rather than directly on it. tests/contrast.test.ts
@@ -685,34 +627,28 @@ export function OutcomeCard(props: OutcomeCardProps): JSX.Element {
               </ChipGroup>
             </View>
           ) : null}
-          <Text style={[typeScale.body, styles.subtitle, { color: colors.textSecondary }]}>{RATING_QUESTION}</Text>
-          <RatingScale
-            selected={ratedValue}
-            onDraftChange={setDraftRating}
-            reduceMotionEnabled={reduceMotionEnabled}
-            disabled={isCommitting}
-          />
+          {/* ⚠ THE RATING SCALE AND ITS QUESTION STOOD HERE UNTIL GAP-46.
+              They are in `PendingRatingSheet` now, asked twelve hours after
+              the cook finished — the owner's "anders heb je het
+              waarschijnlijk nog helemaal niet gegeten". Nothing replaced
+              them: the card is shorter, which is the one thing its own
+              header has always treated as a hard constraint. */}
           {/* Secondary, not tertiary: the way out has to look like a real
-              button sitting beside a real question, not like a link
-              someone hopes you will not notice. It costs the same single
-              tap a chip does. */}
+              button rather than a link someone hopes you will not notice.
+              Since the grade left, this is the only thing it does — one tap,
+              nothing recorded, which is a complete and permitted end to
+              this card rather than an abandoned one. */}
           <View style={styles.skip}>
             <Button
-              label={RATING_SKIP_LABEL}
+              label={OUTCOME_DONE_LABEL}
               variant="secondary"
               onPress={handleFinish}
-              disabled={isCommitting}
-              // Both halves are announced, because the same word does two
-              // different things and a screen-reader user cannot see which
-              // one is armed. The scale reports its draft through
-              // `accessibilityValue` either way, so the number itself is
-              // never only visual.
-              accessibilityLabel={
-                draftRating === null ? 'Klaar, zonder beoordeling' : `Klaar, cijfer ${formatGrade(draftRating)} opslaan`
-              }
-              accessibilityHint={
-                draftRating === null ? 'Sluit zonder een cijfer te geven' : 'Slaat het gekozen cijfer op en sluit'
-              }
+              // One state now, not two. The label used to fork on whether a
+              // grade was drafted, because the same word both saved and
+              // skipped; it only closes today, so a fork would describe a
+              // branch that no longer exists.
+              accessibilityLabel="Klaar"
+              accessibilityHint="Sluit deze kaart"
             />
           </View>
           {/* §3.1's `Stuur door`. Stacked under "Klaar" rather than set
@@ -825,10 +761,9 @@ const styles = StyleSheet.create({
   moodQuestion: {
     textAlign: 'left',
   },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: spacing.space5,
-  },
+  // `subtitle` stood here and styled the rating question. It went with the
+  // scale (GAP-46); react-native/no-unused-styles catches a leftover, which
+  // is how this one was found rather than shipped.
   row: {
     flexDirection: 'row',
     gap: spacing.space3,

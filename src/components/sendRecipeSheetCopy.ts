@@ -82,6 +82,22 @@ export const OUTCOME_SEND_LABEL = 'Stuur door';
 
 export const OUTCOME_SEND_ACCESSIBILITY_LABEL = 'Stuur dit gerecht door naar een vriend';
 
+/**
+ * The outcome card's way out, and since GAP-46 that is ALL it is.
+ *
+ * It used to be `RATING_SKIP_LABEL` from ratingScaleCopy.ts, borrowed
+ * because the same button both committed a drafted grade and closed the
+ * card without one. The grade moved to `PendingRatingSheet` on 9 September
+ * 2026, so that import would now name a scale this card no longer draws —
+ * the kind of stale reference this repo keeps finding and paying for.
+ *
+ * SAME WORD, DIFFERENT OWNER. "Klaar" is unchanged on screen; what changed
+ * is which module is entitled to define it. It lives beside `Stuur door`
+ * because those are now the outcome card's two exits, and nothing else on
+ * that card is a word this file does not already own.
+ */
+export const OUTCOME_DONE_LABEL = 'Klaar';
+
 // ---------------------------------------------------------------------------
 // The sheet's own chrome
 // ---------------------------------------------------------------------------

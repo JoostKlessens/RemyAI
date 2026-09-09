@@ -72,14 +72,13 @@ import { TimerDisplay } from '@/components/TimerDisplay';
 import { createCookTimer, type CookTimerState } from '@/domain/cookTimer';
 import { selectCookTimerBar } from '@/domain/cookTimerBar';
 import { scaleRecipe } from '@/domain/scaleRecipe';
-import { castPublicVote } from '@/domain/social/publicVote';
-import type { CookEventId, DecisionId, HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
+// `castPublicVote`, `createSupabaseSocialRepository`, `supabase` and
+// `useSession` all left with `handleRate` (GAP-46) — the public vote is
+// cast by src/lib/pendingRating.ts now, twelve hours later.
+import type { DecisionId, HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
-import { useSession } from '@/hooks/useSession';
 import { hapticSmallCommit, hapticValueMoved } from '@/lib/haptics';
 import { ensureSeeded, getAppRepository, todayIso } from '@/lib/repository';
-import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import { supabase } from '@/lib/supabase';
 import { useOutcomeSend } from '@/lib/useOutcomeSend';
 import { getColors, spacing, typeScale } from '@/theme/tokens';
 
@@ -198,13 +197,11 @@ export default function CookModeScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const reduceMotionEnabled = useReduceMotion();
-  /**
-   * The voter. `profiles.id` IS `auth.users.id`, so the session's user id
-   * is the profile id — the same identity `useOutcomeSend` uses one hook
-   * down. Null while the session resolves, which `planPublicVote` reads as
-   * "not yet" and answers by writing nothing.
-   */
-  const { userId } = useSession();
+  /* ⚠ `userId` WAS READ HERE AND NO LONGER IS (GAP-46). It was the voter's
+     identity for `handleRate`'s public half; that pair moved to
+     `recordPendingRating`, which takes the profile id from the root layout's
+     own session. `useOutcomeSend` below still resolves its own identity, so
+     nothing about sending changed. */
 
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [meal, setMeal] = useState<Meal | null>(null);
@@ -215,7 +212,10 @@ export default function CookModeScreen(): JSX.Element {
   const [decisionId, setDecisionId] = useState<DecisionId | null>(null);
   /** Gates the outcome card's per-cook checkbox. Starts `false`, so the control never appears before the read that justifies it lands. */
   const [shareCooksWithFriends, setShareCooksWithFriends] = useState(false);
-  const [cookEventId, setCookEventId] = useState<CookEventId | null>(null);
+  /* ⚠ `cookEventId` STOOD HERE AND IS GONE (GAP-46). It existed so
+     `handleRate` could attach a grade to the cook it had just written. The
+     grade is asked twelve hours later now and `resolvePendingRating` finds
+     the cook itself, so this screen writes the row and forgets it. */
   const [stepIndex, setStepIndex] = useState(0);
   const [phase, setPhase] = useState<CookPhase>('steps');
   /**
@@ -387,61 +387,32 @@ export default function CookModeScreen(): JSX.Element {
     }
     getAppRepository()
       .createCookEvent({ householdId, mealId: meal.id, decisionId, cookedOn: todayIso() })
-      .then((cookEvent) => setCookEventId(cookEvent.id))
       .catch(() => {
         // See src/app/(tabs)/index.tsx's handleAccept comment: a failed
         // local write here isn't worth blocking the "Gemaakt!" moment for.
       });
   };
 
-  /**
-   * ONE GESTURE, TWO WRITES, AND THEY ARE NOT THE SAME INSTRUMENT.
-   *
-   * Fires only when a score was actually given — closing the card unrated
-   * reports nothing, which is a legitimate end to the flow rather than an
-   * abandoned one. The projection onto `wouldRepeat` happens inside the
-   * repository, never here.
-   *
-   *   1. `cook_events.rating` — PRIVATE, the decision engine's input, and
-   *      untouched by everything below it. It is gated on `cookEventId`
-   *      because a rating with no cook event has nothing to attach to.
-   *   2. `recipe_ratings` — PUBLIC, one vote on the canonical recipe, and
-   *      the reason Ranglijst was empty: `rateRecipe` had zero callers,
-   *      so nothing had ever written a row into the table the whole board
-   *      reads. The owner's instruction, verbatim: "the rating should
-   *      also be represented in the global ranking of a recipe."
-   *
-   * THE TWO SCALES ARE THE SAME SCALE, checked rather than assumed —
-   * 0008 writes the identical `check (rating >= 1 and rating <= 10 and
-   * rating = round(rating, 1))` on both columns — so the value crosses
-   * unconverted and `publicVote.ts` validates it with the one function
-   * that owns the scale for both.
-   *
-   * THE SECOND WRITE IS GATED DIFFERENTLY FROM THE FIRST, deliberately.
-   * It needs a canonical recipe and a signed-in profile, and neither of
-   * those has anything to do with `cookEventId` — a meal typed in by hand
-   * has no shared object to be ranked, which is not an error and writes
-   * nothing. `planPublicVote` owns that decision so it can be tested;
-   * this line owns nothing but the wiring.
-   *
-   * A FAILED PUBLIC VOTE MUST NOT FAIL THE PRIVATE ONE. They are two
-   * awaits on two rows with no ordering between them, and `castPublicVote`
-   * never rejects — it RETURNS `'failed'`, which is received here rather
-   * than dropped into an empty `.catch`. Nothing is announced and nothing
-   * is shown: somebody has just said how dinner was, and a leaderboard
-   * that could not be updated is not their problem. What the outcome is
-   * for is a call site that can see it went wrong.
-   */
-  const handleRate = (rating: number): void => {
-    if (cookEventId !== null) {
-      void getAppRepository().setCookEventRating(cookEventId, rating);
-    }
-    void castPublicVote(createSupabaseSocialRepository(supabase), {
-      recipeId: meal?.recipeId ?? null,
-      raterProfileId: userId,
-      rating,
-    });
-  };
+  /* ⚠ `handleRate` STOOD HERE AND HAS MOVED, NOT BEEN DELETED (GAP-46).
+     Its two writes — the private `cook_events.rating` and the anonymous
+     `recipe_ratings` vote — are now `recordPendingRating` in
+     src/lib/pendingRating.ts, which carries this function's whole argument
+     with it: the two scales are the same scale (0008 writes the identical
+     CHECK on both columns, so nothing is converted), the second write is
+     gated differently from the first because a hand-typed dish has no
+     shared object to rank, and a failed public vote must never fail the
+     private one.
+
+     WHY IT MOVED. This screen asked for the grade on the "Gemaakt!" card,
+     at the moment the pan came off the heat. The owner: "Daarnaast wil ik
+     dat je pas een cijfer kan geven de eerste keer dat je de app opent na
+     12 uur sinds het afronden van het recept. Anders heb je het
+     waarschijnlijk nog helemaal niet gegeten."
+
+     WHAT THIS SCREEN STILL OWNS: `handleCooked(true)` writes the
+     `cook_events` row, and its `created_at` IS the finish moment the
+     twelve-hour rule reads. That column has existed since 0001 and nothing
+     had ever read it. */
 
   /**
    * The owner's per-cook checkbox, inverted here and nowhere else.
@@ -615,7 +586,6 @@ export default function CookModeScreen(): JSX.Element {
           <OutcomeCard
             dishTitle={dishTitle}
             onCooked={handleCooked}
-            onRate={handleRate}
             onChooseMood={handleChooseMood}
             // Handed over only when the household actually shares. An
             // undefined handler removes the row entirely, which is what

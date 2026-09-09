@@ -36,7 +36,7 @@
  * actually appears on screen.
  */
 
-import { useEffect, type JSX } from 'react';
+import { useCallback, useEffect, useState, type JSX } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -51,6 +51,14 @@ import { startHouseholdSync, subscribeToForeground } from '@/lib/householdSync';
 import { scheduleDecisionNotification } from '@/lib/decisionNotification';
 import { getAppRepository } from '@/lib/repository';
 import { getAppHouseholdSyncEnvironment } from '@/lib/repository/createRepository';
+import {
+  recordPendingRating,
+  resolvePendingRating,
+  type PendingRatingPrompt,
+} from '@/lib/pendingRating';
+import { PendingRatingSheet } from '@/components/PendingRatingSheet';
+import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
+import { supabase } from '@/lib/supabase';
 
 // Must run once, at module scope, before the first render — calling this
 // inside the component body can race the initial paint on some platforms.
@@ -138,6 +146,7 @@ export default function RootLayout(): JSX.Element | null {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <AuthGate />
       <HouseholdBootstrapGate />
+      <PendingRatingGate />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cook/[mealId]" options={{ presentation: 'fullScreenModal' }} />
@@ -364,6 +373,105 @@ async function armDecisionNotification(canUseApp: boolean): Promise<void> {
     // Local storage. Same contract as the sync beside it: no notification
     // today is never no app today.
   }
+}
+
+/**
+ * Asks for the grade the outcome card no longer asks for (GAP-46).
+ *
+ * A SIBLING OF `AuthGate`, NOT A WRAPPER, AND NOT A GATE ON ANYTHING — the
+ * same shape and the same reasons as `HouseholdBootstrapGate` beside it.
+ * The name says "gate" because it decides whether a QUESTION appears, never
+ * whether the app does: it blocks no render, holds no error state and shows
+ * no spinner, and a launch where every read fails is a launch with no sheet
+ * and an app that works exactly as well.
+ *
+ * WHY IT LIVES AT THE ROOT. The owner chose "a sheet when you open the app"
+ * over a card on Kiezen and a badge on a tile, and the root layout is the
+ * one place that is true of every route — including the launch that lands
+ * straight on Mijn recepten. Deciding it per screen would ask the same
+ * question from four places, or from none.
+ *
+ * WHAT IS DELIBERATELY NOT HERE. No clock arithmetic, no repository
+ * queries, no notion of what "due" means: `resolvePendingRating` owns all
+ * of it one file down, where tests/pendingRating.test.ts can reach it,
+ * because a route module cannot be imported by a test in this repo at all.
+ * This component is the eleven lines React actually owns.
+ *
+ * IT RUNS ONCE PER MOUNT AND NOT ON EVERY FOREGROUND, which is the one
+ * place it deviates from its neighbour. `HouseholdBootstrapGate` re-runs on
+ * `AppState` because a flush that missed the network should retry when the
+ * network returns. This must not: a sheet that reappears every time
+ * somebody glances at another app and comes back is a nag, and the owner's
+ * whole reason for the twelve-hour delay was to ask at a moment people are
+ * ready for. His words are "de eerste keer dat je de app opent" — the first
+ * time, not every time it comes forward.
+ *
+ * ONE QUESTION PER LAUNCH, and the backlog drains in order. Clearing the
+ * prompt does not look for a next one, so somebody who has not opened the
+ * app in a week is asked about Monday today and Tuesday tomorrow —
+ * `selectPendingRating` returns the OLDEST due cook, so the order is the
+ * order things happened. Turning the app's launch into a queue of dialogs
+ * is precisely the chore this delay exists to avoid.
+ */
+function PendingRatingGate(): JSX.Element {
+  const { isResolving, capability, userId } = useSession();
+  const canUseApp = capability.canUseApp;
+  const [prompt, setPrompt] = useState<PendingRatingPrompt | null>(null);
+
+  useEffect(() => {
+    // `isResolving` is not "signed out": asking before the session settles
+    // would read a repository whose household is not yet decided. Same
+    // predicate order `HouseholdBootstrapGate` uses, for the same reason.
+    if (isResolving || !canUseApp) {
+      return;
+    }
+    let cancelled = false;
+    void resolvePendingRating(getAppRepository(), Date.now()).then((resolved) => {
+      // The mount can lose the race with a sign-out or a fast unmount;
+      // setting state then is a warning in the log and a sheet nobody asked
+      // for. `resolvePendingRating` never rejects, so there is no catch.
+      if (!cancelled) {
+        setPrompt(resolved);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isResolving, canUseApp]);
+
+  /**
+   * The single answer path, and it clears the prompt on BOTH outcomes.
+   *
+   * That is `PendingRatingSheet`'s stated mounting contract: a sheet whose
+   * caller forgets to clear in one branch is a sheet that reappears on the
+   * next render, about the same dish, forever. Clearing FIRST also makes
+   * the dismissal instant — the write is not something anybody should watch
+   * a sheet wait for.
+   *
+   * A SKIP WRITES NOTHING AT ALL. `rating` null means the question was
+   * postponed, so the cook stays due and the next launch asks again; that
+   * is PD-008's "skipping must cost exactly what answering costs", and it
+   * is why this is one handler with one branch rather than two callbacks.
+   */
+  const handleAnswer = useCallback(
+    (rating: number | null): void => {
+      const answered = prompt;
+      setPrompt(null);
+      if (answered === null || rating === null) {
+        return;
+      }
+      void recordPendingRating(
+        getAppRepository(),
+        createSupabaseSocialRepository(supabase),
+        answered,
+        userId,
+        rating,
+      );
+    },
+    [prompt, userId],
+  );
+
+  return <PendingRatingSheet prompt={prompt} onAnswer={handleAnswer} />;
 }
 
 function HouseholdBootstrapGate(): null {

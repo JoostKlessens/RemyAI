@@ -155,7 +155,6 @@ import { NO_DECISION_FILTERS } from '@/domain/exclusions';
 import { selectOfferableMeals } from '@/domain/offerablePool';
 import { buildFriendProofLine } from '@/domain/reason';
 import type {
-  CookEventId,
   Decision,
   DecisionFilters,
   DecisionResult,
@@ -369,7 +368,13 @@ export default function VanavondScreen(): JSX.Element {
   const [showOutcomeOverlay, setShowOutcomeOverlay] = useState(false);
   const [pendingOutcomeDecision, setPendingOutcomeDecision] = useState<Decision | null>(null);
   const [pendingOutcomeMeal, setPendingOutcomeMeal] = useState<Meal | null>(null);
-  const [pendingCookEventId, setPendingCookEventId] = useState<CookEventId | null>(null);
+  /* ⚠ `pendingCookEventId` STOOD HERE AND IS GONE (GAP-46). It existed only
+     so `handleOutcomeRate` could attach a grade to the cook it had just
+     written; with the grade asked twelve hours later, the sheet resolves
+     its own cook event from the repository and this screen has nothing left
+     to remember. The `createCookEvent` write below is unchanged — it is
+     what makes the cook exist, and its `created_at` is the clock the delay
+     runs on. */
   // docs/DESIGN.md §1: "on Ja, a hairline accent stroke draws under the
   // dish name ... before navigating" — the grease-pencil circle landing.
   // Quoted as that document still words it. The button has read `Dit
@@ -556,26 +561,26 @@ export default function VanavondScreen(): JSX.Element {
         decisionId: pendingOutcomeDecision.id,
         cookedOn: todayIso(),
       })
-      .then((cookEvent) => setPendingCookEventId(cookEvent.id))
       .catch(() => {});
   };
 
-  /**
-   * Fires only when a score was actually given — dismissing the card
-   * unrated reports nothing, and that silence is a legitimate answer
-   * (PD-002's optional decline reason, applied to the outcome loop).
-   * `wouldRepeat` is re-derived from the score inside the repository, so
-   * nothing here projects it.
-   */
-  const handleOutcomeRate = (rating: number): void => {
-    if (pendingCookEventId === null) {
-      return;
-    }
-    void getAppRepository().setCookEventRating(pendingCookEventId, rating);
-  };
+  /* ⚠ `handleOutcomeRate` STOOD HERE AND IS GONE (GAP-46). The outcome card
+     no longer asks for a grade — `PendingRatingSheet` does, twelve hours
+     after the cook finished — so this screen has no rating to write.
 
-  /** The public half of the same moment, keyed on the MEAL rather than on
-      `pendingCookEventId` like the grade above — see OutcomeCard's header. */
+     WORTH KNOWING BEFORE SOMEBODY "RESTORES" IT: what stood here wrote ONLY
+     the private `cook_events.rating`, with no `castPublicVote` beside it,
+     while `cook/[mealId].tsx` wrote both. So a meal graded from this card
+     never reached Ranglijst and the same meal graded from Kookmodus did —
+     an asymmetry nobody had noticed and no test could see. One sheet asking
+     the question means one answer to it, and `recordPendingRating` writes
+     both rows wherever the cook began.
+
+     `pendingCookEventId` went with it: nothing read it any more once the
+     grade left, and the sheet finds its own cook event from the
+     repository. */
+
+  /** The mood, keyed on the MEAL — see OutcomeCard's header. */
   const handleOutcomeMood = (mood: string): void => {
     if (pendingOutcomeMeal === null) {
       return;
@@ -691,7 +696,6 @@ export default function VanavondScreen(): JSX.Element {
                 <OutcomeCard
                   dishTitle={pendingOutcomeMeal.title}
                   onCooked={handleOutcomeCooked}
-                  onRate={handleOutcomeRate}
                   onChooseMood={handleOutcomeMood}
                   onSendRecipe={outcomeSend.onSendRecipe}
                   onDismiss={() => setShowOutcomeOverlay(false)}
