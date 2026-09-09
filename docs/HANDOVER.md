@@ -1281,8 +1281,29 @@ enige relatie tot het woord dat het markeert. Hij krimpt nu om de titel, zoals
    gewoon zichzelf. Dat is de enige beeldstrategie die de juridische positie
    van dit product overleeft. ⚠ Correctie op het plan: `react-native-svg`
    **is** geïnstalleerd (15.15.4), dus dit kost geen dependency.
-4. **Eén beslissing die alleen de eigenaar mag nemen:** "8,84" afronden naar
-   "8,8" keert `DESIGN.md` §9 en PD-014 om.
+4. ✅ ~~**Eén beslissing die alleen de eigenaar mag nemen:** "8,84" afronden
+   naar "8,8" keert `DESIGN.md` §9 en PD-014 om.~~ **BEANTWOORD OP
+   9 SEPTEMBER 2026: de eigenaar houdt twee decimalen.** *"I want to keep the
+   2 decimal grading."* Geen codewijziging — `LEADERBOARD_SCORE_DECIMALS = 2`
+   staat er al en `DESIGN.md` §9 en PD-014 blijven onaangeraakt.
+
+   ⚠ **Waarom dit géén weggegooide vraag was, en waarom afronden duurder
+   was dan het leek.** Die constante staat in het DOMEIN en niet in de
+   presentatielaag, en de score wordt erop afgerond **vóórdat er gesorteerd
+   wordt** (`leaderboard.ts:67-81`). Twee decimalen zijn dus de SORTEERSLEUTEL
+   en niet een opmaakkeuze: naar één afronden had de VOLGORDE van het bord
+   veranderd en een hoop paren tot echte gelijkstand laten vallen, die dan op
+   het stemmenaantal uiteenvallen.
+
+   ⚠ **En let op: er zijn twee getallen, met bewust tegengestelde precisie.**
+   PRODUCT-DECISIONS.md zegt het in één zin — *"Precision follows the
+   instrument, not the screen"*: één decimaal voor één stem (PD-008a) én voor
+   een kringgemiddelde ("8,5 · Sanne en Joris"), twee voor het bord ("8,72 ·
+   204 stemmen"), omdat een gemiddelde van honderden die informatie werkelijk
+   draagt. *"Two decimals on a handful of known votes is false precision
+   wearing the board's clothes."* Deze beslissing gaat over het BORD. **De
+   kring blijft op één decimaal**; wie dat ook wil omzetten neemt een tweede,
+   aparte beslissing en haalt dat citaat onderuit.
 
 ---
 
