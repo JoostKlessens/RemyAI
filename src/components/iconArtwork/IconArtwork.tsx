@@ -15,6 +15,18 @@
  * tint IS the signal, the answer is a font glyph through `Icon`, not a
  * coloured drawing.
  *
+ * ⚠ AMENDED 9 SEPTEMBER 2026 (GAP-58), AND THE PARAGRAPH ABOVE WAS TOO BROAD
+ * BY EXACTLY ONE CASE. "A caller that needs a tint to carry meaning wants a
+ * font glyph" held for `Chip`, and it was wrong for `FilterTrigger`: the
+ * funnel's green is not decoration a caller wants to override, it is the
+ * element palette.py already designates as "the point of the control" — the
+ * ACTIVE FILTER, named in that file in so many words. It was simply painted
+ * whether the control was active or not. So this file now takes one more
+ * prop, `active`, which is not a colour and cannot be used as one: it says
+ * whether the control is doing anything, and controlState.ts turns that into
+ * the single fill substitution the sixteen UI glyphs were designed around.
+ * `color` is still not forwarded, and a carrot still cannot be grey.
+ *
  * THE SCHEME COMES FROM THE HOOK AND NOT FROM A PROP, for the same reason
  * `Chip` reads `useColorScheme()` itself: a caller that has to pass the scheme
  * is a caller that can forget, and a forgotten scheme here means an outline
@@ -29,6 +41,7 @@ import type { JSX } from 'react';
 import { useColorScheme } from 'react-native';
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline, Rect } from 'react-native-svg';
 
+import { resolveFillKey } from './controlState';
 import { ICON_ARTWORK, type IconArtworkElement } from './drawings';
 import { iconPalette, type IconPaletteKey } from './palette';
 
@@ -48,17 +61,31 @@ export function hasIconArtwork(name: string): boolean {
 interface IconArtworkProps {
   readonly name: string;
   readonly size: number;
+  /**
+   * Whether the control this glyph labels is currently doing something.
+   * Omitted by every caller whose glyph has no such state — see
+   * controlState.ts for why that is `undefined` and not `true`, and for the
+   * whole argument about which element of a UI glyph is allowed to move.
+   */
+  readonly active?: boolean;
 }
 
 export function IconArtwork(props: IconArtworkProps): JSX.Element | null {
-  const { name, size } = props;
+  const { name, size, active } = props;
   const scheme = useColorScheme();
   const elements = ICON_ARTWORK[name];
   if (elements === undefined) {
     return null;
   }
   const palette = iconPalette(scheme === 'dark' ? 'dark' : 'light');
-  const paint = (key: IconPaletteKey | undefined): string | undefined =>
+  // TWO LOOKUPS AND NOT ONE, because the state rule applies to fills only.
+  // controlState.ts's header carries why: a rule that dimmed strokes would
+  // erase `check` and `plus` rather than dim them.
+  const paintFill = (key: IconPaletteKey | undefined): string | undefined => {
+    const resolved = resolveFillKey(key, active);
+    return resolved === undefined ? undefined : palette[resolved];
+  };
+  const paintStroke = (key: IconPaletteKey | undefined): string | undefined =>
     key === undefined ? undefined : palette[key];
 
   return (
@@ -69,7 +96,7 @@ export function IconArtwork(props: IconArtworkProps): JSX.Element | null {
       accessibilityElementsHidden
       importantForAccessibility="no"
     >
-      {elements.map((element, index) => renderElement(element, index, paint))}
+      {elements.map((element, index) => renderElement(element, index, paintFill, paintStroke))}
     </Svg>
   );
 }
@@ -83,11 +110,12 @@ export function IconArtwork(props: IconArtworkProps): JSX.Element | null {
 function renderElement(
   element: IconArtworkElement,
   index: number,
-  paint: (key: IconPaletteKey | undefined) => string | undefined,
+  paintFill: (key: IconPaletteKey | undefined) => string | undefined,
+  paintStroke: (key: IconPaletteKey | undefined) => string | undefined,
 ): JSX.Element {
   const common = {
-    fill: paint(element.fill) ?? 'none',
-    stroke: paint(element.stroke),
+    fill: paintFill(element.fill) ?? 'none',
+    stroke: paintStroke(element.stroke),
     strokeWidth: element.sw,
     strokeLinecap: CAP,
     strokeLinejoin: CAP,

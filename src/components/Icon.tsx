@@ -85,10 +85,20 @@ export interface IconProps {
   readonly size: number;
   /** Always a `getColors(scheme)` value — docs/DESIGN.md's "never hardcode a hex in a screen" applies to glyph colour exactly as it does to text. */
   readonly color: string;
+  /**
+   * Whether the control this glyph labels is currently doing something.
+   *
+   * OMIT IT UNLESS THE GLYPH HAS SUCH A STATE, which is all but one call site
+   * today. This is not a second colour channel and must not be used as one:
+   * it drives a single fill substitution inside the drawing (controlState.ts
+   * holds the rule and the argument), and it exists because `color` cannot
+   * reach a drawing and GAP-58 measured the one place where that mattered.
+   */
+  readonly active?: boolean;
 }
 
 export function Icon(props: IconProps): JSX.Element | null {
-  const { name, size, color } = props;
+  const { name, size, color, active } = props;
 
   // THE DRAWINGS COME FIRST, AND TODAY THEY ANSWER EVERYTHING. All 45
   // `ICON_NAMES` have artwork — tests/iconArtwork.test.ts asserts it name by
@@ -104,7 +114,14 @@ export function Icon(props: IconProps): JSX.Element | null {
     // (`Chip`, whose selected state is already the fill plus the border). A
     // caller that needs a tint to CARRY meaning wants a font glyph, not a
     // drawing.
-    return <IconArtwork name={name} size={size} />;
+    //
+    // `active` IS FORWARDED, and it is the narrow exception rather than a
+    // reopening of that argument (GAP-58). It carries a control's STATE, not
+    // a colour: the drawing decides what to do with it, so a caller still
+    // cannot repaint a carrot. Ten of the twelve call sites pass a constant
+    // `color` that was always safe to drop; this exists for the one that
+    // passed a conditional and meant it.
+    return <IconArtwork name={name} size={size} active={active} />;
   }
 
   const glyph = resolveInstalledGlyph(name);

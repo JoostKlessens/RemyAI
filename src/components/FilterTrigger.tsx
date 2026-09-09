@@ -91,7 +91,22 @@ export function FilterTrigger(props: FilterTriggerProps): JSX.Element {
         accessibilityState={{ expanded: isExpanded }}
         accessibilityLabel={accessibilityLabel}
       >
-        <Icon name="filter" size={GLYPH_SIZE} color={isFiltering ? colors.accent : colors.textMuted} />
+        {/*
+          `active` IS WHAT ACTUALLY DRAWS THE STATE HERE, and `color` is the
+          fallback's copy of the same fact. GAP-58 measured that `Icon` throws
+          `color` away for every name with artwork, which is every name — so
+          until 9 September 2026 this funnel looked identical filtering or not,
+          and only the small count beside it gave the state away. The
+          conditional `color` stays because the font branch below `Icon`'s
+          artwork check is the one place it would still arrive, and a glyph
+          that fell back to Feather should not lose the distinction with it.
+        */}
+        <Icon
+          name="filter"
+          size={GLYPH_SIZE}
+          color={isFiltering ? colors.accent : colors.textMuted}
+          active={isFiltering}
+        />
         {isFiltering ? (
           <Text style={[typeScale.caption, styles.count, { color: colors.accent }]}>{activeFilterCount}</Text>
         ) : null}

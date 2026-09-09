@@ -11,6 +11,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { resolveFillKey } from '@/components/iconArtwork/controlState';
 import { ICON_ARTWORK } from '@/components/iconArtwork/drawings';
 import { iconPalette } from '@/components/iconArtwork/palette';
 import { ICON_NAMES } from '@/components/iconFont';
@@ -110,3 +111,59 @@ function luminance(hex: string): number {
   };
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
 }
+
+/**
+ * GAP-58 — a control that is off must look off.
+ *
+ * The defect this guards was invisible to every gate the repo has: `Icon`
+ * discards `color` for a name with artwork, so `FilterTrigger`'s
+ * `isFiltering ? accent : textMuted` never arrived and the funnel rendered
+ * the same either way. Nothing type-checks a prop that is accepted and
+ * dropped, and no test could see it because the drop happens in a `.tsx`
+ * this run cannot import.
+ *
+ * So the rule was put in a plain `.ts` — controlState.ts — precisely so
+ * these rows can exist. What they pin is the SUBSTITUTION, not the render.
+ */
+describe('a UI glyph can say its control is off', () => {
+  test('an inactive control empties its accent fill, so the funnel reads as off', () => {
+    expect(resolveFillKey('GREEN_SOFT', false)).toBe('WHITE');
+    expect(resolveFillKey('GREEN', false)).toBe('WHITE');
+  });
+
+  test('an active control is drawn exactly as designed', () => {
+    expect(resolveFillKey('GREEN_SOFT', true)).toBe('GREEN_SOFT');
+    expect(resolveFillKey('GREEN', true)).toBe('GREEN');
+  });
+
+  test('a glyph with no active state is untouched — undefined is not false', () => {
+    // The 44 drawings that are not `filter` pass `undefined`, and this is the
+    // row that proves the rule cannot reach them by accident.
+    expect(resolveFillKey('GREEN_SOFT', undefined)).toBe('GREEN_SOFT');
+    expect(resolveFillKey('ORANGE', undefined)).toBe('ORANGE');
+  });
+
+  test('only the two green control keys move — a carrot stays orange even when off', () => {
+    // The whole reason this is a substitution table and not a tint: an
+    // inactive control must not be able to recolour food.
+    const untouched = ['ORANGE', 'AMBER', 'TEAL', 'MEAT', 'BERRY', 'BROWN', 'RED', 'INK'] as const;
+    for (const key of untouched) {
+      expect(resolveFillKey(key, false)).toBe(key);
+    }
+  });
+
+  test('an absent fill stays absent — `none` must not become a white blob', () => {
+    expect(resolveFillKey(undefined, false)).toBeUndefined();
+    expect(resolveFillKey(undefined, undefined)).toBeUndefined();
+  });
+
+  test('the funnel is still a single filled path, so the rule above has something to act on', () => {
+    // If a regenerate ever splits `filter` into outline plus body, or renames
+    // its fill, the substitution silently stops mattering and the state stops
+    // being drawn again. This row fails on that day instead.
+    const filter = ICON_ARTWORK['filter'];
+    expect(filter).toHaveLength(1);
+    expect(filter?.[0]?.fill).toBe('GREEN_SOFT');
+    expect(filter?.[0]?.stroke).toBe('INK');
+  });
+});
