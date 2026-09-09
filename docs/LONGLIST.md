@@ -11,12 +11,18 @@ de import; hun tweede helft (boodschappen, prijzen, supermarktkoppeling) is
 grotendeels bewust niet overgenomen.
 
 **Stand:** 9 september 2026, `feat/live-import-and-plan-phases`, t/m
-`a7720b2` gecommit **én gepusht**. **De werkboom is schoon** — nul regels uit
+`72eccde` gecommit **én gepusht** — **tien commits die dag**
+(`f53d18d..72eccde`). **De werkboom is schoon** — nul regels uit
 `git status --short` — en `git rev-list --left-right --count
 origin/feat/live-import-and-plan-phases...HEAD` geeft `0	0`, gemeten ná de
 push en niet ervoor. **Vijf poorten groen**: typecheck 0, lint 0,
-`check:functions` 0, `check:seed` 0, **3344 tests over 139 bestanden**,
-gedraaid en niet opgehoogd (hier stond 3249 over 135).
+`check:functions` 0, `check:seed` 0, **3338 tests over 139 bestanden**,
+gedraaid en niet opgehoogd.
+
+⚠ **HET TESTAANTAL DAALDE VAN 3344 NAAR 3338 EN DAT IS GEEN REGRESSIE.**
+`Wissen` en `Geavanceerd` zijn verwijderd (GAP-59), dus hun assertions ook —
+zes weg, drie smallere ervoor terug. Een dalend getal is hier het bewijs dat
+de tests de controls volgden en niet andersom.
 
 ⚠ **HET RIJTJE IS VIJF EN GEEN VIER.** `check:seed` kwam er op 9 september bij
 en dit document liet je er dagenlang vier opzeggen. Draai hem mee.
@@ -212,6 +218,7 @@ doorgegeven:
 | OPS-07 | ⬜ | Werken zonder verbinding |
 | OPS-09 | 🟡 | Deno's resolutieregel is nu **half** afgedekt, en dat is een echte stap. `lint/eslint.flat.config.mjs` draagt een `@typescript-eslint/no-restricted-imports`-regel over `src/domain/import/**` die een relatieve **value**-import zonder `.ts` afkeurt. `allowTypeImports: true` is het dragende stuk: de 14 extensieloze imports in die map zijn allemaal `import type`, die Deno wist vóór resolutie, dus die mogen niet afgekeurd worden. Empirisch nagemeten: 0 fouten op `src/domain/import`, en de regel vuurt wél op een echte overtreding (`src/lib/auth.ts:29`). Nul nieuwe dependencies — `typescript-eslint` zat er al. **Wat nog open is:** `supabase/functions/**` staat nog steeds in ESLint's `ignores`, dus die 13 bestanden zijn onbewaakt (ze zijn vandaag allemaal correct), en een aanwezige-maar-verkeerde extensie (`./x.js` voor een `x.ts`) vangt alleen `deno check`. `deno check` is nog nooit gedraaid; Deno is niet geïnstalleerd |
 | OPS-14 | 🔒 | **Greptile-account om de codebase te laten nakijken — gevraagd door de eigenaar op 9 september 2026.** Greptile indexeert een repo en reviewt pull requests; deze repo staat op GitHub (`JoostKlessens/RemyAI`), dus de koppeling zelf is triviaal. **Twee voorwaarden die vandaag niet bestaan.** (a) Een betaald account — niet in code te betalen, dezelfde soort prijs als OPS-02. (b) **Pull requests.** `git log --merges` geeft nul treffers: er wordt rechtstreeks op `feat/live-import-and-plan-phases` gecommit en `main` loopt achter. Greptiles hoofdmodus is een review óp een PR, dus zonder PR-ritme koop je vooral de tweede modus — vragen stellen over de codebase — en dat is een ander product dan wat de vraag suggereert. **Waarom het hier meer zou opleveren dan nog een linter:** de vijf poorten van dit project (typecheck, lint, `check:functions`, `check:seed`, 3315 tests) lezen geen bedoeling. Het karakteristieke defect van deze repo is een bewering die van de code afdrijft — 26 van 26 kleurtokens die twee dagen ongebruikt bleken, een migratiestand die vier keer onwaar was, 0 van 21 lege toestanden, en op 9 september nog een aanbeveling die door de eigen contrastpoort verboden bleek. Dat is precies het soort vraag dat een geïndexeerde codebase kan beantwoorden en dat `tsc` structureel niet ziet. ⚠ **De prijs staat er los van en hoort hier genoemd:** een derde partij krijgt leesrechten op de hele repo. `.env` en `research/13-legal-tos.md` staan in `.gitignore` en gaan niet mee; al het overige wel, `supabase/` inbegrepen |
+| OPS-15 | ⚖ | **Een Xcode-MCP om de iOS-logs te lezen — gevraagd door de eigenaar op 9 september 2026, en het antwoord is nee mét een alternatief.** Zijn vraag, letterlijk: *"are we using xcode mcp? I think it would help a lot with looking at logs for the ios app."* **HIJ KAN OP DEZE MACHINE NIET BESTAAN, en dat is gemeten en niet vermoed.** Elke Xcode-MCP (XcodeBuildMCP, ios-simulator-mcp) is een omhulsel om `xcrun simctl`, `xcodebuild` en macOS' `log stream`; deze machine draait Windows en heeft **geen `xcrun` op PATH**, dus zo'n server faalt bij elke aanroep. ⚠ **En hij zou óók op een Mac het verkeerde instrument zijn:** dit project heeft geen development build en geen EAS-pijplijn (OPS-02), dus er is geen `.app` die een simulator kan draaien. De iPhone draait Expo Go over wifi, en die logs zijn **JavaScript**-logs over de Metro-verbinding — geen device syslog. **WAT HET ECHTE GAT WAS, en dat is kleiner dan de vraag suggereert:** de logs die ertoe doen bereikten de terminal al. OPS-10 is gevonden uit negen *"Route … is missing the required default export"*-regels bij het opstarten, OPS-11 uit een require-cycle-waarschuwing, OPS-12 uit een `expo-notifications`-throw — alle drie uit `expo start`. Het gat was dat die log in een terminal stond die niemand anders kon lezen. **Gebouwd:** `scripts/dev-log.mjs` en `npm run start:log` — dezelfde `expo start`, met stdout én stderr ook naar `dev-server.log` in de projectmap. Geen dependency, geen MCP, kale Node; stdin wordt doorgegeven zodat `r`/`j`/`m` blijven werken. Per run afgekapt, want een log over meerdere sessies maakt *"stond deze waarschuwing bij DEZE start"* onbeantwoordbaar — precies de vraag waar die drie vondsten antwoorden op waren. Valt onder de bestaande `*.log`-regel in `.gitignore`, wat hier uitmaakt omdat Expo de LAN-URL afdrukt. `TOESTELTEST.md` wijst er nu naar. ⚠ **Wat er NIET in komt:** een native crash onder de JS-laag. Metro ziet die niet en dit bestand dus ook niet — dat vraagt macOS met Xcode, of `idevicesyslog` (libimobiledevice) op Windows mét Apple's device drivers, een luidruchtige device-brede syslog. **Heroverweeg deze regel zodra er een Mac of een development build is**; vandaag zou de MCP decoratie zijn |
 
 ## BIZ — verdienmodel
 
@@ -463,7 +470,9 @@ renderpad. Dat blijkt op een toestel of nergens.
    ZICHTBARE doel was dat wel, en `BackButton.tsx` (`3a3796e`) maakt er een
    pijl van 20pt in `textPrimary` van.
 
-1. **De app op een toestel zetten en er doorheen lopen.** `npx expo start`,
+1. **De app op een toestel zetten en er doorheen lopen.**
+   **`npm run start:log`** (niet `npx expo start` — dan is de Metro-log
+   achteraf leesbaar in plaats van over te typen, zie OPS-15),
    Expo Go, en dan één echte import door de flow plus de throttle-test (21
    binnen tien minuten, de 21e hoort `import_throttled` te krijgen). Dubbel
    zo waardevol als gisteren: het test de deploy én het renderpad van de

@@ -4,10 +4,12 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand:** 9 september 2026, branch `feat/live-import-and-plan-phases`, t/m
-`b2054e9` en de docs erna. **De werkboom is schoon** — `git status --short`
-geeft nul regels. ⚠ **Meet de push zelf**: er zijn 's middags en 's avonds
-negen commits bij gekomen, en dit blok is al vier keer in de verkeerde
-richting ingevuld.
+`72eccde` gecommit en gepusht — **tien commits die dag** (`f53d18d..72eccde`).
+**De werkboom is schoon** — `git status --short` geeft nul regels, en
+`git rev-list --left-right --count origin/…​...HEAD` gaf `0	0` ná de push.
+⚠ **Meet het zelf opnieuw**, want dit blok is al vier keer in de verkeerde
+richting ingevuld, en onthoud dat "pushen" hier twee dingen betekent: dit gaat
+over git, `npx supabase migration list` over de database.
 
 **Vijf poorten groen**: typecheck 0, lint 0, `check:functions` 0,
 `check:seed` 0, **3338 tests over 139 bestanden**. ⚠ Dat zijn er zes minder
@@ -172,11 +174,18 @@ dichting van het anon-key-gat zijn werkelijk actief.
 ondersteunt:
 
 ```
-npx expo start
+npm run start:log
 ```
 
 Expo Go uit de App Store, QR scannen, telefoon en laptop op dezelfde wifi.
-Bij netwerkisolatie: `npx expo start --tunnel`.
+Bij netwerkisolatie: `npm run start:log -- --tunnel`.
+
+⚠ **`start:log` EN NIET `npx expo start`, en dat scheelt een overtypronde.**
+Het is dezelfde server; hij schrijft de Metro-uitvoer óók naar
+`dev-server.log`, zodat de log achteraf te lezen is in plaats van te moeten
+worden overgeschreven. OPS-10, OPS-11 en OPS-12 zijn alle drie uit die regels
+gevonden. `npx expo start` blijft gewoon werken — je verliest alleen het
+bestand. Zie OPS-15 voor waarom dit geen Xcode-MCP is.
 
 **Vijf poorten, allemaal groen:**
 
@@ -2009,6 +2018,25 @@ hele regel terug — waarmee ook het web-artefact van vanochtend verdwijnt, want
 er staat niets meer naast — en de tijdschuif krijgt achter de lade de volle
 breedte in plaats van een halve regel, de ruil die `LibrarySearchBar` zelf als
 *"worth putting back in front of the owner"* had opgeschreven.
+
+**`72eccde` — `npm run start:log`, en waarom er géén Xcode-MCP staat
+(OPS-15).** De eigenaar vroeg 's ochtends: *"are we using xcode mcp? I think
+it would help a lot with looking at logs for the ios app."* **Het antwoord is
+nee, en de reden is gemeten:** elke Xcode-MCP is een omhulsel om `xcrun
+simctl`, `xcodebuild` en macOS' `log stream`, en deze machine draait Windows
+zonder `xcrun` op PATH — zo'n server faalt bij elke aanroep. Hij zou ook op een
+Mac het verkeerde ding zijn: zonder development build (OPS-02) is er geen
+`.app` voor een simulator, en Expo Go's logs zijn JavaScript over de
+Metro-verbinding, geen device syslog.
+
+**Het echte gat was kleiner dan de vraag suggereert**, en dit document is er
+zelf het bewijs van: OPS-10, OPS-11 en OPS-12 zijn alle drie gevonden in de
+gewone `expo start`-uitvoer. Het gat was dat die uitvoer in een terminal stond
+die niemand anders kon lezen. `scripts/dev-log.mjs` draait dezelfde server en
+tee't stdout en stderr naar `dev-server.log`; geen dependency, geen MCP, kale
+Node. **Gebruik `npm run start:log` bij de toesteltest** — `TOESTELTEST.md`
+zegt dat nu ook. ⚠ Een native crash ónder de JS-laag komt er niet in; dat
+vraagt macOS met Xcode of `idevicesyslog` op Windows.
 
 ⚠ **EN ÉÉN COMMENTAAR VOORSPELDE ZIJN EIGEN FOUT, WOORDELIJK.**
 `describeAdvancedFilters` (nu `describeLibraryFilters`) noemde twee assen en
