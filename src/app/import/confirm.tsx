@@ -79,20 +79,39 @@
  * recipeProvenanceCopy.ts for why it is a fact and never a score. Nothing
  * about it is persisted: provenance is a fact about the IMPORT, not a
  * column on the meal, and this screen is where it is spent.
+ *
+ * ---
+ *
+ * WHAT NO LONGER LIVES HERE, AND WHY THAT WAS THE POINT. This file held
+ * the whole save chain — the rebuild from field state, the two
+ * `CreateMealInput` literals, the duplicate check and the two writes — at
+ * 963 lines, over the 800 cap. All of it moved to
+ * src/domain/import/{editedRecipe,importMealInput,persistImportedMeal}.ts
+ * on 10 September 2026, behaviour unchanged, and the cap is the smaller
+ * half of the reason: vitest cannot import src/app (the measurement is
+ * src/domain/offerablePool.ts's header), so every rule in that chain was
+ * unassertable while it sat here. That is not hypothetical for this
+ * particular code — its own comments record two field losses that shipped
+ * silently, `dishTags` twice, and neither could have been caught by a test
+ * that was not allowed to exist. What remains here is what this file is
+ * for: state, layout, and the one press that starts the write.
+ *
+ * `buildDuplicateNotice` and `buildSaveErrorMessage` stayed, and that is
+ * the same pre-existing exception their own comment already names rather
+ * than a leftover — two Dutch strings, still unreachable from the suite.
  */
 
 import { useEffect, useState, type JSX } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { decodeImportConfirmParams, type ImportConfirmParams } from '@/navigation/importRouteParams';
-import { findDuplicateImport } from '@/domain/import/duplicateImport';
-import { formatIngredientLine, resolveEditedIngredients } from '@/domain/import/editedIngredients';
-import { toMealDraft, type MealDraftInsert } from '@/domain/import/toMealDraft';
-import type { ParsedIngredient, ParsedRecipe } from '@/domain/import/types';
+import { decodeImportConfirmParams } from '@/navigation/importRouteParams';
+import { formatIngredientLine } from '@/domain/import/editedIngredients';
+import { buildEditedRecipe } from '@/domain/import/editedRecipe';
+import { persistImportedMeal } from '@/domain/import/persistImportedMeal';
+import type { ParsedIngredient } from '@/domain/import/types';
 import { buildReasonText } from '@/domain/reason';
 import { IMPORT_DEFAULT_SAVE_INTENT } from '@/domain/saveIntent';
-import type { AllergenTagStatus, HouseholdId, SaveIntent } from '@/domain/types';
 import { AllergenTaggingSection } from '@/components/AllergenTaggingSection';
 import { Button } from '@/components/Button';
 import { ImportCreatorCredit } from '@/components/ImportCreatorCredit';
@@ -111,7 +130,7 @@ import {
 import { useHouseholdAllergenRestriction } from '@/hooks/useHouseholdAllergenRestriction';
 import { hapticSmallCommit } from '@/lib/haptics';
 import { loadFriendProofForRecipes } from '@/lib/friendProof';
-import { getAppRepository, todayIso, type CreateMealInput, type RemyRepository } from '@/lib/repository';
+import { getAppRepository, todayIso } from '@/lib/repository';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import { supabase } from '@/lib/supabase';
 import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
@@ -129,264 +148,6 @@ function buildInitialIngredientItems(ingredients: readonly ParsedIngredient[]): 
 
 function buildInitialStepItems(steps: readonly string[]): EditableTextListItem[] {
   return steps.map((step) => ({ id: generateLocalId('step'), text: step }));
-}
-
-/** "25" -> 25; "" / "0" / "abc" -> null. Mirrors ParsedRecipe's own "only set when genuinely known" contract for these two fields. */
-function parseOptionalPositiveInt(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  const parsed = Number.parseInt(trimmed, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-/**
- * Rebuilds a ParsedRecipe from this screen's current field state. Every
- * field lands in one of three categories, and the third is scar tissue
- * from two separate bugs of the same shape:
- *
- *  - EDITED — title, steps, minutes, servings. Read from this screen's
- *    state and NEVER from the pre-edit `recipe` route param. "Nothing is
- *    ever saved silently" (file header) means the correction the user made
- *    here is what gets persisted, so reading the arrival for any of these
- *    would quietly throw their edit away.
- *  - CARRIED — `dishTags`. Not editable here, so there is no state to read
- *    it from; it travels through from the arrival, unchanged.
- *  - BOTH, PER LINE — `ingredients`, which is the second bug below.
- *
- * A FIELD IN NEITHER OF THE FIRST TWO IS SIMPLY GONE, AND THAT WAS LIVE.
- * This function used to name only the edited fields, so a user who fixed a
- * typo in the title silently lost the recipe's categories and
- * Bibliotheek's dishTag filter then under-reported what that household
- * owns. Nothing threw and nothing logged, because a rebuild-from-scratch
- * cannot notice what it failed to mention. `ParsedRecipe.dishTags` is
- * required (types.ts) exactly so the next carried field cannot go the same
- * way: it is passed in here, or this file does not compile.
- *
- * AND THE INGREDIENT FLATTENING THIS HEADER USED TO STATE AS AN OPEN COST
- * IS NOW SETTLED, in two halves, because it was two questions under one
- * name. The rebuild wrote every line back as `{ name: line, quantity:
- * null, unit: null }` on EVERY save, the great majority nobody had touched
- * included, so merely opening this screen destroyed amounts the source
- * gave us: `scaleRecipe.ts` cannot halve an amount folded into a name, and
- * the shopping list's quantity column came up empty. A line NOBODY TOUCHED
- * now carries its arriving `ParsedIngredient` through unchanged; a line
- * the user DID edit stays null, deliberately and permanently, since
- * splitting it back into three fields would be a parser inventing
- * structure nobody typed. That decision, whitespace ruling included, is
- * editedIngredients.ts's — pure and unit-tested, which here it is not.
- */
-function buildEditedRecipe(
-  title: string,
-  /** The ingredients as they ARRIVED: "unchanged" is a comparison, and there is nothing to compare a line against without them. `[]` is manual entry's real answer, not a fallback. */
-  arrivedIngredients: readonly ParsedIngredient[],
-  ingredients: readonly EditableTextListItem[],
-  steps: readonly EditableTextListItem[],
-  estimatedMinutesText: string,
-  servingsText: string,
-  /** Carried, not edited — see this function's header. `[]` is a real value here, never a stand-in for "unknown": a recipe the user typed has no model-assigned categories. */
-  dishTags: readonly string[],
-): ParsedRecipe {
-  return {
-    title,
-    ingredients: resolveEditedIngredients(arrivedIngredients, ingredients.map((item) => item.text)),
-    steps: steps.map((item) => item.text.trim()).filter((text) => text.length > 0),
-    estimatedMinutes: parseOptionalPositiveInt(estimatedMinutesText),
-    servings: parseOptionalPositiveInt(servingsText),
-    dishTags,
-  };
-}
-
-/** toMealDraft's steps carry no durationMinutes (cook-mode timers aren't part of import) — CreateMealInput requires the field explicitly, so it's filled in as null here, not omitted. */
-function toMealStepInputs(draft: MealDraftInsert): CreateMealInput['steps'] {
-  return draft.steps.map((step) => ({ ...step, durationMinutes: null }));
-}
-
-/**
- * Overlays this screen's OWN allergen tagging on top of toMealDraft's
- * always-'unknown'/[] defaults (PD-006: toMealDraft never classifies
- * allergens itself — see its file header). `allergenStatus` is only ever
- * 'verified' here when the user actually tapped "Bevestigen" on
- * AllergenTaggingSection; leaving a meal unconfirmed keeps it 'unknown',
- * exactly like a title-only seeded meal.
- */
-function buildMealInputFromDraft(
-  draft: MealDraftInsert,
-  allergenTags: readonly string[],
-  allergenStatus: AllergenTagStatus,
-): CreateMealInput {
-  return {
-    householdId: draft.householdId,
-    title: draft.title,
-    source: draft.source,
-    estimatedMinutes: draft.estimatedMinutes,
-    skillLevel: draft.skillLevel,
-    servings: draft.servings,
-    ingredientTags: allergenTags,
-    allergenTagStatus: allergenStatus,
-    // The model's dish categories, and the SECOND time this screen has
-    // lost them. `ParsedRecipe.dishTags` was made required so
-    // `buildEditedRecipe` could not omit it and `toMealDraft` duly puts it
-    // on the draft — then this literal, the last rebuild before the write,
-    // did not mention it, because `CreateMealInput.dishTags` is OPTIONAL.
-    // Word for word `recipeId`'s sentence below: every layer had the
-    // value, and every layer left it out. Only REQUIRING the field stops
-    // the third occurrence — a wave-6 decision, recorded not taken.
-    dishTags: draft.dishTags,
-    sourceUrl: draft.sourceUrl,
-    sourcePlatform: draft.sourcePlatform,
-    thumbnailUrl: draft.thumbnailUrl,
-    // The canonical `recipes` row this import is a household's private
-    // copy of. Carried straight off the draft — which took it from the
-    // route params, which took it from the function's answer — because
-    // this is the field `shared_cooks` (0009) joins a friend's cook to.
-    // Dropping it here is how the link stayed unwritten from 0006 until
-    // W-01b: every layer had the value, and every layer left it out.
-    recipeId: draft.recipeId,
-    ingredients: draft.ingredients,
-    steps: toMealStepInputs(draft),
-  };
-}
-
-/**
- * FROM-SCRATCH MANUAL ENTRY — after SRC-08 a narrower set than "an import
- * without a URL", reached only when there is NO ROUTE AT ALL: no platform,
- * so no oEmbed hop, no page GET, no pasted text, nothing ever read. Which
- * keeps the three `null` literals below honest rather than assumed: here
- * `sourceUrl`, `thumbnailUrl` and `recipeId` are not merely absent, they
- * are permanently unavailable. Stating them rather than omitting them is
- * what stops a reader wondering whether they were forgotten — exactly how
- * `recipeId` went unwritten everywhere, and `dishTags` here.
- */
-function buildManualMealInput(
-  recipe: ParsedRecipe,
-  householdId: HouseholdId,
-  allergenTags: readonly string[],
-  allergenStatus: AllergenTagStatus,
-): CreateMealInput {
-  return {
-    householdId,
-    title: recipe.title,
-    source: 'saved',
-    estimatedMinutes: recipe.estimatedMinutes,
-    skillLevel: null,
-    servings: recipe.servings,
-    ingredientTags: allergenTags,
-    allergenTagStatus: allergenStatus,
-    // Same drop, same fix as the drafted path. `[]` is what a hand-typed
-    // recipe has, but "no categories" and "the writer forgot" were
-    // indistinguishable here until this line said which one it is.
-    dishTags: recipe.dishTags,
-    sourceUrl: null,
-    sourcePlatform: null,
-    // A from-scratch add has no post to take a thumbnail from, so the
-    // library falls back to a monogram tile. Not a rule about manual entry
-    // in general: a display-only import (PD-011) is typed by hand too but
-    // keeps its image, arrives with a platform, and so drafts instead.
-    thumbnailUrl: null,
-    // Stated, not omitted: a from-scratch add is a copy of nothing.
-    recipeId: null,
-    ingredients: recipe.ingredients.map((ingredient, index) => ({
-      name: ingredient.name,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-      sortOrder: index,
-    })),
-    steps: recipe.steps.map((instruction, index) => ({ stepNumber: index + 1, instruction, durationMinutes: null })),
-  };
-}
-
-/**
- * WHICH WRITE PATH — AND THE TEST IS THE PLATFORM, NOT THE URL AND NOT
- * `mode`. This read `sourceUrl !== null && platform !== null`; the extra
- * clause was invisible while every route that had one had the other.
- * SRC-08 separates them: a pasted-text import is a genuine parsed recipe
- * that never had an address, so the old condition dropped it into the
- * manual builder — which hardcodes `recipeId`/`thumbnailUrl` and, until
- * this change, omitted `dishTags`, being written for a caller that
- * provably has none. It would have reached the database stripped of its
- * categories, silently.
- *
- * So the branch now tests what `toMealDraft` cannot do without: a nullable
- * `sourceUrl` (widened for this route) and a REQUIRED `platform` it
- * derives `source_platform` from. `platform === null` therefore means
- * something precise — no route taken, nothing fetched or pasted — and that
- * alone is manual entry. `mode` is not consulted: it says which SCREEN the
- * user came through, which is a fact about the journey, not the row.
- */
-function buildMealInput(
-  recipe: ParsedRecipe,
-  confirmParams: ImportConfirmParams,
-  householdId: HouseholdId,
-  allergenTags: readonly string[],
-  allergenStatus: AllergenTagStatus,
-): CreateMealInput {
-  const { sourceUrl, platform, thumbnailUrl, recipeId } = confirmParams;
-  if (platform === null) {
-    return buildManualMealInput(recipe, householdId, allergenTags, allergenStatus);
-  }
-  const draft = toMealDraft(recipe, { householdId, sourceUrl, platform, thumbnailUrl, recipeId });
-  return buildMealInputFromDraft(draft, allergenTags, allergenStatus);
-}
-
-/**
- * The write path: a real meal + ingredients + steps row, then a real save
- * row carrying a `SaveIntent`.
- *
- * IT STILL TAKES THE INTENT AS A PARAMETER even though exactly one caller
- * passes exactly one value (`IMPORT_DEFAULT_SAVE_INTENT`). Hardcoding it in
- * here would move the product decision out of src/domain/saveIntent.ts,
- * where it is documented and tested, into an unexported helper inside a
- * route module no test can reach — which is the arrangement this whole
- * change exists to undo. The parameter is the seam that keeps the decision
- * somewhere it can be read.
- *
- * PD-004a: 'this_week' or 'someday', never 'none'.
- */
-/**
- * What a save attempt did. A duplicate is NOT an error and must not be
- * reported as one: nothing failed, the household simply already owns this
- * dish, and the outcome they wanted is already true. Modelling it as a
- * third result rather than a thrown error is what keeps it out of the red
- * `danger` line — the same distinction PD-011's `display_only` earns on
- * the screen before this one.
- */
-type ImportSaveResult = { readonly kind: 'saved' } | { readonly kind: 'duplicate'; readonly title: string };
-
-async function persistImportedMeal(
-  repository: RemyRepository,
-  intent: SaveIntent,
-  editedRecipe: ParsedRecipe,
-  confirmParams: ImportConfirmParams,
-  allergenTags: readonly string[],
-  allergenStatus: AllergenTagStatus,
-): Promise<ImportSaveResult> {
-  const householdId = await repository.getCurrentHouseholdId();
-  // The check this file's own header has claimed for months. `sourceUrl`
-  // really is the deduplication key now, rather than a sentence describing
-  // one that was never built — see duplicateImport.ts, which also explains
-  // why a null address can never collide with another null.
-  //
-  // Read here rather than at paste time, deliberately. Catching it earlier
-  // would spare a round trip, but it would also mean the paste screen
-  // deciding what the library contains, and the whole reason that screen
-  // never inspects its own input is that guessing belongs in one layer.
-  // This is the layer that already holds a household id.
-  const existing = findDuplicateImport(await repository.listHouseholdMeals(householdId), confirmParams.sourceUrl);
-  if (existing !== null) {
-    return { kind: 'duplicate', title: existing.title };
-  }
-  const mealInput = buildMealInput(editedRecipe, confirmParams, householdId, allergenTags, allergenStatus);
-  const meal = await repository.createMeal(mealInput);
-  await repository.createSave({
-    householdId,
-    memberId: null,
-    mealId: meal.id,
-    intent,
-    sourceUrl: confirmParams.sourceUrl,
-  });
-  return { kind: 'saved' };
 }
 
 /**
@@ -643,15 +404,15 @@ export default function ImportConfirmScreen(): JSX.Element {
     setSaveError(null);
     setIsSaving(true);
 
-    const editedRecipe = buildEditedRecipe(
-      trimmedTitle,
+    const editedRecipe = buildEditedRecipe({
+      title: trimmedTitle,
       arrivedIngredients,
-      ingredients,
-      steps,
+      ingredientLines: ingredients.map((item) => item.text),
+      stepLines: steps.map((item) => item.text),
       estimatedMinutesText,
       servingsText,
-      carriedDishTags,
-    );
+      dishTags: carriedDishTags,
+    });
     persistImportedMeal(
       getAppRepository(),
       IMPORT_DEFAULT_SAVE_INTENT,
