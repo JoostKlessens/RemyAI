@@ -147,9 +147,11 @@ apart gecommit; de agents hebben zelf niet gecommit of gestaged.
 | `eca0cf1` | De stand van de avond, en twee afgewezen voorschriften |
 | `4bfbcd8` | De sessielimiet van 00:40 |
 | `5d06b7b` | **GAP-34 — dislikes sluiten uit op ingrediëntnaam.** +28 tests, OPS-16 dicht |
+| `579a2b7` | De eindstand van de kritieke drie |
+| `516299b` | **`import/confirm.tsx` gesplitst**, 963 → 737, +45 tests |
 
-**Eindmeting, zelf gedraaid ná `5d06b7b`:** typecheck 0, lint 0,
-`check:functions` 0, `check:seed` 0, **3433 tests over 143 bestanden**.
+**Eindmeting, zelf gedraaid ná `516299b`:** typecheck 0, lint 0,
+`check:functions` 0, `check:seed` 0, **3478 tests over 146 bestanden**.
 Werkboom schoon. **Niet gepusht** — bewust.
 
 ## Wat de eigenaar moet weten
@@ -170,5 +172,14 @@ Werkboom schoon. **Niet gepusht** — bewust.
 4. **Wat GAP-34 bewust NIET doet, en in tests staat:** geen synoniemenlijst,
    dus `paddenstoelen` vindt `champignons` niet, en meervouden zijn een eigen
    woord. De ingrediënt-zoekbalk is niet gebouwd.
-5. **Nog steeds onbevestigd op een toestel.** Niets van deze nacht is op een
+5. ⚠ **EEN BEWERING VAN DEZE NACHT IS ZELF ONWAAR GEBLEKEN, en dat is de
+   leerzaamste regel hier.** Er stond, in dit bestand én in HANDOVER én in
+   LONGLIST, dat `confirm.tsx` de ENIGE was die over het regelplafond zat. Dat
+   is nooit geteld — het is overgeschreven uit HANDOVER's punt 10, dat alleen
+   over dát bestand ging. `wc -l` over `src/` geeft er **zeven**, en
+   `src/app/import/paste.tsx` staat op **1244**: dezelfde importstroom, en
+   anderhalf keer het bestand dat net gesplitst is. **`paste.tsx` is de
+   volgende, niet confirm.** Gevonden door de agent die de splitsing deed, die
+   het meette in plaats van het aan te nemen.
+6. **Nog steeds onbevestigd op een toestel.** Niets van deze nacht is op een
    scherm gezien. `TOESTELTEST.md` blijft punt één, en Android bovenaan.

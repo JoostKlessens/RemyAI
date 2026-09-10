@@ -23,8 +23,36 @@ gekozen). Plus twee correcties op dit document zelf, `feffdfe` en `3632188`.
 
 **OPS-16 viel als bijvangst dicht:** `(tabs)/index.tsx` ging van 825 naar 702
 regels doordat de laadfunctie naar `src/lib/liveSession.ts` verhuisde.
-⚠ **`src/app/import/confirm.tsx` (963) is nu de ENIGE die over het plafond
-van 800 zit.**
+~~⚠ `src/app/import/confirm.tsx` (963) is nu de ENIGE die over het plafond van 800 zit.~~
+
+⚠ **EN HIER STOND EEN ONWARE BEWERING DIE OP 10 SEPTEMBER 2026 IS NAGEMETEN.**
+Er stond dat `confirm.tsx` na de splitsing de ENIGE was die over het plafond
+van 800 zat. Onwaar, en niemand had het geteld — de bewering is overgeschreven
+uit HANDOVER's punt 10, dat alleen over dát bestand ging. `wc -l` over `src/`
+geeft er **zeven**, en `confirm.tsx` (737) staat er niet meer bij:
+
+| Regels | Bestand |
+|---|---|
+| **1244** | `src/app/import/paste.tsx` |
+| 934 | `src/app/(tabs)/ranglijst.tsx` |
+| 894 | `src/domain/types.ts` |
+| 882 | `src/app/(tabs)/friends.tsx` |
+| 848 | `src/app/cook/[mealId].tsx` |
+| 814 | `src/app/friends/add.tsx` |
+| 804 | `src/theme/tokens.ts` |
+
+Plus vijf testbestanden: `importPipeline.e2e.test.ts` (1076),
+`localRepository.test.ts` (1030), `parseImportResult.test.ts` (821),
+`importTelemetry.test.ts` (805) en `mealRecipeEdit.test.ts` (801).
+
+⚠ **`src/app/import/paste.tsx` is met 1244 regels de grootste, ligt in
+dezelfde importstroom, en is anderhalf keer het bestand dat net gesplitst is.**
+Dat is de volgende, niet `confirm.tsx`.
+
+Dit is dezelfde vorm die dit document over de migratiestand beschrijft: een
+correcte meting (963 > 800) aan een verkeerde vraag gehangen ("is hij de
+enige?"), en vier documenten die het overschreven zonder te tellen.
+
 
 ⚠ **Er staat niets half in de boom.** `git status --short` gaf nul regels ná
 de laatste commit, zelf gemeten en niet afgeleid.
