@@ -75,6 +75,7 @@ import { hapticValueMoved } from '@/lib/haptics';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ProfileId } from '@/domain/social/types';
+import { useSheetTransition } from '@/hooks/useSheetTransition';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 import { ADD_FRIEND_ENTRY_ACCESSIBILITY_LABEL, ADD_FRIEND_ENTRY_LABEL, ADD_FRIEND_ROUTE } from './addFriendCopy';
 import { Button } from './Button';
@@ -120,9 +121,6 @@ export interface SendRecipeSheetProps {
   readonly onAddFriend?: () => void;
   readonly reduceMotionEnabled: boolean;
 }
-
-/** Matches SaveIntentSheet's and LibraryTileActionSheet's off-screen start offset. */
-const SHEET_ENTRY_OFFSET = 400;
 
 /** Hairline, like DecisionCard's accept stroke and FriendProofCard's closed-loop one. */
 const COMMIT_STROKE_HEIGHT = 2;
@@ -177,29 +175,17 @@ export function SendRecipeSheet(props: SendRecipeSheetProps): JSX.Element {
     router.push(ADD_FRIEND_ROUTE);
   };
 
-  const translateY = useRef(new Animated.Value(SHEET_ENTRY_OFFSET)).current;
-  const scrimOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    const duration = resolveDuration(motion.durationNormal, reduceMotionEnabled);
-    translateY.setValue(reduceMotionEnabled ? 0 : SHEET_ENTRY_OFFSET);
-    scrimOpacity.setValue(0);
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration,
-        easing: Easing.bezier(...motion.easingDecelerate),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scrimOpacity, { toValue: 1, duration, useNativeDriver: true }),
-    ]).start();
-  }, [visible, translateY, scrimOpacity, reduceMotionEnabled]);
+  /**
+   * Entrance and exit, shared with the other three sheets. This sheet is why
+   * the travel distance is now MEASURED rather than the 400 that used to sit
+   * here: at 534 lines it can exceed 400 pt at large Dynamic Type, and its
+   * "off-screen" start was then inside the screen — the top of the panel
+   * popped instead of sliding, on the one sheet most likely to be tall.
+   */
+  const { mounted, translateY, scrimOpacity, onSheetLayout } = useSheetTransition(visible, reduceMotionEnabled);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onDismiss}>
       <Animated.View style={[styles.scrim, { backgroundColor: colors.overlay, opacity: scrimOpacity }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -209,6 +195,7 @@ export function SendRecipeSheet(props: SendRecipeSheetProps): JSX.Element {
         />
       </Animated.View>
       <Animated.View
+        onLayout={onSheetLayout}
         style={[
           styles.sheet,
           {

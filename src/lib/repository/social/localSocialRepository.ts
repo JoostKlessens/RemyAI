@@ -33,6 +33,8 @@ import {
 } from '@/domain/social/friendship';
 import { parseHandle } from '@/domain/social/handle';
 import type {
+  Block,
+  Follow,
   Friendship,
   FriendshipAction,
   FriendshipStatus,
@@ -47,6 +49,7 @@ import { nowIso } from '../clock';
 import { generateLocalId } from '../id';
 import type { KeyValueStore } from '../keyValueStore';
 import { createTableAccessor, type TableAccessor } from '../table';
+import { createLocalFollowGraph } from './localFollowGraph';
 import {
   normalizeSendNote,
   type CanonicalRecipe,
@@ -82,6 +85,14 @@ interface StoredRecipeShare extends RecipeShare {
 interface SocialTables {
   readonly profiles: TableAccessor<Profile>;
   readonly friendships: TableAccessor<Friendship>;
+  /**
+   * PD-024's directed graph. Two accessors and not one, exactly as the
+   * schema has two tables, and for the schema's reason: a block cannot
+   * live on a directed row, because that row belongs to the person being
+   * blocked.
+   */
+  readonly follows: TableAccessor<Follow>;
+  readonly blocks: TableAccessor<Block>;
   readonly recipeRatings: TableAccessor<RecipeRating>;
   readonly recipeShares: TableAccessor<StoredRecipeShare>;
   /**
@@ -141,6 +152,8 @@ function createSocialTables(store: KeyValueStore): SocialTables {
   return {
     profiles: createTableAccessor<Profile>(store, 'remy:profiles'),
     friendships: createTableAccessor<Friendship>(store, 'remy:friendships'),
+    follows: createTableAccessor<Follow>(store, 'remy:follows'),
+    blocks: createTableAccessor<Block>(store, 'remy:blocks'),
     recipeRatings: createTableAccessor<RecipeRating>(store, 'remy:recipe_ratings'),
     recipeShares: createTableAccessor<StoredRecipeShare>(store, 'remy:recipe_shares'),
     meals: createTableAccessor<Meal>(store, 'remy:meals'),
@@ -285,6 +298,12 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
   }
 
   return {
+    // PD-024's directed graph, spread in from ./localFollowGraph — seven
+    // methods that are one subject with one set of rules, and the file this
+    // one would otherwise be. `RemyFollowGraphRepository` names the same
+    // split on the type side, so callers still see one object.
+    ...createLocalFollowGraph(tables),
+
     getProfile,
     getFriendshipBetween,
 

@@ -189,8 +189,14 @@ function HeaderControl(props: HeaderControlProps): JSX.Element {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    // 12 + 44 + 12 = 68pt. The one number this file is measured by.
-    paddingTop: spacing.space3,
+    // 24 + 44 + 12 = 80pt. The one number this file is measured by.
+    //
+    // ⚠ IT WAS 12 + 44 + 12 = 68 UNTIL 10 SEPTEMBER 2026. The three
+    // controls in this row are tap targets near the top of the screen,
+    // and the owner reported that class of control as hard to hit for a
+    // third time. The clearance is now stated once for the whole app —
+    // see spacing.screenHeaderTop — rather than measured per file.
+    paddingTop: spacing.screenHeaderTop,
     paddingBottom: spacing.space3,
   },
   titleRow: {

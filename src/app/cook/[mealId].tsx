@@ -811,6 +811,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.space4,
   },
   progressHeader: {
+    // Cook mode had NO top clearance at all, which made it the worst case
+    // of the three the owner reported: Stoppen sat flush against the
+    // safe-area inset. See spacing.screenHeaderTop.
+    paddingTop: spacing.screenHeaderTop,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

@@ -629,6 +629,10 @@ function SuggestionView(props: SuggestionViewProps): JSX.Element {
         <DecisionCard
           dishTitle={meal?.title ?? 'Onbekend gerecht'}
           thumbnailUrl={meal?.thumbnailUrl ?? null}
+          /* So a still that expired between the import and tonight is asked
+             for again rather than drawn as a letter — see DecisionCard's
+             `sourceUrl` prop and useThumbnailFallback.ts. */
+          sourceUrl={meal?.sourceUrl ?? null}
           /* The REDEN block is gone (see DecisionCard's header). `reasonText`
              is still composed by `decide()` and still persisted on the
              decisions row above; what reaches the card is only the friend

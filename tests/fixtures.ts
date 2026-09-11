@@ -129,6 +129,7 @@ export function makeSave(overrides: Partial<Save> = {}): Save {
     memberId: 'member-1',
     mealId: 'meal-1',
     intent: 'this_week',
+    origin: 'import',
     sourceUrl: null,
     savedAt: '2026-08-18T10:00:00.000Z',
     ...overrides,

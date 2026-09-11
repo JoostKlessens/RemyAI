@@ -33,6 +33,7 @@
 import { joinDutchList } from '@/domain/dutchText';
 import { describeAllergenTag } from './allergenTaggingCopy';
 import { getPlatformDisplayName } from './creatorPresentation';
+import type { RecipeAttribution } from './recipeAttribution';
 import type { CreatorPlatform } from '@/domain/feed/types';
 import type { MealIngredient } from '@/domain/types';
 
@@ -208,6 +209,34 @@ export function buildAllergenCollisionLabel(collidingTags: readonly string[]): s
 }
 
 /**
+ * A CARD's credit line built straight off an attribution, or null when
+ * there is nobody to credit.
+ *
+ * WHY THIS EXISTS RATHER THAN THE CARD READING TWO FIELDS. `FriendRecipeCard`
+ * used to interpolate "`@${model.creator.handle} · ${getPlatformDisplayName(
+ * model.creator.platform)}`" inline, which is a formatted string living in
+ * a `.tsx` — unreachable by vitest, which renders no component in this
+ * project, and the same class of string every `*Copy.ts` in this directory
+ * exists to pull out. It also quietly disagreed with `buildCreatorLine`
+ * next door, which strips a leading `@` and falls back to the platform
+ * alone; two spellings of one line is how the proof card and the send card
+ * start crediting the same creator differently.
+ *
+ * NULL WHERE `buildCreatorLine` FALLS BACK TO THE PLATFORM, and the two are
+ * not in tension. That function is handed a handle and a platform and can
+ * always name SOMETHING. This one is handed an attribution that may not
+ * exist at all — a friend's hand-entered dish has no canonical row and so
+ * nobody to credit — and inventing a platform for it would be crediting a
+ * post that was never made.
+ */
+export function buildCardCreditLine(attribution: RecipeAttribution | null): string | null {
+  if (attribution === null) {
+    return null;
+  }
+  return buildCreatorLine(attribution.handle, attribution.platform);
+}
+
+/**
  * "@kokenmetkees · TikTok" — the attribution line every list surface owes
  * the creator whose post a recipe was extracted from (PD-007, PD-010.1).
  *
@@ -229,4 +258,30 @@ export function buildCreatorLine(handle: string, platform: CreatorPlatform): str
   const platformName = getPlatformDisplayName(platform);
   const trimmed = handle.trim().replace(/^@/u, '');
   return trimmed.length > 0 ? `@${trimmed} · ${platformName}` : platformName;
+}
+
+/**
+ * The second line of a CREDIT ROW — `CreatorAttribution`'s, where
+ * `buildCreatorLine` above is a CARD's.
+ *
+ * The two differ in exactly one place: a credit row can fail to open the
+ * profile it links to, and when it does the line says so instead of naming
+ * the platform. That swap used to be written inline in
+ * `CreatorAttribution.tsx`, as `@${handle} · opnieuw proberen`, which is a
+ * Dutch sentence in a `.tsx` — unreachable by vitest, and the same class of
+ * string every `*Copy.ts` in this directory exists to pull out.
+ *
+ * IT SHARES `buildCreatorLine`'S EMPTY-HANDLE RULE by calling it: a
+ * creator with no handle is credited by platform alone rather than as
+ * "@ · TikTok", because attribution that renders as punctuation credits
+ * nobody. On the retry line an empty handle leaves the retry clause
+ * standing on its own, which is correct — the sentence is about the tap,
+ * not about the creator.
+ */
+export function buildCreatorCreditLine(handle: string, platform: CreatorPlatform, hasFailedToOpen: boolean): string {
+  if (!hasFailedToOpen) {
+    return buildCreatorLine(handle, platform);
+  }
+  const trimmed = handle.trim().replace(/^@/u, '');
+  return trimmed.length > 0 ? `@${trimmed} · opnieuw proberen` : 'opnieuw proberen';
 }

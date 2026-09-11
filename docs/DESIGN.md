@@ -329,6 +329,41 @@ PD-014; was "Ranglijst"), in that order. No tab icons — text-only labels in
 > What changed is how a bounded, deterministic, identical list is DRAWN. Read
 > PD-014a before citing this paragraph about Trending.
 
+> ⚠ **BANNER, 10 September 2026 — THE TAB COUNT GOES BACK DOWN TO THREE, and
+> this section's own rule is what decides how. PD-024 is the decision.** The
+> owner asked for the two social tabs to become one thing called **Ontdek**:
+> *"de tabs 'vrienden' en trending\vrienden [zijn] hetzelfde … dit moet
+> hernoemt worden naar ontdek"*. He then chose the one-tab shape over the
+> two-tab one on the same day. The order becomes **Kiezen | Mijn recepten |
+> Ontdek**, and the fourth position comes free.
+>
+> **The rule below is not repealed and the fourth question is not withdrawn.**
+> Trending's claim — *"wat is hier echt goed"* — is still a real question with
+> a real answer, and PD-014's six conditions still bind the surface that
+> answers it. What changed is that it is now answered on ONE tab together with
+> *"wat maakten de mensen die ik volg"*, behind the segmented control that
+> already exists on that screen.
+>
+> **Why one tab and not two, argued rather than assumed, because this rule
+> cuts both ways here.** Two publics, two orderings and two consent models is
+> a perfectly good case for two questions. The case for one: both sides answer
+> *"wat is er buiten mijn eigen keuken?"*, and the switch picks the EVIDENCE
+> BASE — people I know, or everybody. PD-018 already defended exactly this
+> control on exactly this screen, in a sentence that transfers unchanged: it
+> *"selects between two SEPARATE lists rather than re-ordering one"*.
+>
+> ⚠ **And the tripwire, recorded now rather than rediscovered later.** The
+> moment the feed side carries something that has to be ANSWERED — a follow
+> request, a co-diner invitation — it carries post, and post on a surface you
+> must switch to first is post you miss. **That is the day it is two questions
+> and therefore two tabs.** Fase 1 lands follow requests, so that day is close;
+> the one-tab shape is chosen knowing two tabs is the next stop.
+>
+> **The fourth position stays empty.** *"A fifth tab still needs a fifth
+> question"* holds in the direction nobody worried about too: filling a slot
+> because one opened up is precisely the mistake this rule was written
+> against. Read PD-024 before changing the tab bar.
+
 **This document said "no third tab" until PD-010, and it was right to.**
 The argument was that the product has two tasks — deciding and keeping —
 and that a third tab is how a decision tool turns into a browsing app.

@@ -178,7 +178,11 @@ function EmbedFallback(props: {
   const { thumbnailUrl, title, sourceUrl, platform, note } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
-  const thumbnail = useThumbnailFallback(thumbnailUrl);
+  // The address is already in hand here, so an expired still costs one
+  // oEmbed call rather than a monogram. The policy module resolves the
+  // platform from the URL itself, so a `'web'` or `'facebook'` fallback is
+  // refused there and never reaches the network.
+  const thumbnail = useThumbnailFallback(thumbnailUrl, sourceUrl);
   const { status, open } = useOpenExternalLink(OPEN_FAILED_ANNOUNCEMENT);
   const monogram = title.trim().charAt(0).toUpperCase() || '?';
 
@@ -197,7 +201,7 @@ function EmbedFallback(props: {
       <View style={[styles.frame, styles.fallbackFrame, { backgroundColor: colors.surfaceSunken }]}>
         {thumbnail.showsImage ? (
           <Image
-            source={{ uri: thumbnailUrl ?? undefined }}
+            source={{ uri: thumbnail.imageUrl ?? undefined }}
             style={styles.fill}
             resizeMode="cover"
             onError={thumbnail.onError}

@@ -40,6 +40,29 @@
  * beside it — and should be replaced by that module's real type the moment
  * it exists, rather than being grown here into a second source of truth.
  *
+ * ⚠ THE CARD NO LONGER CARRIES A `Creator`, AND THAT IS WHAT MADE THE LIVE
+ * SEND LIST POSSIBLE (10 September 2026). `FriendRecipeCardModel.creator`
+ * was a whole `Creator`, i.e. a PD-007 CONSENT record, and a friend's
+ * imported meal has no `creators` row behind it — only
+ * `recipes.author_name` / `platform` / `author_url`. Filling that field
+ * from an author name would have fabricated a consent record, which is the
+ * conflation migration 0006's own comment warns against, so the live list
+ * showed proof cards only while the tab label counted live sends. The
+ * field is `attribution: RecipeAttribution | null` now
+ * (src/components/recipeAttribution.ts, which carries the full argument),
+ * and `buildSentMealCardModels` at the foot of this file builds a card out
+ * of a `SentMeal` without inventing anything.
+ *
+ * THE CONSENT GATE DID NOT MOVE WITH IT, and this file is where that is
+ * enforced. `assembleFriendFeed` below still takes `readonly Creator[]`
+ * and still runs `filterServableFeedItems` FIRST; `buildCardModel` still
+ * drops an item whose creator is missing from the gated lookup. What
+ * changed is only the last step — an already-gated `Creator` is narrowed
+ * by `buildCreatorAttribution` into the four strings a row prints. The two
+ * builders are deliberately separate functions rather than one taking a
+ * flag: they read different objects under different permissions, and a
+ * flag is how one of them eventually runs the other's rules.
+ *
  * THIS FILE ONCE HELD BOTH CARD KINDS AND NO LONGER DOES. At 800 lines it
  * was split along the seam its own header had named: the two kinds "share
  * a vocabulary — key ingredients, the PD-007a label, the creator line —
@@ -63,8 +86,10 @@ import {
   summarizeKeyIngredients,
   type KeyIngredientsSummary,
 } from './friendCardVocabulary';
+import { buildCreatorAttribution, type RecipeAttribution } from './recipeAttribution';
 import type { Creator, CreatorId, CreatorPlatform, FeedItem, FeedItemId } from '@/domain/feed/types';
 import type { RecipeId } from '@/domain/social/types';
+import type { RecipeShareId } from '@/lib/repository/social/types';
 import type { Household, IsoDateString, Meal, MealId, MealIngredient, Member, Restriction } from '@/domain/types';
 
 /**
@@ -165,7 +190,29 @@ export interface FriendShare {
 
 /** Everything one card needs, resolved once, so the component itself does no lookups. */
 export interface FriendRecipeCardModel {
-  readonly feedItemId: FeedItemId;
+  /**
+   * The card's identity: its list key, and the segment
+   * `/friends/[feedItemId]` is opened with.
+   *
+   * THE UNION IS DOCUMENTATION THAT HAPPENS TO COMPILE, not something to
+   * narrow on — both aliases are bare `string` (src/domain/types.ts on why
+   * no `*Id` alias in this codebase ever assumes a uuid shape), so no
+   * runtime test could tell them apart and none should be written. What it
+   * records is which row produced the card: a creator-fed card carries its
+   * `feed_items` id, and a LIVE SEND has no `feed_items` row at all and
+   * carries its `recipe_shares` id instead.
+   *
+   * ⚠ A LIVE SEND'S ID RESOLVES TO NOTHING ON THE SCREEN IT OPENS, TODAY.
+   * `/friends/[feedItemId]` looks its param up against the fixture feed,
+   * behind `__DEV__`, so a live send card taps through to
+   * `describeSharedRecipeNotice('missing')` — which is the wrong sentence
+   * for a recipe that exists and was simply not read. That is a known,
+   * measured seam rather than an oversight: closing it needs STEPS on
+   * `SentMeal`, i.e. an interface field and two repository
+   * implementations, and that file is owned elsewhere. See
+   * src/lib/gekooktSource.ts's header, which carries the trade in full.
+   */
+  readonly feedItemId: FeedItemId | RecipeShareId;
   readonly mealId: MealId;
   readonly title: string;
   readonly thumbnailUrl: string | null;
@@ -208,9 +255,33 @@ export interface FriendRecipeCardModel {
    * that on 9 September 2026.
    */
   readonly canonicalRecipeId: RecipeId | null;
-  /** The original video's creator — carried whole, since PD-010 requires attribution on the card AND on the recipe. */
-  readonly creator: Creator;
-  readonly sourceUrl: string;
+  /**
+   * Who to credit for the original video (PD-010.1 — attribution on the
+   * card AND on the recipe), or null when the source named nobody.
+   *
+   * IT IS NOT A `Creator`, AND THE DIFFERENCE IS THE WHOLE POINT — see
+   * src/components/recipeAttribution.ts, which carries the argument, and
+   * this file's header for what it unblocked. Null is a real, renderable
+   * state rather than a gap: a friend's hand-entered dish has no canonical
+   * row and therefore nobody to credit, and the card answers that by
+   * printing no creator line at all rather than a row of punctuation.
+   *
+   * ON THE CREATOR-FED PATH IT IS NEVER NULL, because `buildCardModel`
+   * drops an item whose creator is missing from the gated lookup — a
+   * fail-closed rule that predates this field and is unchanged by it.
+   */
+  readonly attribution: RecipeAttribution | null;
+  /**
+   * The creator's post, for PD-010.2's "Bekijk het originele filmpje".
+   *
+   * NULLABLE SINCE THE LIVE SEND PATH LANDED, matching `SentMeal.sourceUrl`
+   * exactly: a friend's hand-entered or seeded dish never came out of a
+   * video, so there is no post to link to. It is never null on the
+   * creator-fed path, where a `FeedItem` is a post by definition. The
+   * recipe screen renders the whole PD-010.2 row only when there is both
+   * an address and a platform to name — see `SharedRecipeView.sourceUrl`.
+   */
+  readonly sourceUrl: string | null;
   readonly keyIngredients: KeyIngredientsSummary | null;
   /** Verbatim from `getCollidingTagsByFeedItem` — see this file's header. */
   readonly collidingTags: readonly string[];
@@ -278,7 +349,12 @@ function buildCardModel(item: FeedItem, source: FriendFeedSource): FriendRecipeC
     // `?? null` for `Meal.recipeId`'s own reason: a row written before 0006
     // has no key, and a missing key means the same thing as null.
     canonicalRecipeId: meal.recipeId ?? null,
-    creator,
+    // The gated creator, narrowed to what a row prints. The gate itself
+    // already ran — `filterServableFeedItems` inside `assembleFriendFeed`,
+    // plus the `creator === undefined` drop above — and this line performs
+    // no check of its own; see recipeAttribution.ts on why that separation
+    // is deliberate rather than an omission.
+    attribution: buildCreatorAttribution(creator),
     sourceUrl: item.sourceUrl,
     keyIngredients: summarizeKeyIngredients(source.ingredientsByMealId.get(meal.id) ?? []),
     collidingTags: source.collidingTagsByFeedItemId.get(item.id) ?? [],
@@ -362,15 +438,23 @@ export function assembleFriendFeed(request: FriendFeedRequest): readonly FriendR
  *
  * The ingredient summary is read in its spoken form, never the visual
  * "+2", which VoiceOver pronounces as "plus two" with no noun attached.
+ *
+ * A NULL ATTRIBUTION DROPS THE CREDIT CLAUSE ENTIRELY rather than reading
+ * "van op TikTok" or, worse, naming a platform for a dish that came from
+ * no platform. That is the same rule the visible line follows one function
+ * away, which is what keeps this label a description of the card rather
+ * than a second, longer version of it: a screen-reader user hears exactly
+ * the facts the layout shows, including the ones it does not.
  */
 export function buildFriendRecipeCardAccessibilityLabel(model: FriendRecipeCardModel): string {
-  const platformName = getPlatformDisplayName(model.creator.platform);
   const parts: string[] = [model.title, `gedeeld door ${model.friendName}`];
 
   if (model.note !== null) {
     parts.push(`die erbij schreef: "${model.note}"`);
   }
-  parts.push(`van ${model.creator.handle} op ${platformName}`);
+  if (model.attribution !== null) {
+    parts.push(`van ${model.attribution.handle} op ${getPlatformDisplayName(model.attribution.platform)}`);
+  }
 
   if (model.keyIngredients !== null) {
     parts.push(`met ${model.keyIngredients.spokenText}`);

@@ -3,17 +3,63 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
-**Stand: 9 september 2026, LAAT OP DE AVOND — dit blok vervangt het blok
-eronder, dat tot en met `72eccde` liep.** Branch
-`feat/live-import-and-plan-phases`, t/m **`5d06b7b` gecommit en BEWUST NIET
-GEPUSHT**: dit is nachtwerk dat de eigenaar 's ochtends zelf wil kunnen
-bekijken voordat het de remote raakt. Zeven commits bovenop `72eccde`.
+**Stand: 11 september 2026 — dit blok vervangt het blok eronder, dat tot en
+met `e3685d2` liep en niet gepusht was.** Branch
+`feat/live-import-and-plan-phases`, **nu wél gepusht**, op uitdrukkelijk
+verzoek van de eigenaar.
 
-**Vijf poorten groen, alle vijf zelf gedraaid ná de laatste commit:**
-typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3433 tests over
-143 bestanden**, gemeten op 10 september ná `5d06b7b`. De uitgangsmeting op
+**Vijf poorten groen, alle vijf zelf gedraaid op 11 september 2026 om 11:45
+en overgeschreven uit de terminal:** typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3742 tests over 157 bestanden**. De uitgangsmeting vóór dit
+werk was 3577 over 152, dus **+165 tests over vijf nieuwe testbestanden**.
+
+**Wat er landde: Ontdek fase 0 en fase 1** (`docs/ONTDEK-PLAN.md`, PD-024).
+De twee sociale tabs worden één oppervlak met een feed en een explore, en
+daarvoor moest de sociale graaf eerst GERICHT worden — asymmetrisch volgen
+met een goedkeuringsstap. In het kort:
+
+- **Fase 0, de papieren omkering.** PD-024 staat onderaan
+  `PRODUCT-DECISIONS.md`. `DESIGN-SOCIAL.md` §9's slotzin *"Do not build a
+  feed"* is doorgestreept met een amendementsblok; §8's vierde weigering is
+  voor de TWEEDE keer geamendeerd, met alleen `No follower model`
+  doorgestreept — publieke profielen en de contactenupload blijven absoluut.
+  `DESIGN.md` §Navigation draagt de banner over drie tabs.
+- **Fase 0, de enige code: O-9.** Een save draagt nu een HERKOMST
+  (`src/domain/saveOrigin.ts`), omdat dat de enige post in het hele plan is
+  die duurder wordt door te wachten: de baseline van de closed-loop rate
+  bestaat alleen tot Ontdek er is.
+- **Fase 1, de gerichte graaf.** Migratie `0021_directed_graph.sql` —
+  ⚠ **GESCHREVEN EN NIET GEDRAAID**, dat blijft van de eigenaar.
+- **Één operationele volgorde die niet omgedraaid mag worden:** eerst de
+  migratie, dan de code. Andersom leest `listFollows` een tabel die niet
+  bestaat en staat elk sociaal scherm leeg.
+
+⚠ **In dezelfde push zit ook het onvoltooide werk van de sessie ervóór** —
+de animatielaag, de thumbnail-verversing en het gedeelde receptscherm — dat
+al ongecommit in de werkmap lag toen fase 0 begon. Die twee werkstromen
+raken deels dezelfde bestanden en zijn niet achteraf uit elkaar te halen
+zonder een commit te verzinnen die nooit als groene toestand bestaan heeft.
+
+---
+
+**Stand: 10 september 2026 — dit blok liep tot en met `72eccde`.** Branch `feat/live-import-and-plan-phases`, t/m
+**`e3685d2` gecommit en BEWUST NIET GEPUSHT**: dit is nachtwerk dat de
+eigenaar 's ochtends zelf wil kunnen bekijken voordat het de remote raakt.
+Tien commits bovenop `72eccde`.
+
+**Vijf poorten groen, alle vijf zelf gedraaid op 10 september ná `e3685d2`
+en niet overgeschreven:** typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3478 tests over 146 bestanden**. De uitgangsmeting op
 9 september 's avonds was 3338 over 139 — GAP-33 bracht er 13 bij,
-GAP-32/55 er 54 en GAP-34 er 28, met vier nieuwe testbestanden.
+GAP-32/55 er 54, GAP-34 er 28 en de splitsing van `confirm.tsx` er 45, met
+vijf nieuwe testbestanden.
+
+⚠ **Deze stand liep tot 10 september twee commits achter, en dat is dezelfde
+vorm als de onware bewering hieronder.** Er stond `5d06b7b` en 3433/143 —
+eerlijk gemeten, maar vóór `516299b` (de splitsing van `confirm.tsx`) en
+`e3685d2`. Een getal dat waar wás en niet is bijgehouden leest als een
+meting. Wie deze regel leest, meet hem na: `git log --oneline -1` en
+`npm test`.
 
 **Wat er die nacht landde — alle drie de kritieke stukken:** GAP-33 (Kiezen
 narrowt zijn chips mee, `cd4d09d`), GAP-32/55 (`Bewaren` plus het
@@ -67,6 +113,36 @@ vorm als de migratiestand: een correcte meting aan een verkeerde vraag.
 ⚠ **`check:functions` is GEEN functielengte-controle** en dit document heeft
 dat nooit rechtgezet: het is `tsc -p supabase/functions/tsconfig.json`. De
 regel "functies onder 50 regels" heeft hier geen enkele poort.
+
+### De documentenopruiming van 10 september 2026
+
+De eigenaar: *"er zijn er namelijk op het moment erg veel en ik denk niet
+allemaal meer relevant, ruim op."* Nagelopen zijn alle 17 bestanden in
+`docs/` plus `docs/ui-research/`, `research/` en `design/`, met één
+maatstaf: **verwijst er nog iets naar, en staat de inhoud ergens anders?**
+
+**Drie verwijderd**, alle drie omdat hun inhoud aantoonbaar elders staat:
+
+| Weg | Waarom het mocht |
+|---|---|
+| `NACHTPLAN-9-SEPTEMBER.md` | Noemde zichzelf in zijn eerste regel een wegwerpdocument. Alle uitkomsten staan hier en in `LONGLIST.md`: de drie kritieke stukken, de `paste.tsx`-natelling, en de ingetrokken `claim-handle`-schuld. Nul verwijzingen vanuit code. |
+| `SESSIE-6-SEPTEMBER.md` | Zei zelf, en dit document zei het ook, dat het weg mocht zodra de handover het had opgenomen. §5 (de embed-vraag) staat volledig in `src/domain/embed/resolveEmbedUrl.ts` mét dezelfde bronvermeldingen; §7 is helemaal ingehaald. **§4 was het enige dat nergens anders stond en is daarom eerst overgezet** naar `DESIGN-SOCIAL.md` §9. |
+| `ontwerp-plan-9-september.html` | Alle vier de fases uitgevoerd of beantwoord, beide eigenaarsbeslissingen dicht (fase 3 → uploaden; DEC-04 → twee decimalen). Geen beeld erin. |
+
+**Alles anders is blijven staan, en dat is een uitkomst en geen luiheid.**
+`docs/ui-research/` (7 bestanden, ~500 kB) leek de dikste kandidaat, maar
+**zeven bronbestanden verwijzen er bij naam naar om uit te leggen waarom de
+code ervan afwijkt** — `DecisionCard.tsx` en `TrendingCard.tsx` rechtvaardigen
+er hun 9:16 mee tegen ASSEMBLY §2.2's 4:5. Hetzelfde geldt voor
+`STYLING-PLAN.md` (3 bronbestanden), `TOESTELTEST.md` (2), `research/` (5) en
+`design/` (4). Wie die weggooit laat commentaar achter dat naar niets wijst.
+
+⚠ **En de opruiming legde bloot wat het echte probleem was: niet het aantal,
+maar dat er open vragen in rondedocumenten stonden.** De vraag hoe diep de
+Trending-feed mag stond alleen in `RONDE-8-SEPTEMBER-TRENDING.md` en staat nu
+in `OPEN-BESLISSINGEN.md` als **vraag K**. De stand bovenaan dit document en
+in `LONGLIST.md` liep twee commits achter en punt 10 hieronder beschreef werk
+dat al af was.
 
 ---
 
@@ -181,7 +257,8 @@ omdat elke bevinding erin een *patroon* is dat zich herhaalt.
 | `OPEN-BESLISSINGEN.md` | Wat er nog open staat en waarom. Open vragen A t/m H, plus de beantwoorde met hun bewijs. |
 | `STYLING-PLAN.md` | Iconen, beeld en animatie: wat het onderzoek besloot, wat daarvan geland is, en wat niet. Nieuw op 4 september. |
 | `PRODUCT-DECISIONS.md` | PD-001 t/m **PD-023**. Vastgelegd; niet heropenen zonder aanleiding. PD-002 draagt sinds 5 september een omkeringsbanner, en **PD-015, PD-017 en PD-019 sinds 6 september** — alle vier blijven staan, want dit document draait beslissingen schriftelijk terug en verwijdert het argument nooit. Let op: dit document is Engels, in tegenstelling tot de rest van `docs/`. |
-| `SESSIE-6-SEPTEMBER.md` | Wat er op 6 september gevraagd, gebouwd en gevonden is, inclusief het groeiplan voor de sociale laag en het antwoord op de embed-vraag. **Wegwerpdocument**: zodra dit handover-bestand het heeft opgenomen mag het weg — deze repo heeft zijn procesdocumenten op 3 september bewust opgeruimd. |
+| `RONDE-8-SEPTEMBER-TRENDING.md` | De vier meldingen van 8 september (vriendschapsverzoek, terugknop, Trending aanklikbaar, Trending als scrollfeed) met per taak de gemeten oorzaak. **Blijft staan, en niet uit sentiment**: `src/app/_layout.tsx:142` verwijst er bij naam naar ("taak B") voor een uitsluiting die nergens anders is opgeschreven. De open vraag die erin zat — hoe diep de feed mag — staat sinds 10 september in `OPEN-BESLISSINGEN.md` als **vraag K**, waar openstaand werk hoort. |
+| `ontwerp-audit-9-september.html` | Twaalf schermen als ingebedde screenshots, 9 september, plus het oordeel per scherm. **Blijft staan omdat het niet te herschrijven is**: het is 720 kB beeld uit een Chromium-harnas dat twee tijdelijke code-ingrepen nodig had, en die zijn teruggedraaid. Lees de waarschuwing verderop over wat deze plaatjes wél en niet bewijzen. |
 | `DESIGN.md`, `DESIGN-SOCIAL.md`, `ARCHITECTURE.md` | Staande documenten. Zie de waarschuwing onderaan over `DESIGN.md`. `ARCHITECTURE.md`'s sectie over de 16:00-push draagt sinds 5 september een banner: die specificatie is niet tegen deze database te bouwen. |
 | `LOKAAL-DRAAIEN.md` | **Nieuw op 8 september.** Van niets naar een lokale stack: Docker Desktop op Win11/WSL2, `supabase start`, en — de belangrijkste test in dat document — `db reset`, dat alle migraties tegen een lege database afspeelt. Niemand heeft ooit geverifieerd dat dit schema vanaf nul opbouwt. ⚠ Bevat ook het lokaal/productie-onderscheid: dit project **is** gelinkt (`supabase/.temp/project-ref` bestaat), dus `db reset --linked` is een echt gevaar en geen theorie. |
 | `TOESTELTEST.md` | **Nieuw op 8 september.** Afvinkbare lijst voor alles wat nooit op een scherm is gezien, Android bovenaan omdat dat de goedkoopste meting met het grootste gevolg is. |
@@ -1247,8 +1324,12 @@ document.** `react-native-web` stond al in `package.json`, dus
 393 × 852 pt bij `deviceScaleFactor: 3`. De bibliotheek is gevuld door tien
 recepten rechtstreeks op de `remy:`-sleutels in `localStorage` te schrijven;
 de sociale schermen draaien op hun eigen fixtures. Twaalf schermen staan in
-`docs/ontwerp-audit-9-september.html`, met het plan ernaast in
-`docs/ontwerp-plan-9-september.html`.
+`docs/ontwerp-audit-9-september.html`. ⚠ **Het plan dat ernaast stond,
+`docs/ontwerp-plan-9-september.html`, is op 10 september verwijderd**: alle
+vier zijn fases zijn uitgevoerd of beantwoord, en zijn twee "beslissingen die
+alleen jij kunt nemen" staan hieronder beantwoord (fase 3 → uploaden in plaats
+van de omkering; de afronding → DEC-04, twee decimalen blijven). Er stond niets
+meer in dat niet elders vastligt, en het bevatte geen beeld.
 
 ⚠ **WAT DIT WEL EN NIET BEWIJST, want dat is de hele waarde ervan.** Kleur,
 type, maatvoering, hiërarchie en lege ruimte komen uit `tokens.ts` en zijn
@@ -1951,7 +2032,8 @@ gedaan. De rest is werk.
    icoonvak wordt toch al getekend, dus een echt icoon kost nul punten — met
    twee families is er nu ook iets om erin te zetten.
 
-9. 🟡 **`Bewaren` op de gedeelde receptpagina** (GAP-32) — **DE KNOP EN HET
+9. 🟡 **`Bewaren` op de gedeelde receptpagina** (GAP-32) — **PUNT (1) EN (3)
+   ZIJN DICHT, PUNT (2) HALF. DE KNOP EN HET
    SCHRIJFPAD ERONDER STAAN SINDS 9 SEPTEMBER 2026, `5767bda`.** De blokkade
    was niet de knop: er was in deze codebase géén schrijfpad dat een
    `recipes`-rij naar `meals` kopieerde. Dat is er nu
@@ -1959,11 +2041,47 @@ gedaan. De rest is werk.
    én beide implementaties), met `allergenTagStatus` als LITERAAL `'unknown'`
    op het type zodat de compiler PD-010 bewaakt. **Geen migratie nodig** —
    0006's trigger dwingt hetzelfde serverzijdig af, nagemeten.
-   ⚠ **Wat nog open staat:** bewijskaarten krijgen nog steeds geen
-   `onPress`, en de LEESHELFT van dat scherm draait nog op fixtures op elke
-   build. Dat laatste is bewust zo gelaten en niet vergeten: live produceert
-   vandaag geen kaart die erheen routeert, dus een `__DEV__`-poort zou een
-   leeg scherm opleveren. De schrijfhelft is wél echt.
+   ✅ **PUNT (1) IS DICHT OP 10 SEPTEMBER 2026, EN HET IS DE TIK DIE DE
+   EIGENAAR MISTE.** `/friends/recipe/[recipeId]` is nieuw en LIVE — geen
+   fixture, geen vlag, geen migratie: `getCanonicalRecipe` stond al op de
+   interface en op beide implementaties sinds `5767bda`, en 0006 geeft
+   `recipes`/`recipe_ingredients`/`recipe_steps` al SELECT aan elke
+   ingelogde lezer (`can_read_recipe`). `friends.tsx` geeft `FriendProofCard`
+   nu `onOpenCanonicalRecipe`, en omdat die handler al optioneel WAS komen
+   de `accessibilityRole`, de hint en de press-scale in één regel terug.
+   **Waarom dit de klacht oplost:** live produceert alleen bewijskaarten
+   (`gekooktSource.ts`), dus dit is op een toestel het enige gedeelde
+   receptscherm dat een kaart kan bereiken — en dus het enige pad naar
+   `Bewaren`. Nooit `/cook/[mealId]`: een bewijskaart kan structureel geen
+   meal-id dragen (`mealId?: never`).
+
+   🟡 **PUNT (2) IS HALF DICHT, EN DE ANDERE HELFT IS GEMETEN.** De
+   SEND-leeshelft van `/friends/[feedItemId]` staat nog op fixtures, maar nu
+   **achter `__DEV__`** — een productie-deeplink rendeerde tot vandaag
+   Sanne's verzonnen pasta als echt gerecht, met een `Bewaren` die alleen
+   kon falen; die read bestaat in een productiebuild niet meer en het scherm
+   zegt nu `Dit recept staat er niet meer`. Wat een échte send-read nog
+   kost, in volgorde: **(a) stappen** — `SentMeal` draagt ze niet,
+   `listMealsSentToMe` leest `meals` + `meal_ingredients` en stopt; **geen
+   migratie nodig**, 0009 levert `meal_steps_select_sent_to_me` al en
+   0001-0019 draaien, dus het is één interfaceveld, één `.in()`, de lokale
+   spiegel en een rowmapper. **(b) attributie** — `SentMeal` draagt geen
+   naam/platform/profiel-url, maar wél `recipeId`, en de canonieke rij
+   daarachter heeft alle drie en is wereldleesbaar. **(c) de blokkade zit
+   in de LIJST, niet in het scherm** — `FriendRecipeCardModel.creator` is
+   een hele `Creator` en dus een PD-007-toestemmingsrecord, en
+   `assembleFriendFeed` draait op `FeedItem`/`Creator`/`Meal`-drietallen die
+   een live send niet heeft. Zolang de lijst geen live send-kaart maakt, is
+   een live read daar een scherm dat niets bereikt — daarom is (a) en (b)
+   bewust NIET half gebouwd.
+
+   Nieuw en gedeeld door beide schermen: `sharedRecipePresentation.ts`
+   (puur, 29 tests), `SharedRecipeArticle`, `SharedRecipeSaveZone`,
+   `SharedRecipeNoticeState`, `useSharedRecipeSave`. Wat NIET gedeeld wordt
+   is de READ, want dat is het privacymodel. `[feedItemId].tsx`: 564 → 246
+   regels. ⚠ **Bijvangst:** `CreatorAttribution`'s header beweerde dat
+   `import/confirm.tsx` hem rendert — `grep` geeft nul treffers, dat scherm
+   gebruikt `ImportCreatorCredit`. Rechtgezet.
 
    ~~Oude tekst:~~ **`Bewaren` op de gedeelde receptpagina** (GAP-32). De Vrienden-tab is op
    echte data grotendeels inert: bewijskaarten krijgen geen `onPress`,
@@ -1974,10 +2092,14 @@ gedaan. De rest is werk.
    daarvan zelf als vervanger voor Strava's kudos. Het is volledig
    gespecificeerd in `DESIGN-SOCIAL.md` §3.3 en §4.3.
 
-10. **`src/app/import/confirm.tsx` is 963 regels**, ver over het plafond van
-   800, en was op 892 vóór iemand hem deze week aanraakte. Eruit halen wat
-   eruit moet — `buildEditedRecipe`, `buildMealInput`, `persistImportedMeal`
-   naar `src/domain/import/**` — is een schone, afgebakende klus.
+10. ✅ ~~**`src/app/import/confirm.tsx` is 963 regels**, ver over het plafond
+   van 800 … naar `src/domain/import/**`.~~ **GEDAAN OP 10 SEPTEMBER 2026
+   (`516299b`): 963 → 737, precies de drie genoemde functies verhuisd, +45
+   tests.** ⚠ **En de opvolger is NIET confirm.** `wc -l` over `src/` geeft
+   zeven bestanden boven de 800, met `src/app/import/paste.tsx` op **1244**
+   als grootste — dezelfde importstroom, anderhalf keer het bestand dat net
+   gesplitst is. Zie de nagetelde tabel bovenaan dit document. **`paste.tsx`
+   is de volgende.**
 
 11. **De mail naar Food Influencers United.** Het mandje vullen bij AH en
    Jumbo is gelicentieerd (`api.tobasket.com`, sinds oktober 2025), gratis

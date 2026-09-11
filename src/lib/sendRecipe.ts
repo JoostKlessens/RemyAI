@@ -17,7 +17,8 @@
  * it, exactly as the cook-proof reads live in friendProof.ts.
  *
  * IT IS A SHELL, AND EVERY JUDGEMENT IT MAKES BELONGS TO SOMEBODY ELSE.
- * `friendshipRoleOf` decides who counts as the other side of a row,
+ * `collectMutualFollowIds` decides who counts as reachable (PD-024:
+ * mutual, never one-way — see `loadSendAudience`),
  * `normalizeSendNote` decides what a storable note is, `describeSendRow`
  * and `describeSendAnnouncement` decide what is said. Same split
  * importRecipe.ts and friendProof.ts keep: a module that fetches, beside
@@ -57,8 +58,8 @@ import {
   type SendFriendIdentity,
   type SendRowStatus,
 } from '@/components/sendRecipeSheetCopy';
-import { friendshipRoleOf } from '@/domain/social/friendship';
-import type { Friendship, Profile, ProfileId } from '@/domain/social/types';
+import { collectMutualFollowIds } from '@/domain/social/follow';
+import type { Profile, ProfileId } from '@/domain/social/types';
 import type { MealId } from '@/domain/types';
 import { hasPendingMealMirror, type MirrorOutbox } from './repository/mirror';
 import type { RemySocialRepository, SendRecipeInput } from './repository/social/types';
@@ -80,39 +81,7 @@ import type { RemySocialRepository, SendRecipeInput } from './repository/social/
  * observed. The real repository satisfies it structurally; a test fake is
  * two functions rather than seventeen.
  */
-export type SendAudienceSource = Pick<RemySocialRepository, 'listFriendships' | 'getProfile'>;
-
-/**
- * The other person named by a row, or null when the row names nobody but
- * the reader.
- *
- * BUILT ON `friendshipRoleOf` RATHER THAN ON A RAW `===`, which is the one
- * place this differs from `collectAcceptedFriendIds` next door. That
- * function documents its raw comparison honestly: its callers feed it rows
- * straight out of Postgres beside an `auth.uid()` rendered by the same
- * rules, so there is no case to normalise. This one is reached from two
- * screens whose identity may equally have come out of a local store, and a
- * single upper-cased uuid there does not merely miss a friend — it makes
- * the reader their OWN friend, offers them their own dishes, and sends
- * them a recipe they already have. `friendshipRoleOf` is what canonicalises
- * the comparison, and it is not re-implemented here: a second lowercasing
- * rule is exactly the drift src/domain/social/friendship.ts exists to
- * prevent.
- *
- * The self-pair check is phrased as "which role does the other id occupy?"
- * rather than as an id comparison for the same reason — asking
- * `friendshipRoleOf` twice keeps the canonicalisation in one function.
- */
-function otherSideOf(friendship: Friendship, profileId: ProfileId): ProfileId | null {
-  const role = friendshipRoleOf(friendship, profileId);
-  if (role === null) {
-    return null;
-  }
-  const other = role === 'requester' ? friendship.addresseeId : friendship.requesterId;
-  // A row naming the same person on both sides would otherwise report the
-  // reader as their own friend.
-  return friendshipRoleOf(friendship, other) === role ? null : other;
-}
+export type SendAudienceSource = Pick<RemySocialRepository, 'listFollows' | 'listBlocks' | 'getProfile'>;
 
 /**
  * Every mutually accepted friend, named — the read §3.1 gates the button
@@ -163,17 +132,27 @@ export async function loadSendAudience(
   }
 
   try {
-    const friendships = await source.listFriendships(profileId);
-    const friendIds = new Set<ProfileId>();
-    for (const friendship of friendships) {
-      if (friendship.status !== 'accepted') {
-        continue;
-      }
-      const other = otherSideOf(friendship, profileId);
-      if (other !== null) {
-        friendIds.add(other);
-      }
-    }
+    // ⚠ MUTUAL, AND THAT IS A DECISION RATHER THAN INERTIA (PD-024,
+    // ONTDEK-PLAN.md O-11b's table). The feed became asymmetric — you see
+    // the cooking of the people you follow — and a send did NOT. A send is
+    // a message aimed at one named person, so one-way would turn it into
+    // unsolicited post, and DESIGN-SOCIAL.md §8's "no chat" wall gets thin
+    // the moment a stranger can put a card in your list. `recipe_shares_
+    // insert` (0009:229) makes the same call on the server through
+    // `is_friend_of`, which since migration 0021 means exactly this: an
+    // accepted follow in both directions, unblocked.
+    //
+    // `collectMutualFollowIds` REPLACES `otherSideOf` AND ITS CANONICAL-
+    // ISATION ARGUMENT, which is why that helper is gone rather than
+    // ported. The reason it existed — this path is reached from screens
+    // whose identity may have come out of a local store, and a single
+    // upper-cased uuid makes the reader their own friend — now lives in
+    // `followRoleOf`, once, for every caller instead of this one.
+    const [follows, blocks] = await Promise.all([
+      source.listFollows(profileId),
+      source.listBlocks(profileId),
+    ]);
+    const friendIds = collectMutualFollowIds(follows, blocks, profileId);
     if (friendIds.size === 0) {
       return [];
     }

@@ -50,11 +50,22 @@
  * The previous version of this header promised that a loading state and an
  * error state "become real the moment this reads through a repository, and
  * they belong in that change, beside the call that can actually fail".
- * This is that change: the read below goes to `friendships`,
- * `recipe_ratings`, `shared_cooks`, `recipe_shares`, `profiles` and
- * `recipes` through supabaseSocialRepository, so both states are now real
- * and sit beside the call. `cards` survives an error, so a refresh that
- * fails does not blank a list the reader was already looking at.
+ * This is that change: the read below goes to ~~`friendships`~~ `follows`
+ * and `blocks`, `recipe_ratings`, `shared_cooks`, `recipe_shares`,
+ * `profiles` and `recipes` through supabaseSocialRepository, so both states
+ * are now real and sit beside the call. `cards` survives an error, so a
+ * refresh that fails does not blank a list the reader was already looking
+ * at.
+ *
+ * ⚠ THAT STRUCK-OUT TABLE NAME IS NOT A RENAME, AND READING IT AS ONE IS
+ * THE EASIEST MISTAKE PD-024 OFFERS. The graph became DIRECTED: from
+ * migration 0021 onward `friendships` is a FROZEN PRE-MIGRATION COPY that
+ * nothing in the product may read, kept only because 0021 touches live data
+ * and it is the way back. `follows` holds one row per DIRECTED pair and
+ * `blocks` is its own object, so this file no longer asks "are we friends"
+ * at all. It asks "whose cooking have I been granted sight of", which is a
+ * different question with a different answer — see the narrowing inside
+ * `loadLiveFriends`.
  *
  * THE LIVE READ IS THE AMBIENT HALF, AND THIS SAYS WHICH HALF.
  * `listFriendCookedRecipes` (the `shared_cooks` view, self-gating on
@@ -105,9 +116,9 @@ import { getProofFixture } from '@/fixtures/friendProofFixtures';
 import { assembleFriendFeed } from '@/components/friendFeedPresentation';
 import { assembleFriendProofCards, type ProofRecipe } from '@/components/friendProofPresentation';
 import { collectUnseenSendMealIds, orderGekooktList, type GekooktList } from '@/components/gekooktPresentation';
-import { collectAcceptedFriendIds } from '@/domain/social/friendship';
 import type { ProfileId, RecipeId } from '@/domain/social/types';
 import { clearUnseenSendCount } from '@/hooks/useUnseenSendCount';
+import { loadFollowedIds } from '@/lib/followGraphReads';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import type { CanonicalRecipeSummary } from '@/lib/repository/social/types';
 import { supabase } from '@/lib/supabase';
@@ -173,10 +184,16 @@ function toProofRecipe(recipe: CanonicalRecipeSummary): ProofRecipe {
 }
 
 /**
- * Reads the circle: who your friends are, what they cooked, how they graded
- * it, what is waiting for you, and what all those recipes are called.
+ * Reads the circle: ~~who your friends are~~ WHO YOU FOLLOW, what they
+ * cooked, how they graded it, what is waiting for you, and what all those
+ * recipes are called.
  *
- * ORDERED SO NOTHING UNNECESSARY IS FETCHED. No accepted friends means no
+ * ⚠ THE FIRST CLAUSE CHANGED MEANING, NOT WORDING (PD-024, ONTDEK-PLAN.md
+ * O-11b). A friendship was symmetric, so "who your friends are" had one
+ * answer; a directed graph has three, and this surface takes "ik volg hen".
+ * The full argument sits on the narrowing itself below.
+ *
+ * ORDERED SO NOTHING UNNECESSARY IS FETCHED. Following nobody means no
  * proof, no grades and — RLS being what it is — no sends either, so the
  * whole read short-circuits. That matters most for `listAllRecipeRatings`,
  * which is the whole-table read Trending also performs.
@@ -184,9 +201,10 @@ function toProofRecipe(recipe: CanonicalRecipeSummary): ProofRecipe {
  * THE RATINGS ARE STILL READ, AND THEY ARE NOT THE KRING. `rankKring` and
  * its list live on Trending now; what is left here is the GRADE ON A PROOF
  * CARD — "Sanne maakte dit, 8,5" — which `assembleFriendProofCards` builds
- * from the same narrowed votes. Narrowing to accepted friends before
- * anything is scored stays non-negotiable either way; the set itself is
- * `src/domain/social/friendship.ts`'s.
+ * from the same narrowed votes. Narrowing before anything is scored stays
+ * non-negotiable either way; the set itself is
+ * ~~`src/domain/social/friendship.ts`~~ `src/domain/social/follow.ts`'s,
+ * fetched through `loadFollowedIds`.
  *
  * `listCanonicalRecipes` IS ASKED ONLY FOR WHAT WAS COOKED. It used to be
  * asked for the voted recipes as well, because de kring needed to name
@@ -209,31 +227,57 @@ export async function loadLiveFriends(profileId: ProfileId): Promise<FriendsData
   // that filters ratings by rater, so the narrowing happens here, on the
   // way in — handing a whole-table read of `recipe_ratings` to anything
   // that grades is how a stranger's vote ends up on a friend's card. The
-  // set itself is `src/domain/social/friendship.ts`'s; it was a local copy
+  // set itself is `src/domain/social/follow.ts`'s; it was a local copy
   // here until it had two of them and no test.
-  const friendIds = collectAcceptedFriendIds(await repository.listFriendships(profileId), profileId);
-  if (friendIds.size === 0) {
+  //
+  // ⚠ AND IT IS "IK VOLG HEN" RATHER THAN "WEDERZIJDS" — the decision
+  // PD-024 forced on this line, and ONTDEK-PLAN.md O-11b's table settles it
+  // in one sentence: `shared_cooks` (proof) becomes "ik volg hen", because
+  // *"dat ís de feed. Asymmetrie hoort hier of nergens."* This is the tab
+  // the whole follow model was built for. If the feed showed only people
+  // who follow back, following would grant nothing friendship did not
+  // already grant and the second table would have bought nothing.
+  //
+  // WHAT MAKES THE WIDER SET SAFE IS O-11c's CONSENT, not this file being
+  // generous. Every id below belongs to somebody who ACCEPTED being
+  // followed — a fresh permission granted per person, which §5's single
+  // global switch cannot express — and §5's switch still sits above it, so
+  // a household that shares nothing shows nothing to an accepted follower
+  // either. Consent stacks; it does not substitute.
+  //
+  // ⚠ THE COOK HALF IS STILL NARROWER THAN THIS SET TODAY, and that is the
+  // migration's doing rather than a bug here. `shared_cooks` (0009:155)
+  // gates itself on `is_friend_of`, which 0021 rewrote to MUTUAL, and
+  // `i_follow` — the asymmetric predicate — landed in 0021 with zero
+  // callers on purpose, so that the migration changes nothing observable.
+  // So proof cards remain the intersection until fase 2 widens that view.
+  // The grades below are NOT gated that way: `listAllRecipeRatings` is
+  // narrowed here and nowhere else, so this line is what decides them, and
+  // it is already right for the day the view catches up.
+  const followedIds = await loadFollowedIds(repository, profileId);
+  if (followedIds.size === 0) {
     return NO_FRIENDS_DATA;
   }
 
   const [allRatings, friendProfiles, cooks, sends] = await Promise.all([
     repository.listAllRecipeRatings(),
-    Promise.all([...friendIds].map((friendId) => repository.getProfile(friendId))),
-    // `shared_cooks` gates itself on friendship inside the view body, so
-    // this is already scoped to accepted friends who opted in. Most
-    // households never do, and an empty result is the ordinary case
-    // rather than a failure.
+    Promise.all([...followedIds].map((followedId) => repository.getProfile(followedId))),
+    // `shared_cooks` gates itself inside the view body, so this is already
+    // scoped to the people who opted in — MUTUAL ones until fase 2 widens
+    // the view from `is_friend_of` to `i_follow` (see the narrowing above).
+    // Most households never opt in, and an empty result is the ordinary
+    // case rather than a failure.
     repository.listFriendCookedRecipes(),
     repository.listSendsToMe(profileId),
   ]);
 
-  // A friend whose profile row failed to load keeps their vote and their
+  // Somebody whose profile row failed to load keeps their vote and their
   // cook, and loses their name: `assembleFriendProof` drops an unnameable
   // cook rather than rendering "iemand maakte dit".
   const displayNamesByProfile = new Map(
     friendProfiles.flatMap((profile) => (profile === null ? [] : [[profile.id, profile.displayName] as const])),
   );
-  const votes = allRatings.filter((rating) => friendIds.has(rating.raterProfileId));
+  const votes = allRatings.filter((rating) => followedIds.has(rating.raterProfileId));
   const cookedRecipeIds = new Set<RecipeId>(cooks.map((cook) => cook.recipeId));
   const recipes = await repository.listCanonicalRecipes([...cookedRecipeIds]);
 

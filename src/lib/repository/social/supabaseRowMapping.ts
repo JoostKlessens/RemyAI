@@ -43,7 +43,15 @@ import type { CreatorPlatform } from '@/domain/feed/types';
 // wire), and without the alias one of them would have to be renamed to
 // something worse than either.
 import type { SuggestedFriendRow as DomainSuggestedFriendRow } from '@/domain/social/friendSuggestions';
-import type { Friendship, FriendshipStatus, Profile, RecipeRating } from '@/domain/social/types';
+import type {
+  Block,
+  Follow,
+  FollowStatus,
+  Friendship,
+  FriendshipStatus,
+  Profile,
+  RecipeRating,
+} from '@/domain/social/types';
 import type { CanonicalRecipe, CanonicalRecipeSummary, IncomingSend, RecipeShare, SentMeal } from './types';
 
 /**
@@ -69,6 +77,45 @@ export interface FriendshipRow {
   readonly blocked_by: string | null;
   readonly created_at: string;
   readonly responded_at: string | null;
+}
+
+/**
+ * `follows` (0021). THE DIRECTED SUCCESSOR OF `FriendshipRow`, and the
+ * column list is where the difference is visible: no `blocked_by`, because
+ * a block is its own row in its own table now, and a pair of ids that means
+ * something in that ORDER — `follower_id` asked, `followee_id` answered.
+ *
+ * There are no `profile_low`/`profile_high` generated columns to mirror
+ * either, and their absence is the point rather than an omission: 0007
+ * generates those so an UNORDERED pair has one canonical form, and a
+ * directed row is already filed under the only key it has.
+ */
+export interface FollowRow {
+  readonly id: string;
+  readonly follower_id: string;
+  readonly followee_id: string;
+  readonly status: string;
+  readonly created_at: string;
+  readonly responded_at: string | null;
+}
+
+/**
+ * `blocks` (0021). Two timestamps and no status column, exactly as the
+ * table has it: a block stands or it has been lifted, and `lifted_at` says
+ * which. `RecipeShareRow` carries `withdrawn_at` in the same shape and for
+ * a neighbouring reason.
+ *
+ * ⚠ `blocked_at` IS NOT THE ROW'S BIRTHDAY. It is when the CURRENT block
+ * was put in place, and a re-block moves it forward — `followSurvivesBlocks`
+ * compares an acceptance against it, so reading it as a creation date would
+ * make a lifted-then-reinstated block restore consents nobody re-granted.
+ */
+export interface BlockRow {
+  readonly id: string;
+  readonly blocker_id: string;
+  readonly blocked_id: string;
+  readonly blocked_at: string;
+  readonly lifted_at: string | null;
 }
 
 export interface RecipeRatingRow {
@@ -234,6 +281,45 @@ export function toFriendship(row: FriendshipRow): Friendship {
     blockedBy: row.blocked_by,
     createdAt: toIsoDateTime(row.created_at),
     respondedAt: row.responded_at === null ? null : toIsoDateTime(row.responded_at),
+  };
+}
+
+export function toFollow(row: FollowRow): Follow {
+  return {
+    id: row.id,
+    followerId: row.follower_id,
+    followeeId: row.followee_id,
+    // The CHECK in 0021 constrains this column to the same three values the
+    // domain type names, so the cast asserts a guarantee the database
+    // already keeps rather than hoping about a free-text field — the same
+    // argument `toFriendship` makes one function up, minus 'blocked', which
+    // 0021 removed from the vocabulary entirely.
+    status: row.status as FollowStatus,
+    createdAt: toIsoDateTime(row.created_at),
+    // ⚠ NORMALIZED, AND HERE THAT IS A SECURITY PROPERTY RATHER THAN
+    // TIDINESS. `followSurvivesBlocks` compares this string against a
+    // block's `blockedAt` with `>=`, and a lexical comparison is only
+    // meaningful between two fixed-width UTC strings. Left in PostgREST's
+    // offset form, an acceptance could compare as newer than the block that
+    // must invalidate it — which is precisely the consent that was never
+    // re-granted springing back to life.
+    respondedAt: row.responded_at === null ? null : toIsoDateTime(row.responded_at),
+  };
+}
+
+export function toBlock(row: BlockRow): Block {
+  return {
+    id: row.id,
+    blockerId: row.blocker_id,
+    blockedId: row.blocked_id,
+    // The other half of the comparison `toFollow` above describes; both
+    // sides of it have to be in this format or neither is.
+    blockedAt: toIsoDateTime(row.blocked_at),
+    // Null means the block STANDS. Nothing here collapses that into a
+    // boolean, because the date is what a lifted row is for: it is not a
+    // flag saying "over", it is the row going on refusing every follow
+    // accepted before `blockedAt`.
+    liftedAt: row.lifted_at === null ? null : toIsoDateTime(row.lifted_at),
   };
 }
 

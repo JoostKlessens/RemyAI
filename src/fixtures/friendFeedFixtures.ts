@@ -17,13 +17,15 @@
  * Trending's kring scope both read this only when the scenario row picks a
  * source, and that row is behind `__DEV__ && DEV_SCENARIO_ROWS_VISIBLE`
  * (src/lib/devFlags.ts) with `'live'` as the default — so on those two
- * tabs nothing here renders in a production build. The friend recipe
- * screen (src/app/friends/[feedItemId].tsx) is the exception and is not
- * gated at all: that screen has no live read yet, so it is fixture-backed
- * outright, as its own header says. That is a real gap in the product,
- * not in this file, and it closes when `listMealsSentToMe` can serve that
- * screen — until then, do not read the presence of a dev flag on this
- * module's other callers as covering all three.
+ * tabs nothing here renders in a production build. ✅ **AND SO DOES THE
+ * SEND SCREEN NOW** (src/app/friends/[feedItemId].tsx), which was the
+ * exception this paragraph existed to name: it was fixture-backed outright,
+ * on every build, so a deep link rendered invented data as though it were
+ * somebody's dinner. Since 10 September 2026 its fixture read sits behind
+ * `if (!__DEV__) return null` and a production deep link gets the
+ * not-found notice instead. All three callers are gated; the remaining gap
+ * is the product one, and it closes when `listMealsSentToMe` can serve that
+ * screen — its header carries what that costs, measured.
  *
  * HOW THIS STAYS HONEST — the same discipline `importFixtures.ts`
  * describes, applied to a different seam:

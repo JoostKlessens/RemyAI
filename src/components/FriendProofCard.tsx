@@ -78,16 +78,22 @@ export interface FriendProofCardProps {
    * caller so that a screen wiring this up has a publicly readable recipe
    * id in hand and no household row anywhere in reach.
    *
-   * OPTIONAL, AND ITS ABSENCE IS MEANINGFUL. No screen in this app reads
-   * a canonical recipe yet, so the only caller passed `() => undefined` —
-   * and the card still announced itself as a button, hinted "Open het
-   * volledige recept", and depressed under a thumb that got nothing back.
-   * `KringRow` met the identical question and answered it by not being
-   * pressable at all, arguing in its own header that "an action that
-   * silently does nothing is worse than no action". This prop now carries
-   * that same answer: given a handler the card is a button, given none it
-   * is a card. The fix for the missing destination is the
-   * canonical-recipe screen, not a handler that pretends.
+   * OPTIONAL, AND ITS ABSENCE WAS MEANINGFUL — AND ON 10 SEPTEMBER 2026
+   * THE VRIENDEN TAB FINALLY PASSES ONE. `/friends/recipe/[recipeId]`
+   * exists and reads a canonical recipe live, so the card is a button
+   * again: role, hint and press-scale all come back together with the
+   * destination, in the one branch below, because they were tied to this
+   * handler rather than to a flag.
+   *
+   * THE OPTIONALITY STAYS, and it is worth saying why now that it has a
+   * caller. It was introduced because the only caller passed
+   * `() => undefined` — the card announced itself as a button, hinted
+   * "Open het volledige recept", and depressed under a thumb that got
+   * nothing back. `KringRow` met the identical question and answered it by
+   * not being pressable at all, arguing that "an action that silently does
+   * nothing is worse than no action". Any future surface that renders this
+   * card without a destination must be able to inherit that answer rather
+   * than pass a handler that pretends.
    */
   readonly onOpenCanonicalRecipe?: (recipeId: RecipeId) => void;
   /** Read once per screen and passed down, per docs/DESIGN.md "Global rules". */
@@ -114,6 +120,9 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
   const metaLine = buildFriendProofMetaLine(model.estimatedMinutes, model.grade);
   const collisionLabel = buildAllergenCollisionLabel(model.collidingTags);
   const monogram = model.title.trim().charAt(0).toUpperCase() || '?';
+  // No source URL passed, and deliberately: `CanonicalRecipeSummary` does
+  // not carry one, and a proof feed assembled per read is not a person
+  // looking at one post. useThumbnailFallback.ts carries both halves.
   const thumbnail = useThumbnailFallback(model.thumbnailUrl);
 
   useEffect(() => {
@@ -169,7 +178,7 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
         <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
           {thumbnail.showsImage ? (
             <Image
-              source={{ uri: model.thumbnailUrl ?? undefined }}
+              source={{ uri: thumbnail.imageUrl ?? undefined }}
               style={styles.thumbnail}
               resizeMode="cover"
               onError={thumbnail.onError}

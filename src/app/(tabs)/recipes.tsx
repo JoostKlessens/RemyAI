@@ -160,7 +160,7 @@
 
 import { useCallback, useMemo, useState, type JSX } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { FlatList, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { Animated, FlatList, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NO_LIBRARY_SEARCH, type LibrarySearchState } from '@/domain/recipeSearch';
 import type { HouseholdId, MealId } from '@/domain/types';
@@ -183,7 +183,9 @@ import { RecipeTile } from '@/components/RecipeTile';
 import { sortMealsByScheduling, type ScheduledMealRow } from '@/components/recipeScheduling';
 import { SendRecipeSheet } from '@/components/SendRecipeSheet';
 import { useLibraryTileActions } from '@/components/useLibraryTileActions';
+import { useListItemExit } from '@/hooks/useListItemExit';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { hapticSmallCommit } from '@/lib/haptics';
 import { useSession } from '@/hooks/useSession';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
 import { useLibrarySendSheet } from '@/lib/useLibrarySendSheet';
@@ -193,6 +195,15 @@ type ScreenPhase = 'loading' | 'error' | 'ready';
 
 /** Three rows of placeholders at three columns — about one screenful, matching what the real grid shows. */
 const LOADING_TILE_COUNT = 9;
+
+/**
+ * How far an archived tile shrinks as it goes. Small on purpose: at three
+ * columns a tile is already narrow, so anything deeper reads as the grid
+ * collapsing rather than as one thing being put away. The week screen's row
+ * gets no scale at all — see its `commitRemoval` for why a reversible act
+ * must not borrow this weight.
+ */
+const ARCHIVE_EXIT_SCALE = 0.92;
 
 /**
  * The first-run empty state's words (ENT-05), resolved once at module load
@@ -231,6 +242,12 @@ export default function RecipesScreen(): JSX.Element {
   const colors = getColors(scheme);
   // docs/DESIGN.md "Global rules": read once per screen, pass it down.
   const reduceMotionEnabled = useReduceMotion();
+  /**
+   * Per-tile exit values, keyed OUTSIDE `renderItem` — a value created in
+   * there would be re-made every time a cell was recycled by scrolling, and
+   * tiles nobody touched would animate. See `useListItemExit`.
+   */
+  const { valueFor, runExit } = useListItemExit(reduceMotionEnabled);
   /** The sender, for `sendRecipe`. `profiles.id` IS `auth.users.id`, so the session's user id is the profile id. */
   const { userId } = useSession();
 
@@ -311,9 +328,28 @@ export default function RecipesScreen(): JSX.Element {
    * rule.
    */
   const actions = useLibraryTileActions({
-    onRemoved: useCallback((mealId: MealId): void => {
-      setRows((current) => current.filter((row) => row.meal.id !== mealId));
-    }, []),
+    onRemoved: useCallback(
+      (mealId: MealId): void => {
+        // ⚠ ARCHIVING IS THE ONE GENUINELY IRREVERSIBLE ACT IN THIS APP —
+        // `RemyRepository`'s own type says `archiveMeal` has no way back
+        // through this interface — AND UNTIL NOW IT PRODUCED NO FEEDBACK AT
+        // ALL. `useLibraryTileActions.ts` does not import `haptics` at all,
+        // not even for failure, so a confirmed removal was a tile that had
+        // silently stopped existing.
+        //
+        // So this exit carries weight where the week screen's stays light:
+        // opacity AND scale, plus a haptic. `hapticSmallCommit` rather than
+        // `hapticRealCommit` — that one is nailed to three named moments and
+        // archiving is not among them — and because a haptic survives
+        // reduced motion, the irreversible act keeps feedback there while
+        // the reversible one correctly stays silent.
+        hapticSmallCommit();
+        runExit(mealId, () => {
+          setRows((current) => current.filter((row) => row.meal.id !== mealId));
+        });
+      },
+      [runExit],
+    ),
     onSchedulingChanged: refresh,
   });
   const closeActions = actions.close;
@@ -450,7 +486,19 @@ export default function RecipesScreen(): JSX.Element {
             // be drawn triple width. See libraryGridMetrics.ts for why this
             // is measured rather than expressed as a percentage, and why the
             // placeholder-row alternative was rejected.
-            <View style={{ width: tileWidth }}>
+            // Opacity AND scale, unlike the week screen's opacity-only row:
+            // archiving is final, so the tile is visibly put away rather
+            // than merely stepping aside. Only the container scales — never
+            // the dish title inside it.
+            <Animated.View
+              style={{
+                width: tileWidth,
+                opacity: valueFor(item.meal.id),
+                transform: [
+                  { scale: valueFor(item.meal.id).interpolate({ inputRange: [0, 1], outputRange: [ARCHIVE_EXIT_SCALE, 1] }) },
+                ],
+              }}
+            >
               <RecipeTile
                 meal={item.meal}
                 scheduling={item.scheduling}
@@ -465,7 +513,7 @@ export default function RecipesScreen(): JSX.Element {
                 accessibilityHint={LIBRARY_TILE_OPEN_RECIPE_HINT}
                 onLongPress={() => actions.open(item.meal, item.scheduling.state === 'deze_week')}
               />
-            </View>
+            </Animated.View>
           )}
           contentContainerStyle={styles.gridContent}
         />

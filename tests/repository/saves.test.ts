@@ -75,6 +75,7 @@ describe('listPendingSaves — an archived dish is no longer planned', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
     expect(await repository.listPendingSaves(HOUSEHOLD_ID, 'this_week')).toHaveLength(1);
@@ -91,6 +92,7 @@ describe('listPendingSaves — an archived dish is no longer planned', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'someday',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -108,6 +110,7 @@ describe('listPendingSaves — an archived dish is no longer planned', () => {
         memberId: null,
         mealId,
         intent: 'this_week',
+        origin: 'import',
         sourceUrl: null,
       });
     }
@@ -124,6 +127,7 @@ describe('listPendingSaves — an archived dish is no longer planned', () => {
       memberId: null,
       mealId: 'meal-that-was-never-created',
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -140,6 +144,7 @@ describe('listPendingSaves — an archived dish is no longer planned', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -163,6 +168,7 @@ describe('removeSaves — van deze week af', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -180,6 +186,7 @@ describe('removeSaves — van deze week af', () => {
         memberId,
         mealId: meal.id,
         intent: 'this_week',
+        origin: 'import',
         sourceUrl: null,
       });
     }
@@ -198,6 +205,7 @@ describe('removeSaves — van deze week af', () => {
         memberId: null,
         mealId: meal.id,
         intent,
+        origin: 'import',
         sourceUrl: null,
       });
     }
@@ -217,6 +225,7 @@ describe('removeSaves — van deze week af', () => {
         memberId: null,
         mealId,
         intent: 'this_week',
+        origin: 'import',
         sourceUrl: null,
       });
     }
@@ -234,6 +243,7 @@ describe('removeSaves — van deze week af', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
     await repository.createSave({
@@ -241,6 +251,7 @@ describe('removeSaves — van deze week af', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -257,6 +268,7 @@ describe('removeSaves — van deze week af', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
 

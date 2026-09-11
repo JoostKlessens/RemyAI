@@ -31,7 +31,7 @@ import {
   describeSendAnnouncement,
   type SendRowStatus,
 } from '@/components/sendRecipeSheetCopy';
-import type { Friendship, Profile, ProfileId } from '@/domain/social/types';
+import type { Block, Follow, Profile, ProfileId } from '@/domain/social/types';
 import { createInMemoryKeyValueStore } from '@/lib/repository/keyValueStore';
 import { createMirrorOutbox, type MirrorOutbox } from '@/lib/repository/mirror';
 import type { RecipeShare, SendRecipeInput } from '@/lib/repository/social/types';
@@ -44,28 +44,55 @@ import {
   type SendAudienceSource,
   type SendRecipeSink,
 } from '@/lib/sendRecipe';
-import { PROFILE_A, PROFILE_B, PROFILE_C, makeFriendship, makeProfile } from './social/fixtures';
+import { PROFILE_A, PROFILE_B, PROFILE_C, makeProfile } from './social/fixtures';
 
 const ME = PROFILE_A;
 const SANNE = PROFILE_B;
 const JORIS = PROFILE_C;
 
 interface AudienceOptions {
-  readonly friendships?: readonly Friendship[];
+  readonly follows?: readonly Follow[];
+  readonly blocks?: readonly Block[];
   readonly profiles?: readonly Profile[];
-  readonly failFriendships?: boolean;
+  readonly failFollows?: boolean;
   readonly failProfiles?: boolean;
+}
+
+/**
+ * One directed row. PD-024's graph holds two per pair, so a send audience
+ * is built out of PAIRS of these — which is the whole point of `mutual`
+ * below and the reason a one-way row is its own test.
+ */
+function makeFollow(overrides: Partial<Follow> = {}): Follow {
+  return {
+    id: 'follow-1',
+    followerId: ME,
+    followeeId: SANNE,
+    status: 'accepted',
+    createdAt: '2026-06-01T10:00:00.000Z',
+    respondedAt: '2026-06-01T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** Both directions accepted — what `is_friend_of` means since migration 0021. */
+function mutual(a: string, b: string): readonly Follow[] {
+  return [
+    makeFollow({ id: `${a}->${b}`, followerId: a, followeeId: b }),
+    makeFollow({ id: `${b}->${a}`, followerId: b, followeeId: a }),
+  ];
 }
 
 function makeAudienceSource(options: AudienceOptions = {}) {
   const profiles = new Map((options.profiles ?? []).map((profile) => [profile.id, profile]));
   return {
-    listFriendships: vi.fn(async (): Promise<readonly Friendship[]> => {
-      if (options.failFriendships === true) {
+    listFollows: vi.fn(async (): Promise<readonly Follow[]> => {
+      if (options.failFollows === true) {
         throw new Error('no session');
       }
-      return options.friendships ?? [];
+      return options.follows ?? [];
     }),
+    listBlocks: vi.fn(async (): Promise<readonly Block[]> => options.blocks ?? []),
     getProfile: vi.fn(async (profileId: ProfileId): Promise<Profile | null> => {
       if (options.failProfiles === true) {
         throw new Error('profile read refused');
@@ -83,41 +110,77 @@ const joris = makeProfile({ id: JORIS, handle: 'joris', displayName: 'Joris' });
 // ---------------------------------------------------------------------------
 
 describe('loadSendAudience — the read the outcome card gates its button on', () => {
-  test('names every mutually accepted friend', async () => {
-    const source = makeAudienceSource({
-      friendships: [makeFriendship({ id: 'f-1', requesterId: ME, addresseeId: SANNE })],
-      profiles: [sanne],
-    });
+  test('names everyone the sender is MUTUALLY connected to', async () => {
+    const source = makeAudienceSource({ follows: mutual(ME, SANNE), profiles: [sanne] });
 
     const audience = await loadSendAudience(source, ME);
 
-    expect(source.listFriendships).toHaveBeenCalledWith(ME);
+    expect(source.listFollows).toHaveBeenCalledWith(ME);
     expect(audience).toEqual([{ profileId: SANNE, displayName: 'Sanne', handle: 'sanne' }]);
   });
 
-  test('finds the friend on either side of the row', async () => {
-    const source = makeAudienceSource({
-      friendships: [makeFriendship({ id: 'f-1', requesterId: SANNE, addresseeId: ME })],
+  test('⚠ A ONE-WAY FOLLOW IS NOT AN AUDIENCE, in either direction', async () => {
+    // PD-024's sharpest line on this surface. The feed became asymmetric
+    // and the send did not: a send is a message aimed at one named person,
+    // so one-way would turn it into unsolicited post and §8's "no chat"
+    // wall gets thin. `recipe_shares_insert` makes the same call server-
+    // side through `is_friend_of`, which since 0021 means mutual.
+    const iFollowThem = makeAudienceSource({
+      follows: [makeFollow({ followerId: ME, followeeId: SANNE })],
       profiles: [sanne],
     });
+    expect(await loadSendAudience(iFollowThem, ME)).toEqual([]);
 
-    const audience = await loadSendAudience(source, ME);
-
-    expect(audience.map((friend) => friend.profileId)).toEqual([SANNE]);
+    const theyFollowMe = makeAudienceSource({
+      follows: [makeFollow({ followerId: SANNE, followeeId: ME })],
+      profiles: [sanne],
+    });
+    expect(await loadSendAudience(theyFollowMe, ME)).toEqual([]);
   });
 
-  test('only accepted friendships count — pending, declined and blocked are not an audience', async () => {
+  test('only accepted rows count — a pending or declined half is not an audience', async () => {
     const source = makeAudienceSource({
-      friendships: [
-        makeFriendship({ id: 'f-1', requesterId: ME, addresseeId: SANNE, status: 'pending' }),
-        makeFriendship({ id: 'f-2', requesterId: ME, addresseeId: JORIS, status: 'declined' }),
-        makeFriendship({ id: 'f-3', requesterId: JORIS, addresseeId: ME, status: 'blocked', blockedBy: JORIS }),
+      follows: [
+        makeFollow({ id: 'f-1', followerId: ME, followeeId: SANNE, status: 'pending', respondedAt: null }),
+        makeFollow({ id: 'f-2', followerId: SANNE, followeeId: ME, status: 'accepted' }),
+        makeFollow({ id: 'f-3', followerId: ME, followeeId: JORIS, status: 'declined' }),
+        makeFollow({ id: 'f-4', followerId: JORIS, followeeId: ME, status: 'accepted' }),
       ],
       profiles: [sanne, joris],
     });
 
     expect(await loadSendAudience(source, ME)).toEqual([]);
     expect(source.getProfile).not.toHaveBeenCalled();
+  });
+
+  test('a standing block empties the audience even when both directions are accepted', async () => {
+    const source = makeAudienceSource({
+      follows: mutual(ME, SANNE),
+      blocks: [{ id: 'b-1', blockerId: SANNE, blockedId: ME, blockedAt: '2026-07-01T10:00:00.000Z', liftedAt: null }],
+      profiles: [sanne],
+    });
+
+    expect(await loadSendAudience(source, ME)).toEqual([]);
+  });
+
+  test('a LIFTED block still empties it, because the acceptance predates the block', async () => {
+    // The mechanism `blocks` keeps its row for: lifting restores the
+    // ability to ask and never the answer somebody already gave.
+    const source = makeAudienceSource({
+      follows: mutual(ME, SANNE),
+      blocks: [
+        {
+          id: 'b-1',
+          blockerId: SANNE,
+          blockedId: ME,
+          blockedAt: '2026-07-01T10:00:00.000Z',
+          liftedAt: '2026-08-01T10:00:00.000Z',
+        },
+      ],
+      profiles: [sanne],
+    });
+
+    expect(await loadSendAudience(source, ME)).toEqual([]);
   });
 
   /**
@@ -128,7 +191,7 @@ describe('loadSendAudience — the read the outcome card gates its button on', (
    */
   test('matches the signed-in person however their uuid is cased', async () => {
     const source = makeAudienceSource({
-      friendships: [makeFriendship({ id: 'f-1', requesterId: ME.toUpperCase(), addresseeId: SANNE })],
+      follows: mutual(ME.toUpperCase(), SANNE),
       profiles: [sanne],
     });
 
@@ -137,7 +200,7 @@ describe('loadSendAudience — the read the outcome card gates its button on', (
 
   test('never lists the sender themselves', async () => {
     const source = makeAudienceSource({
-      friendships: [makeFriendship({ id: 'f-1', requesterId: ME, addresseeId: ME })],
+      follows: [makeFollow({ followerId: ME, followeeId: ME })],
       profiles: [makeProfile({ id: ME, handle: 'joost', displayName: 'Joost' })],
     });
 
@@ -146,10 +209,7 @@ describe('loadSendAudience — the read the outcome card gates its button on', (
 
   test('a friend whose profile will not resolve is dropped, never listed nameless', async () => {
     const source = makeAudienceSource({
-      friendships: [
-        makeFriendship({ id: 'f-1', requesterId: ME, addresseeId: SANNE }),
-        makeFriendship({ id: 'f-2', requesterId: ME, addresseeId: JORIS }),
-      ],
+      follows: [...mutual(ME, SANNE), ...mutual(ME, JORIS)],
       profiles: [sanne],
     });
 
@@ -158,10 +218,7 @@ describe('loadSendAudience — the read the outcome card gates its button on', (
 
   test('one lookup per friend, however many rows name them', async () => {
     const source = makeAudienceSource({
-      friendships: [
-        makeFriendship({ id: 'f-1', requesterId: ME, addresseeId: SANNE }),
-        makeFriendship({ id: 'f-2', requesterId: SANNE, addresseeId: ME }),
-      ],
+      follows: [...mutual(ME, SANNE), ...mutual(ME, SANNE).map((f) => ({ ...f, id: `${f.id}-dup` }))],
       profiles: [sanne],
     });
 
@@ -174,16 +231,16 @@ describe('loadSendAudience — the read the outcome card gates its button on', (
     const source = makeAudienceSource({ profiles: [sanne] });
 
     expect(await loadSendAudience(source, null)).toEqual([]);
-    expect(source.listFriendships).not.toHaveBeenCalled();
+    expect(source.listFollows).not.toHaveBeenCalled();
   });
 
-  test('a failed friendship read is silence, not a crash on the outcome card', async () => {
-    expect(await loadSendAudience(makeAudienceSource({ failFriendships: true }), ME)).toEqual([]);
+  test('a failed follow read is silence, not a crash on the outcome card', async () => {
+    expect(await loadSendAudience(makeAudienceSource({ failFollows: true }), ME)).toEqual([]);
   });
 
   test('a failed profile read is silence too', async () => {
     const source = makeAudienceSource({
-      friendships: [makeFriendship({ id: 'f-1', requesterId: ME, addresseeId: SANNE })],
+      follows: mutual(ME, SANNE),
       failProfiles: true,
     });
 

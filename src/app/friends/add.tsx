@@ -1,66 +1,117 @@
 /**
  * Vriend toevoegen — the handle exchange (DESIGN-SOCIAL.md §4.4), and the
- * one place in the app where a friendship can come into existence.
+ * one place in the app where a link between two people can come into
+ * existence.
  *
  * WHY THIS SCREEN IS THE MOST IMPORTANT SMALL SCREEN IN THE PRODUCT. Until
  * it existed there was no way whatsoever to acquire a friend, which meant
  * Gekookt, de Kring, Sturen and cook proof were all empty in practice
- * however well they were built — four finished surfaces with no way to put
- * anything on them. Everything else in the social half is downstream of
- * these two buttons.
+ * however well they were built. Everything else in the social half is
+ * downstream of these two buttons.
+ *
+ * ============================================================================
+ * ⚠ IT SENDS FOLLOW REQUESTS NOW, NOT FRIENDSHIP REQUESTS — PD-024
+ * ============================================================================
+ *
+ * Migration 0021 replaced the symmetric `friendships` table with the
+ * directed `follows` one, at the owner's request: *"Ik wil dat je een
+ * persoon kan volgen en een melding krijgt als iemand dat wil, dan kan je
+ * het accepteren en als je wil terugvolgen."* Everything this screen reads
+ * and writes moved with it — ~~`listFriendships`~~ → `listFollows` +
+ * `listBlocks`, ~~`getFriendshipBetween`~~ → `getFollowBetween`,
+ * ~~`actOnFriendship`~~ → `actOnFollow` — and `friendships` is now a FROZEN
+ * COPY nothing may read.
+ *
+ * THREE CONSEQUENCES THAT ARE NOT RENAMES, and each is a decision:
+ *
+ *   1. THE READ IS TWO CALLS NOW, NOT ONE. `listFollows` is deliberately
+ *      unfiltered by blocks (followGraph.ts: "filtering here as well would
+ *      be a second definition of 'counts'"), so the blocks are fetched
+ *      alongside it and both are handed to `partitionFollows`. Follows
+ *      alone would list a blocked pair — the one leak that partition exists
+ *      to prevent.
+ *   2. THE LOOKUP IS DIRECTION-SENSITIVE. `getFollowBetween(me, them)`
+ *      returns the row pointing FROM the reader and never the one pointing
+ *      back. A request THEY sent is a different row, it is answered from the
+ *      VOLGVERZOEKEN list below, and it does not stop the reader opening
+ *      their own — which is exactly the "terugvolgen" the owner asked for.
+ *   3. ONE LIST BECAME TWO. See addFriendLists.ts's header for the whole
+ *      argument; the short version is that `followers` is the list of people
+ *      who can see what this household cooks, and a per-person consent the
+ *      giver cannot see is a consent with no way back.
+ *
+ * ⚠ AND THE WORDS CHANGED, WHICH MATTERS MORE THAN THE CALLS. Accepting no
+ * longer makes anybody friends; it grants ONE person sight of your cooking,
+ * and whether you follow back is a separate decision you may never take.
+ * addFriendCopy.ts carries which strings moved to "volgverzoek" and which
+ * deliberately did not; `REQUESTS_EXPLAINER` is the new sentence telling the
+ * reader what `Accepteren` hands over, because a consent the giver has to
+ * guess at is not a consent.
+ *
+ * ---
  *
  * "DELIBERATELY SMALL" IS THE SPEC, NOT A STAGE. §4.4: "The minimum viable
  * friendship: you know someone's handle because they told you. No
  * search-by-name, no contact-book upload, no suggestions." Those are
  * RECORDED REFUSALS, and §7 restates the contact-book one as a standing
  * position rather than a backlog item — an address-book upload discloses
- * every person in it, none of whom agreed to anything. The reason they are
- * cheap to hold here is structural: `profiles_select` grants every
+ * every person in it, none of whom agreed to anything. They are cheap to
+ * hold here for a structural reason: `profiles_select` grants every
  * authenticated reader every row, so the only thing standing between this
  * app and a user directory is that the client offers exactly one way to
- * ask, by exact handle. Adding a name search would not be a feature; it
- * would be an enumeration endpoint. The sentences that would announce any
- * of the three are swept by tests/addFriendCopy.test.ts.
+ * ask, by exact handle. A name search would not be a feature; it would be
+ * an enumeration endpoint. ⚠ THE DIRECTED GRAPH CHANGES NOTHING HERE:
+ * `findProfileByHandle` still does `.eq` and never `ilike`, whether a
+ * people-search lands is O-4, and that is fase 6. The sentences that would
+ * announce any of the three are swept by tests/addFriendCopy.test.ts.
  *
- * ONE ADDITION TO §4.4'S SKETCH, STATED SO IT IS NOT MISTAKEN FOR DRIFT.
- * The sketch draws your handle, the input, and the pending requests. This
- * screen also lists accepted friends under `VRIENDEN`. Without it,
- * accepting a request makes the row silently vanish and nothing on screen
- * says the friendship exists — an accept that leaves no trace reads as a
- * failed tap, and this is the one screen where a person needs to see that
- * the thing they came for actually happened. The list carries what §4.4's
- * rows carry and nothing more: a name and a handle. No count of what
- * anybody sent, no date, and nothing about whether they share their
+ * WHAT THIS SCREEN LISTS BEYOND §4.4'S SKETCH, STATED SO IT IS NOT MISTAKEN
+ * FOR DRIFT. The sketch draws your handle, the input and the pending
+ * requests; this screen also lists the accepted rows, ~~under `VRIENDEN`~~
+ * and since PD-024 under `JIJ VOLGT` and `VOLGEN JOU`. The reason for
+ * listing them at all is unchanged, and it is also why the mutual-only
+ * shortcut had to be refused: without it, accepting makes the row silently
+ * vanish and nothing on screen says the grant exists — an accept that
+ * leaves no trace reads as a failed tap, and this is the one screen where a
+ * person needs to see that the thing they came for happened. The rows carry
+ * a name and a handle and nothing else: no count of what anybody sent, no
+ * date, no follower tally, and nothing about whether they share their
  * cooking — that last would put another household's §5 answer on a screen
  * with no business holding it.
  *
  * WHAT THIS SCREEN DOES NOT OFFER, and why each is a decision. There is no
- * withdraw on an outgoing request, no unfriend, and no block — all three
- * are `removeFriendship` or `actOnFriendship(..., 'block')` and all three
- * are one small screen's worth of confirm dialogs away. They are absent
- * because the loop that makes a friendship EXIST is the thing that was
- * missing, and every one of those three has a working alternative today
- * (do nothing) in a way that "acquire a friend" did not. §4.4 sketches
- * blocking as "a quiet tertiary behind a confirm"; when it lands it lands
- * here, beside these rows.
+ * withdraw on an outgoing request, no unfollow, no remove-a-follower and no
+ * block — all four are `removeFollow` or `blockProfile`, one small screen's
+ * worth of confirm dialogs away. They are absent because the loop that makes
+ * a link EXIST was the missing thing, and every one of them has a working
+ * alternative today (do nothing) in a way that "acquire a follow" did not.
+ * §4.4 sketches blocking as "a quiet tertiary behind a confirm"; when they
+ * land they land here, and `VOLGEN JOU` is the list remove-a-follower needs
+ * to be operable at all.
  *
  * LIVE ONLY — NO `__DEV__` FIXTURE ROW, unlike Kiezen, Vrienden and
- * Ranglijst. Those three exist to give design something to look at while
- * the real tables are empty, and their fixtures are read-only view models.
- * This screen is almost entirely writes against another person's row, and a
- * fixture source would either have to fake `actOnFriendship`'s rejections
- * (in which case the one thing worth exercising is the fake) or write for
- * real against invented ids. There is nothing here a fixture could honestly
- * stand in for.
+ * Ranglijst. Those three exist to give design something to look at while the
+ * real tables are empty, and their fixtures are read-only view models. This
+ * screen is almost entirely writes against another person's row, so a
+ * fixture source would either fake `actOnFollow`'s rejections — leaving the
+ * fake as the only thing exercised — or write for real against invented ids.
+ * There is nothing here a fixture could honestly stand in for.
  *
- * THE TRANSITION TABLE IS NOT RE-DERIVED HERE. `planFriendRequest`
- * (addFriendCopy.ts) asks `applyFriendshipAction` and hands back either
- * "write it" or a Dutch sentence. This screen classifies before it writes
- * rather than catching `actOnFriendship`'s rejection, because that method
- * REJECTS an illegal move — correctly — and an `Error` is not a sentence
- * anybody can act on. Two of those rejections share a code and want
- * opposite screens: `already_pending` is either "your request is open" or
- * "they asked YOU, and the Accepteren is four rows down".
+ * THE TRANSITION TABLE IS NOT RE-DERIVED HERE. `planFollowRequest`
+ * (addFriendCopy.ts) asks `applyFollowAction` and hands back "write it" or a
+ * Dutch sentence — classifying before the write, because `actOnFollow`
+ * REJECTS an illegal move (correctly) and an `Error` is not a sentence
+ * anybody can act on. ⚠ THE BLOCKS GO IN AS ROWS, never as a boolean this
+ * screen computed: `isBlockStanding` is direction-insensitive on purpose, so
+ * blocker and blocked reach an identical refusal down an identical path, and
+ * that is only testable if the screen does not decide it.
+ *
+ * THE COMPOSITION IS NOT HERE EITHER. addFriendLists.ts holds the read, the
+ * four buckets, each section's loading/empty/failed rule and the message
+ * tone, because a route module cannot be imported by vitest at all —
+ * expo-router pulls react-native's package internals through Vite's SSR
+ * graph and the import dies with a SyntaxError. Anything left in this file
+ * is a decision nothing can assert.
  *
  * PD-012: there is deliberately no signed-out branch. An account is
  * required before the app renders at all and the root layout answers that
@@ -72,37 +123,37 @@
  *
  * §5's ONE-TIME ASK IS MOUNTED HERE, AND THIS IS THE ONLY PLACE IT COULD
  * BE. The cook-proof opt-in is offered contextually, on an accepted
- * friendship — that moment happens on the accept path below and nowhere
- * else in the app. `CookSharingAskSheet` owns the disclosure and the
- * control and deliberately tracks nothing; its `visible` must already mean
- * "there is an accepted friendship AND we have never asked", which
+ * request — that moment happens on the accept path below and nowhere else
+ * in the app. `CookSharingAskSheet` owns the disclosure and the control and
+ * deliberately tracks nothing; its `visible` must already mean "somebody can
+ * now see this household's cooking AND we have never asked", which
  * `shouldAskCookSharing` decides from two facts:
  *
- *   1. The accepted count RE-READ after the write, so it is the database's
- *      answer and not a number this screen carried forward. It only has to
- *      be at least one: zero means the accept did not actually take.
+ *   1. The FOLLOWER count re-read after the write, so it is the database's
+ *      answer and not a number this screen carried forward. ⚠ Followers and
+ *      not follows: §5 discloses what this household cooks, and the people
+ *      it discloses to are the ones who follow, never the ones this reader
+ *      chose to follow. It only has to be at least one — zero means the
+ *      accept did not actually take.
  *   2. `getHouseholdCookSharingAsked`, the durable household flag whose
  *      writer has no un-ask counterpart on purpose. This is the guard that
  *      enforces "once".
  *
  * TWO CLAIMS HERE WENT STALE WITH THE OWNER'S REVERSAL, and both are
- * corrected above rather than left for somebody to discover. The control
- * is no longer "visibly off": migration 0015 made sharing the standard and
- * the sheet now arrives PRE-CHECKED, committing on its own `Klaar`. And
- * the trigger is no longer the household's FIRST friendship — under
- * `=== 1` a household that already had friends could never be asked at
- * all, which in an on-by-default product meant the households most likely
- * to want it were the only ones never offered it. See
- * `shouldAskCookSharing`'s own header for the full argument, including
- * what the broadening gives up and what still covers it.
+ * corrected above rather than left for somebody to discover. The control is
+ * no longer "visibly off": migration 0015 made sharing the standard and the
+ * sheet arrives PRE-CHECKED, committing on its own `Klaar`. And the trigger
+ * is no longer the household's FIRST friendship — under `=== 1` a household
+ * that already had friends could never be asked at all, so in an
+ * on-by-default product the households most likely to want it were the only
+ * ones never offered it. `shouldAskCookSharing`'s own header carries the
+ * full argument, including what the broadening gives up.
  *
  * THE SHEET CANNOT BE RAISED TWICE. `askRef` is set synchronously when the
  * sheet goes up and cleared synchronously in the first line of the answer
  * handler, before any await — a mutex React's batching cannot defeat, which
- * a piece of state alone would not be. Beyond that: the second accept in a
- * session has an accepted count of two, so it fails guard 1 even if the
- * mark write never landed; and once the mark lands, guard 2 refuses every
- * future accept forever.
+ * a piece of state alone would not be. And once the mark lands, guard 2
+ * refuses every future accept forever.
  *
  * ON THE ANSWER PATH, THE ORDER IS LOAD-BEARING. `if (enabled) await
  * setHouseholdCookSharing(id, true)` runs FIRST and the mark second, in one
@@ -114,24 +165,16 @@
 
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { useRouter } from 'expo-router';
-import {
-  AccessibilityInfo,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useColorScheme,
-} from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ADD_FRIEND_INTRO,
-  ADD_FRIEND_LOADING,
-  ADD_FRIEND_LOAD_FAILED,
   ADD_FRIEND_TITLE,
   COOK_SHARING_ASK_FAILED,
-  FRIENDS_EMPTY,
-  FRIENDS_SECTION_LABEL,
+  FOLLOWERS_EMPTY,
+  FOLLOWERS_SECTION_LABEL,
+  FOLLOWING_EMPTY,
+  FOLLOWING_SECTION_LABEL,
   HANDLE_INPUT_ACCESSIBILITY_HINT,
   HANDLE_INPUT_ACCESSIBILITY_LABEL,
   HANDLE_INPUT_PLACEHOLDER,
@@ -139,103 +182,42 @@ import {
   OWN_HANDLE_EYEBROW,
   OWN_HANDLE_UNAVAILABLE,
   REQUESTS_EMPTY,
+  REQUESTS_EXPLAINER,
   REQUESTS_SECTION_LABEL,
   SEND_REQUEST_LABEL,
-  describeAcceptedFriend,
   describeAddFriendOutcome,
-  describeIncomingRequest,
-  describeOutgoingRequest,
   formatHandle,
-  partitionFriendships,
-  planFriendRequest,
+  planFollowRequest,
   shouldAskCookSharing,
-  type AcceptedFriendRow,
+  type AcceptedFollowRow,
   type AddFriendMessage,
-  type AddFriendTone,
   type IncomingRequestRow,
-  type OutgoingRequestRow,
 } from '@/components/addFriendCopy';
+import {
+  INITIAL_ADD_FRIEND_STATE,
+  describeSectionState,
+  readFollowLists,
+  toneColor,
+  type AddFriendLists,
+  type AddFriendState,
+} from '@/components/addFriendLists';
 import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/Button';
 import { CookSharingAskSheet } from '@/components/CookSharingAskSheet';
 import { IncomingRow, OutgoingRow, PartyName, SectionLabel, SectionNote } from '@/components/FriendRequestRows';
 import { HANDLE_MAX_LENGTH, parseHandle } from '@/domain/social/handle';
-import type { Profile, ProfileId } from '@/domain/social/types';
+import type { ProfileId } from '@/domain/social/types';
 import type { HouseholdId } from '@/domain/types';
 import { useSession } from '@/hooks/useSession';
 import { ensureSeeded, getAppRepository } from '@/lib/repository';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import type { RemySocialRepository } from '@/lib/repository/social/types';
 import { supabase } from '@/lib/supabase';
 import { type ColorTokens, getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
-/** The three lists, dressed, plus the one number §5's ask is a function of. */
-interface FriendLists {
-  readonly incoming: readonly IncomingRequestRow[];
-  readonly outgoing: readonly OutgoingRequestRow[];
-  readonly friends: readonly AcceptedFriendRow[];
-  /** Read back from the database, never carried forward — see `shouldAskCookSharing`. */
-  readonly acceptedFriendCount: number;
-}
-
-const NO_LISTS: FriendLists = { incoming: [], outgoing: [], friends: [], acceptedFriendCount: 0 };
-
-/**
- * Loading and error are real states, and the three lists SURVIVE an error
- * so a refresh that fails does not blank rows the reader was already
- * looking at — the rule Ranglijst's `rows` and Vrienden's `cards` both
- * follow, for the same reason.
- */
-interface AddFriendState extends FriendLists {
-  readonly status: 'loading' | 'ready' | 'error';
-  /** The repository puts the Postgres code in here, and that code is what tells an RLS refusal from a network failure. */
-  readonly message: string | null;
-}
-
-const INITIAL_STATE: AddFriendState = { ...NO_LISTS, status: 'loading', message: null };
-
-/** The friendship whose accept raised §5's question, held only while the sheet is up. */
+/** The follow whose accept raised §5's question, held only while the sheet is up. */
 interface PendingAsk {
   readonly householdId: HouseholdId;
   readonly friendDisplayName: string;
-}
-
-/**
- * Names for every profile the three lists mention, in one round of reads.
- *
- * Deduplicated first: the same person can hold at most one row, but the
- * three lists are concatenated and a defensive `Set` costs nothing next to
- * a network call. A profile that fails to resolve is simply absent, and
- * `describeParty` renders the row without a name rather than dropping it —
- * an incoming request you can never answer is worse than one whose name
- * did not load.
- */
-async function readProfiles(
-  repository: RemySocialRepository,
-  profileIds: readonly ProfileId[],
-): Promise<ReadonlyMap<ProfileId, Profile>> {
-  const unique = [...new Set(profileIds)];
-  const profiles = await Promise.all(unique.map((profileId) => repository.getProfile(profileId)));
-  return new Map(profiles.flatMap((profile) => (profile === null ? [] : [[profile.id, profile] as const])));
-}
-
-/** Reads the pairs this person is party to, and dresses each into its row. */
-async function loadFriendLists(profileId: ProfileId): Promise<FriendLists> {
-  const repository = createSupabaseSocialRepository(supabase);
-  const lists = partitionFriendships(await repository.listFriendships(profileId), profileId);
-  const byId = await readProfiles(repository, [
-    ...lists.incoming.map((pair) => pair.profileId),
-    ...lists.outgoing.map((pair) => pair.profileId),
-    ...lists.accepted.map((pair) => pair.profileId),
-  ]);
-  const nameOf = (id: ProfileId): Profile | null => byId.get(id) ?? null;
-
-  return {
-    incoming: lists.incoming.map((pair) => describeIncomingRequest(pair.profileId, nameOf(pair.profileId))),
-    outgoing: lists.outgoing.map((pair) => describeOutgoingRequest(pair.profileId, nameOf(pair.profileId))),
-    friends: lists.accepted.map((pair) => describeAcceptedFriend(pair.profileId, nameOf(pair.profileId))),
-    acceptedFriendCount: lists.accepted.length,
-  };
 }
 
 export default function AddFriendScreen(): JSX.Element {
@@ -244,7 +226,7 @@ export default function AddFriendScreen(): JSX.Element {
   const colors = getColors(scheme);
   const { userId, handle } = useSession();
 
-  const [state, setState] = useState<AddFriendState>(INITIAL_STATE);
+  const [state, setState] = useState<AddFriendState>(INITIAL_ADD_FRIEND_STATE);
   const [handleInput, setHandleInput] = useState('');
   const [isSubmitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<AddFriendMessage | null>(null);
@@ -272,7 +254,7 @@ export default function AddFriendScreen(): JSX.Element {
       return;
     }
     try {
-      const lists = await loadFriendLists(profileId);
+      const lists = await readFollowLists(createSupabaseSocialRepository(supabase), profileId);
       if (isCurrent()) {
         setState({ ...lists, status: 'ready', message: null });
       }
@@ -297,8 +279,8 @@ export default function AddFriendScreen(): JSX.Element {
     };
   }, [userId, load]);
 
-  const refresh = useCallback(async (profileId: ProfileId): Promise<FriendLists> => {
-    const lists = await loadFriendLists(profileId);
+  const refresh = useCallback(async (profileId: ProfileId): Promise<AddFriendLists> => {
+    const lists = await readFollowLists(createSupabaseSocialRepository(supabase), profileId);
     setState({ ...lists, status: 'ready', message: null });
     return lists;
   }, []);
@@ -313,26 +295,23 @@ export default function AddFriendScreen(): JSX.Element {
    * the strength of a lookup that did not work. Not asking is the
    * fail-closed reading, and the switch is still in settings.
    */
-  const maybeAskCookSharing = useCallback(
-    async (acceptedFriendCount: number, friendDisplayName: string): Promise<void> => {
-      try {
-        await ensureSeeded();
-        const repository = getAppRepository();
-        const householdId = await repository.getCurrentHouseholdId();
-        const alreadyAsked = await repository.getHouseholdCookSharingAsked(householdId);
-        if (!shouldAskCookSharing({ acceptedFriendCount, alreadyAsked })) {
-          return;
-        }
-        const pending: PendingAsk = { householdId, friendDisplayName };
-        askRef.current = pending;
-        setAsk(pending);
-      } catch {
-        // See above: a household we could not read is a household we do not
-        // ask. Nothing is written and nothing is shown.
+  const maybeAskCookSharing = useCallback(async (followerCount: number, friendDisplayName: string): Promise<void> => {
+    try {
+      await ensureSeeded();
+      const repository = getAppRepository();
+      const householdId = await repository.getCurrentHouseholdId();
+      const alreadyAsked = await repository.getHouseholdCookSharingAsked(householdId);
+      if (!shouldAskCookSharing({ followerCount, alreadyAsked })) {
+        return;
       }
-    },
-    [],
-  );
+      const pending: PendingAsk = { householdId, friendDisplayName };
+      askRef.current = pending;
+      setAsk(pending);
+    } catch {
+      // See above: a household we could not read is a household we do not
+      // ask. Nothing is written and nothing is shown.
+    }
+  }, []);
 
   /**
    * The single shared path §5 and `CookSharingAskSheet` both describe. The
@@ -357,9 +336,9 @@ export default function AddFriendScreen(): JSX.Element {
           }
           await repository.markHouseholdCookSharingAsked(pending.householdId);
         } catch {
-          // The friendship itself landed and is on screen; only the opt-in
-          // did not. Saying so — and naming the other way in — beats a
-          // silent no-op on a consent the person has just given.
+          // The follow itself landed and is on screen; only the opt-in did
+          // not. Saying so — and naming the other way in — beats a silent
+          // no-op on a consent the person has just given.
           announce({ tone: 'error', text: COOK_SHARING_ASK_FAILED });
         }
       })();
@@ -391,14 +370,20 @@ export default function AddFriendScreen(): JSX.Element {
       }
 
       // Classify before writing — see this file's header on why a rejected
-      // write is not a sentence anybody can act on.
-      const plan = planFriendRequest(await repository.getFriendshipBetween(userId, profile.id), userId);
+      // write is not a sentence anybody can act on. The row is read in the
+      // reader's OWN direction, and the blocks travel as rows so that the
+      // plan decides the refusal rather than this screen.
+      const [existing, blocks] = await Promise.all([
+        repository.getFollowBetween(userId, profile.id),
+        repository.listBlocks(userId),
+      ]);
+      const plan = planFollowRequest(existing, blocks, userId, profile.id);
       if (plan.action === 'none') {
         announce(describeAddFriendOutcome(plan.outcome, parsed));
         return;
       }
 
-      await repository.actOnFriendship(userId, profile.id, 'request');
+      await repository.actOnFollow(userId, profile.id, 'request');
       setHandleInput('');
       announce(describeAddFriendOutcome('sent', parsed));
       await refresh(userId);
@@ -410,12 +395,17 @@ export default function AddFriendScreen(): JSX.Element {
   }, [userId, isSubmitting, handleInput, announce, refresh]);
 
   /**
-   * Accept or decline, and — on an accept only — put §5's question if this
-   * is the household's first friendship.
+   * Accept or decline, and — on an accept only — put §5's question.
    *
    * The lists are re-read before the ask rather than after, because the ask
-   * is a function of the accepted count and that count has to be the
+   * is a function of the follower count and that count has to be the
    * database's answer to the write that just landed.
+   *
+   * ⚠ THE ACTOR IS THE FOLLOWEE HERE. `actOnFollow` takes the acting profile
+   * first and works the direction out from the existing row, which for an
+   * answer is (them -> me). Passing the pair the other way round would ask
+   * the domain to let a follower accept their own request — the one move
+   * 0021's trigger refuses outright.
    */
   const answerRequest = useCallback(
     async (row: IncomingRequestRow, action: 'accept' | 'decline'): Promise<void> => {
@@ -423,29 +413,28 @@ export default function AddFriendScreen(): JSX.Element {
         return;
       }
       try {
-        await createSupabaseSocialRepository(supabase).actOnFriendship(userId, row.profileId, action);
+        await createSupabaseSocialRepository(supabase).actOnFollow(userId, row.profileId, action);
         const lists = await refresh(userId);
         if (action === 'accept') {
-          await maybeAskCookSharing(lists.acceptedFriendCount, row.displayName);
+          await maybeAskCookSharing(lists.followers.length, row.displayName);
         }
       } catch {
         // A SUSPICION ABOUT THIS MESSAGE, RECORDED RATHER THAN ACTED ON.
         // `announce` writes into the one message slot up near the input,
-        // which renders ABOVE the VERZOEKEN label — so a reader who has
+        // which renders ABOVE the VOLGVERZOEKEN label — so a reader who has
         // scrolled down to the request row they just answered may have the
         // sentence off-screen behind them. That is read off the render
         // order and has NOT been observed on a device, which is why nothing
         // has moved: it would relocate a message the send-request path
         // deliberately puts under the input, on the strength of a guess.
-        // It is worth checking on the next device pass, together with the
-        // Terug report above. `announceForAccessibility` fires either way,
-        // so a VoiceOver reader hears it regardless of scroll position.
+        // `announceForAccessibility` fires either way, so a VoiceOver reader
+        // hears it regardless of scroll position.
         //
         // Until 8 September this path also fired on every accept and
-        // decline, because `actOnFriendship` sent an upsert Postgres
-        // refused — see that method for the measurement. So "the owner saw
-        // nothing happen" had two candidate halves, and only one of them
-        // is now known to be fixed.
+        // decline, because the old `actOnFriendship` sent an upsert Postgres
+        // refused — see `actOnFollow` for how the directed version avoids
+        // that shape. So "the owner saw nothing happen" had two candidate
+        // halves, and only one of them is now known to be fixed.
         announce(describeAddFriendOutcome('failed', row.handleLabel));
       }
     },
@@ -459,23 +448,14 @@ export default function AddFriendScreen(): JSX.Element {
       {/* OUTSIDE THE SCROLLVIEW, which is the entire point of this row's
           position. It used to be the first child of the scrolling content
           below, so the exit scrolled away with everything else: on a screen
-          that carries your own handle, an input, a button, a message and
-          three lists — and whose lists are re-read and re-rendered after
-          every accept or decline — the way back sat wherever the reader
-          happened to have left the scroll offset. Every other pushed route
-          in this app draws its exit in exactly this shape, a fixed
-          `styles.header` row directly under the SafeAreaView and above
-          whatever scrolls (recipe/[mealId].tsx and import/paste.tsx are the
-          two copied here, down to the header's smaller horizontal inset);
-          this screen was the only one that did not.
-
-          A MOVE AND NOT A REDESIGN. The word, the accessibility label and
-          the type styling are carried over untouched. `typeScale.button` in
-          `textSecondary` here, against `bodySmall` in `textMuted` on all
-          eight of the other screens that draw a back row out of text, is a
-          genuine inconsistency — but reconciling it is a decision about
-          every back-word in the app across three copy modules, not a side
-          effect of moving one View. */}
+          carrying your own handle, an input, a button, a message and three
+          sections that are re-read and re-rendered after every accept or
+          decline, the way back sat wherever the reader had left the scroll
+          offset. Every other pushed route draws its exit in exactly this
+          shape — a fixed `styles.header` row directly under the SafeAreaView
+          (recipe/[mealId].tsx and import/paste.tsx are copied here, down to
+          the smaller horizontal inset); this screen was the only one that
+          did not. */}
       <View style={styles.header}>
         {/* THE `hitSlop` IS GONE AND THE WORD WITH IT — 9 SEPTEMBER 2026.
             What stood here defended an 8pt slop added "while the cause is
@@ -522,9 +502,8 @@ export default function AddFriendScreen(): JSX.Element {
             ✅ CONFIRMED ON A DEVICE, 9 SEPTEMBER 2026. Asked to press it
             again, the owner answered "hij werkt" — and, asked the §8c
             question in the same breath, reported that Instellingen works
-            too. That is the twenty-second measurement this paragraph used to
-            ask for, and it settles the diagnosis above rather than merely
-            failing to contradict it: the no-op `back()` was the cause and
+            too. That settles the diagnosis above rather than merely failing
+            to contradict it: the no-op `back()` was the cause and
             `canGoBack()` is the fix. Open point A in docs/HANDOVER.md is
             closed. What survived is a different complaint — "nog steeds
             lastig te klikken" — which is about aiming, and is answered by
@@ -588,15 +567,23 @@ export default function AddFriendScreen(): JSX.Element {
         <SectionLabel label={REQUESTS_SECTION_LABEL} colors={colors} />
         <RequestsSection state={state} colors={colors} onAnswer={answerRequest} />
 
-        <SectionLabel label={FRIENDS_SECTION_LABEL} colors={colors} />
-        <FriendsSection state={state} colors={colors} />
+        {/* TWO SECTIONS WHERE `VRIENDEN` STOOD, and the order is deliberate:
+            what the reader chose comes before what happened to them. See
+            addFriendLists.ts for why the mutual-only shortcut was refused,
+            and why a reciprocated pair appears in both. */}
+        <SectionLabel label={FOLLOWING_SECTION_LABEL} colors={colors} />
+        <FollowListSection rows={state.following} state={state} emptyText={FOLLOWING_EMPTY} colors={colors} />
+
+        <SectionLabel label={FOLLOWERS_SECTION_LABEL} colors={colors} />
+        <FollowListSection rows={state.followers} state={state} emptyText={FOLLOWERS_EMPTY} colors={colors} />
       </ScrollView>
 
       {/*
-        §5's one-time ask. `visible` already encodes "first accepted
-        friendship AND never asked" — `shouldAskCookSharing` decided that
-        before `ask` was ever set, which is the contract
-        CookSharingAskSheet's own header says it will not check for itself.
+        §5's one-time ask. `visible` already encodes "somebody can now see
+        this household's cooking AND we have never asked" —
+        `shouldAskCookSharing` decided that before `ask` was ever set, which
+        is the contract CookSharingAskSheet's own header says it will not
+        check for itself.
       */}
       <CookSharingAskSheet
         visible={ask !== null}
@@ -605,27 +592,6 @@ export default function AddFriendScreen(): JSX.Element {
       />
     </SafeAreaView>
   );
-}
-
-/**
- * Message colour by tone. `ok` and `notice` are deliberately close in
- * weight: this product does not celebrate, and a sent request is a fact
- * rather than an achievement. All three tokens are guarded as text on the
- * neutral surfaces by tests/contrast.test.ts.
- */
-function toneColor(tone: AddFriendTone, colors: ColorTokens): string {
-  switch (tone) {
-    case 'ok':
-      return colors.accent;
-    case 'notice':
-      return colors.textSecondary;
-    case 'error':
-      return colors.danger;
-    default: {
-      const exhaustiveCheck: never = tone;
-      throw new Error(`Unhandled AddFriendTone: ${String(exhaustiveCheck)}`);
-    }
-  }
 }
 
 interface OwnHandleBlockProps {
@@ -671,26 +637,32 @@ interface RequestsSectionProps {
 /**
  * Both directions in one section, incoming first, matching §4.4's sketch.
  *
- * Loading and error only take over an EMPTY section, so a refresh that
- * fails leaves the rows the reader was looking at exactly where they were —
- * Vrienden's rule, applied to a shorter list.
+ * Whether it draws rows or a single line is `describeSectionState`'s call
+ * and not this component's — including the rule that rows outlive a failed
+ * refresh, which matters most on this screen because it re-reads after every
+ * accept and every decline.
+ *
+ * ⚠ THE EXPLAINER HANGS OFF THE INCOMING COUNT, not off the section's. It
+ * says what `Accepteren` hands over, so it belongs above a list that has
+ * something to accept; over outgoing rows alone it would explain a button
+ * that is not on screen.
  */
 function RequestsSection(props: RequestsSectionProps): JSX.Element {
   const { state, colors, onAnswer } = props;
-  const isEmpty = state.incoming.length === 0 && state.outgoing.length === 0;
+  const content = describeSectionState({
+    rowCount: state.incoming.length + state.outgoing.length,
+    status: state.status,
+    message: state.message,
+    emptyText: REQUESTS_EMPTY,
+  });
 
-  if (isEmpty && state.status === 'loading') {
-    return <SectionNote text={ADD_FRIEND_LOADING} colors={colors} />;
-  }
-  if (isEmpty && state.status === 'error') {
-    return <SectionNote text={ADD_FRIEND_LOAD_FAILED} detail={state.message} colors={colors} />;
-  }
-  if (isEmpty) {
-    return <SectionNote text={REQUESTS_EMPTY} colors={colors} />;
+  if (content.kind === 'note') {
+    return <SectionNote text={content.text} detail={content.detail} colors={colors} />;
   }
 
   return (
     <View>
+      {state.incoming.length === 0 ? null : <SectionNote text={REQUESTS_EXPLAINER} colors={colors} />}
       {state.incoming.map((row) => (
         <IncomingRow
           key={row.profileId}
@@ -710,27 +682,40 @@ function RequestsSection(props: RequestsSectionProps): JSX.Element {
   );
 }
 
-interface FriendsSectionProps {
+interface FollowListSectionProps {
+  readonly rows: readonly AcceptedFollowRow[];
   readonly state: AddFriendState;
+  readonly emptyText: string;
   readonly colors: ColorTokens;
 }
 
-function FriendsSection(props: FriendsSectionProps): JSX.Element {
-  const { state, colors } = props;
+/**
+ * `JIJ VOLGT` and `VOLGEN JOU`, out of one component used twice.
+ *
+ * ONE COMPONENT AND NOT TWO, because the two lists differ in exactly two
+ * things — which rows, and which line when empty — and both arrive as
+ * props. The DIRECTION is already spoken in each row's own accessibility
+ * label (`describeFollowParty`), so nothing is left here that could differ
+ * between them; two components would be one body under two names, and the
+ * day somebody adjusted a row in one of them would be the day the two lists
+ * stopped matching.
+ */
+function FollowListSection(props: FollowListSectionProps): JSX.Element {
+  const { rows, state, emptyText, colors } = props;
+  const content = describeSectionState({
+    rowCount: rows.length,
+    status: state.status,
+    message: state.message,
+    emptyText,
+  });
 
-  if (state.friends.length === 0 && state.status === 'loading') {
-    return <SectionNote text={ADD_FRIEND_LOADING} colors={colors} />;
-  }
-  if (state.friends.length === 0 && state.status === 'error') {
-    return <SectionNote text={ADD_FRIEND_LOAD_FAILED} detail={state.message} colors={colors} />;
-  }
-  if (state.friends.length === 0) {
-    return <SectionNote text={FRIENDS_EMPTY} colors={colors} />;
+  if (content.kind === 'note') {
+    return <SectionNote text={content.text} detail={content.detail} colors={colors} />;
   }
 
   return (
     <View>
-      {state.friends.map((row) => (
+      {rows.map((row) => (
         <View key={row.profileId} style={styles.friendRow} accessibilityLabel={row.accessibilityLabel}>
           <PartyName displayName={row.displayName} handleLabel={row.handleLabel} colors={colors} />
         </View>
@@ -774,7 +759,7 @@ const styles = StyleSheet.create({
     // until it cost a working control on the one screen that was reported.
     // If §8c shows the sibling screens fail too, the fix belongs in all
     // four and this divergence should close rather than spread by copying.
-    paddingTop: spacing.space6,
+    paddingTop: spacing.screenHeaderTop,
   },
   title: {
     marginTop: spacing.space2,
@@ -805,7 +790,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.space3,
   },
   friendRow: {
-    // The accepted-friend row has no controls, so it is a plain wrapper
+    // An accepted-follow row has no controls, so it is a plain wrapper
     // around `PartyName` rather than one of FriendRequestRows.tsx's own
     // row styles — the same vertical rhythm, without the flex layout the
     // two request kinds need for their trailing element.

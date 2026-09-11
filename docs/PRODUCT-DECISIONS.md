@@ -1452,3 +1452,203 @@ vote table. Rejected because it gives the board two definitions of one number, t
 plumbing rather than a policy. *Rank the board on `shared_cooks` counts instead of grades* — that is
 the global strangers aggregate PD-015 rejected by name, and a count of cooks is not a verdict on a
 recipe.
+
+---
+
+## PD-024 — Reversed: Remy gets a feed AND an explore, together called Ontdek, and the graph becomes directed
+
+**Owner decision, 10 September 2026, in his own words — four quotes, because this is one decision in
+four steps and each step reverses something this repo had written down:**
+
+*"ik wil wel een feed, dat is waar we naartoe willen."* And: *"de tabs 'vrienden' en
+trending\vrienden [zijn] hetzelfde … dit moet hernoemt worden naar ontdek."* And, on what that
+merged thing then is: *"je moet het zien als instagram je feed met daarin je gevolgde accounts en je
+explore pagina met daarin allemaal nieuwe en trending dingen om te ontdekken."* And: *"Ik wil dat je
+een persoon kan volgen en een melding krijgt als iemand dat wil, dan kan je het accepteren en als je
+wil terugvolgen."*
+
+**What is reversed — three written sentences, and each one is struck where it lives rather than
+quietly bypassed.**
+
+1. **DESIGN-SOCIAL.md §9's closing line**, *"⚠ Do not build a feed. Strava's feed is its weakest
+   surface. Remy has the recipe as a natural key, and that is precisely what feeds are a surrogate
+   for."* No longer in force. Amended in place, 10 September 2026.
+2. **DESIGN-SOCIAL.md §8's fourth refusal, for the SECOND time:** *"**No follower model**, no public
+   profiles, ~~no vrienden-van-vrienden~~, no contact-book upload."* The follower model goes.
+   **Public profiles and the contact-book upload both stay refused**, and that is not automatic: a
+   follow model turns "who may I follow" into a question that asks for a profile page and an address
+   book in the same breath. The answer to both is still no. Amended in place, in the form the
+   8 September amendment of that same bullet established.
+3. **DESIGN-SOCIAL.md §9's growth path** said graph 2 is a LATER step and that *jumping* is the
+   mistake. It is being jumped, deliberately, on request. What that costs is priced below under
+   "what is spent" rather than argued away.
+
+**And DESIGN.md §Navigation's tab count changes, downward.** The owner chose one tab — *"Eén tab
+Ontdek, drie tabs totaal"* — on 10 September 2026. `Kiezen | Mijn recepten | Ontdek`. §8's *"No
+fifth tab"* is not touched in the direction anybody worried about: a tab goes away. The fourth tab
+position comes free and stays free; filling it because a gap opened is exactly the mistake
+§Navigation's rule was written against.
+
+**Why one tab is defensible under a rule that says a tab is a question and never a kind of content,
+stated rather than assumed.** Both surfaces answer *"wat is er buiten mijn eigen keuken?"*, and the
+switch chooses the EVIDENCE BASE — people I know, or everybody. That is the form PD-018 already
+defended for the `Iedereen | Vrienden` control on Trending, in a sentence that transfers without
+alteration: it *"selects between two SEPARATE lists rather than re-ordering one"*. The feed/explore
+reading strengthens that argument rather than straining it, because the two lists move further apart
+rather than closer together.
+
+⚠ **The price, and the tripwire that tips this to two tabs, recorded now so nobody has to rediscover
+it.** One tab answering two questions genuinely does stretch §Navigation's rule. The moment the feed
+side carries something that must be ANSWERED — a follow request, a co-diner invitation — it carries
+post, and post on a surface you must first switch to is post you miss. **That is the day it is two
+questions and therefore two tabs.** Given that fase 1 lands follow requests, that day is not far
+off; this decision is taken knowing two tabs is the next stop and not a failure of this one.
+
+**What is bought on the merge, and it is less than it looks.** The two surfaces were already
+measurably double. Since PD-023 `recipe_ratings` has exactly one writer — `castPublicVote`, called
+from `src/lib/pendingRating.ts` and nowhere else — so every vote in the kring is a friend who
+cooked. A friend who cooks a canonical recipe and grades it produces, today, a `shared_cooks` row
+(proof card on Vrienden) and a namable vote (kring row on Trending/Vrienden) at the same time. One
+event, two tabs, two cards, and nowhere that a reader is told why.
+
+**What the merge does NOT do is delete one of those two cards.** They move to the two surfaces where
+they belong. What disappears is the **seam running straight through a single cooking event**; what
+replaces it is a seam between **people you know** and **everybody** — which is precisely the
+separation PD-018 already drew between `rankKring` and `rankRecipes`, now at surface level instead
+of scope level.
+
+**What is bought on the follow model, and it is far more than it looks.** A follow model is not one
+table. `is_friend_of()` is this product's second RLS predicate beside `is_household_member`, with
+four server objects hanging off it (`shared_cooks`, `recipe_shares_insert`, `can_read_shared_meal`,
+and `suggested_friends()`' exclusions) and six client calls of `listFriendships`. Each of those ten
+has to decide again what "friend" means, out of three possible meanings: *I follow them*, *they
+follow me*, *mutual*.
+
+**The shape chosen, 10 September 2026: `follows` becomes THE graph and friendship becomes a DERIVED
+term.** `is_friend_of(x)` = *there is an accepted follow x→me AND an accepted follow me→x*. The two
+rejected shapes are recorded so they are not re-proposed:
+
+- *Extend `friendships` with a direction or kind column.* **Impossible**, not merely unwise. That
+  table is built around `unique (profile_low, profile_high)` — one row per unordered pair, two
+  generated columns, and the index `is_friend_of` probes. Following back is a second directed row
+  for the same pair, so this asks for the removal of the exact constraint the table's own header
+  says it is *"built around"*. That is a rewrite wearing the old name.
+- *A `follows` table beside `friendships`, both live.* Possible, and the smallest first build. It
+  buys two graphs standing side by side: every read has to choose one, and a person receives **two
+  kinds of request** on one screen — a friendship request and a follow request — that they cannot
+  tell apart, having only ever asked for one.
+
+**Why the chosen shape is affordable where it looked expensive.** `is_friend_of` is ONE function
+with exactly three server callers — `shared_cooks` (`0009:155`), `recipe_shares_insert`
+(`0009:229`), `can_read_shared_meal` (`0007:614`), grepped across all nineteen migrations. Rewrite
+its body and those three keep working **without being touched**, which is the whole reason this is
+doable: the abstraction it needs is already there. Two mechanisms do NOT come along and must be
+moved by hand, and a reader who assumes otherwise will ship a hole:
+
+1. `suggested_friends()` reads `friendships` directly (`0019:90,105,116`), never through
+   `is_friend_of`. It is the fourth server object.
+2. **The kring is not view-gated at all.** `namable_recipe_votes` (0016) filters on consent only;
+   the friend narrowing is *"the caller's job and happens in the query that reads friendships"*.
+   That narrowing lives in the client and moves in the client.
+
+**And one term that has no directed equivalent at all, which is why it is built FIRST.** A block
+cannot live on a `follows` row. `friendships.blocked_by` exists because a block is otherwise
+unenforceable: *"either party may delete their own friendship row, so the blocked person would
+simply remove the block and ask again."* A follow row is directed and belongs to the follower, so
+the blocked party owns the row that would carry their own block. **Blocking therefore becomes its
+own object before the graph can be made directed** — a precondition, not a detail.
+
+**What is spent, priced and not refuted.**
+
+- **§9's argument against a feed is not refuted; it is overruled.** The argument was that Remy has
+  the recipe as a natural key and a feed is a surrogate for exactly that. It remains as true as it
+  was. What changed is that the owner wants the surface that SHOWS the key, and accepts that it will
+  look like a feed.
+- **§9's thesis that the ORDER of the three graphs is the expensive part** is likewise not refuted.
+  It is stepped over, on request, with the cost in view.
+- **`rankKring` loses its ordering role, and that is a real post.** Trending's `Vrienden` scope is
+  today a list ordered by score. Once friend evidence moves to the feed, `rankFeedItems` orders on
+  cookability and the grade is decoration on a card. The average and the voter names
+  (`buildKringMetaLine`) survive; the **ordering** does not.
+- **§9's recommended middle step is skipped and not replaced:** *"lijsten waar je in kunt komen"*
+  ("onder 20 minuten", "wat je in huis hebt"). That was the discovery form §9 proposed in order to
+  avoid a feed. It does not arrive instead of the feed and it does not arrive beside it. It belongs
+  on the LONGLIST.
+
+**Why the acceptance step is load-bearing and not a nicety — the consent argument, in full, because
+it is the sharpest thing in this decision.** DESIGN-SOCIAL.md §5 fixes what the opt-in switch
+exposes: *"the link between your display name and a canonical recipe id"* — and it was switched on
+under the meaning **"to mutually accepted friends"**. If a follower who is not a friend could see
+that same cooking history, that consent would have been **widened by a migration**, and PD-022's one
+surviving absolute is *"nothing is shared by a migration, ever."*
+
+The rescue is in the question the owner actually asked. He did not ask for public following. He
+asked for *"een melding krijgt als iemand dat wil, dan kan je het accepteren."* **That acceptance is
+a fresh consent per person**, which is a STRONGER gate than §5's global switch — that one holds for
+everybody at once, this one for one human being. An accepted follower therefore holds a permission
+this product cannot currently even express. Three build rules follow, and they are binding:
+
+1. **No existing friendship may expose more after the migration than before it.** Two accepted
+   follows derived from one friendship expose exactly what the friendship exposed.
+2. **A public follow model — following without acceptance — is hereby explicitly refused**, however
+   much cheaper it looks later. Remove the acceptance step and the whole argument above collapses
+   and §5's consent HAS been widened.
+3. **§5's global switch remains the outer gate.** Switched off, an accepted follower sees nothing.
+   Consent stacks; it does not substitute.
+
+**What is NOT reversed — and this half is the difference between this decision and a generic feed.**
+
+- **PD-004 stands.** Both surfaces are measured on save-to-cook, never on dwell time. No session
+  length, no scroll depth, no time-in-app as a goal.
+- **PD-014's six conditions stand**, and the sixth — *"no personalisation, ever"* — is made
+  SHARPER by the split rather than weaker. **Explore stays literally impersonal:** `rankRecipes`
+  reads a list that never sees the household, and that remains byte-for-byte the object PD-014
+  protects. **The feed is personal by definition** — it is the people you follow — and it already
+  was (`shared_cooks` self-gates on friendship). What changes is that the two properties now sit on
+  two SURFACES instead of behind one switch on the protected object's own tab. PD-018 named that
+  risk itself: *"a shared constant is how one list quietly starts behaving like the other."*
+- **Therefore the hard boundary:** nothing from the feed may touch explore's ordering, and explore
+  may never backfill the feed. That is §8's "no padding the kring", inverted, and it earns a test —
+  one that nails down that no row produced by `rankRecipes` can land on the feed side.
+- **A person is never ranked.** Ontdek ranks recipes. Following is a **gate** that decides whose
+  cooking you see, and never a **score** on a human being. No follower counts, no "most popular
+  cooks", no profile page, no creator feed. §8's "no trophy shelf" covers this and is not amended.
+- **Finite, and says so.** No pagination, no `onEndReached`, no pull-for-more.
+  `LEADERBOARD_MAX_ROWS = 25` holds until open question K is answered.
+- **Never ordered by recency.** No timestamp on a card, no "nieuw" badge.
+- **No push.** Both new kinds of post — the follow request and the co-diner invitation — are
+  announced by one line at the top of Ontdek, reusing `PendingRequestsLine`, which already exists
+  and already draws only when something is actually waiting. ⚠ **This is the first time the absence
+  of push genuinely limits a requested feature**, because the owner said *"een melding krijgt"* and
+  a line that appears only when you open the app is not that. §8's deferred decision now has a
+  concrete occasion; OPS-02 (no development-build pipeline) is the first blocker on that path.
+- **`meals.visibility` has no `public` member, and gains none.** A follower reads what a friend
+  reads or less, never more.
+
+**Three further answers taken the same day, recorded here so they are not asked again.**
+
+- **Cuisine becomes a CLOSED SET with one value per recipe** (`text null`, no `'onbekend'` member),
+  filled by the LLM from an enum and correctable by a human — the `dish_course` shape from 0017,
+  for 0017's own cardinality reason: a cuisine is one fact that can be corrected, not a description
+  that accumulates. It is built in fase 4, not here. ⚠ **There will be no backfill.** `recipes`
+  stores no source text and `canonicalRecipeStore` writes `ON CONFLICT DO NOTHING`, so a re-import
+  overwrites nothing; every recipe from before fase 4 keeps an empty cuisine until a human sets it.
+  Guessing from title plus ingredients is the estimate this pipeline refuses everywhere else.
+- **A save carries an ORIGIN from now on** — `import`, `bibliotheek`, `send`, `proof`, `kring`,
+  `zoek`. §9's honest metric is the closed-loop rate over sends, and Ontdek is about to deliver
+  saves that come from searching instead. Without an origin the denominator of that fraction goes
+  cloudy and cannot be un-clouded afterwards, because the baseline exists only until Ontdek ships.
+  **This is the one item in the whole plan that gets more expensive by waiting**, which is why it
+  lands in fase 0 with the paperwork rather than with the surface it measures. It is
+  `src/domain/saveOrigin.ts`, `Save.origin`, and `CreateSaveInput.origin`; rows written before it
+  carry `null`, which means "from before the question was asked" and is exactly the baseline the
+  measurement needs — never a guess at what they were.
+- **The co-diner link is OPT-IN** (fase 5): a third party's name is visible to NOBODY but the two
+  people involved until the state is `confirmed`. What the owner first called *"weigeren"* is called
+  **bevestigen** from here, and silence is a valid, silent refusal. There is no window in which the
+  name already stands.
+
+**Rejected alternative, recorded so it is not rebuilt.** *Leave the two tabs standing and explain
+the duplication in copy.* Rejected because an explanation of why the same dinner appears in two
+places is an explanation about the architecture rather than about the food — and because it is not
+what was asked for.

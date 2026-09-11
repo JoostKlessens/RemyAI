@@ -58,7 +58,22 @@ describe('the fixture set demonstrates what it claims to', () => {
     // Five feed items go in; the opted-out creator's post and the share
     // with no linked recipe are both gone. See the fixture module header.
     expect(cards).toHaveLength(3);
-    expect(cards.every((card) => card.creator.optedOutAt === null)).toBe(true);
+
+    // ⚠ THE CONSENT ASSERTION HAD TO CHANGE SHAPE, AND IT IS STRONGER NOW.
+    // It used to read `card.creator.optedOutAt === null` off the model —
+    // which only ever proved that whatever the model carried had not
+    // withdrawn, and stopped being expressible the day the card stopped
+    // carrying a `Creator` at all (PD-024's send-card fix). A card model is
+    // now four strings; it holds no consent record, by design, precisely so
+    // nobody can mistake it for one. So the gate is asserted where it
+    // actually lives: `filterServableFeedItems` drops the withdrawn
+    // creator's item BEFORE a model is built, so the proof is that no
+    // surviving card credits them.
+    const withdrawn = getFriendFeedFixture('gedeeld').creators.filter((creator) => creator.optedOutAt !== null);
+    expect(withdrawn.length).toBeGreaterThan(0);
+    for (const creator of withdrawn) {
+      expect(cards.some((card) => card.attribution?.handle === creator.handle)).toBe(false);
+    }
   });
 
   test('"gedeeld" surfaces exactly one PD-007a collision, ranked last but present', () => {
@@ -81,9 +96,13 @@ describe('the fixture set demonstrates what it claims to', () => {
 
   test('every servable card carries the creator attribution PD-010 ships under', () => {
     for (const card of assembleScenario('gedeeld')) {
-      expect(card.creator.handle.length).toBeGreaterThan(0);
-      expect(card.creator.profileUrl.startsWith('https://')).toBe(true);
-      expect(card.sourceUrl.startsWith('https://')).toBe(true);
+      // Never null on the creator-fed path: `buildCardModel` drops an item
+      // whose creator is missing from the gated lookup, which is the same
+      // fail-closed rule that makes the assertion above meaningful.
+      expect(card.attribution).not.toBeNull();
+      expect(card.attribution?.handle.length).toBeGreaterThan(0);
+      expect(card.attribution?.profileUrl?.startsWith('https://')).toBe(true);
+      expect(card.sourceUrl?.startsWith('https://')).toBe(true);
     }
   });
 

@@ -99,7 +99,8 @@ declare
   --
   --     0 profiles      a recipes     b households   c cook_events
   --     1 recipe_ratings              d household_members
-  --     2 recipe_shares  e meals      f friendships
+  --     2 recipe_shares  e meals      f friendships (bevroren sinds 0021)
+  --     3 follows        4 blocks
   --
   -- DE VORM VAN HET NETWERK IS HET BELANGRIJKSTE AAN DIT BESTAND, want de
   -- vriendensuggesties (0019) rekenen op de TWEEDE stap in de grafiek en die
@@ -217,30 +218,66 @@ begin
     (daan_id,    'demo_daan',    'Daan (demo)',    null)
   on conflict (id) do update set display_name = excluded.display_name;
 
-  -- 2. De vriendschappen. Zie het diagram bij de id's hierboven; de rijen
-  --    vanaf f004 zijn wat de suggesties voeden en waren er tot vandaag niet,
-  --    wat de reden was dat "Misschien ken je" niets te tonen had.
+  -- 2. De graaf. Zie het diagram bij de id's hierboven; de rijen vanaf 3008
+  --    zijn wat de suggesties voeden.
   --
-  --    (!) DE RICHTING DOET ER NIET TOE voor een geaccepteerde vriendschap —
-  --    0007 slaat het paar op in gegenereerde `profile_low`/`profile_high`
-  --    kolommen, dus (a,b) en (b,a) zijn dezelfde rij en de unique constraint
-  --    weigert de tweede. Voor `pending` doet de richting er wel toe: de
-  --    requester heeft gevraagd, de addressee moet antwoorden. Fatima staat
-  --    daarom als requester, want anders wacht ZIJ op JOU en toont het scherm
-  --    niets.
-  insert into public.friendships (id, requester_id, addressee_id, status)
+  --    ⚠⚠ DIT BLOK IS OP 11 SEPTEMBER 2026 VAN `friendships` NAAR `follows`
+  --    VERHUISD, EN DAT WAS GEEN OPRUIMING MAAR EEN REPARATIE. PD-024 heeft
+  --    de graaf gericht gemaakt: sinds migratie 0021 is `follows` de waarheid
+  --    en is `friendships` een BEVROREN KOPIE die niets in het product nog
+  --    leest. Een seed die `friendships` vulde zou dus een tabel vullen die
+  --    niemand meer bekijkt, en élk sociaal scherm zou leeg blijven staan —
+  --    met de demo-data netjes in de database. Dat is het soort defect dat
+  --    eruitziet als een kapotte app.
+  --
+  --    ⚠ DEZE SEED VEREIST DAAROM MIGRATIE 0021. Op een database waar 0021
+  --    niet gedraaid is, bestaat `public.follows` niet en faalt dit blok
+  --    hardop. Dat is de bedoeling: hardop falen is beter dan een lege app.
+  --
+  --    (!) DE RICHTING DOET ER NU WÉL TOE, OOK BIJ EEN GEACCEPTEERD PAAR, en
+  --    dat is precies wat er veranderd is. ~~0007 slaat het paar op in
+  --    gegenereerde `profile_low`/`profile_high` kolommen, dus (a,b) en (b,a)
+  --    zijn dezelfde rij en de unique constraint weigert de tweede.~~ In
+  --    `follows` is een rij een GERICHTE kant, uniek op (follower, followee),
+  --    en vriendschap is afgeleid: `is_friend_of` eist een geaccepteerde rij
+  --    in BEIDE richtingen. Een wederzijds paar is hier dus TWEE rijen, en
+  --    wie er één vergeet zet een eenzijdige volgrelatie neer die nergens
+  --    als vriendschap telt.
+  --
+  --    (!) `responded_at` STAAT ER EXPLICIET OP BIJ ELKE GEACCEPTEERDE RIJ.
+  --    Dat is niet decoratief: `follow_survives_blocks` (0021) vergelijkt hem
+  --    met een block's `blocked_at`, en een geaccepteerde rij zonder
+  --    antwoorddatum overleeft geen enkel block — ook geen opgeheven block.
+  --    Een seed die hem leeg laat, zet een graaf neer die stilletjes niets
+  --    telt zodra er ooit een block bij komt.
+  --
+  --    Voor een OPEN verzoek doet de richting er nog steeds toe, om de oude
+  --    reden: Fatima heeft gevraagd en jij moet antwoorden. Stond het
+  --    andersom, dan wacht ZIJ op JOU en toont het scherm niets.
+  insert into public.follows (id, follower_id, followee_id, status, responded_at)
   values
-    ('5eed5eed-0000-4000-8000-00000000f001', owner_id,   sanne_id,   'accepted'),
-    ('5eed5eed-0000-4000-8000-00000000f002', bram_id,    owner_id,   'accepted'),
-    ('5eed5eed-0000-4000-8000-00000000f003', fatima_id,  owner_id,   'pending'),
-    -- De tweede stap: vrienden van jouw vrienden, die jou niet kennen.
-    ('5eed5eed-0000-4000-8000-00000000f004', sanne_id,   noor_id,    'accepted'),
-    ('5eed5eed-0000-4000-8000-00000000f005', bram_id,    noor_id,    'accepted'),
-    ('5eed5eed-0000-4000-8000-00000000f006', sanne_id,   youssef_id, 'accepted'),
-    -- De DERDE stap. Tessa kent alleen Noor, en Noor ken jij niet. Zij hoort
+    -- Jij en Sanne volgen elkaar: twee rijen, en samen zijn dat "vrienden".
+    ('5eed5eed-0000-4000-8000-000000003001', owner_id,   sanne_id,   'accepted', now()),
+    ('5eed5eed-0000-4000-8000-000000003002', sanne_id,   owner_id,   'accepted', now()),
+    -- Jij en Bram, idem.
+    ('5eed5eed-0000-4000-8000-000000003003', owner_id,   bram_id,    'accepted', now()),
+    ('5eed5eed-0000-4000-8000-000000003004', bram_id,    owner_id,   'accepted', now()),
+    -- Fatima wil jou volgen en wacht op antwoord. Eén rij, haar kant op,
+    -- zonder responded_at — dat is wat "wacht op je" betekent.
+    ('5eed5eed-0000-4000-8000-000000003005', fatima_id,  owner_id,   'pending',  null),
+    -- De tweede stap: mensen die de mensen die JIJ volgt op hun beurt volgen,
+    -- en die jou niet kennen. `suggested_friends()` telt deze, gericht.
+    ('5eed5eed-0000-4000-8000-000000003008', sanne_id,   noor_id,    'accepted', now()),
+    ('5eed5eed-0000-4000-8000-000000003009', noor_id,    sanne_id,   'accepted', now()),
+    ('5eed5eed-0000-4000-8000-00000000300a', bram_id,    noor_id,    'accepted', now()),
+    ('5eed5eed-0000-4000-8000-00000000300b', noor_id,    bram_id,    'accepted', now()),
+    ('5eed5eed-0000-4000-8000-00000000300c', sanne_id,   youssef_id, 'accepted', now()),
+    ('5eed5eed-0000-4000-8000-00000000300d', youssef_id, sanne_id,   'accepted', now()),
+    -- De DERDE stap. Tessa kent alleen Noor, en Noor volg jij niet. Zij hoort
     -- dus niet in je suggesties te staan; ze ligt hier om dat te kunnen zien.
-    ('5eed5eed-0000-4000-8000-00000000f007', noor_id,    tessa_id,   'accepted')
-  on conflict (id) do update set status = excluded.status;
+    ('5eed5eed-0000-4000-8000-00000000300e', noor_id,    tessa_id,   'accepted', now()),
+    ('5eed5eed-0000-4000-8000-00000000300f', tessa_id,   noor_id,    'accepted', now())
+  on conflict (id) do update set status = excluded.status, responded_at = excluded.responded_at;
 
   -- 3. Canonieke recepten. Hier rangschikt Ranglijst op, hiernaar wijst een
   --    bewijskaart, en hierop wordt gestemd: zonder recipe_id bestaat er geen
@@ -370,11 +407,34 @@ end $$;
 -- het de beveiliging is die werkt. Dat deel test je op een toestel.
 -- ---------------------------------------------------------------------------
 
-select 'vrienden (geaccepteerd)' as wat, count(*) as aantal
-  from public.friendships where id::text like '5eed5eed%' and status = 'accepted'
+-- ⚠ TELT `follows` EN NIET `friendships`, sinds PD-024 de graaf gericht
+-- maakte. "Vrienden" is nu AFGELEID — een geaccepteerde rij in beide
+-- richtingen — dus de eerste telling deelt door twee, en een oneven uitkomst
+-- betekent dat er ergens één kant van een paar ontbreekt.
+select 'vrienden (wederzijds)' as wat, count(*) / 2 as aantal
+  from public.follows f
+  where f.id::text like '5eed5eed%'
+    and f.status = 'accepted'
+    and exists (
+      select 1 from public.follows b
+      where b.follower_id = f.followee_id
+        and b.followee_id = f.follower_id
+        and b.status = 'accepted'
+    )
 union all
-select 'verzoeken (open)', count(*)
-  from public.friendships where id::text like '5eed5eed%' and status = 'pending'
+select 'eenzijdig gevolgd', count(*)
+  from public.follows f
+  where f.id::text like '5eed5eed%'
+    and f.status = 'accepted'
+    and not exists (
+      select 1 from public.follows b
+      where b.follower_id = f.followee_id
+        and b.followee_id = f.follower_id
+        and b.status = 'accepted'
+    )
+union all
+select 'volgverzoeken (open)', count(*)
+  from public.follows where id::text like '5eed5eed%' and status = 'pending'
 union all
 select 'recepten', count(*) from public.recipes where id::text like '5eed5eed%'
 union all

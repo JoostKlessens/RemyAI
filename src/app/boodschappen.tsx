@@ -93,6 +93,7 @@ import type { RawIngredientLine, ShoppingListItem, ShoppingListMealInput } from 
 import type { MealId, MealIngredient, Save } from '@/domain/types';
 import { Button } from '@/components/Button';
 import { ShoppingListRow } from '@/components/ShoppingListRow';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 import {
   describeShoppingListAllChecked,
   describeShoppingListMealCount,
@@ -162,6 +163,9 @@ export default function ShoppingListScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
+  // Read once here and passed down, per docs/DESIGN.md's global rule — a
+  // list of twenty rows must not register twenty AccessibilityInfo listeners.
+  const reduceMotionEnabled = useReduceMotion();
   const [phase, setPhase] = useState<ScreenPhase>('loading');
   const [items, setItems] = useState<readonly ShoppingListItem[]>([]);
   const [mealCount, setMealCount] = useState(0);
@@ -267,7 +271,12 @@ export default function ShoppingListScreen(): JSX.Element {
             data={items}
             keyExtractor={(item: ShoppingListItem) => item.name}
             renderItem={({ item }: { item: ShoppingListItem }) => (
-              <ShoppingListRow item={item} checked={checkedNames.has(item.name)} onToggle={() => handleToggle(item.name)} />
+              <ShoppingListRow
+                item={item}
+                checked={checkedNames.has(item.name)}
+                onToggle={() => handleToggle(item.name)}
+                reduceMotionEnabled={reduceMotionEnabled}
+              />
             )}
             contentContainerStyle={styles.listContent}
           />
@@ -400,7 +409,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space2,
+    paddingTop: spacing.screenHeaderTop,
     paddingBottom: spacing.space4,
     gap: spacing.space2,
   },

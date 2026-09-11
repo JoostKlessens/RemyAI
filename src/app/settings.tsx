@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
+    paddingTop: spacing.screenHeaderTop,
   },
   scrollContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,

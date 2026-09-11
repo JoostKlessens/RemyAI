@@ -598,6 +598,44 @@ one, renders under the eyebrow with the card's left-rule treatment. A
 proof card or kring row routes here too when it opens a canonical
 recipe, with the same anatomy minus note and minus sender eyebrow.
 
+> **AMENDED 10 September 2026 — THE ANATOMY IS ONE, THE SCREENS ARE TWO.**
+> "Routes here too" is now literally false and was always ambiguous, so it
+> is settled rather than left to be discovered: a proof card opens
+> **`/friends/recipe/[recipeId]`**, a second route beside this one.
+>
+> **Why not one screen.** The two read different rows under different
+> permissions — this one a friend's private `meals` row through
+> `has_active_send_to_me()`, the new one the world-readable `recipes` row
+> 0006 grants to every authenticated reader. §4.2's own rule is that the
+> difference between the two card kinds "is the privacy model made
+> visible"; a single screen branching on a route param would make that a
+> runtime decision in one file, which is exactly what the Vrienden tab
+> refused when it declined to pass one handler taking a union. The
+> alternative considered and rejected was a `?kind=proof` query parameter
+> on this route: it costs one file fewer and puts a permission boundary
+> behind a string a deep link can type.
+>
+> **What IS shared is this section, in full.** Both routes render one
+> `SharedRecipeArticle` over one view model (`sharedRecipePresentation.ts`)
+> and one `SharedRecipeSaveZone` outside the scroll, so PD-010.2's promise
+> that the original-post link stays under the last step is kept by
+> structure on both. "Minus note and minus sender eyebrow" survives as two
+> null fields on that model rather than as a mode.
+>
+> **What a canonical recipe additionally cannot say**, and the copy differs
+> for it: it carries no allergen tag of any kind (PD-006 — `recipes` has
+> none), so the standing caveat there reads "Dit recept is door niemand op
+> allergenen gecontroleerd. Dat doen jullie zelf bij het bewaren." rather
+> than this screen's "Allergietags komen van wie dit deelde". And it shows
+> no grade: the number on a proof card is the average of the friends named
+> on THAT card, and a recipe screen holding only a recipe id does not know
+> who they were — a second, differently-scoped average one tap away would
+> be worse than saying less.
+>
+> The **kring row** half of the original sentence is unchanged and now has
+> its destination too: it holds a canonical recipe id, so it routes to the
+> same new screen. Wiring it is not done and is not this change.
+
 ### 4.4 Vriend toevoegen — the handle exchange (new, deliberately small)
 
 The minimum viable friendship: you know someone's handle because they
@@ -1020,7 +1058,7 @@ asked. Recorded in PD-022.)**
 - **No padding the kring.** A thin friends list is never blended with
   global rows to look fuller — that would rebuild the refused Ontdekken
   surface out of spare parts. Thin is the honest state (§2.2).
-- **No follower model, no public profiles, ~~no vrienden-van-vrienden~~,
+- **~~No follower model~~, no public profiles, ~~no vrienden-van-vrienden~~,
   no contact-book upload.** The graph is built by handle exchange between
   people who already know each other; growth loops over Article-9-
   adjacent data are the kind this product does not want.
@@ -1060,6 +1098,51 @@ asked. Recorded in PD-022.)**
   > friendship per bit, and it is why the rows are capped and the read is
   > a function rather than a filterable relation. A real cost, taken
   > rather than argued away.
+  >
+  > **AMENDED 2026-09-10 — THE FOLLOWER MODEL IS NOW REVERSED TOO, at the
+  > owner's explicit request. This is the SECOND amendment to this one
+  > bullet, and the other two refusals in it still stand.** He asked for
+  > "dat je een persoon kan volgen en een melding krijgt als iemand dat
+  > wil, dan kan je het accepteren en als je wil terugvolgen". Recorded in
+  > PD-024; built as `follows` in fase 1 of `ONTDEK-PLAN.md`.
+  >
+  > **Read the strikethrough narrowly.** It crosses out FOUR WORDS. Public
+  > profiles and the contact-book upload are untouched and stay absolute,
+  > and saying so is not a formality: a follow model is exactly the feature
+  > that makes both of them sound reasonable next. There is still no
+  > profile to visit, and there is still nothing, anywhere, that reads a
+  > phone's address book.
+  >
+  > **What is given up, stated plainly rather than softened.** §9's growth
+  > path put asymmetric following in graph 2 and argued that the ORDER is
+  > the expensive part to get wrong. That argument is not refuted here; it
+  > is overruled, on request, with the cost in view. The graph stops being
+  > symmetric: `follows` is directed, two rows per pair, and `friendships`
+  > stops being the truth about who knows whom.
+  >
+  > **What keeps §5's consent intact, and it is the whole reason this
+  > amendment is survivable.** What was asked for is not PUBLIC following.
+  > Every follow is a REQUEST the other person accepts, so an accepted
+  > follower holds a permission granted person by person — a stronger gate
+  > than §5's one global switch, which grants to everybody at once. §5 was
+  > switched on meaning "to mutually accepted friends"; if an unaccepted
+  > follower could read that same cooking history, that consent would have
+  > been widened by a migration, and PD-022's surviving absolute is
+  > "nothing is shared by a migration, ever". So: **following without an
+  > acceptance step is refused here explicitly**, and the global switch of
+  > §5 stays the outer gate — switched off, an accepted follower sees
+  > nothing. Consent stacks; it never substitutes.
+  >
+  > **What the migration may not do.** No existing friendship may expose
+  > more after it than before it. One accepted friendship becomes two
+  > accepted follows, which expose exactly what the friendship exposed —
+  > not one row more.
+  >
+  > **The refusal that follows straight on, so it is not re-argued later.**
+  > A follow is a GATE on whose cooking you see, never a SCORE on a person.
+  > No follower counts, no "populairste koks", no profile page, no creator
+  > feed. That is the "no trophy shelf" bullet below, applied to the graph
+  > this amendment opens.
 - **No trophy shelf, no streaks, no most-cooked leaderboard of
   friends.** Proof decorates recipes; it never accumulates into scores
   for people. The kring ranks recipes by friends' votes, never friends
@@ -1074,3 +1157,114 @@ asked. Recorded in PD-022.)**
   not refused — recorded in §6 territory so it takes a decision, not
   drift, to appear. The first push this product sends should be its
   best one, and that argument deserves its own day.
+
+---
+
+## 9. The growth path: three graphs, and why jumping is the mistake
+
+**Absorbed on 10 September 2026 from `SESSIE-6-SEPTEMBER.md` §4, which was a
+disposable session document and has been deleted.** The owner asked on
+6 September *"how we can use strava as an example to set up the social media
+part and grow into tiktok/instagram afterwards."* This is the answer, kept
+because it is the only written argument for the ORDER of the social layer —
+and order is the part that is expensive to get wrong.
+
+### Why Strava is the right model, and it is not the feed
+
+**Content is a by-product of something you did anyway.** You run because you
+run; the activity records itself; posting is the default, not an act of
+composition. §0 above already says this without naming Strava. The cook
+checkbox (PD-022) is the last piece of it: it moves the question from *"do I
+post this?"* to *"do I hold this back?"*
+
+**The segment.** Strava's real invention was not "share your run" but *"this
+stretch of road is a shared object, and everyone who ever ran it is on one
+list."* You do not pick a segment; you run, and you are ranked.
+
+**Remy's segment is the recipe**, and the apparatus already exists:
+`recipes`, `recipe_ratings`, Ranglijst, de kring. What was missing was a
+writer — built on 6 September. Supply and ranking are two halves of one
+mechanism, not two features.
+
+**What is still missing to make a recipe a real segment:** your own history on
+it. Strava shows *"you ran this 14 times, your PR is 4:32."* Remy should show
+*"je maakte dit 6 keer, je gaf het gemiddeld een 8,2"* on the recipe screen.
+
+**Where Remy must go against Strava: kudos.** Kudos works there because a 10k
+is objectively expensive. A like on someone's dinner is cheap on both sides.
+§1 already refuses it, and the owner's own idea — *bewaren voor later* — is
+the honest reaction, because it costs the receiver something real. ⚠ **The
+gap that remains:** today the sender hears nothing when a friend saves, only
+when they cook (§3.4). The honest version is *"Sanne wil dit maken"* reaching
+the sender once, as a post, without a number — §3.4's own sentence stands:
+*"the moment a send earns a persistent number, people start cooking for the
+number."*
+
+### The three graphs
+
+Strava is **low effort, high trust, small graph**. TikTok is **high effort,
+low trust, no graph**. They are opposites, and the mistake is jumping.
+
+1. **The closed graph** (where Remy is). Mutual friends only, derived
+   content. The honest metric is not DAU but the **closed-loop rate**: what
+   share of sent recipes get cooked on the other side.
+2. **The open graph, still derived.** Asymmetric *following* on top of mutual
+   friendship, creators first (BIZ-04 is already building toward it). The unit
+   stays the recipe. What opens up is **lists you can get into**: "onder 20
+   minuten", "wat je in huis hebt", de kring. Discovery without a feed, ranked
+   on a natural key instead of an algorithm that guesses.
+3. **Composed content.** Only here does the photo count — and here Remy has an
+   advantage nobody else has: **the app is already at the stove.** Kookmodus
+   knows which step you are on, that the timer ran, that it went off. A photo
+   taken *in* kookmodus at the "Gemaakt!" moment hangs on a real cook session
+   against a canonical recipe. That is a **verified** food photo, which
+   Instagram structurally cannot offer, because it does not know whether you
+   cooked it or photographed a restaurant plate. It is the role GPS plays for
+   Strava.
+
+Since SRC-07 the pipeline runs both ways: a photo becomes a recipe, a recipe
+yields a photo, the same Gemini call reversed.
+
+~~⚠ **Do not build a feed.** Strava's feed is its weakest surface. Remy has the
+recipe as a natural key, and that is precisely what feeds are a surrogate for.~~
+
+> **AMENDED 2026-09-10 — A FEED IS BEING BUILT, at the owner's explicit
+> request. Recorded in PD-024.** He said it in one sentence: *"ik wil wel een
+> feed, dat is waar we naartoe willen."* The two surfaces are called Ontdek
+> together — a feed of the accounts you follow, and an explore holding the
+> global board and, later, search.
+>
+> **The argument above is not refuted. It is overruled, and it stays here
+> because it is still true.** Remy does have the recipe as a natural key, and
+> a feed is still a surrogate for exactly that. What changed is that the owner
+> wants the surface that SHOWS the key, and accepts that it will look like a
+> feed. That is a decision, not a discovery, and it is priced in PD-024 under
+> "what is spent" rather than argued away.
+>
+> **The same goes for this section's own thesis, that the ORDER of the three
+> graphs is the expensive part.** Graph 2 is not being skipped; it is being
+> pulled FORWARD, ahead of the feed that rests on it, because a feed of
+> "accounts you follow" cannot exist before following does. That is a jump,
+> and this section's warning about jumping is not withdrawn.
+>
+> **What softens the jump, and it is not nothing: every follow is accepted
+> before it grants anything.** Asymmetric following WITH a per-person approval
+> step is not the open graph — it is a directed graph with a gate per human
+> being, which sits closer to graph 1 than to graph 2, and it is what keeps
+> §5's consent argument standing. §8's amended bullet carries that reasoning
+> in full.
+>
+> **What this section recommended INSTEAD of a feed is not built and is not
+> replaced:** *"lijsten waar je in kunt komen"* — "onder 20 minuten", "wat je
+> in huis hebt". It does not arrive instead of the feed and it does not arrive
+> beside it. It is the cheapest omitted half of the growth path and it belongs
+> on the LONGLIST.
+>
+> **What still holds, unchanged, and is the reason this is not a generic
+> feed.** Content is still a by-product: every card comes from a cooking
+> event, a grade on one, or a directed send. Nobody composes anything for
+> Ontdek. The recipe is still the ranked unit — **a person is never ranked**.
+> And the honest metric is still the closed-loop rate rather than DAU, which
+> is why a save now carries an ORIGIN (PD-024): Ontdek is about to deliver
+> saves that did not come from a send, and without an origin the denominator
+> goes cloudy and cannot be cleared up afterwards.

@@ -199,8 +199,8 @@ describe('the waiting-requests line', () => {
   });
 
   test('counts in singular and plural', () => {
-    expect(formatPendingRequests(1)).toBe('1 vriendschapsverzoek wacht op je');
-    expect(formatPendingRequests(3)).toBe('3 vriendschapsverzoeken wachten op je');
+    expect(formatPendingRequests(1)).toBe('1 volgverzoek wacht op je');
+    expect(formatPendingRequests(3)).toBe('3 volgverzoeken wachten op je');
   });
 
   test('a nonsense count draws no line rather than a nonsense one', () => {

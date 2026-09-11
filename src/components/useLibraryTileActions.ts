@@ -53,6 +53,7 @@
 
 import { useCallback, useReducer, useRef, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { LIBRARY_SAVE_ORIGIN } from '@/domain/saveOrigin';
 import type { Meal, MealId } from '@/domain/types';
 import { getAppRepository } from '@/lib/repository';
 import {
@@ -293,8 +294,19 @@ export function useLibraryTileActions(options: LibraryTileActionsOptions): Libra
       if (removalMealRef.current !== meal.id) {
         return;
       }
-      onRemoved(meal.id);
+      // ⚠ `close()` COMES FIRST, AND THE ORDER IS THE POINT. These two lines
+      // used to run the other way round, and the effect was that the tile
+      // left the grid while the sheet was still drawn over it — the entire
+      // visible consequence of a confirmed removal happened behind the
+      // scrim. What the household saw was a sheet vanishing, which is
+      // exactly what they would have seen had they tapped the scrim by
+      // accident: confirming and mis-tapping looked identical.
+      //
+      // Closing first lets the sheet run its exit (see `useSheetTransition`)
+      // and hands the tile's disappearance back to a grid the household can
+      // actually see.
       close();
+      onRemoved(meal.id);
       AccessibilityInfo.announceForAccessibility(describeLibraryRemovedAnnouncement(meal.title));
     },
     [close, onRemoved],
@@ -336,6 +348,9 @@ export function useLibraryTileActions(options: LibraryTileActionsOptions): Libra
             memberId: null,
             mealId: meal.id,
             intent: 'this_week',
+            // The tile sheet's twin of the recipe screen's button — same
+            // act, same origin. See `LIBRARY_SAVE_ORIGIN`.
+            origin: LIBRARY_SAVE_ORIGIN,
             sourceUrl: null,
           });
         }

@@ -69,9 +69,10 @@
  */
 
 import { useEffect, useRef, useState, type JSX } from 'react';
-import { AccessibilityInfo, Animated, Easing, Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, Animated, Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SaveIntent } from '@/domain/types';
+import { useSheetTransition } from '@/hooks/useSheetTransition';
 import { hapticSmallCommit } from '@/lib/haptics';
 import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
@@ -102,29 +103,24 @@ export function SaveIntentSheet(props: SaveIntentSheetProps): JSX.Element {
   const colors = getColors(scheme);
   const insets = useSafeAreaInsets();
 
-  const translateY = useRef(new Animated.Value(400)).current;
-  const scrimOpacity = useRef(new Animated.Value(0)).current;
+  /** Entrance and exit, shared with the other three sheets — see `useSheetTransition`. */
+  const { mounted, translateY, scrimOpacity, onSheetLayout } = useSheetTransition(visible, reduceMotionEnabled);
+  /**
+   * ⚠ THE FLASH IS NOT PART OF THE SHARED TRANSITION AND MUST NOT BECOME
+   * PART OF IT. It is what distinguishes "a choice was made" from "this was
+   * dismissed": the exit itself is identical either way, deliberately, so a
+   * plain scrim tap never reads as a commitment. Colouring the exit would
+   * take that meaning away from the small mark that carries it correctly and
+   * spread it across the two largest surfaces on screen.
+   */
   const flash = useRef(new Animated.Value(0)).current;
   const [flashingValue, setFlashingValue] = useState<SaveIntent | null>(null);
 
   useEffect(() => {
     if (!visible) {
       setFlashingValue(null);
-      return;
     }
-    const duration = resolveDuration(motion.durationNormal, reduceMotionEnabled);
-    translateY.setValue(reduceMotionEnabled ? 0 : 400);
-    scrimOpacity.setValue(0);
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration,
-        easing: Easing.bezier(...motion.easingDecelerate),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scrimOpacity, { toValue: 1, duration, useNativeDriver: true }),
-    ]).start();
-  }, [visible, translateY, scrimOpacity, reduceMotionEnabled]);
+  }, [visible]);
 
   const handleSelect = (option: IntentOption): void => {
     const duration = resolveDuration(motion.durationFast, reduceMotionEnabled);
@@ -146,7 +142,7 @@ export function SaveIntentSheet(props: SaveIntentSheetProps): JSX.Element {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onDismiss}>
       <Animated.View style={[styles.scrim, { backgroundColor: colors.overlay, opacity: scrimOpacity }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -156,6 +152,7 @@ export function SaveIntentSheet(props: SaveIntentSheetProps): JSX.Element {
         />
       </Animated.View>
       <Animated.View
+        onLayout={onSheetLayout}
         style={[
           styles.sheet,
           { backgroundColor: colors.surfaceRaised, paddingBottom: spacing.space8 + insets.bottom, transform: [{ translateY }] },

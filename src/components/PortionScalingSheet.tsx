@@ -55,11 +55,12 @@
  * being repeated exactly as written.
  */
 
-import { useEffect, useRef, type JSX } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import type { JSX } from 'react';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ScaledIngredient, ScaleRecipeResult } from '@/domain/scaleRecipe';
-import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { useSheetTransition } from '@/hooks/useSheetTransition';
+import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 import { Button } from './Button';
 import {
   PORTION_NO_INGREDIENTS_BODY,
@@ -90,38 +91,17 @@ export interface PortionScalingSheetProps {
   readonly reduceMotionEnabled: boolean;
 }
 
-/** Matches SendRecipeSheet's, SaveIntentSheet's and LibraryTileActionSheet's off-screen start offset. */
-const SHEET_ENTRY_OFFSET = 400;
-
 export function PortionScalingSheet(props: PortionScalingSheetProps): JSX.Element {
   const { visible, result, recipeServings, householdSize, onDismiss, reduceMotionEnabled } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const insets = useSafeAreaInsets();
 
-  const translateY = useRef(new Animated.Value(SHEET_ENTRY_OFFSET)).current;
-  const scrimOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    const duration = resolveDuration(motion.durationNormal, reduceMotionEnabled);
-    translateY.setValue(reduceMotionEnabled ? 0 : SHEET_ENTRY_OFFSET);
-    scrimOpacity.setValue(0);
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration,
-        easing: Easing.bezier(...motion.easingDecelerate),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scrimOpacity, { toValue: 1, duration, useNativeDriver: true }),
-    ]).start();
-  }, [visible, translateY, scrimOpacity, reduceMotionEnabled]);
+  /** Entrance and exit, shared with the other three sheets — see `useSheetTransition`. */
+  const { mounted, translateY, scrimOpacity, onSheetLayout } = useSheetTransition(visible, reduceMotionEnabled);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onDismiss}>
       <Animated.View style={[styles.scrim, { backgroundColor: colors.overlay, opacity: scrimOpacity }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -131,6 +111,7 @@ export function PortionScalingSheet(props: PortionScalingSheetProps): JSX.Elemen
         />
       </Animated.View>
       <Animated.View
+        onLayout={onSheetLayout}
         style={[
           styles.sheet,
           {

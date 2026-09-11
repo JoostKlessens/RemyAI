@@ -365,6 +365,38 @@ verbiedt dat bij naam, en die regel is niet omgekeerd. Onbeantwoord.
 
 ---
 
+### K. Hoe diep mag de Trending-feed? (GAP-56, `LEADERBOARD_MIN_VOTES`)
+
+**Opgeworpen op 8 september 2026, en hier op 10 september neergezet omdat hij
+tot dan toe alleen in `RONDE-8-SEPTEMBER-TRENDING.md` stond — een rondedocument
+dat niemand leest als hij openstaand werk zoekt.** De ronde heeft de vraag
+expliciet aan de eigenaar teruggelegd en hem bewust niet zelf beantwoord.
+
+De eigenaar vroeg om Instagram-achtig doorscrollen op Trending: *"een soort
+scroll feature … dat je naar beneden kan scrollen en er een nieuw recept
+komt."* De vorm is gebouwd. Het probleem is de toevoer.
+
+**Gemeten op de demo-seed, niet geschat:** `LEADERBOARD_MIN_VOTES = 3`, en van
+de acht recepten halen er drie die vloer (Romige pasta 4, Kip uit de oven 3,
+Rode linzensoep 3). De `Iedereen`-feed is dus **drie kaarten lang**. Ter
+vergelijking, gemeten via PostgREST met een echte sessie: de `Vrienden`-scope
+heeft 8 naambare stemmen over **6 verschillende recepten**, want `rankKring`
+kent geen vloer — en dat verschil is opzet, niet slordigheid (PD: twee
+vrienden die een gerecht noemen is bewijs, twee vreemden niet).
+
+**Waarom dit een beslissing van de eigenaar is en niet van een agent.** De knop
+om de feed dieper te maken is de stemvloer verlagen, en die vloer bepaalt hóé
+waar de ranglijst is. `PRODUCT-DECISIONS.md` (`LEADERBOARD_MIN_VOTES` /
+`LEADERBOARD_PRIOR_VOTES`) legt vast dat die twee constanten één keer worden
+uitgesproken; ze verlagen verandert de rekenkunde van elke rang, niet alleen de
+lengte van één lijst. Drie kaarten doorscrollen is niet de ervaring die hij
+beschreef; een ranglijst waar één stem je bovenaan zet ook niet.
+
+⚠ **De vorm is gebouwd, de vloer staat nog op 3.** Dat is de bewuste
+tussenstand, geen vergeten werk. Onbeantwoord.
+
+---
+
 ## Beantwoord op 2 september, met bewijs
 
 Deze stonden lang open. Ze zijn nu dicht; hier staat waarom, zodat niemand ze

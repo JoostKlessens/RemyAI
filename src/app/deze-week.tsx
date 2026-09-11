@@ -94,8 +94,10 @@
 
 import { useCallback, useReducer, useState, type JSX } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { AccessibilityInfo, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AccessibilityInfo, Animated, FlatList, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useListItemExit } from '@/hooks/useListItemExit';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 import type { HouseholdId, Meal, MealId, SaveIntent } from '@/domain/types';
 import { buildWeekPlan, type WeekPlan, type WeekPlanEntry } from '@/domain/weekPlan';
 import { Button } from '@/components/Button';
@@ -189,6 +191,10 @@ export default function WeekPlanScreen(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
+  // Read once here and passed down, per docs/DESIGN.md's global rule.
+  const reduceMotionEnabled = useReduceMotion();
+  /** Per-dish exit values, keyed outside `renderItem` — see `useListItemExit`. */
+  const { valueFor, runExit } = useListItemExit(reduceMotionEnabled);
   const [phase, setPhase] = useState<ScreenPhase>('loading');
   const [plan, setPlan] = useState<WeekPlan>(EMPTY_PLAN);
   const [householdId, setHouseholdId] = useState<HouseholdId | null>(null);
@@ -279,12 +285,29 @@ export default function WeekPlanScreen(): JSX.Element {
         return;
       }
 
-      setPlan((current) => withoutDish(current, entry.meal.id));
+      // ⚠ THE ROW LEAVES BEFORE THE STATE DOES, AND THE EXIT IS DELIBERATELY
+      // LIGHT: `opacity` only, no scale and no sideways travel. Two reasons,
+      // and both are about telling the truth.
+      //
+      // (1) This row is mostly the dish's name, and docs/DESIGN.md forbids a
+      //     dish name scaling or sliding sideways — it may fade, nothing more.
+      // (2) Taking a dish off the week is REVERSIBLE. `removeSaves` drops the
+      //     save, but the dish stays in Mijn recepten and `createSave` is
+      //     reachable from both the library tile and the recipe screen, so it
+      //     can be put back in two taps. A heavy exit on a reversible act
+      //     overstates the consequence — the same lie as a light exit on
+      //     archiving, which is final and therefore gets weight.
+      //
+      // The success path also stays silent, per the comment above: nothing
+      // here gained a haptic.
+      runExit(entry.meal.id, () => {
+        setPlan((current) => withoutDish(current, entry.meal.id));
+      });
       setRemovalMealId(null);
       dispatchRemoval({ type: 'reset' });
       AccessibilityInfo.announceForAccessibility(describeWeekPlanRemovedAnnouncement(entry.meal.title));
     },
-    [householdId, removal.phase],
+    [householdId, removal.phase, runExit],
   );
 
   // Re-read on focus, like boodschappen.tsx: cooking a dish from this very
@@ -338,16 +361,22 @@ export default function WeekPlanScreen(): JSX.Element {
           // phase does, instead of on every render of the screen.
           extraData={`${removalMealId ?? ''}:${removal.phase}`}
           renderItem={({ item }: { item: WeekPlanEntry }) => (
-            <WeekPlanRow
-              entry={item}
-              onPress={() => router.push(`/cook/${item.meal.id}`)}
-              removal={item.meal.id === removalMealId ? removal : INITIAL_WEEK_PLAN_REMOVAL}
-              onRequestRemoval={() => handleRequestRemoval(item.meal.id)}
-              onCancelRemoval={handleCancelRemoval}
-              onConfirmRemoval={() => {
-                void commitRemoval(item);
-              }}
-            />
+            // Opacity only — the row is mostly the dish's name, which may
+            // fade and may never scale or slide. The value comes from the
+            // screen-level map, so scrolling a row out of the window and
+            // back never restarts or re-triggers an exit.
+            <Animated.View style={{ opacity: valueFor(item.meal.id) }}>
+              <WeekPlanRow
+                entry={item}
+                onPress={() => router.push(`/cook/${item.meal.id}`)}
+                removal={item.meal.id === removalMealId ? removal : INITIAL_WEEK_PLAN_REMOVAL}
+                onRequestRemoval={() => handleRequestRemoval(item.meal.id)}
+                onCancelRemoval={handleCancelRemoval}
+                onConfirmRemoval={() => {
+                  void commitRemoval(item);
+                }}
+              />
+            </Animated.View>
           )}
           ListFooterComponent={<PlanFooter onOpenShoppingList={() => router.replace('/boodschappen')} />}
           contentContainerStyle={styles.listContent}
@@ -501,7 +530,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space2,
+    paddingTop: spacing.screenHeaderTop,
     paddingBottom: spacing.space4,
     gap: spacing.space2,
   },

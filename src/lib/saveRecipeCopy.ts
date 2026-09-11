@@ -40,7 +40,7 @@
 import { buildMealCopy, findExistingRecipeCopy } from '@/domain/social/recipeCopy';
 import type { RecipeId } from '@/domain/social/types';
 import type { SchedulableSaveIntent } from '@/domain/saveIntent';
-import type { MealId } from '@/domain/types';
+import type { MealId, SaveOrigin } from '@/domain/types';
 import type { CreateMealInput, RemyRepository } from './repository';
 import type { RemySocialRepository } from './repository/social/types';
 
@@ -73,12 +73,21 @@ export type RecipeCopyOutcome =
  * graveyard cannot be written from here even if the sheet ever grows a
  * row for it. `memberId: null` is the same value the import confirmation
  * and the library sheet write — a save belongs to the household.
+ *
+ * THE ORIGIN IS A PARAMETER AND NOT A CONSTANT, and that is PD-024's
+ * requirement rather than flexibility for its own sake. This one function
+ * is the write behind every social `Bewaren` there will ever be, so
+ * hard-coding an origin here would make all four of them report the same
+ * provenance and the closed-loop rate over sends would silently include
+ * everything else. The screen knows which surface the reader came from;
+ * this does not, and must not guess.
  */
 export async function saveRecipeCopy(
   source: RecipeCopySource,
   sink: RecipeCopySink,
   recipeId: RecipeId,
   intent: SchedulableSaveIntent,
+  origin: SaveOrigin,
 ): Promise<RecipeCopyOutcome> {
   try {
     const recipe = await source.getCanonicalRecipe(recipeId);
@@ -94,7 +103,14 @@ export async function saveRecipeCopy(
     const copy: CreateMealInput = buildMealCopy(recipe, householdId);
     const meal = existing ?? (await sink.createMeal(copy));
 
-    await sink.createSave({ householdId, memberId: null, mealId: meal.id, intent, sourceUrl: recipe.sourceUrl });
+    await sink.createSave({
+      householdId,
+      memberId: null,
+      mealId: meal.id,
+      intent,
+      origin,
+      sourceUrl: recipe.sourceUrl,
+    });
     return { kind: 'saved', mealId: meal.id, title: meal.title, isNewCopy: existing === null };
   } catch {
     return { kind: 'failed' };

@@ -208,6 +208,7 @@ async function seedPreMirrorStore(
       memberId: ID.member,
       mealId: ID.mealPasta,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
       savedAt: CREATED_AT,
     },

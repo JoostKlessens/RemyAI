@@ -97,16 +97,47 @@ export const SUGGESTIONS_SEARCH_ACCESSIBILITY_LABEL =
  * second copy of that state machine here would be a second place for the
  * consent sheet to be forgotten — and it is the one place in this app where
  * forgetting it means a household starts sharing without being asked.
+ *
+ * ⚠ THE WORD CHANGED ON 10 SEPTEMBER 2026 AND THE OLD ONE WAS NOT MERELY
+ * DATED — IT BECAME FALSE. ~~"1 vriendschapsverzoek wacht op je"~~ described
+ * a symmetric graph: one row per unordered pair, and accepting it made you
+ * friends. PD-024 made the graph DIRECTED. What waits for an answer now is
+ * a `follows` row pointing at you, and accepting it does NOT make you
+ * friends — it lets that person see your cooking, and whether you follow
+ * back is a separate decision you may never take. A sentence that still
+ * said "vriendschapsverzoek" would promise a mutual relationship for a
+ * one-way grant, which is the single most consequential thing this copy
+ * could get wrong: the reader is being asked for consent and has to know
+ * what they are consenting to.
+ *
+ * "VOLGVERZOEK" AND NOT "VOLGER", deliberately. A follower is somebody who
+ * already got in; a request is somebody asking. The line names the question,
+ * because the whole point of it is that the question can be answered.
+ *
+ * ⚠ THIS LINE IS THE ONLY ANNOUNCEMENT EITHER NEW KIND OF POST GETS, and
+ * that is a constraint rather than a choice. Remote push does not exist —
+ * `push_tokens` has had a table, an index and three policies since 0001 and
+ * zero writers — so ONTDEK-PLAN.md O-11d settles for a line at the top of
+ * the screen for both the follow request and, later, the co-diner
+ * invitation. PD-024 records that this is the first time the absence of
+ * push genuinely limits a requested feature: the owner asked for *"een
+ * melding"*, and a line that appears only once you open the app is not one.
+ *
+ * WHEN THE CO-DINER LINK LANDS (fase 5) THIS COUNT GROWS RATHER THAN
+ * GAINING A NEIGHBOUR. O-1b is explicit about the shape: one line, one
+ * count over every kind of post, one destination — never three lines under
+ * each other and never a coloured badge. That is the grens PD-020.1 already
+ * drew, and it is easier to hold if the next person finds it written here.
  */
 export function formatPendingRequests(count: number): string | null {
   if (!Number.isFinite(count) || count < 1) {
     return null;
   }
   const whole = Math.floor(count);
-  return whole === 1 ? '1 vriendschapsverzoek wacht op je' : `${whole} vriendschapsverzoeken wachten op je`;
+  return whole === 1 ? '1 volgverzoek wacht op je' : `${whole} volgverzoeken wachten op je`;
 }
 
-export const PENDING_REQUESTS_ACCESSIBILITY_LABEL = 'Openstaande vriendschapsverzoeken bekijken';
+export const PENDING_REQUESTS_ACCESSIBILITY_LABEL = 'Openstaande volgverzoeken bekijken';
 
 /**
  * Why a suggested person is on screen, in one short line under their name.

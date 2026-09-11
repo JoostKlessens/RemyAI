@@ -588,6 +588,7 @@ describe('localRepository — saves (PD-004a)', () => {
       memberId: 'member-1',
       mealId: meal.id,
       intent: 'someday',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -603,6 +604,7 @@ describe('localRepository — saves (PD-004a)', () => {
       memberId: null,
       mealId: thisWeekMeal.id,
       intent: 'this_week',
+      origin: 'import',
       sourceUrl: null,
     });
     await repository.createSave({
@@ -610,6 +612,7 @@ describe('localRepository — saves (PD-004a)', () => {
       memberId: null,
       mealId: somedayMeal.id,
       intent: 'someday',
+      origin: 'import',
       sourceUrl: null,
     });
 
@@ -625,6 +628,7 @@ describe('localRepository — saves (PD-004a)', () => {
       memberId: null,
       mealId: meal.id,
       intent: 'someday',
+      origin: 'import',
       sourceUrl: null,
     });
     expect(await repository.listPendingSaves(HOUSEHOLD_ID, 'someday')).toHaveLength(1);

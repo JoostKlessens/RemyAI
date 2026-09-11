@@ -123,6 +123,21 @@
  * is worse than no action, and a prop nobody can fill in honestly is an
  * invitation to fill it in dishonestly.
  *
+ * ⚠ DESTINATION C WAS BUILT ON 10 SEPTEMBER 2026, AND THE PREMISE ABOVE IS
+ * NO LONGER TRUE. `/friends/recipe/[recipeId]` is "a real canonical recipe
+ * screen whose action is bewaren": a route, a full read
+ * (`getCanonicalRecipe`, which returns ingredients AND steps — the thing C
+ * said did not exist), and the `recipes` -> `meals` write that shipped with
+ * `Bewaren` on 9 September (`5767bda`). It was built for GAP-32's proof
+ * cards on the Vrienden tab, and THIS card is still not wired to it.
+ *
+ * The correction is recorded rather than the paragraph deleted, because
+ * what is left is a genuinely different question. C's blockers are gone;
+ * what remains is PD-014, which is about this tab and not about this
+ * component: the board is "identical for every reader" and a tap that leads
+ * to a household's own save is the first place that could stop being true.
+ * Whoever answers it has one line to write, not a package.
+ *
  * IT DOES NOT ANIMATE. `DecisionCard` fades and rises because it is one
  * verdict arriving; a feed where every card did that on scroll would be
  * motion for its own sake, and PD-020.1's entrance is reserved for a directed
@@ -201,6 +216,9 @@ export function TrendingCard(props: TrendingCardProps): JSX.Element {
   const { row } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
+  // No source URL passed, and deliberately: `BoardRecipe` does not carry one,
+  // and a leaderboard capped at 25 rows is populated by a ranking rather than
+  // by anything this household did. See useThumbnailFallback.ts.
   const photo = useThumbnailFallback(row.thumbnailUrl);
   // The same expression `RecipeTile`, `FriendProofCard`, `FriendRecipeCard`,
   // `KringRow` and `DecisionCard` use, character for character — a sixth
@@ -236,7 +254,7 @@ export function TrendingCard(props: TrendingCardProps): JSX.Element {
       <View style={[styles.photoFrame, { backgroundColor: colors.surfaceSunken }]}>
         {photo.showsImage ? (
           <Image
-            source={{ uri: row.thumbnailUrl ?? undefined }}
+            source={{ uri: photo.imageUrl ?? undefined }}
             style={styles.photo}
             resizeMode="cover"
             onError={photo.onError}

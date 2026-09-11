@@ -663,6 +663,31 @@ export interface SpacingTokens {
    * assert it. Kiezen still does not.
    */
   readonly thumbZoneMinHeight: number;
+  /**
+   * Vertical clearance between the safe-area inset and a screen's top
+   * control row — the back arrow, Annuleren, Sluiten, Stoppen.
+   *
+   * ⚠ THIS TOKEN EXISTS BECAUSE THE SAME BUG WAS REPORTED THREE TIMES AND
+   * FIXED ON ONE SCREEN. The owner, 8 September 2026: "dat pagina terug
+   * teken iets lager moet om te voorkomen dat je hier soms niet op kan
+   * klikken"; again after the first attempt failed; and again on
+   * 10 September for Annuleren and Stoppen on other screens.
+   *
+   * `friends/add.tsx` was moved to 24pt and its comment set the condition
+   * for the rest: "If §8c shows the sibling screens fail too, the fix
+   * belongs in all four and this divergence should close rather than
+   * spread by copying." It does, so it did, and this is the not-by-copying
+   * version — ten screens had written that clearance themselves and had
+   * given THREE different answers (8pt on eight of them, 16pt on two, and
+   * none at all on friends/add before the fix and on cook mode still).
+   *
+   * WHY 24 AND NOT 8. On a `fullScreenModal` the system gesture area and
+   * the Dynamic Island both sit above this row, and 8pt of clearance is
+   * thin regardless of which one is eating the tap. This is not a hitbox
+   * fix — `BackButton.tsx` measured those at a full 44pt and ruled them
+   * out — it is clearance.
+   */
+  readonly screenHeaderTop: number;
   /** Minimum touch target size (WCAG 2.5.5 / iOS HIG), in points. */
   readonly touchTargetMin: number;
 }
@@ -682,6 +707,7 @@ export const spacing = {
   space20: 80,
   space24: 96,
   screenPaddingHorizontal: 20,
+  screenHeaderTop: 24,
   thumbZoneMinHeight: 96,
   touchTargetMin: 44,
 } as const satisfies SpacingTokens;

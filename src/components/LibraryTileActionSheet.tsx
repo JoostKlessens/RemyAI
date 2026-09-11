@@ -79,16 +79,16 @@
  */
 
 import type { JSX } from 'react';
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSheetTransition } from '@/hooks/useSheetTransition';
 import { LIBRARY_TILE_SHEET_DISMISS_LABEL, LIBRARY_TILE_SHEET_TITLE } from './libraryTileActionCopy';
 import {
   buildLibraryTileActionRows,
   type LibraryTileActionRow,
   type LibraryTileActionRowInput,
 } from './libraryTileActionRows';
-import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
 
 /**
  * Re-exported so the sheet remains the single address for its own contract
@@ -109,9 +109,6 @@ export interface LibraryTileActionSheetProps extends LibraryTileActionRowInput {
   readonly reduceMotionEnabled: boolean;
 }
 
-/** Matches SaveIntentSheet's off-screen start offset. */
-const SHEET_ENTRY_OFFSET = 400;
-
 export function LibraryTileActionSheet(props: LibraryTileActionSheetProps): JSX.Element {
   const { visible, dishTitle, onDismiss, reduceMotionEnabled } = props;
   const scheme = useColorScheme();
@@ -119,29 +116,15 @@ export function LibraryTileActionSheet(props: LibraryTileActionSheetProps): JSX.
   const insets = useSafeAreaInsets();
   const rows = buildLibraryTileActionRows(props);
 
-  const translateY = useRef(new Animated.Value(SHEET_ENTRY_OFFSET)).current;
-  const scrimOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    const duration = resolveDuration(motion.durationNormal, reduceMotionEnabled);
-    translateY.setValue(reduceMotionEnabled ? 0 : SHEET_ENTRY_OFFSET);
-    scrimOpacity.setValue(0);
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration,
-        easing: Easing.bezier(...motion.easingDecelerate),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scrimOpacity, { toValue: 1, duration, useNativeDriver: true }),
-    ]).start();
-  }, [visible, translateY, scrimOpacity, reduceMotionEnabled]);
+  /**
+   * Entrance AND exit, shared with the other three sheets — see
+   * `useSheetTransition`'s header for why the travel distance is measured
+   * rather than the 400 that used to be hard-coded here.
+   */
+  const { mounted, translateY, scrimOpacity, onSheetLayout } = useSheetTransition(visible, reduceMotionEnabled);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onDismiss}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onDismiss}>
       <Animated.View style={[styles.scrim, { backgroundColor: colors.overlay, opacity: scrimOpacity }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -151,6 +134,7 @@ export function LibraryTileActionSheet(props: LibraryTileActionSheetProps): JSX.
         />
       </Animated.View>
       <Animated.View
+        onLayout={onSheetLayout}
         style={[
           styles.sheet,
           {

@@ -46,14 +46,32 @@ import {
   type SendFriendIdentity,
   type SendSheetState,
 } from '@/components/sendRecipeSheetCopy';
-import { collectAcceptedFriendIds } from '@/domain/social/friendship';
 import type { ProfileId } from '@/domain/social/types';
 import type { Meal, MealId } from '@/domain/types';
+import { loadMutualFollowIds } from './followGraphReads';
 import { createSupabaseSocialRepository } from './repository/social/supabaseSocialRepository';
 import { supabase } from './supabase';
 
 /**
  * The friends a dish could go to: every mutually accepted friend, named.
+ *
+ * ⚠ "MUTUALLY" SURVIVED PD-024 AS A DECISION RATHER THAN AS INERTIA, and
+ * the word means something different now than when it was written.
+ * ONTDEK-PLAN.md O-11b's table gives `sendRecipe` / `useLibrarySendSheet`
+ * the "wederzijds" reading, following `recipe_shares_insert`, with one line
+ * of justification: *"Een send is een bericht aan één persoon.
+ * Eenrichtingsverkeer maakt er ongevraagde post van, en §8's 'no chat'-muur
+ * wordt dan dun."* The feed on Vrienden went the OTHER way in the same
+ * migration — `gekooktSource.ts` reads "ik volg hen", because that is what
+ * following was built for — so the two surfaces now disagree on purpose,
+ * and this is the half that must not drift. A one-way follower appearing in
+ * this list is a stranger being handed a card in somebody's Vrienden tab.
+ *
+ * `loadMutualFollowIds` IS WHAT `is_friend_of` MEANS SINCE MIGRATION 0021:
+ * an accepted follow in BOTH directions, with no block between the two
+ * since either was accepted. So the client offers exactly the audience the
+ * server's insert policy would accept — which is agreement, not a second
+ * copy of the rule; see the next paragraph.
  *
  * NO PRE-FLIGHT PERMISSION CHECK HERE OR ANYWHERE BELOW IT. `recipe_shares`
  * carries a three-clause insert policy — the sender is you, the recipient is
@@ -69,10 +87,28 @@ import { supabase } from './supabase';
  * A friend whose profile row fails to load is dropped rather than listed
  * nameless — a blank name beside a `Stuur` action is a tap nobody should be
  * invited to take.
+ *
+ * ⚠ IT REJECTS RATHER THAN RETURNING AN EMPTY LIST, AND THAT IS WHY IT IS
+ * STILL NOT `loadSendAudience`. sendRecipe.ts predicted this function's
+ * deletion — *"when one hand owns both, that function is deleted and its
+ * screen calls `loadSendAudience`"* — and that prediction was written when
+ * this code lived in a route module. It lives in src/lib now, so the stated
+ * condition is met and the merge was reconsidered on its merits. It is
+ * refused, because the two do not fail the same way and must not.
+ * `loadSendAudience` SWALLOWS a failed read on purpose: it decorates the
+ * outcome card, where an absent button is indistinguishable from "you have
+ * no friends yet" and putting an error on a card somebody just graded would
+ * be answering a question nobody asked. Bibliotheek's long-press sheet is
+ * the opposite: it always offers the row, so a failed read must reach
+ * `load-failed` and the retry beside it. Collapsing the two would turn a
+ * broken read into the sentence "Nog geen vrienden om naar te sturen." —
+ * a lie, on the surface with the least excuse for one. What the two DO now
+ * share is the narrowing itself, which is the part that could actually
+ * drift: both go through `follow.ts`'s `collectMutualFollowIds`.
  */
 async function loadSendFriends(profileId: ProfileId): Promise<readonly SendFriendIdentity[]> {
   const repository = createSupabaseSocialRepository(supabase);
-  const friendIds = collectAcceptedFriendIds(await repository.listFriendships(profileId), profileId);
+  const friendIds = await loadMutualFollowIds(repository, profileId);
   if (friendIds.size === 0) {
     return [];
   }

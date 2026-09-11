@@ -48,6 +48,10 @@ export type ProfileId = string;
 
 export type FriendshipId = string;
 
+export type FollowId = string;
+
+export type BlockId = string;
+
 /**
  * A canonical recipe (supabase/migrations/0006_canonical_recipes.sql), NOT
  * a household's own `meals` row. Ratings key on this — see RecipeRating.
@@ -111,6 +115,93 @@ export interface Friendship {
   readonly createdAt: IsoDateTimeString;
   /** When the addressee answered. Null while the request is still open. */
   readonly respondedAt: IsoDateTimeString | null;
+}
+
+/**
+ * The lifecycle of one DIRECTED follow request (PD-024, migration 0021).
+ *
+ * THREE VALUES WHERE `FriendshipStatus` HAS FOUR, and the missing one is
+ * the whole reason `follows` is a new table rather than a column on
+ * `friendships`. There is no `blocked` here: a follow row is directed and
+ * belongs to the FOLLOWER, so the row that would carry a block is the row
+ * the blocked person may remove — which is the unenforceability 0007
+ * invented `friendships.blocked_by` to work around. A block is its own
+ * object, `Block` below.
+ *
+ * `pending` grants NOTHING. That is not an implementation detail but the
+ * consent argument the whole decision rests on: DESIGN-SOCIAL.md §5's
+ * switch was turned on meaning "to mutually accepted friends", and only an
+ * acceptance per person keeps that true under an asymmetric graph.
+ */
+export type FollowStatus = 'pending' | 'accepted' | 'declined';
+
+/** Which side of a directed follow row a profile sits on. */
+export type FollowRole = 'follower' | 'followee';
+
+/**
+ * What someone can do to a follow. Unfollowing, withdrawing your own
+ * request and removing a follower are all a DELETE and not an action here
+ * — see follow.ts. `block` is absent for the same reason `blocked` is
+ * absent from `FollowStatus`: it is a different object.
+ */
+export type FollowAction = 'request' | 'accept' | 'decline';
+
+/**
+ * One row per ORDERED pair of profiles. A→B and B→A are two rows and mean
+ * two different things, which is exactly what `friendships` could not
+ * express — that table is unique on the UNORDERED pair, and following back
+ * needs a second row for the same two people.
+ *
+ * Friendship is now DERIVED from this: two accepted rows, one each way,
+ * with no block between them since. `is_friend_of` in the database and
+ * `areMutualFollows` in follow.ts compute the identical thing, and both
+ * are what the old `Friendship` meant all along.
+ */
+export interface Follow {
+  readonly id: FollowId;
+  /** Who asked to see whose cooking. Immutable — 0021's trigger refuses any change to either side, and unlike a friendship there is no legitimate swap, because the row IS the direction. */
+  readonly followerId: ProfileId;
+  readonly followeeId: ProfileId;
+  readonly status: FollowStatus;
+  readonly createdAt: IsoDateTimeString;
+  /**
+   * When the followee answered, and therefore WHEN CONSENT WAS GIVEN. Null
+   * while the request is open, and reset to null by a re-request.
+   *
+   * ⚠ IT IS COMPARED AGAINST A BLOCK'S `blockedAt` and is not decorative.
+   * An acceptance that predates the most recent block between the two
+   * never counts again, which is what stops lifting a block from silently
+   * restoring a consent nobody re-granted. `createdAt` would be the wrong
+   * timestamp for that: a request sent before a block and accepted after
+   * it is a fresh answer to an old question, and it counts.
+   */
+  readonly respondedAt: IsoDateTimeString | null;
+}
+
+/**
+ * One person's refusal of another, owned by the person who made it
+ * (PD-024, migration 0021).
+ *
+ * ONE ROW PER ORDERED PAIR, the opposite of `Friendship`'s unordered one.
+ * A block is inherently one-directional — "I do not want this person near
+ * me" is a statement one person makes — and both people blocking each
+ * other is two statements that must be liftable separately.
+ *
+ * NO STATUS. A block stands or it has been lifted, and `liftedAt` says
+ * which. It is never removed, and that is the mechanism rather than
+ * bookkeeping: `blockedAt` has to survive a lift, or an accepted follow
+ * from before the block would spring back the moment it was lifted.
+ * `recipe_shares.withdrawnAt` keeps a withdrawn send for the neighbouring
+ * reason — "so withdrawal stays auditable".
+ */
+export interface Block {
+  readonly id: BlockId;
+  readonly blockerId: ProfileId;
+  readonly blockedId: ProfileId;
+  /** When the CURRENT block was put in place. Moves forward on a re-block; never backwards. */
+  readonly blockedAt: IsoDateTimeString;
+  /** Null while the block stands. Set on "deblokkeren", which restores the ability to ASK and never the answer already given. */
+  readonly liftedAt: IsoDateTimeString | null;
 }
 
 /**

@@ -301,7 +301,7 @@ describe('buildFriendRecipeCardModels', () => {
     expect(model?.estimatedMinutes).toBe(35);
     expect(model?.friendName).toBe('Sanne');
     expect(model?.rating).toBe(5);
-    expect(model?.creator.handle).toBe('chefremy');
+    expect(model?.attribution?.handle).toBe('chefremy');
     expect(model?.sourceUrl).toBe('https://www.tiktok.com/@chefremy/video/123');
   });
 

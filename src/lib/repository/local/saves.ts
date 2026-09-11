@@ -120,6 +120,10 @@ export async function createSave(tables: RepositoryTables, input: CreateSaveInpu
     memberId: input.memberId,
     mealId: input.mealId,
     intent: input.intent,
+    // PD-024. Required on the input and therefore never absent on a row
+    // this function writes; a `null` in the store is a row from before the
+    // field existed, and `readSaveOrigin` is where that is absorbed.
+    origin: input.origin,
     sourceUrl: input.sourceUrl,
     savedAt: nowIso(),
   };

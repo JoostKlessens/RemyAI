@@ -208,6 +208,13 @@ export default function RootLayout(): JSX.Element | null {
             three. */}
         <Stack.Screen name="friends/add" />
         <Stack.Screen name="friends/[feedItemId]" />
+        {/* The canonical recipe behind a PROOF card, added 10 September 2026.
+            An ordinary push beside its sibling above, not a modal, and for the
+            same reason: it holds no unsaved work, and the back swipe is the
+            gesture somebody arriving from a feed will reach for first. The two
+            are separate routes because they read different rows under different
+            permissions — see either file's header. */}
+        <Stack.Screen name="friends/recipe/[recipeId]" />
         {/* RCP-03. Full-screen over the tabs, the same treatment
             import/confirm gets below and for the same reason: it is one
             focused editing task you go into and come back from, and the

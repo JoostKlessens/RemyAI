@@ -854,7 +854,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space4,
+    paddingTop: spacing.screenHeaderTop,
     paddingBottom: spacing.space4,
   },
   controlRow: {

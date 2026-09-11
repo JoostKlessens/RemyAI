@@ -65,6 +65,16 @@
  * contract would be this file telling the next reader that a question has
  * been settled when it has been reopened.
  *
+ * ⚠ AND THE PREMISE STOPPED BEING TRUE ON 10 SEPTEMBER 2026. The screen
+ * exists: `/friends/recipe/[recipeId]` reads a canonical recipe in full
+ * through `getCanonicalRecipe` and carries `Bewaren`. It was built for
+ * GAP-32's proof cards, not for this row, and this row is not wired to it —
+ * so the sentence above is corrected rather than deleted, because the debt
+ * it names is now a WIRING debt of one line instead of a package. What still
+ * has to be decided before that line is written is not technical: a kring
+ * row sits on Trending, and PD-014's conditions about what a board may do
+ * are that tab's question, not this component's.
+ *
  * WHAT IS ACTUALLY IN THE WAY, measured on 8 September 2026 rather than
  * assumed. The honest destination is a canonical recipe screen whose action
  * is "bewaren", and it is a package rather than a prop: no route shows a
@@ -114,6 +124,9 @@ export function KringRow(props: KringRowProps): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
   const monogram = row.title.trim().charAt(0).toUpperCase() || '?';
+  // No source URL passed, and deliberately: `KringRecipe` does not carry
+  // one, and a ranked board of up to 25 rows is the surface where refreshing
+  // would look least like "tonen". See useThumbnailFallback.ts.
   const thumbnail = useThumbnailFallback(row.thumbnailUrl);
 
   return (
@@ -126,7 +139,7 @@ export function KringRow(props: KringRowProps): JSX.Element {
       <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
         {thumbnail.showsImage ? (
           <Image
-            source={{ uri: row.thumbnailUrl ?? undefined }}
+            source={{ uri: thumbnail.imageUrl ?? undefined }}
             style={styles.thumbnail}
             resizeMode="cover"
             onError={thumbnail.onError}

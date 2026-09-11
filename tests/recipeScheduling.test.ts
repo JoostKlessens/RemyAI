@@ -22,7 +22,16 @@ function buildMeal(id: string, title: string): Meal {
 }
 
 function buildSave(mealId: string, intent: Save['intent'], savedAt: string): Save {
-  return { id: `save-${mealId}-${savedAt}`, householdId: 'household-1', memberId: null, mealId, intent, sourceUrl: null, savedAt };
+  return {
+    id: `save-${mealId}-${savedAt}`,
+    householdId: 'household-1',
+    memberId: null,
+    mealId,
+    intent,
+    origin: 'import',
+    sourceUrl: null,
+    savedAt,
+  };
 }
 
 function buildCookEvent(mealId: string, cookedOn: string): CookEvent {

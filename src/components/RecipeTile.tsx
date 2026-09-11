@@ -71,6 +71,18 @@
  * letter in mono — the same monogram idea `CreatorAttribution`'s avatar
  * chip uses, never a broken image or a stock placeholder.
  *
+ * THE COMMONEST WAY TO LOSE THE PICTURE IS NOT IN THAT LIST, AND IT IS THE
+ * ONE THE OWNER ACTUALLY HIT — a grey square with a letter C where his own
+ * "creamy cajun chicken pasta" should have been. A TikTok still is a
+ * pre-signed URL that stops answering after a few days, so a tile that
+ * looked right last week is a monogram this week, and nothing about the
+ * import went wrong. `useThumbnailFallback` now asks oEmbed once for a
+ * fresh address before settling for the letter, which is why this tile
+ * hands it `meal.sourceUrl` and renders `thumbnail.imageUrl` rather than
+ * `meal.thumbnailUrl`. That hook's header carries the whole argument —
+ * including why re-fetching is not the caching `research/13-legal-tos.md`
+ * forbids, and why three of the seven call sites deliberately ask nothing.
+ *
  * Known simplification: `Meal` (src/domain/types.ts) has no persisted
  * creator-handle field — oEmbed's `authorName` is only ever used
  * transiently, to credit the creator on the import confirmation screen
@@ -169,7 +181,11 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
   // The whole row, not just its state: the grade lives on it too.
   const badgeContent = describeLibraryTileBadge(scheduling);
   const monogram = meal.title.trim().charAt(0).toUpperCase() || '?';
-  const thumbnail = useThumbnailFallback(meal.thumbnailUrl);
+  // `meal.sourceUrl` is what makes an expired address recoverable — see
+  // useThumbnailFallback.ts on why it is passed here and withheld on two of
+  // the four call sites. Null (manual entry, pasted text, a photographed
+  // page) is ordinary and simply means no refresh is possible.
+  const thumbnail = useThumbnailFallback(meal.thumbnailUrl, meal.sourceUrl);
   const hasActions = onLongPress !== undefined;
 
   return (
@@ -199,7 +215,7 @@ export function RecipeTile(props: RecipeTileProps): JSX.Element {
       <View style={[styles.frame, { backgroundColor: colors.surfaceSunken }]}>
         {thumbnail.showsImage ? (
           <Image
-            source={{ uri: meal.thumbnailUrl ?? undefined }}
+            source={{ uri: thumbnail.imageUrl ?? undefined }}
             style={styles.thumbnail}
             resizeMode="cover"
             onError={thumbnail.onError}

@@ -176,6 +176,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { readMealDishMoods } from '@/domain/dishMoods';
+import { LIBRARY_SAVE_ORIGIN } from '@/domain/saveOrigin';
 import type { HouseholdId, Meal, MealIngredient, MealStep } from '@/domain/types';
 import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/Button';
@@ -368,6 +369,11 @@ export default function RecipeOverviewScreen(): JSX.Element {
           memberId: null,
           mealId: recipe.meal.id,
           intent: 'this_week',
+          // Scheduling a dish this household already holds. PD-024's
+          // `saveOrigin.ts` explains why that gets its own value rather
+          // than being counted as a discovery: it inflates no conversion
+          // denominator only because it is nameable.
+          origin: LIBRARY_SAVE_ORIGIN,
           sourceUrl: null,
         });
       }
@@ -636,7 +642,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
+    paddingTop: spacing.screenHeaderTop,
   },
   centered: {
     flex: 1,

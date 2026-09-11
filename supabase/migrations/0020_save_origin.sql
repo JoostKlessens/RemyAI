@@ -1,0 +1,102 @@
+-- Remy — where a save came from (additive only; touches no existing column,
+-- no existing policy, and no existing row)
+--
+-- PD-024, and the one item in docs/ONTDEK-PLAN.md's whole sequence that
+-- gets MORE EXPENSIVE BY WAITING. It lands in fase 0 with the paperwork
+-- rather than in fase 3 beside the search box it measures, and the reason
+-- is a baseline that expires.
+--
+-- ===========================================================================
+-- WHAT BREAKS IF THIS ARRIVES LATER
+-- ===========================================================================
+--
+-- docs/DESIGN-SOCIAL.md §9 fixes the honest metric for the whole social
+-- layer: "de eerlijke metriek is niet DAU maar de closed-loop rate" — what
+-- share of SENT recipes get cooked on the other side. Ontdek is about to
+-- start delivering saves that came from a search box and from the global
+-- board, and neither of those came from a send. A single undifferentiated
+-- save count then answers a different question than it used to, silently,
+-- and nobody can say when it changed.
+--
+-- The part that makes this urgent rather than merely correct: a row cannot
+-- be asked afterwards where it came from. This table carries household_id,
+-- meal_id, intent, source_url and saved_at, and none of those five
+-- separates "a friend sent me this" from "I found this myself" — the
+-- source_url is IDENTICAL in both cases, because it is the same recipe.
+-- PD-023 wrote the same sentence about cook_events.rating one decision
+-- earlier: "that baseline exists only until the change lands, which is the
+-- one time-sensitive thing in this entry".
+--
+-- ===========================================================================
+-- `text null`, NOT `not null default`, AND THAT IS THE DECISION
+-- ===========================================================================
+--
+-- 0017 gave `meals.dish_course` a `not null default 'hoofdgerecht'` and
+-- argued the default was not a placeholder — it WAS the answer, for the
+-- past as much as for the future, because a dish nobody classified genuinely
+-- is a main course. There is no equivalent honest answer here. A save
+-- written last month came from somewhere real and nobody recorded which, so
+-- every candidate default is a guess, and a guess written into the exact
+-- column a measurement reads is worse than a gap, because a gap is visible.
+--
+-- So null here means one specific thing and it is not "unknown in general":
+-- **from before the question was asked**. That is precisely the baseline
+-- the closed-loop rate has to be read against, which is why the absence of
+-- an `update` statement below is load-bearing rather than an omission.
+-- This is the same shape PD-024 gives `dish_cuisine` and the opposite of
+-- `dish_course`'s, and the difference between the two is the whole reason
+-- both are written down.
+--
+-- REJECTED: backfilling existing rows to 'import'. It is the likeliest
+-- true answer for most of them and it destroys the thing this column was
+-- added to protect. `0015_cook_sharing_on_by_default.sql` refused the
+-- structurally identical move for a consent column; the argument there was
+-- that a household that never answered is exactly the household with no
+-- evidence of what it wanted. The argument here is the measurement twin of
+-- it: a row nobody recorded an origin for is exactly the row with no
+-- evidence of its origin.
+--
+-- REJECTED: a seventh member, 'onbekend'. 0017's own rejection of a third
+-- state applies unchanged — it invents a state the product does not have
+-- and forces every reader to decide what it means, with two of them
+-- deciding differently. An absent origin is absent.
+--
+-- ===========================================================================
+-- WHAT THIS MIGRATION CHANGES TODAY: NOTHING, AND THAT IS DELIBERATE
+-- ===========================================================================
+--
+-- `saves` IS LOCAL-ONLY AND HAS NEVER HELD A ROW OF ANYBODY'S HOUSEHOLD.
+-- src/lib/repository/localRepository.ts states it in its own header: saves,
+-- decisions, members and restrictions stay local, "nothing outside a
+-- household reads them", and `createSave` "sends none" — which is also why
+-- `removeSaves` mirrors nothing, since "a delete can only mirror a row an
+-- insert once sent". mirror/types.ts calls its target list "deliberately
+-- short" and defends every entry by naming the remote reader that wants it;
+-- `saves` has no remote reader.
+--
+-- So this statement runs against zero production rows, and the field that
+-- actually takes effect today is the TypeScript one: `Save.origin` and the
+-- required `CreateSaveInput.origin`, written into the local store by
+-- src/lib/repository/local/saves.ts. This migration exists so that the day
+-- `saves` does acquire a remote reader, the column is already there and
+-- already carries this argument — rather than the mirror landing first and
+-- the origin being added to a table that has by then filled up with rows
+-- whose provenance is gone. Adding it now costs one catalog entry; adding
+-- it after the mirror costs the baseline all over again.
+--
+-- No table rewrite either way: a nullable `add column` writes no row.
+-- ---------------------------------------------------------------------------
+
+alter table saves
+  add column origin text
+    check (origin is null or origin in ('import', 'bibliotheek', 'send', 'proof', 'kring', 'zoek'));
+
+comment on column saves.origin is
+  'PD-024: which surface produced this save. import = a pasted link; bibliotheek = the household scheduling a dish it already holds; send, proof, kring, zoek = the four Ontdek surfaces. NULL means the row was written before this column existed and is NEVER backfilled — that null is the baseline DESIGN-SOCIAL.md §9''s closed-loop rate is read against. The vocabulary is mirrored in src/domain/saveOrigin.ts, which owns isSocialSaveOrigin() — the predicate that says which of the six count as a dish arriving from outside the household. Orthogonal to saves.intent, which says WHEN rather than FROM WHERE.';
+
+-- "Where did this household's saves come from" — partial, because the rows
+-- from before this column are the baseline and are read as a group rather
+-- than scanned alongside the rest. Same shape as
+-- idx_saves_household_pending_this_week above it in 0001.
+create index idx_saves_household_origin on saves (household_id, origin)
+  where origin is not null;

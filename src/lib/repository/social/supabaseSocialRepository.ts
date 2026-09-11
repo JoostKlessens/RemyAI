@@ -102,6 +102,11 @@ import {
   type SuggestedFriendRow as SuggestedFriendRpcRow,
 } from './supabaseRowMapping';
 import type { SuggestedFriendRow as DomainSuggestedFriendRow } from '@/domain/social/friendSuggestions';
+// PD-024's directed graph over Postgres. Split out for the reason the
+// row-mapping module above was: this file was 747 lines and `follows` plus
+// `blocks` is two hundred more. See that file's header on why the seam sits
+// exactly there, and on why both backends split in the same place.
+import { createSupabaseFollowGraph } from './supabaseFollowGraph';
 
 /** How many rows one PostgREST page asks for. Supabase caps a single response well below the ceiling, so a whole-table read has to page. */
 const PAGE_SIZE = 1000;
@@ -164,6 +169,15 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
   }
 
   return {
+    // PD-024's directed graph, spread in from ./supabaseFollowGraph — seven
+    // methods that are one subject with one set of rules, and the file this
+    // one would otherwise be. `RemyFollowGraphRepository` names the same
+    // split on the type side, so callers still see one object and one
+    // implementation per backend. `localSocialRepository` spreads its own
+    // half in at the identical point, which is what lets the two backends
+    // be read against each other.
+    ...createSupabaseFollowGraph(client),
+
     async getProfile(profileId: ProfileId): Promise<Profile | null> {
       const { data, error } = await client.from('profiles').select('*').eq('id', profileId).maybeSingle();
       if (error) {

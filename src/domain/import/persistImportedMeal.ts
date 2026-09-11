@@ -23,6 +23,7 @@
 import { findDuplicateImport } from './duplicateImport.ts';
 import { buildMealInput, type ImportMealContext } from './importMealInput.ts';
 import type { ParsedRecipe } from './types';
+import { IMPORT_SAVE_ORIGIN } from '../saveOrigin.ts';
 import type { AllergenTagStatus, SaveIntent } from '../types';
 import type { RemyRepository } from '../../lib/repository/types';
 
@@ -91,6 +92,7 @@ export async function persistImportedMeal(
     memberId: null,
     mealId: meal.id,
     intent,
+    origin: IMPORT_SAVE_ORIGIN,
     sourceUrl: context.sourceUrl,
   });
   return { kind: 'saved' };

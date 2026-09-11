@@ -113,7 +113,7 @@ import {
   type BoardRecipe,
   type BoardRowModel,
 } from '@/components/leaderboardPresentation';
-import { collectAcceptedFriendIds } from '@/domain/social/friendship';
+import { collectFollowedIds } from '@/domain/social/follow';
 import { buildLeaderboard } from '@/domain/social/leaderboard';
 import type { ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
@@ -206,7 +206,7 @@ function toKringRecipe(recipe: CanonicalRecipeSummary): KringRecipe {
  * A null id is NOT a signed-out branch — PD-012 means the root layout
  * answers that before this tab ever renders. It only means the identity has
  * not resolved yet, and reading without one would ask the database a
- * question with no `auth.uid()` behind it. No accepted friends short-
+ * question with no `auth.uid()` behind it. Following nobody short-
  * circuits for the ordinary reason: there is nothing to narrow to.
  *
  * IT READS ITS OWN VOTES, AND NOT THE BOARD'S. This used to be handed
@@ -228,12 +228,35 @@ async function readFriendVotes(profileId: ProfileId | null): Promise<FriendVotes
   }
 
   const repository = createSupabaseSocialRepository(supabase);
-  const friendIds = collectAcceptedFriendIds(await repository.listFriendships(profileId), profileId);
+  // ⚠ THE KRING IS NARROWED HERE AND NOWHERE ELSE, WHICH IS WHY THIS LINE
+  // HAD TO MOVE BY HAND FOR PD-024. `namable_recipe_votes` (0016) is NOT
+  // friend-gated — its own header says the friend narrowing is "the
+  // caller's job and happens in the query that reads friendships", and
+  // this is that query. So rewriting `is_friend_of` in migration 0021
+  // carried the proof projection and the send policies along and carried
+  // the kring NOWHERE. A reader who assumed otherwise would have shipped a
+  // surface still answering from the frozen `friendships` table.
+  //
+  // AND IT BECOMES "IK VOLG HEN", not "wederzijds" — ONTDEK-PLAN.md
+  // O-11b's table. The kring follows the feed: it is evidence from the
+  // people whose cooking you chose to see, and asymmetry belongs here or
+  // nowhere. Sends go the other way and stay mutual, because a send is a
+  // message to one person and one-way would make it unsolicited post.
+  //
+  // `listBlocks` rides along because `collectFollowedIds` needs it: an
+  // accepted follow from before a block never counts again, standing or
+  // lifted, and leaving that to the caller is how one of six call sites
+  // forgets.
+  const [follows, blocks] = await Promise.all([
+    repository.listFollows(profileId),
+    repository.listBlocks(profileId),
+  ]);
+  const friendIds = collectFollowedIds(follows, blocks, profileId);
   if (friendIds.size === 0) {
     return NO_FRIEND_VOTES;
   }
-  // After the friend check, not before: no accepted friends means no kring
-  // at all, and this is a whole-relation read worth not making.
+  // After the follow check, not before: following nobody means no kring at
+  // all, and this is a whole-relation read worth not making.
   const namableVotes = await repository.listNamableRecipeVotes();
 
   const friendProfiles = await Promise.all([...friendIds].map((friendId) => repository.getProfile(friendId)));

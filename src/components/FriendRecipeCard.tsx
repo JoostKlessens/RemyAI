@@ -57,10 +57,9 @@
 import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
-import { getPlatformDisplayName } from './creatorPresentation';
 import { useThumbnailFallback } from './useThumbnailFallback';
+import { buildAllergenCollisionLabel, buildCardCreditLine } from './friendCardVocabulary';
 import {
-  buildAllergenCollisionLabel,
   buildFriendRecipeCardAccessibilityLabel,
   buildFriendRecipeMetaLine,
   type FriendRecipeCardModel,
@@ -110,8 +109,14 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
 
   const metaLine = buildFriendRecipeMetaLine(model.estimatedMinutes, model.rating);
   const collisionLabel = buildAllergenCollisionLabel(model.collidingTags);
+  // PD-010.1's credit, decided in a pure module so a test can read it —
+  // null when a friend's hand-entered dish has nobody to credit.
+  const creditLine = buildCardCreditLine(model.attribution);
   const monogram = model.title.trim().charAt(0).toUpperCase() || '?';
-  const thumbnail = useThumbnailFallback(model.thumbnailUrl);
+  // The post a friend actually sent, so an expired still can be re-signed
+  // once — see useThumbnailFallback.ts for why this surface qualifies and
+  // the two board-shaped ones do not.
+  const thumbnail = useThumbnailFallback(model.thumbnailUrl, model.sourceUrl);
 
   useEffect(() => {
     if (entranceDelayMs === null) {
@@ -166,7 +171,7 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
         <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
           {thumbnail.showsImage ? (
             <Image
-              source={{ uri: model.thumbnailUrl ?? undefined }}
+              source={{ uri: thumbnail.imageUrl ?? undefined }}
               style={styles.thumbnail}
               resizeMode="cover"
               onError={thumbnail.onError}
@@ -224,9 +229,9 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
               and a nested link inside it would hand a screen reader two
               destinations for one visual object. The creator's profile is
               reachable one screen in, where it can be its own control. */}
-          <Text style={[typeScale.caption, styles.creator, { color: colors.textMuted }]}>
-            {`@${model.creator.handle} · ${getPlatformDisplayName(model.creator.platform)}`}
-          </Text>
+          {creditLine !== null ? (
+            <Text style={[typeScale.caption, styles.creator, { color: colors.textMuted }]}>{creditLine}</Text>
+          ) : null}
 
           {collisionLabel !== null ? (
             <View style={[styles.collisionChip, { backgroundColor: colors.warningMuted }]}>

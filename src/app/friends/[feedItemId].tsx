@@ -1,5 +1,21 @@
 /**
- * The full recipe behind a friend's card (docs/DESIGN.md §8, PD-010).
+ * The full recipe behind a friend's SEND (docs/DESIGN.md §8, PD-010) —
+ * the sender's own `meals` row, readable only while
+ * `has_active_send_to_me()` says so.
+ *
+ * THERE IS A SECOND SHARED RECIPE SCREEN NOW, AND THE SPLIT IS THE
+ * PRIVACY MODEL. `/friends/recipe/[recipeId]` opens the CANONICAL,
+ * world-readable `recipes` row a PROOF card points at. §4.3 describes one
+ * anatomy for both ("the same anatomy minus note and minus sender
+ * eyebrow"), and that anatomy is shared as three components —
+ * `SharedRecipeArticle`, `SharedRecipeSaveZone`, `SharedRecipeNoticeState`
+ * — plus one pure module, `sharedRecipePresentation.ts`. What is NOT
+ * shared is this file: the READ. (tabs)/friends.tsx argued that the two
+ * destinations must be "two named things" rather than one handler taking a
+ * union, because one is a private household row and the other is public,
+ * and one screen branching on a route param would make that a runtime
+ * decision. Two routes, one row each; the components they share open
+ * nothing and hold no id they could route on.
  *
  * PD-010 is the decision this screen exists to honour, and it was taken
  * with its cost stated out loud: showing someone else's recipe to a third
@@ -9,9 +25,9 @@
  * which makes the mitigations conditions of shipping rather than garnish.
  * Three of them are structural to this file:
  *
- *   1. **Creator attribution above the recipe** (`CreatorAttribution`) —
- *      handle, platform, and a live link to their profile. Not a footer,
- *      not a tooltip.
+ *   1. **Creator attribution above the recipe** (`CreatorAttribution`,
+ *      rendered by `SharedRecipeArticle`) — handle, platform, and a live
+ *      link to their profile. Not a footer, not a tooltip.
  *   2. **The link to the original post sits with the recipe**, directly
  *      under the last step, at full width. The pitch that we send viewers
  *      to the creator has to be true on the surface where it matters
@@ -56,66 +72,73 @@
  * that reason and carried undecorated by `FriendRecipeCardModel`, so the
  * card and this screen add the quotation marks separately instead of one
  * of them unpicking the other's string. A null note renders nothing at
- * all: a send without one is ordinary, and a proof card opening this same
- * screen never has one.
+ * all: a send without one is ordinary, and the canonical recipe screen
+ * beside this one never has one at all — §4.3's "minus note".
  *
- * FIXTURES ONLY FOR THE RECIPE ON SCREEN (`@/fixtures/friendFeedFixtures`)
- * — the reading half still has no live source, on every build and behind
- * no flag, because the list that routes here produces no live send cards
- * yet (src/lib/gekooktSource.ts explains the `Creator`-versus-attribution
- * gap), so nothing reaches this screen outside the `__DEV__` scenarios
- * except a deep link. THE SAVE IS NOT A FIXTURE: `Bewaren` reads
- * `recipes` through the Supabase social repository and writes through the
- * app repository. On a fixture card that read answers null — the fixture
- * ids exist in no database, by design (see `FIXTURE_RECIPE_IDS`) — and the
- * zone shows its not-found line. When this screen gains a live read, the
- * save works unchanged.
+ * ⚠ THE READING HALF IS STILL FIXTURES, AND AS OF 10 SEPTEMBER 2026 IT IS
+ * BEHIND `__DEV__` — WHICH IS THE HONEST HALF OF THE FIX, NOT THE WHOLE
+ * ONE. What stood here before said "on every build and behind no flag",
+ * and that was true and was a live defect: a production deep link to
+ * `/friends/<a fixture id>` rendered Sanne's invented pasta as though it
+ * were somebody's dinner, with a `Bewaren` that could only ever fail —
+ * `FIXTURE_RECIPE_IDS` exist in no database, by design. In a production
+ * build the fixture read is now simply not there, and an unresolvable
+ * `feedItemId` gets `describeSharedRecipeNotice('missing')`, which is true.
+ *
+ * WHAT WOULD MAKE IT LIVE, MEASURED RATHER THAN GUESSED, because the next
+ * reader will want to know whether this is a day's work or a week's:
+ *
+ *   1. `SentMeal` (src/lib/repository/social/types.ts) carries no STEPS.
+ *      `listMealsSentToMe` reads `meals` and `meal_ingredients` and stops.
+ *      No migration is needed for the third read — 0009 already ships
+ *      `meal_steps_select_sent_to_me`, `for select using
+ *      (public.has_active_send_to_me(meal_id))`, and migrations 0001-0019
+ *      are all applied. This is an interface field, one more `.in()` in
+ *      the Supabase implementation, the mirror of it in the local one, and
+ *      a row mapper.
+ *   2. `SentMeal` carries no ATTRIBUTION — no author name, platform or
+ *      profile url, only `sourceUrl`. It does carry `recipeId`
+ *      (`meals.recipe_id`), and the canonical row behind it holds all
+ *      three and is world-readable, so the attribution is reachable
+ *      through `getCanonicalRecipe` without any new permission. A friend's
+ *      hand-entered dish has no such row and would credit nobody, which
+ *      `SharedRecipeArticle` already renders correctly (null attribution).
+ *   3. The LIST has to produce a live send card first, and that is the
+ *      real gate: `FriendRecipeCardModel.creator` is a whole `Creator`,
+ *      i.e. a PD-007 consent record, and `assembleFriendFeed` is built
+ *      around `FeedItem`/`Creator`/`Meal` triples that a live send is not.
+ *      src/lib/gekooktSource.ts carries that argument in full. Until the
+ *      list produces one, a live read here would be a screen nothing
+ *      reaches — which is why this change stops at the `__DEV__` gate
+ *      rather than building half of (1) and (2).
+ *
+ * THE SAVE WAS NEVER A FIXTURE and still is not: `Bewaren` reads `recipes`
+ * through the Supabase social repository and writes through the app
+ * repository. On a fixture card that read answers null and the zone shows
+ * its not-found line. When this screen gains a live read, the save works
+ * unchanged.
  */
 
-import { useCallback, useMemo, useReducer, type JSX } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { useMemo, type JSX } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FIXTURE_TARGET_DATE, getFriendFeedFixture, parseFriendFeedScenario } from '@/fixtures/friendFeedFixtures';
 import { BackButton } from '@/components/BackButton';
-import { Button } from '@/components/Button';
-import { CreatorAttribution } from '@/components/CreatorAttribution';
-import {
-  assembleFriendFeed,
-  buildAllergenCollisionLabel,
-  buildFriendRecipeMetaLine,
-  buildOriginalPostLinkLabel,
-  formatIngredientLine,
-  type FriendRecipeCardModel,
-} from '@/components/friendFeedPresentation';
+import { assembleFriendFeed } from '@/components/friendFeedPresentation';
 import { SaveIntentSheet } from '@/components/SaveIntentSheet';
+import { SharedRecipeArticle } from '@/components/SharedRecipeArticle';
+import { SharedRecipeNoticeState } from '@/components/SharedRecipeNoticeState';
 import {
-  IDLE_SHARED_RECIPE_SAVE,
-  SHARED_RECIPE_SAVED_ACCESSIBILITY_LABEL,
-  SHARED_RECIPE_SAVE_ACCESSIBILITY_LABEL,
-  describeSharedRecipeSaveAnnouncement,
-  describeSharedRecipeSaveControl,
-  reduceSharedRecipeSave,
-  type SharedRecipeSaveControl,
-  type SharedRecipeSaveState,
-} from '@/components/sharedRecipeSaveCopy';
-import { useOpenExternalLink } from '@/components/useOpenExternalLink';
-import { isSchedulableSaveIntent } from '@/domain/saveIntent';
-import type { RecipeId } from '@/domain/social/types';
-import type { MealIngredient, MealStep, SaveIntent } from '@/domain/types';
+  SHARED_RECIPE_BACK_LABEL,
+  buildSentSharedRecipe,
+  describeSharedRecipeNotice,
+  type SharedRecipeView,
+} from '@/components/sharedRecipePresentation';
+import { SharedRecipeSaveZone } from '@/components/SharedRecipeSaveZone';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
-import { getAppRepository } from '@/lib/repository';
-import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import { saveRecipeCopy } from '@/lib/saveRecipeCopy';
-import { supabase } from '@/lib/supabase';
-import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
-
-interface ResolvedSharedRecipe {
-  readonly card: FriendRecipeCardModel;
-  readonly ingredients: readonly MealIngredient[];
-  readonly steps: readonly MealStep[];
-}
+import { useSharedRecipeSave } from '@/hooks/useSharedRecipeSave';
+import { getColors, spacing } from '@/theme/tokens';
 
 export default function SharedRecipeScreen(): JSX.Element {
   const router = useRouter();
@@ -134,8 +157,18 @@ export default function SharedRecipeScreen(): JSX.Element {
    * for someone who deep-linked straight to it, or backgrounded the app
    * before it happened — and the "bevat noten" label can never say one
    * thing on the card and another on the recipe.
+   *
+   * `__DEV__` GATES THE WHOLE READ, not the render below it. A production
+   * build must not so much as resolve a fixture id: see this file's header
+   * on what a deep link used to get. The gate is inside the memo rather
+   * than around the component so there is exactly one branch, and it
+   * collapses to `null` — which every consumer below already handles,
+   * because a withdrawn recipe produces the same null.
    */
-  const resolved = useMemo<ResolvedSharedRecipe | null>(() => {
+  const view = useMemo<SharedRecipeView | null>(() => {
+    if (!__DEV__) {
+      return null;
+    }
     const fixture = getFriendFeedFixture(parseFriendFeedScenario(rawScenario));
     const card = assembleFriendFeed({ ...fixture, targetDate: FIXTURE_TARGET_DATE }).find(
       (candidate) => candidate.feedItemId === feedItemId,
@@ -143,11 +176,11 @@ export default function SharedRecipeScreen(): JSX.Element {
     if (card === undefined) {
       return null;
     }
-    return {
+    return buildSentSharedRecipe(
       card,
-      ingredients: [...(fixture.ingredientsByMealId.get(card.mealId) ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
-      steps: [...(fixture.stepsByMealId.get(card.mealId) ?? [])].sort((a, b) => a.stepNumber - b.stepNumber),
-    };
+      fixture.ingredientsByMealId.get(card.mealId) ?? [],
+      fixture.stepsByMealId.get(card.mealId) ?? [],
+    );
   }, [feedItemId, rawScenario]);
 
   // All four edges now, where this screen used to leave the bottom to its
@@ -162,291 +195,46 @@ export default function SharedRecipeScreen(): JSX.Element {
             argument for the component: the row was described in three
             separate headers as "byte-for-byte the same" and it had already
             drifted. */}
-        <BackButton onPress={() => router.back()} accessibilityLabel="Terug naar wat vrienden deelden" />
+        <BackButton onPress={() => router.back()} accessibilityLabel={SHARED_RECIPE_BACK_LABEL} />
       </View>
 
-      {resolved === null ? (
-        <UnavailableRecipeState onBack={() => router.back()} />
+      {view === null ? (
+        <SharedRecipeNoticeState notice={describeSharedRecipeNotice('missing')} onBack={() => router.back()} />
       ) : (
-        <SharedRecipeWithSave resolved={resolved} />
+        <SharedRecipeWithSave view={view} />
       )}
     </SafeAreaView>
   );
 }
 
 /**
- * Reachable, not hypothetical: a creator can withdraw between the moment
- * a card was rendered and the moment it was tapped, and PD-007 says that
- * withdrawal is honoured immediately. The copy names both real causes and
- * blames neither the reader nor the friend who sent it.
+ * The article, the thumb-zone save under it, and the sheet between them.
+ * Split from `SharedRecipeScreen` so the save hook runs only once a recipe
+ * has resolved — a save keyed on a recipe that is not on screen has no
+ * business existing. `/friends/recipe/[recipeId]` holds the same three in
+ * the same order, for the same reason.
  */
-function UnavailableRecipeState(props: { readonly onBack: () => void }): JSX.Element {
-  const { onBack } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={styles.unavailable}>
-      <Text style={[typeScale.title2, styles.centeredTitle, { color: colors.textPrimary }]}>
-        Dit recept staat er niet meer
-      </Text>
-      <Text style={[typeScale.bodySmall, styles.centeredBody, { color: colors.textMuted }]}>
-        De maker heeft het teruggetrokken, of de post is verwijderd.
-      </Text>
-      <Button label="Terug" variant="secondary" onPress={onBack} accessibilityLabel="Terug naar wat vrienden deelden" />
-    </View>
-  );
-}
-
-/**
- * The body, the thumb-zone save under it, and the sheet between them. Split
- * from `SharedRecipeScreen` so the save hook runs only once a card has
- * resolved — a save keyed on a recipe that is not on screen has no
- * business existing.
- */
-function SharedRecipeWithSave(props: { readonly resolved: ResolvedSharedRecipe }): JSX.Element {
-  const { resolved } = props;
+function SharedRecipeWithSave(props: { readonly view: SharedRecipeView }): JSX.Element {
+  const { view } = props;
   const reduceMotionEnabled = useReduceMotion();
-  const save = useSharedRecipeSave(resolved.card.canonicalRecipeId);
+  // PD-024: this route only ever opens a meal somebody SENT to this
+  // household — `has_active_send_to_me()` is the permission that made the
+  // row readable at all — so a save from here is a save from a send, which
+  // is the numerator DESIGN-SOCIAL.md §9's closed-loop rate is about.
+  const save = useSharedRecipeSave(view.canonicalRecipeId, 'send');
 
   return (
     <>
-      <SharedRecipeBody resolved={resolved} />
+      <SharedRecipeArticle view={view} />
       <SharedRecipeSaveZone control={save.control} isFailure={save.state.kind === 'failed'} onPress={save.press} />
       <SaveIntentSheet
         visible={save.state.kind === 'choosing'}
-        dishTitle={resolved.card.title}
+        dishTitle={view.title}
         onSelectIntent={save.chooseIntent}
         onDismiss={save.dismiss}
         reduceMotionEnabled={reduceMotionEnabled}
       />
     </>
-  );
-}
-
-interface SharedRecipeSaveHandle {
-  readonly state: SharedRecipeSaveState;
-  readonly control: SharedRecipeSaveControl;
-  readonly press: () => void;
-  readonly dismiss: () => void;
-  readonly chooseIntent: (intent: SaveIntent) => void;
-}
-
-/**
- * `Bewaren` -> sheet -> write -> `Bewaard`, as one reducer and one effect.
- * Every transition is `reduceSharedRecipeSave`'s (tested); this only
- * dispatches, and performs the single write through `saveRecipeCopy`,
- * which reports rather than throws, so there is no error path to forget.
- */
-function useSharedRecipeSave(recipeId: RecipeId | null): SharedRecipeSaveHandle {
-  const [state, dispatch] = useReducer(reduceSharedRecipeSave, IDLE_SHARED_RECIPE_SAVE);
-
-  const chooseIntent = useCallback(
-    (intent: SaveIntent): void => {
-      // The sheet's contract is `SaveIntent`; the write's is the schedulable
-      // half of it. A `'none'` cannot arrive from the two rows the sheet
-      // offers, and if it ever did the honest answer is to write nothing.
-      if (recipeId === null || !isSchedulableSaveIntent(intent)) {
-        dispatch({ type: 'sheet-dismissed' });
-        return;
-      }
-      dispatch({ type: 'intent-chosen' });
-      void saveRecipeCopy(createSupabaseSocialRepository(supabase), getAppRepository(), recipeId, intent).then(
-        (outcome) => {
-          dispatch({ type: 'write-settled', outcome });
-          // The sheet already said "Bewaard: …" the instant a row was
-          // tapped, before the write. This confirms it, or corrects it.
-          AccessibilityInfo.announceForAccessibility(describeSharedRecipeSaveAnnouncement(outcome));
-        },
-      );
-    },
-    [recipeId],
-  );
-
-  return {
-    state,
-    control: describeSharedRecipeSaveControl(state, recipeId !== null),
-    press: () => dispatch({ type: 'save-pressed' }),
-    dismiss: () => dispatch({ type: 'sheet-dismissed' }),
-    chooseIntent,
-  };
-}
-
-/**
- * The thumb zone (§3.3: "full width, inside `spacing.thumbZoneMinHeight`").
- * A completed save is a state, not an action, so it is drawn as the
- * `positiveMuted` / `positive` pair `RecipeTile`'s badge and
- * `FriendProofCard`'s chip use, rather than as a disabled button pretending
- * to be one — at the button's own height, so the zone does not jump when
- * the write lands.
- */
-function SharedRecipeSaveZone(props: {
-  readonly control: SharedRecipeSaveControl;
-  readonly isFailure: boolean;
-  readonly onPress: () => void;
-}): JSX.Element {
-  const { control, isFailure, onPress } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-
-  return (
-    <View style={[styles.saveZone, { borderTopColor: colors.border }]}>
-      {control.kind === 'completed' ? (
-        <View
-          style={[styles.savedState, { backgroundColor: colors.positiveMuted }]}
-          accessibilityRole="text"
-          accessibilityLabel={SHARED_RECIPE_SAVED_ACCESSIBILITY_LABEL}
-        >
-          <Text style={[typeScale.button, { color: colors.positive }]}>{control.label}</Text>
-        </View>
-      ) : (
-        <>
-          <Button
-            label={control.label}
-            variant="primary"
-            onPress={onPress}
-            disabled={control.disabled}
-            loading={control.loading}
-            accessibilityLabel={SHARED_RECIPE_SAVE_ACCESSIBILITY_LABEL}
-          />
-          {control.note !== null ? (
-            <Text style={[typeScale.bodySmall, styles.saveNote, { color: isFailure ? colors.danger : colors.textMuted }]}>
-              {control.note}
-            </Text>
-          ) : null}
-        </>
-      )}
-    </View>
-  );
-}
-
-function SharedRecipeBody(props: { readonly resolved: ResolvedSharedRecipe }): JSX.Element {
-  const { card, ingredients, steps } = props.resolved;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-  const metaLine = buildFriendRecipeMetaLine(card.estimatedMinutes, card.rating);
-  const collisionLabel = buildAllergenCollisionLabel(card.collidingTags);
-  const originalPostLabel = buildOriginalPostLinkLabel(card.creator.platform);
-  const { status, open } = useOpenExternalLink('Kon het originele filmpje niet openen');
-  const hasFailedToOpen = status === 'failed';
-
-  return (
-    <ScrollView contentContainerStyle={styles.scrollContent}>
-      <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>
-        {`Gedeeld door ${card.friendName}`}
-      </Text>
-      <Text style={[typeScale.title1, { color: colors.textPrimary }]}>{card.title}</Text>
-
-      {/* DESIGN-SOCIAL.md §4.3: the note "renders under the eyebrow with
-          the card's left-rule treatment". Kept in the same position
-          relative to the title that FriendRecipeCard gives it — eyebrow,
-          dish, then the sender's voice — because §4.3's whole ask is that
-          the words look like the same words on both surfaces, and a note
-          that jumped above the dish name here would read as a different
-          thing about a different subject.
-
-          DRESSED IDENTICALLY AND DELIBERATELY: `bodySmall` in
-          `textSecondary` behind a `borderStrong` left rule, quotation
-          marks added here. The rule is the quotation mark that works at
-          any text size, and it is how this product says "these are not our
-          words" — the same treatment §7's "DIT LAS REMY" evidence block
-          uses. The marks are added at render on both surfaces rather than
-          stored, so neither screen has to unpick a string the other
-          decorated.
-
-          NULL RENDERS NOTHING — no empty rule, no placeholder, no "geen
-          briefje" — for the card's reason: a send without a note is the
-          ordinary case, and a stub would make it look like a note failed
-          to load. A proof card routes here too and never carries one
-          (§4.3: "the same anatomy minus note and minus sender eyebrow"),
-          so the absent case is the common one, not the exception. */}
-      {card.note !== null ? (
-        <View style={[styles.note, { borderLeftColor: colors.borderStrong }]}>
-          <Text style={[typeScale.bodySmall, { color: colors.textSecondary }]}>{`"${card.note}"`}</Text>
-        </View>
-      ) : null}
-
-      {metaLine !== null ? (
-        <Text style={[typeScale.numeral, styles.metaRow, { color: colors.textMuted }]}>{metaLine}</Text>
-      ) : null}
-
-      {/* PD-007a, restated where somebody is about to act on it. Same
-          wording as the card's chip, given more room because this is the
-          last screen before the tap that leaves for the video. Still a
-          fact about the dish and about what this household excludes,
-          never a verdict about the reader. */}
-      {collisionLabel !== null ? (
-        <View style={[styles.collisionPanel, { backgroundColor: colors.warningMuted }]}>
-          <Text style={[typeScale.title3, { color: colors.warning }]}>{collisionLabel}</Text>
-          <Text style={[typeScale.bodySmall, styles.collisionBody, { color: colors.warning }]}>
-            Jullie sluiten dit uit in Remy.
-          </Text>
-        </View>
-      ) : null}
-
-      {/* PD-010.1 — attribution above the recipe, as its own control, so
-          the creator's profile is one tap from the thing they made. */}
-      <View style={[styles.creatorBlock, { borderBottomColor: colors.border }]}>
-        <CreatorAttribution creator={card.creator} />
-      </View>
-
-      <Text style={[typeScale.title3, styles.sectionHeading, { color: colors.textPrimary }]}>Ingrediënten</Text>
-      {ingredients.length > 0 ? (
-        ingredients.map((ingredient) => (
-          <Text key={ingredient.id} style={[typeScale.body, styles.listLine, { color: colors.textSecondary }]}>
-            {formatIngredientLine(ingredient)}
-          </Text>
-        ))
-      ) : (
-        <Text style={[typeScale.bodySmall, styles.emptySection, { color: colors.textMuted }]}>
-          De ingrediënten stonden niet in het bijschrift. Ze staan wel in het filmpje.
-        </Text>
-      )}
-
-      {/* PD-006 / PD-010, always shown and never made conditional on a
-          collision: if this caveat only appeared beside a warning, its
-          absence would read as "gecontroleerd en schoon" — the exact
-          inference the tri-state exists to prevent. */}
-      <Text style={[typeScale.bodySmall, styles.tagCaveat, { color: colors.textMuted }]}>
-        Allergietags komen van wie dit deelde — niet van jullie eigen controle.
-      </Text>
-
-      <Text style={[typeScale.title3, styles.sectionHeading, { color: colors.textPrimary }]}>Bereiding</Text>
-      {steps.length > 0 ? (
-        steps.map((step) => (
-          <Text key={step.id} style={[typeScale.body, styles.listLine, { color: colors.textSecondary }]}>
-            {`${step.stepNumber}. ${step.instruction}`}
-          </Text>
-        ))
-      ) : (
-        <Text style={[typeScale.bodySmall, styles.emptySection, { color: colors.textMuted }]}>
-          Deze maker vertelt de stappen alleen hardop. Bekijk het filmpje hieronder.
-        </Text>
-      )}
-
-      {/* PD-010.2 — "the link to the original post sits with the recipe,
-          not buried". Directly under the last step, full width, naming the
-          platform it leaves for. `link`, not `button`: this genuinely
-          navigates out of Remy, which is what a screen reader should hear. */}
-      <Pressable
-        onPress={() => open(card.sourceUrl)}
-        accessibilityRole="link"
-        accessibilityLabel={
-          hasFailedToOpen ? `${originalPostLabel}. Openen mislukte, tik om opnieuw te proberen.` : originalPostLabel
-        }
-        style={[styles.originalPostRow, { borderColor: colors.borderStrong }]}
-      >
-        <Text style={[typeScale.button, styles.originalPostLabel, { color: colors.textPrimary }]}>
-          {originalPostLabel}
-        </Text>
-        <Feather name="external-link" size={16} color={colors.textMuted} />
-      </Pressable>
-      {hasFailedToOpen ? (
-        <Text style={[typeScale.bodySmall, styles.openFailed, { color: colors.danger }]}>
-          Openen lukte niet. Probeer het opnieuw.
-        </Text>
-      ) : null}
-    </ScrollView>
   );
 }
 
@@ -457,108 +245,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space3,
-    paddingBottom: spacing.space12,
-  },
-  eyebrow: {
-    textTransform: 'uppercase',
-    marginBottom: spacing.space2,
-  },
-  note: {
-    marginTop: spacing.space3,
-    // Identical to FriendRecipeCard's rule, down to the padding: a rule of
-    // a different weight or inset would be the second treatment §4.3 is
-    // asking this screen not to invent. `space3` rather than the card's
-    // `space2` above it is the only difference, and it is the screen's own
-    // rhythm — everything on this page sits further apart than it does
-    // inside a 96pt-tall row.
-    borderLeftWidth: 2,
-    paddingLeft: spacing.space2,
-  },
-  metaRow: {
-    marginTop: spacing.space2,
-  },
-  collisionPanel: {
-    marginTop: spacing.space5,
-    padding: spacing.space4,
-    borderRadius: radii.radiusSm,
-  },
-  collisionBody: {
-    marginTop: spacing.space1,
-  },
-  creatorBlock: {
-    marginTop: spacing.space5,
-    paddingBottom: spacing.space4,
-    borderBottomWidth: 1,
-  },
-  sectionHeading: {
-    marginTop: spacing.space6,
-    marginBottom: spacing.space3,
-  },
-  listLine: {
-    marginBottom: spacing.space2,
-  },
-  emptySection: {
-    marginBottom: spacing.space2,
-  },
-  tagCaveat: {
-    marginTop: spacing.space3,
-  },
-  originalPostRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.space3,
-    marginTop: spacing.space8,
-    paddingHorizontal: spacing.space4,
-    paddingVertical: spacing.space4,
-    minHeight: spacing.touchTargetMin,
-    borderWidth: 1,
-    borderRadius: radii.radiusSm,
-  },
-  originalPostLabel: {
-    flex: 1,
-  },
-  openFailed: {
-    marginTop: spacing.space2,
-  },
-  saveZone: {
-    minHeight: spacing.thumbZoneMinHeight,
-    justifyContent: 'center',
-    borderTopWidth: 1,
-    paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space4,
-    paddingBottom: spacing.space4,
-  },
-  savedState: {
-    // The button's own minimum, so `Bewaren` and `Bewaard` occupy the same
-    // box and the zone does not jump when the write lands.
-    minHeight: spacing.touchTargetMin + 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.space4,
-    borderRadius: radii.radiusMd,
-  },
-  saveNote: {
-    marginTop: spacing.space2,
-    textAlign: 'center',
-  },
-  unavailable: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.screenPaddingHorizontal,
-  },
-  centeredTitle: {
-    textAlign: 'center',
-    marginBottom: spacing.space2,
-  },
-  centeredBody: {
-    textAlign: 'center',
-    marginBottom: spacing.space6,
+    paddingTop: spacing.screenHeaderTop,
   },
 });

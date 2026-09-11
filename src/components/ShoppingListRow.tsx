@@ -31,24 +31,27 @@
  * on a small glyph while holding groceries.
  */
 
-import type { JSX } from 'react';
-import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { useEffect, useRef, type JSX } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { ShoppingListItem } from '@/domain/shopping/types';
 import {
   describeShoppingListItemName,
   describeShoppingListItemQuantity,
   describeShoppingListRowAccessibilityLabel,
 } from './shoppingListCopy';
-import { getColors, radii, spacing, typeScale } from '@/theme/tokens';
+import { CHECK_MARK_SCALE_FROM, ROW_PRESS_SCALE, shouldAnimateCheckMark } from './shoppingListRowMotion';
+import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 export interface ShoppingListRowProps {
   readonly item: ShoppingListItem;
   readonly checked: boolean;
   readonly onToggle: () => void;
+  /** Read once by the screen and passed down, per docs/DESIGN.md's global rule. */
+  readonly reduceMotionEnabled: boolean;
 }
 
 export function ShoppingListRow(props: ShoppingListRowProps): JSX.Element {
-  const { item, checked, onToggle } = props;
+  const { item, checked, onToggle, reduceMotionEnabled } = props;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -56,39 +59,108 @@ export function ShoppingListRow(props: ShoppingListRowProps): JSX.Element {
   const quantityText = describeShoppingListItemQuantity(item);
   const accessibilityLabel = describeShoppingListRowAccessibilityLabel(item);
 
+  /**
+   * Seeded from `checked`, never from 0 — see `shouldAnimateCheckMark`'s
+   * header for why a recycled FlatList row must not re-land its own mark.
+   */
+  const mark = useRef(new Animated.Value(checked ? 1 : 0)).current;
+  const previousChecked = useRef(checked);
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (previousChecked.current === checked) {
+      return;
+    }
+    const animate = shouldAnimateCheckMark(previousChecked.current, checked, reduceMotionEnabled);
+    previousChecked.current = checked;
+    if (!animate) {
+      // Reduced motion, and un-ticking, both land here: the value is set,
+      // no timing is constructed, and not one intermediate frame renders.
+      mark.setValue(checked ? 1 : 0);
+      return;
+    }
+    // Reset before starting, so a fast tick-untick-tick cannot stack tweens
+    // on the same value.
+    mark.setValue(0);
+    Animated.timing(mark, {
+      toValue: 1,
+      duration: resolveDuration(motion.durationFast, reduceMotionEnabled),
+      easing: Easing.bezier(...motion.easingStandard),
+      useNativeDriver: true,
+    }).start();
+  }, [checked, mark, reduceMotionEnabled]);
+
+  const animatePressTo = (toValue: number): void => {
+    // Reduced motion drops the depress entirely rather than shortening it:
+    // there is no state to preserve here, only a transient touch feeling.
+    if (reduceMotionEnabled) {
+      return;
+    }
+    Animated.timing(pressScale, {
+      toValue,
+      duration: resolveDuration(motion.durationInstant, reduceMotionEnabled),
+      easing: Easing.bezier(...motion.easingStandard),
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
-    <Pressable
-      onPress={onToggle}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-      accessibilityLabel={accessibilityLabel}
-      style={[styles.row, { borderBottomColor: colors.border }]}
-    >
-      <View
-        style={[
-          styles.box,
-          { borderColor: colors.border, backgroundColor: checked ? colors.positiveMuted : colors.surface },
-        ]}
+    <Animated.View style={{ transform: [{ scale: pressScale }] }}>
+      <Pressable
+        onPress={onToggle}
+        onPressIn={() => animatePressTo(ROW_PRESS_SCALE)}
+        onPressOut={() => animatePressTo(1)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked }}
+        accessibilityLabel={accessibilityLabel}
+        style={[styles.row, { borderBottomColor: colors.border }]}
       >
-        {/* positive on positiveMuted — the exact pairing
-            tests/contrast.test.ts already guards (RecipeTile's "gemaakt"
-            chip), so no new, unverified colour combination is introduced
-            here. */}
-        {checked ? <Text style={{ color: colors.positive }}>✓</Text> : null}
-      </View>
-      <View style={styles.textColumn}>
-        <Text
+        <View
           style={[
-            typeScale.body,
-            checked ? styles.checkedName : null,
-            { color: checked ? colors.textMuted : colors.textPrimary },
+            styles.box,
+            { borderColor: colors.border, backgroundColor: checked ? colors.positiveMuted : colors.surface },
           ]}
         >
-          {displayName}
-        </Text>
-        <Text style={[typeScale.numeral, { color: colors.textMuted }]}>{quantityText}</Text>
-      </View>
-    </Pressable>
+          {/* positive on positiveMuted — the exact pairing
+              tests/contrast.test.ts already guards (RecipeTile's "gemaakt"
+              chip), so no new, unverified colour combination is introduced
+              here.
+
+              STILL MOUNTED ONLY WHEN CHECKED, so the glyph never occupies
+              the box invisibly — `opacity` alone would leave a transparent
+              ✓ that assistive tooling can still find. `allowFontScaling` is
+              off because this glyph sits in a fixed `space6` box: at large
+              Dynamic Type a scaling ✓ would overflow it, and the animation
+              would then be scaling something already clipped. */}
+          {checked ? (
+            <Animated.Text
+              allowFontScaling={false}
+              style={{
+                color: colors.positive,
+                opacity: mark,
+                transform: [
+                  { scale: mark.interpolate({ inputRange: [0, 1], outputRange: [CHECK_MARK_SCALE_FROM, 1] }) },
+                ],
+              }}
+            >
+              ✓
+            </Animated.Text>
+          ) : null}
+        </View>
+        <View style={styles.textColumn}>
+          <Text
+            style={[
+              typeScale.body,
+              checked ? styles.checkedName : null,
+              { color: checked ? colors.textMuted : colors.textPrimary },
+            ]}
+          >
+            {displayName}
+          </Text>
+          <Text style={[typeScale.numeral, { color: colors.textMuted }]}>{quantityText}</Text>
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 }
 

@@ -90,7 +90,7 @@ describe('saveRecipeCopy — the happy path', () => {
     const recipe = makeCanonicalRecipe();
     const sink = makeSink();
 
-    const outcome = await saveRecipeCopy(makeSource(recipe), sink, 'recipe-1', 'this_week');
+    const outcome = await saveRecipeCopy(makeSource(recipe), sink, 'recipe-1', 'this_week', 'send');
 
     expect(sink.createMeal).toHaveBeenCalledTimes(1);
     expect(sink.createMeal).toHaveBeenCalledWith(
@@ -108,6 +108,7 @@ describe('saveRecipeCopy — the happy path', () => {
       memberId: null,
       mealId: 'meal-new',
       intent: 'this_week',
+      origin: 'send',
       sourceUrl: recipe.sourceUrl,
     });
     expect(outcome).toEqual({ kind: 'saved', mealId: 'meal-new', title: recipe.title, isNewCopy: true });
@@ -115,7 +116,7 @@ describe('saveRecipeCopy — the happy path', () => {
 
   test('the save never precedes the meal it points at', async () => {
     const sink = makeSink();
-    await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'someday');
+    await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'someday', 'send');
 
     const mealOrder = sink.createMeal.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
     const saveOrder = sink.createSave.mock.invocationCallOrder[0] ?? Number.NEGATIVE_INFINITY;
@@ -124,7 +125,7 @@ describe('saveRecipeCopy — the happy path', () => {
 
   test("'someday' is written as 'someday' — the intent is the household's, never a default", async () => {
     const sink = makeSink();
-    await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'someday');
+    await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'someday', 'send');
     expect(sink.createSave).toHaveBeenCalledWith(expect.objectContaining({ intent: 'someday' }));
   });
 });
@@ -134,7 +135,7 @@ describe('saveRecipeCopy — one copy per household', () => {
     const existing = makeMeal({ id: 'meal-mine', householdId: HOUSEHOLD, recipeId: 'recipe-1', title: 'Mijn ramen' });
     const sink = makeSink({ meals: [existing] });
 
-    const outcome = await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'this_week');
+    const outcome = await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'this_week', 'send');
 
     expect(sink.createMeal).not.toHaveBeenCalled();
     expect(sink.createSave).toHaveBeenCalledWith(expect.objectContaining({ mealId: 'meal-mine', intent: 'this_week' }));
@@ -144,11 +145,11 @@ describe('saveRecipeCopy — one copy per household', () => {
   test('a retry after a failed save finds the copy the first attempt made rather than making a second', async () => {
     const recipe = makeCanonicalRecipe();
     const firstAttempt = makeSink({ failCreateSave: true });
-    expect(await saveRecipeCopy(makeSource(recipe), firstAttempt, 'recipe-1', 'someday')).toEqual({ kind: 'failed' });
+    expect(await saveRecipeCopy(makeSource(recipe), firstAttempt, 'recipe-1', 'someday', 'send')).toEqual({ kind: 'failed' });
 
     const copyFromFirstAttempt = makeMeal({ id: 'meal-new', householdId: HOUSEHOLD, recipeId: 'recipe-1' });
     const retry = makeSink({ meals: [copyFromFirstAttempt] });
-    const outcome = await saveRecipeCopy(makeSource(recipe), retry, 'recipe-1', 'someday');
+    const outcome = await saveRecipeCopy(makeSource(recipe), retry, 'recipe-1', 'someday', 'send');
 
     expect(retry.createMeal).not.toHaveBeenCalled();
     expect(outcome.kind).toBe('saved');
@@ -158,7 +159,7 @@ describe('saveRecipeCopy — one copy per household', () => {
 describe('saveRecipeCopy — reported, never thrown', () => {
   test('a canonical recipe that no longer exists is reported, and nothing about the household is touched', async () => {
     const sink = makeSink();
-    const outcome = await saveRecipeCopy(makeSource(null), sink, 'recipe-gone', 'this_week');
+    const outcome = await saveRecipeCopy(makeSource(null), sink, 'recipe-gone', 'this_week', 'send');
 
     expect(outcome).toEqual({ kind: 'not_found' });
     expect(sink.getCurrentHouseholdId).not.toHaveBeenCalled();
@@ -168,15 +169,48 @@ describe('saveRecipeCopy — reported, never thrown', () => {
 
   test('a refused read is reported as failed rather than thrown at the screen', async () => {
     const sink = makeSink();
-    expect(await saveRecipeCopy(makeSource('throws'), sink, 'recipe-1', 'this_week')).toEqual({ kind: 'failed' });
+    expect(await saveRecipeCopy(makeSource('throws'), sink, 'recipe-1', 'this_week', 'send')).toEqual({ kind: 'failed' });
     expect(sink.createMeal).not.toHaveBeenCalled();
   });
 
   test('a failed copy is reported as failed and no save is written against a meal that does not exist', async () => {
     const sink = makeSink({ failCreateMeal: true });
-    expect(await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'this_week')).toEqual({
+    expect(await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'this_week', 'send')).toEqual({
       kind: 'failed',
     });
     expect(sink.createSave).not.toHaveBeenCalled();
+  });
+});
+
+describe('saveRecipeCopy — the origin (PD-024)', () => {
+  test("the caller's origin reaches the row, unaltered", async () => {
+    const sink = makeSink();
+    await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'someday', 'zoek');
+    expect(sink.createSave).toHaveBeenCalledWith(expect.objectContaining({ origin: 'zoek' }));
+  });
+
+  test('a different surface writes a different origin — this function has no default of its own', () => {
+    // The assertion that matters for the measurement: one write function
+    // stands behind every social `Bewaren` there will be, so if it ever
+    // acquired a constant of its own, all four surfaces would report the
+    // same provenance and the closed-loop rate over sends would quietly
+    // include search results.
+    expect(saveRecipeCopy.length).toBe(5);
+  });
+
+  test('every social origin is accepted and lands verbatim', async () => {
+    for (const origin of ['send', 'proof', 'kring', 'zoek'] as const) {
+      const sink = makeSink();
+      await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'this_week', origin);
+      expect(sink.createSave).toHaveBeenCalledWith(expect.objectContaining({ origin }));
+    }
+  });
+
+  test('the origin is written beside the intent, never instead of it — the two are orthogonal', async () => {
+    const sink = makeSink();
+    await saveRecipeCopy(makeSource(makeCanonicalRecipe()), sink, 'recipe-1', 'this_week', 'send');
+    expect(sink.createSave).toHaveBeenCalledWith(
+      expect.objectContaining({ intent: 'this_week', origin: 'send' }),
+    );
   });
 });

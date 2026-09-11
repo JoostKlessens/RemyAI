@@ -167,7 +167,7 @@ import {
 import type { FriendSuggestion } from '@/domain/social/friendSuggestions';
 import type { ProfileId } from '@/domain/social/types';
 import {
-  countIncomingFriendRequests,
+  countIncomingFollowRequestsForProfile,
   loadFriendSuggestions,
   requestFriendship,
 } from '@/lib/friendSuggestionSource';
@@ -383,7 +383,7 @@ export default function FriendsScreen(): JSX.Element {
       try {
         const [rows, waiting] = await Promise.all([
           loadFriendSuggestions(requestedRef.current),
-          countIncomingFriendRequests(profileId),
+          countIncomingFollowRequestsForProfile(profileId),
         ]);
         if (isCurrent()) {
           setSuggestions(rows);
@@ -487,28 +487,39 @@ export default function FriendsScreen(): JSX.Element {
       </View>
 
       {/*
-        A PROOF CARD HAS NOWHERE TO GO YET, and no `onOpenProof` is passed
-        for it, which is the whole point rather than an omission.
+        A PROOF CARD NOW HAS SOMEWHERE TO GO, AND IT IS NOT WHERE A SEND
+        GOES. `/friends/recipe/[recipeId]` opens the CANONICAL recipe — the
+        world-readable `recipes` row — and it was built on 10 September
+        2026 precisely because this block used to end "the fix for the
+        missing destination is still the canonical-recipe screen".
 
-        It would open the CANONICAL recipe — the world-readable `recipes`
-        row — and no screen in this app reads one: `/friends/[feedItemId]`
-        resolves a feed item and would answer a recipe id with "Dit recept
-        staat er niet meer", a lie about a recipe that exists. Routing
-        somewhere wrong is worse than routing nowhere.
+        TWO CALLBACKS AND NOT ONE TAKING A UNION, which is exactly what
+        `FriendsBodyProps.onOpenSend` predicted below and argues in full:
+        the difference between the two destinations is the privacy model.
 
-        This used to pass `() => undefined`, which routed nowhere but still
-        let the card announce itself as a button, hint "Open het volledige
-        recept" and depress under a thumb that got nothing back. `KringRow`
-        met the same question and answered it properly by not being
-        pressable at all; `FriendProofCard` now takes that answer too, via
-        an optional handler whose absence removes the affordance rather
-        than emptying it. The fix for the missing destination is still the
-        canonical-recipe screen.
+        NO SCENARIO PARAM ON THIS ONE, and the asymmetry is deliberate. The
+        send screen still resolves a `__DEV__` fixture and has to be told
+        which; the canonical screen reads live on every build and has
+        nothing to be told. Handing it a scenario would be a query string
+        nothing reads — the kind of thing that later gets "supported".
+
+        ⚠ WHAT IT MUST NEVER BECOME IS `/cook/[mealId]`. A proof card
+        cannot hold a meal id at all (`mealId?: never`), because those ids
+        belong to the friends' households and this device's repository has
+        no row for any of them.
+
+        ONE LINE IS THE WHOLE FIX, and that is the payoff of what stood
+        here: `FriendProofCard`'s handler was made OPTIONAL rather than
+        emptied, so the role, the hint "Open het volledige recept" and the
+        press-scale come back together with the destination. That card's
+        prop doc carries the full argument, including why the optionality
+        stays now that it has a caller.
       */}
       <FriendsBody
         state={state}
         reduceMotionEnabled={reduceMotionEnabled}
         onOpenSend={(feedItemId: string) => router.push(`/friends/${feedItemId}?scenario=${detailScenario}`)}
+        onOpenCanonicalRecipe={(recipeId: string) => router.push(`/friends/recipe/${recipeId}`)}
         /*
           ONE NODE, RENDERED IN BOTH BODIES. The suggestion block sits under
           the feed when there is one and under the empty state when there
@@ -551,15 +562,18 @@ interface FriendsBodyProps {
    * A send opens the SENDER'S OWN MEAL, readable only while
    * `has_active_send_to_me()` says so.
    *
-   * There is deliberately no `onOpenProof` beside it. Proof would open
-   * the CANONICAL, world-readable `recipes` row, and nothing reads one
-   * yet. When that screen exists this becomes two callbacks rather than
-   * one taking a union, because the difference between them is the
-   * privacy model: one destination is a private household row and the
-   * other is public, and a single handler would make that a runtime
-   * branch instead of two named things.
+   * IT IS TWO CALLBACKS NOW, WHICH IS WHAT THIS COMMENT PREDICTED: "when
+   * that screen exists this becomes two callbacks rather than one taking a
+   * union, because the difference between them is the privacy model — one
+   * destination is a private household row and the other is public, and a
+   * single handler would make that a runtime branch instead of two named
+   * things." That screen exists — `/friends/recipe/[recipeId]` — so
+   * `onOpenSend` names the row `has_active_send_to_me()` gates, and
+   * `onOpenCanonicalRecipe` the row every authenticated reader may read.
    */
   readonly onOpenSend: (feedItemId: string) => void;
+  /** Proof opens the CANONICAL, world-readable `recipes` row — never a meal id, which a proof card cannot hold. */
+  readonly onOpenCanonicalRecipe: (recipeId: string) => void;
 }
 
 /**
@@ -604,6 +618,7 @@ function FriendsBody(props: FriendsBodyProps): JSX.Element {
           // could outlive the visit it describes.
           entranceDelayMs: resolveUnseenEntranceDelay(index, state.unseenBandSize, props.reduceMotionEnabled),
           onOpenSend: props.onOpenSend,
+          onOpenCanonicalRecipe: props.onOpenCanonicalRecipe,
         })
       }
       ItemSeparatorComponent={ListGap}
@@ -632,6 +647,7 @@ interface FeedCardOptions {
   /** PD-020.1's entrance, or null for a card that renders already at rest. Proof cards are always null. */
   readonly entranceDelayMs: number | null;
   readonly onOpenSend: (feedItemId: string) => void;
+  readonly onOpenCanonicalRecipe: (recipeId: string) => void;
 }
 
 /**
@@ -653,6 +669,11 @@ interface FeedCardOptions {
  * arrived; giving it to an ambient proof card would say a friend's
  * ordinary dinner is addressed to you.
  *
+ * EACH BRANCH GETS ONE DESTINATION AND NEVER THE OTHER'S, which is what
+ * makes the narrowing worth having: `onOpenCanonicalRecipe` is handed a
+ * `recipes.id` off a model that cannot hold a meal id. "Which row does
+ * this tap open" is answered by the type rather than by this comment.
+ *
  * Two siblings, never one component with a `kind` prop: §8 is explicit
  * that a send may never borrow the language of proof, and a shared
  * component is how that rule gets lost.
@@ -660,7 +681,11 @@ interface FeedCardOptions {
 function renderFeedCard(card: GekooktCard, options: FeedCardOptions): JSX.Element {
   if (isProofCard(card)) {
     return (
-      <FriendProofCard model={card} reduceMotionEnabled={options.reduceMotionEnabled} />
+      <FriendProofCard
+        model={card}
+        reduceMotionEnabled={options.reduceMotionEnabled}
+        onOpenCanonicalRecipe={options.onOpenCanonicalRecipe}
+      />
     );
   }
 
@@ -816,7 +841,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingTop: spacing.space4,
+    paddingTop: spacing.screenHeaderTop,
     paddingBottom: spacing.space4,
   },
   listContent: {

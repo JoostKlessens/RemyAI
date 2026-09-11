@@ -246,6 +246,21 @@ export interface DecisionCardProps {
   /** oEmbed's still, carried through import (`Meal.thumbnailUrl`). Null draws the monogram — never a broken image. */
   readonly thumbnailUrl: string | null;
   /**
+   * `Meal.sourceUrl`, so an EXPIRED still can be re-signed once instead of
+   * becoming a letter in a 200pt frame.
+   *
+   * OF EVERY SURFACE THAT PASSES ONE, THIS IS THE STRONGEST CASE. Kiezen
+   * shows exactly one dish, in the largest photo the app draws, on the one
+   * screen whose whole job is "eet dit vanavond". One oEmbed call for one
+   * post a person is looking at right now is the licensed use in its purest
+   * form — nothing about it resembles the sweep §13's mitigation warns
+   * against.
+   *
+   * Optional and defaulting to null, so a caller with no meal in hand (the
+   * dev scenario rows) changes nothing by omitting it.
+   */
+  readonly sourceUrl?: string | null;
+  /**
    * The one surviving reason, from `buildFriendProofLine`
    * (src/domain/reason.ts), or null — null for the other six codes, and also
    * for a `friend_proof` that named nobody. See that function for why a card
@@ -343,9 +358,10 @@ const CLOCK_GLYPH_SIZE = 16;
 
 export function DecisionCard(props: DecisionCardProps): JSX.Element {
   const { dishTitle, thumbnailUrl, friendLine, estimatedMinutes, reduceMotionEnabled, accepted } = props;
+  const sourceUrl = props.sourceUrl ?? null;
   const scheme = useColorScheme();
   const colors = getColors(scheme);
-  const photo = useThumbnailFallback(thumbnailUrl);
+  const photo = useThumbnailFallback(thumbnailUrl, sourceUrl);
   // The same expression `RecipeTile`, `FriendProofCard`, `FriendRecipeCard`
   // and `KringRow` use, character for character — a fifth spelling of one
   // fallback is how five surfaces end up disagreeing about an untitled dish.
@@ -476,7 +492,7 @@ export function DecisionCard(props: DecisionCardProps): JSX.Element {
         >
           {photo.showsImage ? (
             <Image
-              source={{ uri: thumbnailUrl ?? undefined }}
+              source={{ uri: photo.imageUrl ?? undefined }}
               style={styles.photo}
               resizeMode="cover"
               onError={photo.onError}

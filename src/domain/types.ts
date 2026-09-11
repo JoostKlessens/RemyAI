@@ -97,6 +97,47 @@ export type DishCourse = 'voorgerecht' | 'hoofdgerecht' | 'bijgerecht' | 'toetje
 export type SaveIntent = 'this_week' | 'someday' | 'none';
 
 /**
+ * WHERE a save came from — the surface that produced it, never what the
+ * household asked to happen with it. `SaveIntent` answers "when"; this
+ * answers "from where", and the two are orthogonal: a send can be saved
+ * `'this_week'` and an import `'someday'`.
+ *
+ * PD-024 REQUIRES IT, AND THE REASON IS A MEASUREMENT THAT EXPIRES.
+ * DESIGN-SOCIAL.md §9 fixes the honest metric for the social layer as the
+ * closed-loop rate — what share of SENT recipes get cooked on the other
+ * side — and Ontdek is about to start delivering saves that came from
+ * searching and from a global board instead. Without an origin the
+ * denominator of that fraction goes cloudy, and it cannot be un-clouded
+ * afterwards, because a row written yesterday cannot be asked where it
+ * came from. That is why this is the one item in ONTDEK-PLAN.md's whole
+ * sequence that lands in fase 0 with the paperwork rather than beside the
+ * surface it measures.
+ *
+ * SIX MEMBERS AND NOT FOUR. The plan named four — send, proof, kring,
+ * zoek — because it was reasoning about Ontdek. Every existing writer
+ * needed a value too, or the field would ship with a hole at the two
+ * places that write a save today, so `'import'` and `'bibliotheek'` are
+ * here as well. They are not filler: they are the two answers that keep
+ * `'send'` meaningful, because "not from a send" has to be sayable.
+ *
+ * THE UNION LIVES HERE, EVERYTHING ELSE IN src/domain/saveOrigin.ts —
+ * the same split `SaveIntent`/`saveIntent.ts` and `DishCourse`/
+ * `dishCourses.ts` make, for the reason stated on `DishCourse` above:
+ * this file imports nothing, and a union declared in a module that
+ * imports `Save` and consumed back here would close that cycle.
+ *
+ * NULL IS A REAL AND HONEST STATE, and it is not a seventh member. A save
+ * written before this field existed carries `null`, meaning "from before
+ * the question was asked". That is exactly the baseline the closed-loop
+ * measurement needs to read against, so backfilling those rows to
+ * `'import'` would destroy the thing this field was added to protect. It
+ * is the same reasoning `dish_cuisine` gets in PD-024 and the opposite of
+ * `dish_course`'s `not null default 'hoofdgerecht'` (0017), where the
+ * absent value genuinely did mean the default.
+ */
+export type SaveOrigin = 'import' | 'bibliotheek' | 'send' | 'proof' | 'kring' | 'zoek';
+
+/**
  * Why the decision engine picked this meal. Rendered into Dutch UI copy by
  * the caller (e.g. "saved_this_week" + a weekday -> "Je bewaarde dit
  * dinsdag"); this file only defines the vocabulary, not the copy.
@@ -580,6 +621,12 @@ export interface Save {
   readonly memberId: MemberId | null;
   readonly mealId: MealId;
   readonly intent: SaveIntent;
+  /**
+   * Which surface produced this save (PD-024), or `null` for a row written
+   * before the field existed — see `SaveOrigin` for why that null is kept
+   * rather than backfilled.
+   */
+  readonly origin: SaveOrigin | null;
   readonly sourceUrl: string | null;
   readonly savedAt: IsoDateTimeString;
 }

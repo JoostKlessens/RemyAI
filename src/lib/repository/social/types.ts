@@ -32,7 +32,15 @@
 
 import type { CreatorPlatform } from '@/domain/feed/types';
 import type { SuggestedFriendRow } from '@/domain/social/friendSuggestions';
-import type { Friendship, FriendshipAction, Profile, ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
+import type { RemyFollowGraphRepository } from './followGraph';
+import type {
+  Friendship,
+  FriendshipAction,
+  Profile,
+  ProfileId,
+  RecipeId,
+  RecipeRating,
+} from '@/domain/social/types';
 import type { IsoDateTimeString, MealId } from '@/domain/types';
 
 export interface UpsertProfileInput {
@@ -422,7 +430,16 @@ export interface SentMeal {
   readonly ingredients: readonly SentMealIngredient[];
 }
 
-export interface RemySocialRepository {
+/**
+ * ⚠ THE DIRECTED GRAPH LIVES IN `./followGraph`, and this interface
+ * EXTENDS it (PD-024, migration 0021). `listFollows`, `actOnFollow`,
+ * `blockProfile` and the rest are on every implementation of this type;
+ * they are declared next door because this file was 745 lines and the
+ * ceiling is 800. Read that file before writing anything that asks who is
+ * connected to whom — the four `Friendship` methods below are the frozen
+ * pre-migration copy and no longer answer that question.
+ */
+export interface RemySocialRepository extends RemyFollowGraphRepository {
   getProfile(profileId: ProfileId): Promise<Profile | null>;
   /** Handle lookup is how one person finds another, so it takes whatever was typed and normalizes before matching. */
   findProfileByHandle(rawHandle: string): Promise<Profile | null>;

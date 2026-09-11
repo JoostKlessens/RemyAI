@@ -189,6 +189,7 @@ import { ImportFailureState } from '@/components/ImportFailureState';
 import { buildImportFailureCopy, type ImportFailureResult } from '@/components/importFailureCopy';
 import { describeImportFeedback } from '@/components/importFeedbackPolicy';
 import { ImportCheckpointList } from '@/components/ImportCheckpointList';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 import { ImportSourceField } from '@/components/ImportSourceField';
 import {
   buildImportCheckpointLabels,
@@ -398,6 +399,9 @@ export default function ImportPasteScreen(): JSX.Element {
    * that decides which body is posted. Never derived from the field
    * contents — see the file header.
    */
+  // Read once here and passed down, per docs/DESIGN.md's global rule — the
+  // checkpoint rows must not each register their own listener.
+  const reduceMotionEnabled = useReduceMotion();
   const [mode, setMode] = useState<ImportSourceMode>('link');
   const [url, setUrl] = useState('');
   /**
@@ -1093,7 +1097,11 @@ export default function ImportPasteScreen(): JSX.Element {
         ) : null}
 
         {phase === 'loading' ? (
-          <ImportCheckpointList labels={checkpointLabels} filledCount={loadingCheckpoint} />
+          <ImportCheckpointList
+            labels={checkpointLabels}
+            filledCount={loadingCheckpoint}
+            reduceMotionEnabled={reduceMotionEnabled}
+          />
         ) : null}
 
         {failedAttempt !== null ? (
@@ -1210,7 +1218,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     paddingHorizontal: spacing.space3,
-    paddingTop: spacing.space2,
+    paddingTop: spacing.screenHeaderTop,
   },
   cancelButton: {
     minHeight: spacing.touchTargetMin,
