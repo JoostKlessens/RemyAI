@@ -479,16 +479,35 @@ state, the end line "Dat is alles wat er gedeeld is." Changes:
   behind an `Iedereen | Vrienden` scope. Everything below about the two
   card kinds still applies to that single list.
 - **The list holds two card kinds.** A *proof card*
-  (ambient): eyebrow `SANNE MAAKTE DIT`, dish, key ingredients, meta
-  "30 min · 8,5" (her public `recipe_ratings` vote; absent if she never
-  voted), creator line (attribution is not optional — these are
-  extractions of somebody's post, PD-007). It opens the **canonical
+  (ambient): eyebrow `SANNE MAAKTE DIT`, dish, key ingredients, ~~meta
+  "30 min · 8,5"~~ meta "8,5" (her public `recipe_ratings` vote; absent
+  if she never voted), creator line (attribution is not optional — these
+  are extractions of somebody's post, PD-007). It opens the **canonical
   recipe**: the publicly readable `recipes` row, not her household's
   copy — her edits, notes and scheduling stay hers. A *send card* adds
   the sender's note (Archivo `bodySmall`, `textSecondary`,
   `borderStrong` left rule, in quotes) and opens the **sender's actual
   meal** — they chose to hand you their version; that difference between
   the two card kinds is the privacy model made visible.
+
+  > **AMENDED, 2026-09-11 — THE SHAPE CHANGED, THE MEANING DID NOT.** The
+  > owner, looking at the merged Ontdek tab: *"De vrienden pagina op
+  > ontdek is nu geen feed meer zoals die bij ontdekken is, dat is wel de
+  > bedoeling."* He was right — measured, not felt: these two cards drew
+  > an 80pt thumbnail (`spacing.space20`) at 9:16 — about 142pt tall — on
+  > the LEFT of a text column, `title3`, card itself about 150-190pt
+  > tall; explore's card beside it drew a centred column, `title2`, a
+  > 200pt photo at 9:16 (356pt tall), about 496pt tall in total — one
+  > screenful against four rows to a screen, on the same tab. Both now
+  > compose `FeedCardFace.tsx`: eyebrow, `title2` name, a cook-time row
+  > with its own clock — moved OUT of the meta line, where it used to be
+  > the first half of "30 min · 8,5" — the 200pt photo, then whatever
+  > this card kind adds under it, the meta line, the creator line. What
+  > is left in the meta line is the grade alone, and the asymmetry
+  > between "8,5" (proof) and "8,0/10" (send) is meaning rather than
+  > form and stays exactly as written above. The eyebrow, the note and
+  > the two destinations this bullet names did not move at all — see the
+  > diagram below for the shape itself.
 - **Kring** renders §2.2: rank in `numeral` mono (tabular figures, as on
   the board), thumbnail with monogram fallback, dish in `title3`, meta
   in `numeral` mono naming the voters, creator in `caption` mono. Rows
@@ -570,8 +589,77 @@ state, the end line "Dat is alles wat er gedeeld is." Changes:
 │ └─────────────────────────────────┘│
 │    Dat is alles wat er gedeeld is. │ caption, centered
 └───────────────────────────────────┘
+```
+
+> **AMENDED, 2026-09-11 — THE DIAGRAM ABOVE IS THE OLD COMPACT ROW, KEPT
+> RATHER THAN ERASED, AND IT NO LONGER MATCHES THE SHIPPED CARD.** The
+> owner, looking at the merged Ontdek tab: *"De vrienden pagina op ontdek
+> is nu geen feed meer zoals die bij ontdekken is, dat is wel de
+> bedoeling."* He was right, and the header above was already wrong on
+> two further counts before this change, both already recorded — and
+> never carried into this drawing — by this section's own 2026-08-27 and
+> 2026-09-08 notes: there has been no `Gekookt`/`Kring` switch and no
+> subtitle since 8 September. What replaced them is the pager's own
+> switch, `Vrienden | Ontdekken` — two plain words, no box, the active
+> one in `button` weight — because a `SegmentedControl` was judged the
+> wrong instrument for choosing a page you are already a swipe away from.
+> The tab holding both is now called **Ontdek**.
+>
+> **What changed in the cards, measured rather than felt:** an 80pt
+> thumbnail (`spacing.space20`) at 9:16 — about 142pt tall — on the LEFT
+> of a text column, `title3`, card about 150-190pt tall, four fitting a
+> screen; against explore's own card, drawn right beside it in the same
+> merged tab, a centred column with `title2`, a 200pt photo at 9:16
+> (356pt tall), about 496pt tall in total — one screenful. `FeedCardFace`
+> now composes all three cards on Ontdek, this list's two and explore's,
+> so what follows is the one true shape.
+>
+> **What did NOT change:** the eyebrow (`SANNE MAAKTE DIT` against
+> `GEDEELD DOOR JORIS`), the note (a send card has one, a proof card
+> never does — PD-016, and now the clearest visual difference between
+> the two rather than one difference among several), and the two
+> destinations named in the prose above. Only the cook time moved, out of
+> the meta line — where it used to be the first half of "20 min ·
+> 8,5/10" — into its own row with a clock, matching explore; the meta
+> line keeps the grade alone, and the asymmetry between "8,5" (proof) and
+> "8,0/10" (send) is meaning rather than form and is untouched.
+
+```
+┌───────────────────────────────────┐
+│ Vrienden    Ontdekken              │ surface switch · two words, no box
+│                                     │ (active = button weight, muted = body)
+│ ┌─────────────────────────────────┐│
+│ │    GEDEELD DOOR JORIS           ││ label · mono   (send card)
+│ │    Romige pasta pesto           ││ title2, centered
+│ │        ◷ 20 min                 ││ clock glyph + numeral · mono
+│ │      ┌───────────────┐          ││
+│ │      │               │          ││
+│ │      │      9:16     │          ││ 200pt photo, centered
+│ │      │               │          ││
+│ │      └───────────────┘          ││
+│ │      ┃ "echt 20 min, beloofd"   ││ bodySmall, left rule ← note (send only)
+│ │             8,5/10              ││ numeral · mono (public vote, no time)
+│ │      @kokenmetkees · TikTok     ││ caption · mono
+│ └─────────────────────────────────┘│
+│ ┌─────────────────────────────────┐│
+│ │    SANNE MAAKTE DIT             ││ label · mono   (proof card)
+│ │    Traybake kip & citroen       ││ title2, centered
+│ │        ◷ 25 min                 ││ clock glyph + numeral · mono
+│ │      ┌───────────────┐          ││
+│ │      │               │          ││
+│ │      │       T       │          ││ monogram fallback
+│ │      │               │          ││
+│ │      └───────────────┘          ││
+│ │                                 ││ ← no note: proof never has one (PD-016)
+│ │              8,5                ││ numeral · mono
+│ │      @kokenmetkees · TikTok     ││ caption · mono
+│ └─────────────────────────────────┘│
+│    Dat is alles wat er gedeeld is. │ caption, centered
+└───────────────────────────────────┘
+```
 
 Kring mode:
+```
 ┌───────────────────────────────────┐
 │ [ Gekookt │ Kring ]                │
 │ Wat je kring het beste vindt.      │ bodySmall, textMuted

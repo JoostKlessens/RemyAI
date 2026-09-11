@@ -240,25 +240,28 @@ function BoardList(props: { readonly rows: readonly BoardRowModel[] }): JSX.Elem
       data={props.rows}
       keyExtractor={(row: BoardRowModel) => row.recipeId}
       renderItem={({ item }: { item: BoardRowModel }) => <TrendingCard row={item} />}
-      ItemSeparatorComponent={BoardGap}
+      ItemSeparatorComponent={ListGap}
       ListFooterComponent={BoardEndNote}
-      contentContainerStyle={styles.boardContent}
+      contentContainerStyle={styles.listContent}
     />
   );
 }
 
-/** Cards are separated by space, not by a rule — each already carries its own hairline border. */
+/**
+ * Cards are separated by space, not by a rule — each already carries its own
+ * hairline border.
+ *
+ * ⚠ ONE GAP FOR BOTH SURFACES SINCE 11 SEPTEMBER 2026, AND IT USED TO BE
+ * TWO. The feed put 12pt between its cards and explore put 20pt, which was
+ * right while the feed drew 150pt rows and explore drew 496pt photo cards:
+ * the wider gap was doing the work the rank number used to do, saying where
+ * one entry ends when no number does. Both sides draw the same card now
+ * (`FeedCardFace`), so two rhythms would be the last place the surfaces
+ * still disagreed about what a card is — and the owner's complaint was
+ * exactly that they did.
+ */
 function ListGap(): JSX.Element {
   return <View style={styles.listGap} />;
-}
-
-/**
- * Explore's gap is wider than the feed's, and the separator does the work
- * the rank number used to: with no number saying where one entry ends, the
- * gap is what makes a card one thing rather than a run of stacked panels.
- */
-function BoardGap(): JSX.Element {
-  return <View style={styles.boardGap} />;
 }
 
 function FeedEndNote(): JSX.Element {
@@ -366,20 +369,21 @@ function FilteredOutState(): JSX.Element {
 const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.screenPaddingHorizontal,
-    paddingBottom: spacing.space10,
-  },
-  boardContent: {
-    paddingHorizontal: spacing.screenPaddingHorizontal,
-    // Cards want air above them the way rows did not: the filter drawer
-    // sits directly on top of this list, and a card starting flush against
+    // Cards want air above them the way rows did not: a control sits
+    // directly on top of each of these lists — the filter drawer on one
+    // side, the surface switch on both — and a card starting flush against
     // it reads as attached to the control rather than to the feed.
+    //
+    // ⚠ ONE STYLE FOR BOTH SURFACES SINCE 11 SEPTEMBER 2026. `boardContent`
+    // stood beside this and had become identical to it once the feed's cards
+    // grew to explore's size; two spellings of one padding is how two
+    // surfaces drift apart again after being brought together.
     paddingTop: spacing.space4,
     paddingBottom: spacing.space10,
   },
   listGap: {
-    height: spacing.space3,
-  },
-  boardGap: {
+    // Explore's old number, kept rather than the feed's: the wider gap is
+    // what the 356pt photograph needs to read as one object. See `ListGap`.
     height: spacing.space5,
   },
   endNote: {

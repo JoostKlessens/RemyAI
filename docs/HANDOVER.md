@@ -3,6 +3,82 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
+**Stand: 11 september 2026, avond — dit blok vervangt het blok eronder, dat
+geschreven was vóórdat fase 2 gecommit werd en vóór de vormwijziging.**
+Branch `feat/live-import-and-plan-phases`. **Fase 2 ZIT NU WEL IN EEN
+COMMIT**: `13db1d1`, 34 bestanden, +3992/-2078. Het blok hieronder zei nog
+"NOG NIET in een commit"; dat is achterhaald en blijft staan omdat dit
+document doorstreept in plaats van wist.
+
+**Vijf poorten groen, alle vijf zelf gedraaid op 11 september 2026 en
+overgeschreven uit de terminal:** typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3809 tests over 160 bestanden**. Het blok eronder noemt
+3788 over 159; dat getal klopte op het moment van schrijven en is daarna
+gestegen door `tests/sentMealCards.test.ts` (21 tests op de nieuwe
+send-kaart-joins, een gat dat de code-review vond). De uitgangsmeting vóór
+fase 2 was 3742 over 157, dus **+67 tests over +3 testbestanden**.
+
+## Wat er ná `13db1d1` nog gebeurde, en nog NIET gecommit is
+
+**De eigenaar, kijkend naar het samengevoegde scherm, letterlijk:** *"De
+vrienden pagina op ontdek is nu geen feed meer zoals die bij ontdekken is,
+dat is wel de bedoeling."*
+
+Hij had gelijk, en het verschil was meetbaar in plaats van gevoelsmatig. De
+twee kaarten op de Vrienden-kant tekenden een RIJ: een duim van 80pt
+(`spacing.space20`) op 9:16, dus ~142pt hoog, LINKS naast een tekstkolom,
+titel in `title3`, kaart ~150-190pt — vier op een scherm. De kaart één veeg
+verderop tekende een KOLOM: titel `title2` gecentreerd, kooktijd met klok,
+een foto van 200pt op 9:16 (356pt hoog), kaart ~496pt — ruwweg één per
+scherm. Eén tab, twee ideeën van wat een kaart is.
+
+**Wat er gebouwd is.** Eén nieuw bestand, `src/components/FeedCardFace.tsx`
+(353 regels): de gedeelde compositie binnen het paneel — eyebrow, titel
+(`title2`), kooktijd met klok, de 200pt-foto, een slot eronder,
+ingrediënten, metaregel, creatorregel, allergeenchip — plus een
+geëxporteerde `feedCardPanelStyle`. De drie kaarten op Ontdek componeren hem
+nu alle drie: `TrendingCard.tsx` 350 → 242, `FriendProofCard.tsx` 334 → 265,
+`FriendRecipeCard.tsx` 304 → 235. In `OntdekBodies.tsx` (421 → 418) zijn de
+twee tussenruimtes en de twee contentstijlen samengevoegd tot één: 12pt werd
+20pt, want nu beide kanten dezelfde kaart tekenen zou een tweede ritme de
+laatste plek zijn waar de oppervlakken het oneens bleven.
+
+⚠ **PROOF EN SEND BLIJVEN SIBLINGS, EN HOE DAT GEBORGD IS.**
+DESIGN-SOCIAL.md §8 en PD-016 eisen dat een send nooit de taal van proof
+leent, en de staande regel is dat het twee componenten zijn en nooit één met
+een `kind`-prop. `FeedCardFace` neemt **geen enkele discriminator**. Wat per
+soort verschilt blijft buiten dat bestand, bij de sibling die het bezit:
+
+- de eyebrow (`SANNE MAAKTE DIT` tegenover `GEDEELD DOOR JORIS`) komt binnen
+  als AFGEMAAKTE STRING — het gezicht krijgt nooit een naam plus een
+  werkwoord, want dan zou het zelf bepalen welke kaartsoort het tekent;
+- wat een tap opent — een wereldleesbare canonieke rij tegenover iemands
+  privé `meals`-rij, onder verschillende rechten — is een handler op de
+  sibling, en het gezicht heeft helemaal geen `onPress`;
+- PD-020.1's entrance, die een gerichte send aankondigt en nooit een gewoon
+  etentje, is de `Animated.View` van de send-kaart;
+- PD-020.2's closed-loop-streep gaat als NODE mee via het slot
+  `titleUnderline`, niet als vlag. ⚠ Een slot neemt bewust een node en geen
+  boolean: een boolean is een discriminator met een andere hoed op, en de
+  volgende die een tweede verschil nodig heeft zou er een tweede boolean bij
+  zetten in plaats van een tweede sibling.
+
+**Eén gedragsverandering die geen vorm is:** de kooktijd is bij de twee
+vriendkaarten uit de metaregel gehaald en staat nu in zijn eigen regel met
+klok, waar explore hem altijd al tekende. `buildFriendProofMetaLine` en
+`buildFriendRecipeMetaLine` zijn ONGEWIJZIGD; de twee aanroepers geven nu
+`null` voor de minuten en zeggen dat ter plekke. Wat in de metaregel
+overblijft is het cijfer, en de asymmetrie tussen "8,5" (proof) en "8,0/10"
+(send) is betekenis en blijft.
+
+⚠ **MIGRATIES 0020, 0021 EN 0022 ZIJN GESCHREVEN EN NIET GEDRAAID.** Dat is
+onveranderd en het is van de eigenaar. De volgorde is niet omkeerbaar: eerst
+`npx supabase db push`, dan de code live. Andersom leest `listFollows` een
+tabel die niet bestaat en staat elk sociaal scherm leeg mét de data netjes in
+de database.
+
+---
+
 **Stand: 11 september 2026 — dit blok vervangt het blok eronder, dat tot en
 met `4c98898` liep.** Branch `feat/live-import-and-plan-phases`, op
 `4c98898` (fase 0/1, gepusht). **Fase 2 zelf zit NOG NIET in een commit** —

@@ -1,9 +1,23 @@
 /**
- * One ambient cook-proof card in the Vrienden tab's `Gekookt` mode
- * (docs/DESIGN.md §8, docs/DESIGN-SOCIAL.md §2.4 and §4.2, PD-015):
- * a portrait still, who cooked it, the dish, its key ingredients, how long
- * it takes and what the circle publicly gave it. Tapping it opens the
- * canonical recipe.
+ * One ambient cook-proof card on Ontdek's feed side (docs/DESIGN.md §8,
+ * docs/DESIGN-SOCIAL.md §2.4 and §4.2, PD-015): a portrait still, who
+ * cooked it, the dish, its key ingredients, how long it takes and what the
+ * circle publicly gave it. Tapping it opens the canonical recipe.
+ *
+ * ⚠ TWO NAMES IN THAT SENTENCE HAVE GONE AND THE CARD HAS NOT. It used to
+ * open "in the Vrienden tab's `Gekookt` mode"; the mode went when the kring
+ * moved to Trending, and the TAB went on 11 September 2026 when PD-024
+ * merged Vrienden and Trending into Ontdek. This card crossed both moves
+ * unchanged, which is the useful thing to know about it.
+ *
+ * ⚠ IT IS A FULL-WIDTH FEED CARD SINCE THAT SAME DAY, AND IT WAS A COMPACT
+ * ROW BEFORE. The owner, looking at the merged tab: "De vrienden pagina op
+ * ontdek is nu geen feed meer zoals die bij ontdekken is, dat is wel de
+ * bedoeling." The composition — name, clock, 200pt photograph at 9:16,
+ * evidence, creator — now comes from `FeedCardFace.tsx` and is shared with
+ * the send card and with explore's. What stayed here is what makes a proof
+ * card a proof card: the eyebrow, the closed-loop dress, and the
+ * destination.
  *
  * WHY THIS IS A SIBLING OF `FriendRecipeCard` AND NOT A MODE OF IT. The
  * two cards in this one list open different rows under different
@@ -14,9 +28,15 @@
  * component would put that distinction behind a prop: a wrong default, a
  * forgotten argument or a copied call site would route a tap into
  * somebody's kitchen, and nothing at the call site would look wrong. Two
- * components, two models, one destination each. The cost is a second file
- * repeating a thumbnail column and a press animation; what it buys is
- * that "which row does this open" has exactly one answer per file.
+ * components, two models, one destination each.
+ *
+ * ⚠ THE COST OF THAT USED TO BE "a second file repeating a thumbnail column
+ * and a press animation", AND MOST OF IT IS GONE. The composition moved to
+ * `FeedCardFace.tsx` on 11 September 2026, so what the two siblings repeat
+ * now is a press animation and a panel — and what they keep apart is the
+ * thing the separation was always for: which row a tap opens, under which
+ * permissions, with exactly one answer per file. The extraction made the
+ * rule cheaper to keep rather than harder.
  *
  * WHAT THIS CARD DOES NOT HAVE, AND WHY THAT IS THE PRODUCT RATHER THAN
  * AN OMISSION. No sender and no note. A send carries a person and one
@@ -56,7 +76,8 @@
 
 import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { FeedCardFace, feedCardPanelStyle } from './FeedCardFace';
 import {
   CLOSED_LOOP_CHIP_COPY,
   buildAllergenCollisionLabel,
@@ -66,9 +87,8 @@ import {
   buildFriendProofMetaLine,
   type FriendProofCardModel,
 } from './friendFeedPresentation';
-import { useThumbnailFallback } from './useThumbnailFallback';
 import type { RecipeId } from '@/domain/social/types';
-import { fontFamily, getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
+import { getColors, motion, radii, resolveDuration, spacing, typeScale } from '@/theme/tokens';
 
 export interface FriendProofCardProps {
   readonly model: FriendProofCardModel;
@@ -103,33 +123,38 @@ export interface FriendProofCardProps {
 /** Matches Button's and FriendRecipeCard's press feedback exactly, so every tappable object feels like one product. */
 const PRESS_SCALE = 0.98;
 
-/** 9:16, the same portrait ratio Bibliotheek's grid and the send card use — a short-form video still, not a crop. */
-const THUMBNAIL_ASPECT_RATIO = 9 / 16;
+/*
+  `THUMBNAIL_ASPECT_RATIO` STOOD HERE AND IS GONE, not commented out. The
+  9:16 ratio did not change — it moved to `FeedCardFace.tsx` along with the
+  photo it describes, where one constant now serves all three cards on
+  Ontdek. A dead constant kept "in case" is a number the next person has to
+  prove nothing reads.
+*/
 
 /** The hairline weight Kiezen's accept stroke draws at (DecisionCard.tsx); this one is its completion mirror. */
 const CLOSED_LOOP_STROKE_HEIGHT = 2;
 
 export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
   const { model, onOpenCanonicalRecipe, reduceMotionEnabled } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
+  const colors = getColors(useColorScheme());
   const scale = useRef(new Animated.Value(1)).current;
   const strokeScale = useRef(new Animated.Value(0)).current;
 
   const eyebrow = buildFriendProofEyebrow(model.cookNames, model.closedLoop);
-  const metaLine = buildFriendProofMetaLine(model.estimatedMinutes, model.grade);
+  // NULL FOR THE COOK TIME, AND THAT IS THE ONE CALL THIS CHANGE ALTERS.
+  // The time is drawn by `FeedCardFace` with a clock, above the photo, where
+  // explore has always drawn it — so passing it here too would print it
+  // twice. What is left in the meta line is the GRADE, and its spelling
+  // ("8,5", no denominator) is meaning rather than form and stays exactly as
+  // `buildFriendProofMetaLine` has always written it.
+  const metaLine = buildFriendProofMetaLine(null, model.grade);
   const collisionLabel = buildAllergenCollisionLabel(model.collidingTags);
-  const monogram = model.title.trim().charAt(0).toUpperCase() || '?';
-  // No source URL passed, and deliberately: `CanonicalRecipeSummary` does
-  // not carry one, and a proof feed assembled per read is not a person
-  // looking at one post. useThumbnailFallback.ts carries both halves.
-  const thumbnail = useThumbnailFallback(model.thumbnailUrl);
 
   useEffect(() => {
     if (!model.closedLoop) {
-      // An ordinary proof card starts and stays undrawn. The stroke is
-      // never animated away: the dress is read once, and the card simply
-      // arrives without it on the next visit.
+      // An ordinary proof card starts and stays undrawn. The stroke is never
+      // animated away: the dress is read once, and the card simply arrives
+      // without it on the next visit.
       strokeScale.setValue(0);
       return;
     }
@@ -151,10 +176,10 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
   };
 
   /**
-   * Every affordance that claims this card is a button lives here
-   * together, so the claim and the destination cannot drift apart. With
-   * no handler there is no role, no hint and no press-scale — the card
-   * keeps only its accessibility label, exactly as `KringRow` does.
+   * Every affordance that claims this card is a button lives here together,
+   * so the claim and the destination cannot drift apart. With no handler
+   * there is no role, no hint and no press-scale — the card keeps only its
+   * accessibility label, exactly as `KringRow` does.
    */
   const pressAffordance =
     onOpenCanonicalRecipe === undefined
@@ -173,48 +198,18 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
         {...pressAffordance}
         accessible
         accessibilityLabel={buildFriendProofCardAccessibilityLabel(model)}
-        style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        style={[feedCardPanelStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
-        <View style={[styles.thumbnailFrame, { backgroundColor: colors.surfaceSunken }]}>
-          {thumbnail.showsImage ? (
-            <Image
-              source={{ uri: thumbnail.imageUrl ?? undefined }}
-              style={styles.thumbnail}
-              resizeMode="cover"
-              onError={thumbnail.onError}
-              accessibilityIgnoresInvertColors
-            />
-          ) : (
-            // The same monogram fallback Bibliotheek's tile and the send
-            // card use — never a broken image, never a stock placeholder
-            // (docs/DESIGN.md §2).
-            <Text
-              style={[
-                typeScale.title2,
-                styles.monogram,
-                { fontFamily: fontFamily.monoSemiBold, color: colors.textMuted },
-              ]}
-            >
-              {monogram}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.body}>
-          <Text style={[typeScale.label, styles.eyebrow, { color: colors.textMuted }]}>{eyebrow}</Text>
-
-          {/* No numberOfLines cap anywhere on this card, matching the send
-              card: docs/DESIGN.md prefers letting a row grow over clipping
-              it, and a truncated dish name is unreadable at 200% Dynamic
-              Type. */}
-          <View style={styles.dishTitleWrap}>
-            <Text style={[typeScale.title3, { color: colors.textPrimary }]}>{model.title}</Text>
-            {/* Absolutely positioned so it never perturbs the row's height,
-                drawn or not — scaleX alone would not collapse its box.
-                `transformOrigin` rather than a compensating translateX:
-                that fallback needs an onLayout measurement of the title
-                before it can scale from the left edge, and a stroke that
-                waits for a layout pass draws visibly late. */}
+        <FeedCardFace
+          eyebrow={eyebrow}
+          title={model.title}
+          titleUnderline={
+            /* Absolutely positioned so it never perturbs the card's height,
+               drawn or not — scaleX alone would not collapse its box.
+               `transformOrigin` rather than a compensating translateX: that
+               fallback needs an onLayout measurement of the title before it
+               can scale from the left edge, and a stroke that waits for a
+               layout pass draws visibly late. */
             <Animated.View
               pointerEvents="none"
               accessibilityElementsHidden
@@ -224,82 +219,32 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
                 { backgroundColor: colors.positive, transform: [{ scaleX: strokeScale }] },
               ]}
             />
-          </View>
-
-          {model.closedLoop ? (
-            <View style={[styles.chip, styles.closedLoopChip, { backgroundColor: colors.positiveMuted }]}>
-              <Text style={[typeScale.caption, { color: colors.positive }]}>{CLOSED_LOOP_CHIP_COPY}</Text>
-            </View>
-          ) : null}
-
-          {model.keyIngredients !== null ? (
-            <Text style={[typeScale.bodySmall, styles.ingredients, { color: colors.textSecondary }]}>
-              {model.keyIngredients.text}
-            </Text>
-          ) : null}
-
-          {metaLine !== null ? (
-            <Text style={[typeScale.numeral, styles.metaRow, { color: colors.textMuted }]}>{metaLine}</Text>
-          ) : null}
-
-          {/* PD-007: attribution is not optional on a proof card either —
-              this is still an extraction of somebody's post. Deliberately
-              not a link, exactly as on the send card: the whole card is
-              one tap target, and a nested link would hand a screen reader
-              two destinations for one visual object. */}
-          <Text style={[typeScale.caption, styles.creator, { color: colors.textMuted }]}>
-            {buildCreatorLine(model.creatorHandle, model.creatorPlatform)}
-          </Text>
-
-          {collisionLabel !== null ? (
-            <View style={[styles.chip, styles.collisionChip, { backgroundColor: colors.warningMuted }]}>
-              <Text style={[typeScale.caption, { color: colors.warning }]}>{collisionLabel}</Text>
-            </View>
-          ) : null}
-        </View>
+          }
+          estimatedMinutes={model.estimatedMinutes}
+          // No source URL, deliberately: `CanonicalRecipeSummary` does not
+          // carry one, and a proof feed assembled per read is not a person
+          // looking at one post. useThumbnailFallback.ts carries both halves.
+          thumbnailUrl={model.thumbnailUrl}
+          underPhoto={
+            model.closedLoop ? (
+              <View style={[styles.closedLoopChip, { backgroundColor: colors.positiveMuted }]}>
+                <Text style={[typeScale.caption, { color: colors.positive }]}>{CLOSED_LOOP_CHIP_COPY}</Text>
+              </View>
+            ) : null
+          }
+          keyIngredientsText={model.keyIngredients?.text ?? null}
+          metaLine={metaLine}
+          // PD-007: attribution is not optional on a proof card either — this
+          // is still an extraction of somebody's post.
+          creatorLine={buildCreatorLine(model.creatorHandle, model.creatorPlatform)}
+          collisionLabel={collisionLabel}
+        />
       </Pressable>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    gap: spacing.space3,
-    padding: spacing.space3,
-    borderWidth: 1,
-    borderRadius: radii.radiusSm,
-    // Every real state of this card is far taller than 44pt; the floor is
-    // stated anyway so a future single-line variant cannot slip under it.
-    minHeight: spacing.touchTargetMin,
-  },
-  thumbnailFrame: {
-    width: spacing.space20,
-    aspectRatio: THUMBNAIL_ASPECT_RATIO,
-    borderRadius: radii.radiusSm,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  thumbnail: {
-    ...StyleSheet.absoluteFill,
-  },
-  monogram: {
-    textAlign: 'center',
-  },
-  body: {
-    flex: 1,
-  },
-  eyebrow: {
-    textTransform: 'uppercase',
-    marginBottom: spacing.space1,
-  },
-  dishTitleWrap: {
-    position: 'relative',
-    // Shrinks the wrap to the title's own width, so the stroke underlines
-    // the dish name rather than the column it sits in.
-    alignSelf: 'flex-start',
-  },
   closedLoopStroke: {
     position: 'absolute',
     left: 0,
@@ -308,27 +253,13 @@ const styles = StyleSheet.create({
     height: CLOSED_LOOP_STROKE_HEIGHT,
     transformOrigin: 'left',
   },
-  ingredients: {
-    marginTop: spacing.space1,
-  },
-  metaRow: {
-    marginTop: spacing.space1,
-  },
-  creator: {
-    marginTop: spacing.space1,
-  },
-  chip: {
-    alignSelf: 'flex-start',
+  closedLoopChip: {
+    // Sits with the dish (PD-020.2), which means clearing the photo above it
+    // rather than taking the ordinary one-step step.
+    marginTop: spacing.space3,
+    alignSelf: 'center',
     borderRadius: radii.radiusSm,
     paddingHorizontal: spacing.space2,
     paddingVertical: spacing.space1,
-  },
-  closedLoopChip: {
-    // Sits with the dish (PD-020.2), which means clearing the stroke drawn
-    // just under the title rather than taking the ordinary one-step step.
-    marginTop: spacing.space2,
-  },
-  collisionChip: {
-    marginTop: spacing.space2,
   },
 });

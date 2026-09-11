@@ -145,12 +145,10 @@
  */
 
 import type { JSX } from 'react';
-import { Image, StyleSheet, Text, View, useColorScheme } from 'react-native';
-import { Icon } from '@/components/Icon';
-import { isIconAvailable } from '@/components/iconFont';
-import { fontFamily, getColors, radii, spacing, typeScale } from '@/theme/tokens';
-import { buildBoardRowAccessibilityLabel, formatCookTime } from './leaderboardPresentation';
-import { useThumbnailFallback } from './useThumbnailFallback';
+import { View, useColorScheme } from 'react-native';
+import { getColors } from '@/theme/tokens';
+import { FeedCardFace, feedCardPanelStyle } from './FeedCardFace';
+import { buildBoardRowAccessibilityLabel } from './leaderboardPresentation';
 
 /**
  * Exactly what this card draws, and nothing else.
@@ -182,169 +180,63 @@ export interface TrendingCardProps {
 }
 
 /**
- * 200pt wide at 9:16, so 356pt tall — `DecisionCard`'s number, to the point,
- * and arrived at from a different direction.
+ * ⚠ THE COMPOSITION LEFT THIS FILE ON 11 SEPTEMBER 2026 AND IS NOW SHARED.
+ * `PHOTO_WIDTH`, `PHOTO_ASPECT_RATIO`, `CLOCK_GLYPH_SIZE`, the whole
+ * stylesheet and the render body all moved to `FeedCardFace.tsx`, with their
+ * arguments intact — the 200pt-at-9:16 reasoning, the "one card is roughly
+ * one screenful" rhythm, and the warning that those viewport numbers are
+ * derived from stylesheets rather than read off a device.
  *
- * There it is what a 544pt hero block can hold. Here it is what makes one
- * card roughly one screenful, which is the "zoals instagram" rhythm: a card
- * comes to about 356pt of photo plus ~145pt of name, time, grade, creator and
- * padding, and the list viewport on a 402x874 device is about 500pt once the
- * tab bar, the header and a shut filter drawer are taken off. So one card
- * fills the view and the next one peeks — the thing that says "scroll"
- * without a control saying it.
+ * WHY: the owner said the feed side of Ontdek "is nu geen feed meer zoals
+ * die bij ontdekken is, dat is wel de bedoeling." The two friend cards drew
+ * an 80pt thumbnail beside a text column where this one drew a 356pt
+ * photograph, so the same screen held two different ideas of what a card is.
+ * They compose the same face now. That is the same answer the same owner
+ * request got on 8 September for the two SCOPES — one component, satisfied
+ * structurally, "without either becoming the other" — applied to the two
+ * SURFACES the tabs merged into.
  *
- * ⚠ THOSE VIEWPORT NUMBERS ARE DERIVED FROM STYLESHEETS, NOT MEASURED ON A
- * DEVICE. The header's height depends on `SegmentedControl` and on Dynamic
- * Type, and neither has been read off a phone for this screen. What is safe
- * either way is the failure mode: this is a scrolling list, so a card that
- * turns out taller than the viewport scrolls rather than overflowing — which
- * is precisely the risk `DecisionCard` could not take and had to pay for with
- * a `flexShrink` chain.
- *
- * NOT A SPACING TOKEN, because there is no token for it — that scale stops at
- * `space24` (96) — and adding one for a single call site would put a number
- * in a shared vocabulary only this card can use. `DecisionCard` makes the
- * same note about the same number.
+ * WHAT DID NOT MOVE: this card's model, its accessibility sentence, and the
+ * fact that it does not press. `TrendingCardModel` is still the structural
+ * shape above, `BoardRowModel` still satisfies it without importing it, and
+ * the open PD-014 question about the tap is still open and still recorded in
+ * this header.
  */
-const PHOTO_WIDTH = 200;
-const PHOTO_ASPECT_RATIO = 9 / 16;
-
-/** 16pt — the small end of WS4's UI band, and the exact size `TimeCapPicker` and `DecisionCard` draw this same clock at. One unit, one mark. */
-const CLOCK_GLYPH_SIZE = 16;
-
 export function TrendingCard(props: TrendingCardProps): JSX.Element {
   const { row } = props;
-  const scheme = useColorScheme();
-  const colors = getColors(scheme);
-  // No source URL passed, and deliberately: `BoardRecipe` does not carry one,
-  // and a leaderboard capped at 25 rows is populated by a ranking rather than
-  // by anything this household did. See useThumbnailFallback.ts.
-  const photo = useThumbnailFallback(row.thumbnailUrl);
-  // The same expression `RecipeTile`, `FriendProofCard`, `FriendRecipeCard`,
-  // `KringRow` and `DecisionCard` use, character for character — a sixth
-  // spelling of one fallback is how six surfaces end up disagreeing about an
-  // untitled dish.
-  const monogram = row.title.trim().charAt(0).toUpperCase() || '?';
+  const colors = getColors(useColorScheme());
 
   return (
     <View
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      style={[feedCardPanelStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
       accessible
       accessibilityLabel={buildBoardRowAccessibilityLabel(row)}
     >
-      {/* No numberOfLines cap, matching Kiezen: ellipsizing the dish name at
-          200% type would hide the one thing the card exists to show, and a
-          list that scrolls can afford the extra line. */}
-      <Text style={[typeScale.title2, styles.title, { color: colors.textPrimary }]}>{row.title}</Text>
-
-      {/* The clock is asked for FIRST and drawn only if the installed fonts
-          have it — iconFont.ts's stated contract: `Icon` renders null for a
-          glyph no font can draw, and a row whose `gap` survives around nothing
-          is a visible indent with no mark in it. Nothing in this card speaks
-          on its own: the whole card is one accessibility element carrying the
-          sentence `buildBoardRowAccessibilityLabel` builds, and the time is
-          in it. */}
-      {row.estimatedMinutes === null ? null : (
-        <View style={styles.timeRow}>
-          {isIconAvailable('clock') ? <Icon name="clock" size={CLOCK_GLYPH_SIZE} color={colors.textMuted} /> : null}
-          <Text style={[typeScale.numeral, { color: colors.textMuted }]}>{formatCookTime(row.estimatedMinutes)}</Text>
-        </View>
-      )}
-
-      <View style={[styles.photoFrame, { backgroundColor: colors.surfaceSunken }]}>
-        {photo.showsImage ? (
-          <Image
-            source={{ uri: photo.imageUrl ?? undefined }}
-            style={styles.photo}
-            resizeMode="cover"
-            onError={photo.onError}
-            accessibilityIgnoresInvertColors
-          />
-        ) : (
-          <Text
-            style={[typeScale.title2, styles.monogram, { fontFamily: fontFamily.monoSemiBold, color: colors.textMuted }]}
-          >
-            {monogram}
-          </Text>
-        )}
-      </View>
-
-      {/* The verdict and its evidence, never one without the other. PD-014's
-          justification for this whole surface rests on the vote count being
-          here: a grade with its sample removed is a picture with a number on
-          it, and this would be a stream of plates. */}
-      <Text style={[typeScale.numeral, styles.meta, { color: colors.textSecondary }]}>{row.metaLine}</Text>
-
-      {/* Not decoration. These cards are extractions of somebody's public
-          post, and PD-007's attribution obligation applies here exactly as it
-          does in the feed and on Bevestigen. */}
-      <Text style={[typeScale.caption, styles.creator, { color: colors.textMuted }]}>{row.creatorLine}</Text>
-
-      {/* PD-007a: labelled, never hidden, and never ranked down on this
-          surface — see leaderboardPresentation.ts for why the ordering is the
-          half that gives. Its absence says nothing about the dish. */}
-      {row.collisionLabel === null ? null : (
-        <View style={[styles.chip, { backgroundColor: colors.warningMuted }]}>
-          <Text style={[typeScale.caption, { color: colors.warning }]}>{row.collisionLabel}</Text>
-        </View>
-      )}
+      <FeedCardFace
+        // Null, because nobody on the board is named and nothing on it was
+        // addressed to anybody. The two friend cards pass a person here; that
+        // difference is the surfaces speaking, not the card.
+        eyebrow={null}
+        title={row.title}
+        estimatedMinutes={row.estimatedMinutes}
+        // No source URL, deliberately: `BoardRecipe` does not carry one, and a
+        // leaderboard capped at 25 rows is populated by a ranking rather than
+        // by anything this household did. See useThumbnailFallback.ts.
+        thumbnailUrl={row.thumbnailUrl}
+        // A canonical list projection carries no ingredients — see
+        // `CanonicalRecipeSummary`. Null is the projection, not the schema.
+        keyIngredientsText={null}
+        // The verdict and its evidence, never one without the other. PD-014's
+        // justification for this whole surface rests on the vote count being
+        // here: a grade with its sample removed is a picture with a number on
+        // it, and this would be a stream of plates.
+        metaLine={row.metaLine}
+        creatorLine={row.creatorLine}
+        // PD-007a: labelled, never hidden, and never ranked down on this
+        // surface — see leaderboardPresentation.ts for why the ordering is the
+        // half that gives. Its absence says nothing about the dish.
+        collisionLabel={row.collisionLabel}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    // The same proof-sheet panel every list surface in this app uses (DESIGN
-    // §8, §9), so Trending and Vrienden still read as siblings after the row
-    // became a card. What changed is the composition inside the panel; the
-    // panel itself is unchanged.
-    alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.radiusSm,
-    padding: spacing.space4,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // No gap around nothing: with the clock unavailable this row holds one
-    // child and `gap` contributes only BETWEEN children, so the number stays
-    // where it is rather than sitting behind an empty indent. `TimeCapPicker`
-    // and `DecisionCard` both make this note about this glyph.
-    gap: spacing.space2,
-    marginTop: spacing.space2,
-  },
-  photoFrame: {
-    width: PHOTO_WIDTH,
-    aspectRatio: PHOTO_ASPECT_RATIO,
-    // A phone narrower than 240pt would otherwise let a fixed 200 push the
-    // card wider than the screen. It costs nothing on every device that
-    // exists and it is one property rather than a second layout.
-    maxWidth: '100%',
-    marginTop: spacing.space4,
-    borderRadius: radii.radiusSm,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photo: {
-    ...StyleSheet.absoluteFill,
-  },
-  monogram: {
-    textAlign: 'center',
-  },
-  meta: {
-    marginTop: spacing.space3,
-  },
-  creator: {
-    marginTop: spacing.space1,
-  },
-  chip: {
-    marginTop: spacing.space2,
-    paddingHorizontal: spacing.space2,
-    paddingVertical: spacing.space1,
-    borderRadius: radii.radiusSm,
-  },
-});
