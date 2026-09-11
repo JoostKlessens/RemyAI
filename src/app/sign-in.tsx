@@ -136,8 +136,10 @@ export default function SignInScreen(): JSX.Element {
 
         {/* Never in a real build — see DevPasswordSignIn's header, and the
             second guard inside `signInWithDevPassword`. Mirrors how
-            (tabs)/index.tsx, friends.tsx and ranglijst.tsx mount their own
-            `__DEV__` surfaces. */}
+            (tabs)/index.tsx and ranglijst.tsx mount their own `__DEV__`
+            surfaces. (It was three screens until fase 2 merged Vrienden
+            into Ontdek; ranglijst.tsx now carries one dev row for both of
+            its surfaces.) */}
         {__DEV__ ? <DevPasswordSignIn /> : null}
       </View>
     </SafeAreaView>

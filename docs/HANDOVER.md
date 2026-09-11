@@ -4,6 +4,39 @@ Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
 **Stand: 11 september 2026 — dit blok vervangt het blok eronder, dat tot en
+met `4c98898` liep.** Branch `feat/live-import-and-plan-phases`, op
+`4c98898` (fase 0/1, gepusht). **Fase 2 zelf zit NOG NIET in een commit** —
+16 gewijzigde bestanden en 7 nieuwe, ongetrackt in de werkmap.
+
+**Vijf poorten groen, alle vijf zelf gedraaid op 11 september 2026 om 11:45
+en overgeschreven uit de terminal:** typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3788 tests over 159 bestanden**. De uitgangsmeting vóór dit
+werk was 3742 over 157, dus **+46 tests over +2 testbestanden**
+(`tests/ontdekBoundary.test.ts`, `tests/ontdekPresentation.test.ts`).
+
+**Wat er landde: Ontdek fase 2** (`docs/ONTDEK-PLAN.md`, PD-024a). De twee
+sociale tabs zijn nu, in draaiende code, één tab `Ontdek`: routesegment
+blijft `ranglijst`, alleen het label is `Ontdek`. `(tabs)/friends.tsx` is een
+`<Redirect href="/ranglijst" />` van 36 regels (was 907), met `href: null` in
+`_layout.tsx`. `ranglijst.tsx` is het samengevoegde scherm, 742 regels (was
+934): twee oppervlakken achter een pager, schakelaar `Vrienden | Ontdekken`
+(O-2b en O-2c beantwoord op 11 september). De feedkant leest proof-kaarten
+via `i_follow` in plaats van `is_friend_of`; de kring is geen lijst meer —
+`loadLiveTrending()` neemt geen argumenten meer. De grens tussen feed en
+explore heeft nu een test (`tests/ontdekBoundary.test.ts`).
+
+⚠ **MIGRATIES 0020, 0021 ÉN NU OOK 0022 ZIJN GESCHREVEN EN NIET GEDRAAID.**
+`0020_save_origin.sql`, `0021_directed_graph.sql` en
+`0022_feed_follows_the_follow.sql` staan alle drie alleen lokaal in
+`supabase/migrations/`, tegen géén database gedraaid — nog lokaal, nog
+remote. **De volgorde is niet omkeerbaar: eerst `npx supabase db push`, dan
+pas de code live.** Draai de code met deze migraties ongedraaid, en
+`i_follow` / `follows` / `saves.origin` bestaan niet — elk sociaal scherm dat
+erop leunt staat dan leeg of faalt.
+
+---
+
+**Stand: 11 september 2026 — dit blok vervangt het blok eronder, dat tot en
 met `e3685d2` liep en niet gepusht was.** Branch
 `feat/live-import-and-plan-phases`, **nu wél gepusht**, op uitdrukkelijk
 verzoek van de eigenaar.

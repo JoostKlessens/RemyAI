@@ -1,18 +1,25 @@
 /**
- * The four-tab navigator: Kiezen, Mijn recepten, Vrienden and Trending.
- * Nested under `(tabs)` — a route group, so it does not appear in the URL —
- * specifically so Cook Mode, the import flow, a friend's shared recipe and
- * settings (all registered as sibling Stack screens in the parent
- * src/app/_layout.tsx) render full-screen, without this tab bar leaking
- * into them. See src/app/_layout.tsx for the rationale.
+ * The THREE-tab navigator: Kiezen, Mijn recepten and Ontdek. Nested under
+ * `(tabs)` — a route group, so it does not appear in the URL — specifically
+ * so Cook Mode, the import flow, a friend's shared recipe and settings (all
+ * registered as sibling Stack screens in the parent src/app/_layout.tsx)
+ * render full-screen, without this tab bar leaking into them. See
+ * src/app/_layout.tsx for the rationale.
+ *
+ * ⚠ IT WAS FOUR UNTIL 11 SEPTEMBER 2026, AND THE COUNT WENT DOWN. PD-024
+ * merged Vrienden and Trending into one tab called Ontdek — a feed of the
+ * people you follow, and the global board, behind one switch. `friends`
+ * is still a route (it redirects) but carries `href: null`, so the bar
+ * draws three. The fourth position comes free and STAYS free: filling a
+ * slot because one opened up is exactly the mistake DESIGN.md §Navigation's
+ * rule was written against, and there is no fourth question.
  *
  * The tabs, in the order they appear (docs/DESIGN.md "Navigation"):
  * Kiezen is the one-dish decision surface (PD-001/PD-002 govern it
  * unchanged); Mijn recepten is where saved recipes live and where a link
- * gets pasted in; Vrienden, added in Fase 5b, is what people you know
- * have cooked and sent on (PD-010); Trending, added in Fase 6, is
- * best-rated recipes at two scopes — everyone, and your own friends
- * (PD-014).
+ * gets pasted in; Ontdek is both social surfaces at once — what people you
+ * follow cooked and sent on (PD-010), and the best-rated recipes across
+ * every kitchen (PD-014).
  *
  * TWO OF THESE LABELS ARE THE OWNER'S OWN WORDS, replacing ones he told us
  * he did not follow: "Bibliotheek" is now "Mijn recepten" and "Ranglijst"
@@ -20,21 +27,29 @@
  * alternatives deliberately, with the rest of the app's Dutch in view; it
  * is a choice, not an oversight, and it is not to be tidied back.
  *
- * The two social surfaces are deliberately last, in that order. Tab order
- * is a claim about priority, and the daily question this product exists to
- * answer is still the first one — a social surface placed ahead of it
- * would be the app quietly changing its mind about what it is for. Kiezen
- * also stays the launch tab (`index`), unchanged: that is condition 1 of
- * PD-014, not a leftover.
+ * The social surface is deliberately last. Tab order is a claim about
+ * priority, and the daily question this product exists to answer is still
+ * the first one — a social surface placed ahead of it would be the app
+ * quietly changing its mind about what it is for. Kiezen also stays the
+ * launch tab (`index`), unchanged: that is condition 1 of PD-014, not a
+ * leftover.
  *
- * Trending sits behind Vrienden because a board of strangers' verdicts is
- * further from the daily decision than a friend's recipe is — and that
- * holds even now the tab also carries a friends-scoped list, because the
- * scope you land on is the global one. PD-014 grants
- * it a fourth question ("wat is hier echt goed") over a stated objection to
- * DESIGN.md's own rule, and binds it to six conditions; read that decision
- * before touching this order. A fifth tab still needs a fifth question, and
- * there isn't one.
+ * ⚠ THE ARGUMENT THAT USED TO ORDER THE TWO SOCIAL TABS IS NOW INSIDE ONE
+ * OF THEM, and it is worth keeping rather than deleting: "Trending sits
+ * behind Vrienden because a board of strangers' verdicts is further from
+ * the daily decision than a friend's recipe is." That ordering did not
+ * disappear when the tabs merged — it became the ORDER OF THE TWO PAGES,
+ * feed first and explore second, and the surface a visit lands on. PD-024
+ * chose the feed for the same reason this file once chose Vrienden. See
+ * `DEFAULT_ONTDEK_SURFACE` in ontdekPresentation.ts, which is the one
+ * constant that now says it.
+ *
+ * PD-014 granted the board a fourth question ("wat is hier echt goed") over
+ * a stated objection to DESIGN.md's own rule, and bound it to six
+ * conditions; read that decision before touching this order. It keeps that
+ * question inside Ontdek rather than losing it — what went away is the
+ * second TAB, not the second question. A fourth tab still needs a fourth
+ * question, and there isn't one.
  *
  * Settings (household size, weeknight time budget, dislikes/allergens)
  * still has no tab of its own — it is reachable from Mijn recepten's
@@ -94,52 +109,63 @@
  * A 14pt label is also four points above react-navigation's own 10pt
  * `labelBeneath` default, which this bar has always overridden.
  *
- * THE ONE LABEL THAT IS NOT A CONSTANT: `Vrienden` (PD-020.1). While
- * directed sends are waiting it reads `Vrienden · 2`, and that count is
- * part of the LABEL STRING rather than a badge drawn beside it. The
- * distinction is the whole decision. A badge is a small coloured thing
- * that appears in the corner of the eye and asks to be cleared; this is a
- * count set in the same face and the same colour as the word it follows,
- * the way a number printed inside a caption is not a notification. No dot,
- * no `danger` red, no colour of any kind, no animation — the only place
- * this count is allowed to move is the entrance of the cards it refers
- * to, one screen in.
+ * ⚠ EVERY LABEL IN THIS BAR IS A CONSTANT SINCE 11 SEPTEMBER 2026, AND ONE
+ * OF THEM WAS NOT. `Vrienden` carried PD-020.1's count — `Vrienden · 2`
+ * while directed sends were waiting — and O-1b moved it off the bar and
+ * onto one line at the top of Ontdek. The reason is measured rather than
+ * aesthetic: `useUnseenSendCount` read `listSendsToMe` for real while the
+ * list underneath rendered no send cards at all, so the bar was counting
+ * something a reader could not then go and look at. A count belongs beside
+ * the thing it counts.
  *
- * THE COUNT GAVE UP ITS MONOSPACE TO GET THAT, AND IT IS A REAL COST. The
- * paragraph above used to argue the number read as a burned-in frame
- * counter because it was set in the same monospace as the word. It is not,
- * any more, and no proportional face can make it one. What survives is the
- * half that was load-bearing: the count lives inside the label string, so
- * it cannot appear, pulse or clear on its own. Digits in a proportional
- * face also stop sitting on a fixed rhythm, which is why the ceiling in
- * gekooktPresentation.ts is a width guard and not a decorative cap.
+ * ⚠ WHAT THAT MOVE DOES NOT DO IS RELAX THE RULE, and the rule is the half
+ * worth carrying forward. The count was part of the LABEL STRING rather
+ * than a badge drawn beside it, and that distinction was the whole
+ * decision: a badge is a small coloured thing that appears in the corner of
+ * the eye and asks to be cleared. One screen in, the line it became obeys
+ * the identical constraint — one line, one number over every kind of post,
+ * one destination, no dot, no `danger` red, no colour of any kind, no
+ * animation. See `formatWaitingPost` in ontdekCopy.ts.
  *
- * ONLY DIRECTED SENDS FEED IT. Ambient cook proof never does, however many
- * friends cooked something today: `useUnseenSendCount` reads
- * `listSendsToMe`, and `countUnseenSends` accepts nothing else, so
- * `shared_cooks` has no route to this string. §8: "a count fed by other
- * people's ordinary dinners is 'check back often' by another name; a
- * count of letters addressed to you is mail."
+ * AND ONLY POST ADDRESSED TO YOU MAY FEED IT. Ambient cook proof never
+ * does, however many friends cooked something today: `countUnseenSends`
+ * accepts nothing but an `IncomingSend`, so `shared_cooks` has no route to
+ * that number. §8: "a count fed by other people's ordinary dinners is
+ * 'check back often' by another name; a count of letters addressed to you
+ * is mail." That still holds; the line now also counts follow requests,
+ * which are letters in exactly the same sense.
  *
- * With nothing waiting the label is exactly "Vrienden" and this file
- * behaves as it always did.
+ * `buildVriendenTabLabel`, `buildVriendenTabAccessibilityLabel` and their
+ * width table above are therefore no longer read by this file. They are
+ * kept, with their tests: they hold the ceiling at 99, the badge refusal
+ * and the spoken form, and the day a count returns to any label it must
+ * return through them rather than around them.
  */
 
 import type { JSX } from 'react';
 import { Tabs } from 'expo-router';
 import { useColorScheme } from 'react-native';
-import { buildVriendenTabAccessibilityLabel, buildVriendenTabLabel } from '@/components/gekooktPresentation';
-import { useSession } from '@/hooks/useSession';
-import { useUnseenSendCount } from '@/hooks/useUnseenSendCount';
 import { getColors, typeScale } from '@/theme/tokens';
 
+/*
+  THREE IMPORTS LEFT THIS FILE ON 11 SEPTEMBER 2026 AND THE MODULES BEHIND
+  THEM DID NOT: `useUnseenSendCount`, `buildVriendenTabLabel` and
+  `buildVriendenTabAccessibilityLabel`. O-1b moved the count off the tab
+  label and onto one line at the top of Ontdek, so this bar reads nothing
+  and renders four constant strings.
+
+  ⚠ THE TWO LABEL BUILDERS ARE NOT DEAD AND MUST NOT BE DELETED AS SUCH.
+  They still hold PD-020.1's boundary — the ceiling at 99, the "part of the
+  label, never a badge" rule, and the spoken form that states the count in
+  words rather than leaving VoiceOver to voice a middot — and
+  tests/gekooktPresentation.test.ts pins all of it. The day a count returns
+  to any label it must return through them. `useSession` went with them:
+  this bar no longer needs an identity, because it no longer asks the
+  database anything.
+*/
 export default function TabsLayout(): JSX.Element {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
-  const { userId } = useSession();
-  // Read once per identity and never polled — see the hook's header on why
-  // a count that ticks while you are elsewhere is a notification.
-  const unseenSendCount = useUnseenSendCount(userId);
 
   return (
     <Tabs
@@ -200,28 +226,54 @@ export default function TabsLayout(): JSX.Element {
       <Tabs.Screen
         name="friends"
         options={{
-          title: buildVriendenTabLabel(unseenSendCount),
-          // The spoken form states the count in words rather than leaving
-          // a screen reader to voice the middot, which VoiceOver renders
-          // as "punt" or swallows entirely. Built by the same module as
-          // the visible label so the two cannot disagree about the number.
-          tabBarAccessibilityLabel: buildVriendenTabAccessibilityLabel(unseenSendCount),
+          /*
+            `href: null` HIDES THE ROUTE FROM THE BAR WITHOUT UNREGISTERING
+            IT, which is what makes this bar three tabs while `/friends`
+            stays a reachable address. The screen behind it is now a
+            `<Redirect>` to `/ranglijst`; its header carries why the route is
+            kept rather than deleted — a deleted route does not redirect, it
+            404s, and this one sits in history stacks.
+
+            ⚠ NOT A LEFTOVER. Removing this entry would put Vrienden back in
+            the bar as a fourth tab, because expo-router registers every file
+            in the group whether it is declared here or not.
+          */
+          href: null,
         }}
       />
       <Tabs.Screen
         name="ranglijst"
         options={{
-          // The label is "Trending" while the screen header reads "Trending
-          // recipes" — the one place in the app where the two differ,
-          // because this label shares one row with three other words and the
-          // longer form does not fit its quarter of it (DESIGN.md §9). That
-          // held when the row was monospace and it still holds now it is
-          // not: "Trending recipes" measures 103.85pt in Archivo 400 at
-          // 14pt against an 88.25pt slot on a 393pt phone.
-          // The route segment stays `ranglijst`: it is not user-facing, and
-          // renaming a route is how deep links and history entries break.
-          title: 'Trending',
-          tabBarAccessibilityLabel: 'Trending, de best beoordeelde recepten',
+          /*
+            ONTDEK — THE LABEL MOVED AND THE SEGMENT DID NOT (PD-024,
+            ONTDEK-PLAN.md fase 2). The route segment stays `ranglijst`: it
+            is not user-facing, and renaming a route is how deep links and
+            history entries break. The SCREEN behind it is the merged feed +
+            explore; see (tabs)/ranglijst.tsx.
+
+            ⚠ THE LABEL NO LONGER CARRIES A COUNT, and that is O-1b rather
+            than a simplification. It read `Vrienden · 2` over a list that
+            rendered no send cards at all — the count and the thing it
+            counted had come apart. The number is now one line at the top of
+            Ontdek, over every kind of post at once (`formatWaitingPost`),
+            where it sits directly above the cards it describes.
+            `useUnseenSendCount` is therefore no longer read in this file.
+            PD-020.1's rule that the count must never be a badge is
+            unchanged; it is simply enforced one screen in.
+
+            ⚠ AND THE SLOT GOT WIDER, WHICH IS ARITHMETIC AND NOT A
+            MEASUREMENT ON A DEVICE. This bar divides by the number of
+            VISIBLE tabs, so `width / 4 - 2 × 5` became `width / 3 - 2 × 5`:
+            121.00pt on a 393pt phone against 88.25pt before, 115.00pt at
+            375pt, and 96.67pt at 320pt. Both shortenings this file documents
+            would now fit — "Mijn recepten" at 83.85pt and "Trending recipes"
+            at 103.85pt — and "Ontdek" is shorter than either. They are kept
+            anyway: they are correct at every width, and widening a label on
+            the strength of arithmetic nobody has seen on a device is exactly
+            the GAP-19 mistake this project has already made once.
+          */
+          title: 'Ontdek',
+          tabBarAccessibilityLabel: 'Ontdek, wat vrienden kookten en wat er hoog scoort',
         }}
       />
     </Tabs>

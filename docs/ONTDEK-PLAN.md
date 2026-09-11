@@ -333,13 +333,23 @@ in de opdracht. Zie O-8.
 
 ### 1.5 Het bestandsprobleem: samenvoegen kan niet door samen te voegen
 
-`friends.tsx` is 907 regels en `ranglijst.tsx` is 934. Het plafond is 800, en
+~~`friends.tsx` is 907 regels en `ranglijst.tsx` is 934. Het plafond is 800, en
 er zitten er zeven overheen — **nagemeten om 17:23**, `wc -l` over `src/`:
 `import/paste.tsx` 1252, `ranglijst.tsx` 934, `friends.tsx` 907, `types.ts`
 894, `cook/[mealId].tsx` 852, `theme/tokens.ts` 830, `friends/add.tsx` 814.
 (⚠ De eerste versie schreef hier 928 en 1862; dat waren de getallen van 15:00
 en ze zijn vervangen door de nameting. Het aantal bestanden boven het plafond
-is onveranderd zeven.)
+is onveranderd zeven.)~~
+
+⚠ **ACHTERHAALD — FASE 2 IS GEBOUWD, NAGEMETEN OP 11 SEPTEMBER 2026, `wc -l`
+over `src/`: van ZEVEN naar VIER.** `import/paste.tsx` 1252, `domain/types.ts`
+941 (was 894 — gegroeid, niet gekrompen), `cook/[mealId].tsx` 852,
+`theme/tokens.ts` 830. **Drie bestanden zijn eraf:** `ranglijst.tsx` (934 →
+742, het samengevoegde scherm) en `friends.tsx` (907 → 36, nu een
+`<Redirect>`) door de ontleding die fase 2 uitvoerde; `friends/add.tsx` (814
+→ 799) door werk dat buiten deze fase om plaatsvond en dat dit document niet
+bijhoudt.
+
 **Eén bestand van 1841 regels is geen optie.** De samenvoeging is dus per definitie een *ontleding*: presentatie en
 beslissingen naar pure `.ts`-modules (het precedent is `gekooktPresentation.ts`
 en `importCheckpointPresentation.ts`), en het routebestand terug naar iets dat
@@ -825,9 +835,23 @@ hun plek met ✅ in de kop:
 | **O-9** (herkomst op een save) | ✅ **Ja, en nu.** Gebouwd in fase 0. |
 | **O-11b** (vorm van het volgmodel) | ✅ **R2: `follows` wordt DE graaf**, mét blokkeren als eigen object eerst. |
 
-**Nog open, en geen ervan blokkeert fase 0 of fase 1:** O-2b, O-2c, O-4, O-6, O-7,
+~~**Nog open, en geen ervan blokkeert fase 0 of fase 1:** O-2b, O-2c, O-4, O-6, O-7,
 O-8, O-10. Fase 2 wacht op O-2b en O-2c; fase 3 op O-8 (en op open vraag A in
-`OPEN-BESLISSINGEN.md`); fase 4 op O-10; fase 5 op O-6 en O-7; fase 6 op O-4.
+`OPEN-BESLISSINGEN.md`); fase 4 op O-10; fase 5 op O-6 en O-7; fase 6 op O-4.~~
+⚠ **Achterhaald — zie de DERDE HERZIENING hieronder: O-2b en O-2c zijn dicht,
+en fase 2 is inmiddels gebouwd en wachtte dus nergens meer op.**
+
+⚠ **DERDE HERZIENING, 11 september 2026 — O-2b en O-2c zijn dicht, en fase 2
+is gebouwd.** Ze staan hieronder op hun plek met ✅ in de kop:
+
+| | Stand |
+|---|---|
+| **O-2b** (de vriend die stemde zonder te koken) | ✅ **A: hij verdwijnt van de feed en telt alleen mee in explore's globale gemiddelde.** Optie B — de derde kaartvorm — blijft genoteerd als `ONT-02` op de LONGLIST. |
+| **O-2c** (wat blijft er over van de `Iedereen | Vrienden`-schakelaar) | ✅ **A: hij blijft, en schakelt voortaan tussen oppervlakken, met de woorden `Vrienden | Ontdekken`.** ⚠ De eigenaar koos expliciet dat `ranglijst.tsx:216` — *"Wat over alle keukens heen het hoogst scoort."* — letterlijk blijft staan op de explorekant. |
+
+**Nog open, en geen ervan blokkeert fase 2:** O-4, O-6, O-7, O-8, O-10. Fase 3
+wacht op O-8 (en op open vraag A in `OPEN-BESLISSINGEN.md`); fase 4 op O-10;
+fase 5 op O-6 en O-7; fase 6 op O-4.
 
 ---
 
@@ -995,7 +1019,14 @@ oude opties gelden daar onverkort:
 consentregel bijkomt. Dit blijft de keuze van de eigenaar — het gaat over wat
 een vriend over zichzelf publiceert.
 
-### O-2b. De vriend die stemde zonder te koken
+### O-2b. ✅ BEANTWOORD op 11 september 2026 — A: hij verdwijnt van de feed
+
+**Antwoord van de eigenaar: optie A.** De vriend die stemde zonder te koken
+verdwijnt van de feed en telt alleen mee in explore's globale gemiddelde. De
+aanbeveling hieronder werd letterlijk het antwoord. **Optie B — een derde
+kaartvorm ("Sanne gaf dit een 8,5", zonder kook) — blijft genoteerd als
+`ONT-02` op de LONGLIST**, voor het moment dat er wél een meting is van hoe
+vaak dit voorkomt.
 
 De enige echte rest van de oude vraag. 0016 laat zo'n stem naambaar (de
 proof-poort en de stem-poort zijn twee verschillende anti-joins), dus vandaag
@@ -1013,7 +1044,15 @@ vaak dit voorkomt is onbekend (er is geen productiemeting, zie DEEL VI), en een
 derde kaartsoort bouwen voor een geval waarvan de frequentie niet gemeten is,
 is precies de volgorde die dit project elders weigert.
 
-### O-2c. Wat blijft er over van de `Iedereen | Vrienden`-schakelaar?
+### O-2c. ✅ BEANTWOORD op 11 september 2026 — A, met de woorden `Vrienden | Ontdekken`
+
+**Antwoord van de eigenaar: optie A.** De schakelaar blijft, en schakelt
+voortaan tussen oppervlakken, met de woorden `Vrienden | Ontdekken`. ⚠ **De
+gekozen woorden wijken af van de aanbeveling hieronder** (`Volgend |
+Ontdekken`) — dat was een suggestie, geen antwoord. ⚠ **En de eigenaar koos
+expliciet dat `ranglijst.tsx:216`'s zin — *"Wat over alle keukens heen het
+hoogst scoort."* — letterlijk blijft staan op de explorekant**, waar de
+aanbeveling hieronder nog openliet of die zin zou moeten meeveranderen.
 
 **De vraag die de eigenaar niet gesteld heeft en die iemand moet beantwoorden
 vóór fase 2.** `ranglijst.tsx:210-211` heeft vandaag
@@ -1717,6 +1756,64 @@ poort en nooit een score.
 ---
 
 ## Fase 2 — De samenvoeging tot feed + explore, zonder één nieuwe functie
+
+✅ **GEBOUWD op 11 september 2026.** Vijf poorten groen — typecheck 0, lint 0,
+`check:functions` 0, `check:seed` 0, **3788 tests over 159 bestanden** (was
+3742 over 157, dus **+46 tests over +2 testbestanden**).
+
+**Wat er werkelijk gebouwd is, tegenover wat hieronder gepland stond — en het
+belangrijkste verschil eerst, want dit is de post die het plan zelf niet zag
+aankomen:**
+
+- **De voorwaarde die "vóór deze fase moest liggen" was GEEN "één
+  typewijziging".** Verderop in deze sectie stond dat de send-kaart niet op
+  live data rendeerde en dat dit "één typewijziging (attributie in plaats van
+  `Creator`)" zou kosten. Wat er werkelijk ontbrak was een hele FUNCTIE die
+  nooit bestaan had: `buildSentMealCardModels`. `friendFeedPresentation.ts`'s
+  eigen kop BEWEERDE dat die functie al bestond — op twee plekken in
+  hetzelfde bestand, allebei "`buildSentMealCardModels` at the foot of this
+  file" — terwijl `grep -n "buildSentMealCardModels"` vóór deze fase nul
+  definities teruggaf. **Twee koppen waren het eens over een functie die
+  nergens stond.** Nu gebouwd: `SentMealFeedSource` + `buildSentMealCardModels`
+  in `friendFeedPresentation.ts` (488 → 629 regels), en beide koppen zijn
+  rechtgezet.
+- **Gepland en gebouwd zoals beschreven:** de twee sociale tabs zijn één tab
+  geworden. Routesegment blijft `ranglijst`; alleen het label is `Ontdek`.
+  `(tabs)/friends.tsx` is nu een `<Redirect href="/ranglijst" />` van 36
+  regels (was 907) en krijgt `href: null` in `_layout.tsx`, zodat `/friends`
+  bereikbaar blijft maar niet in de balk staat. `ranglijst.tsx` is 742 regels
+  (was 934) en is het samengevoegde scherm: twee oppervlakken achter een
+  pager, schakelaar `Vrienden | Ontdekken` (O-2c). De feedkant kreeg
+  proof-kaarten (uit `shared_cooks`, nu gepoort op `i_follow` — migratie
+  `0022`), de sends en het cijfer volgens O-2's aanbeveling A. De explorekant
+  bleef byte-voor-byte de globale lijst. De tabtelling ging naar O-1b's ene
+  regel via `formatWaitingPost` in `ontdekCopy.ts`, die delegeert naar de
+  bestaande `formatPendingRequests`.
+- **DE KRING IS GEEN LIJST MEER.** `trendingSource.ts` ging van 350 naar 221
+  regels: `readFriendVotes`, `toKringRecipe` en `friendRows` zijn eruit.
+  `loadLiveTrending()` neemt nu GEEN ARGUMENTEN meer (was
+  `profileId: ProfileId | null`) — de handhaving van PD-014.6 "no
+  personalisation, ever": explore weet niet wie er leest. ⚠ `rankKring`,
+  `assembleKring`, `KringRowModel` en `kringPresentation.ts`'s lijst-copy
+  hebben hierdoor geen productie-aanroeper meer. Ze zijn niet verwijderd, hun
+  tests draaien nog, en de reden staat op `docs/LONGLIST.md` ONT-07.
+- **De consent-gepoorte lees `listNamableRecipeVotes` (migratie 0016) is
+  verhuisd** van `trendingSource.ts` naar `gekooktSource.ts` (353 → 465
+  regels), waar hij nu het cijfer op een proof-kaart voedt.
+- **Nieuwe bestanden:** `src/components/ontdekPresentation.ts` (317),
+  `src/components/ontdekCopy.ts` (166), `src/components/OntdekBodies.tsx`
+  (414), `tests/ontdekBoundary.test.ts` (230, 16 tests — de grens die PD-024
+  als test opeiste: geen rij van `rankRecipes` mag op de feed landen),
+  `tests/ontdekPresentation.test.ts` (222, 20 tests),
+  `supabase/migrations/0022_feed_follows_the_follow.sql` (183, GESCHREVEN EN
+  NIET GEDRAAID).
+- **Nieuwe gedeelde regel `findCollidingIngredientTags`** in
+  `src/domain/feed/ranking.ts` (geëxporteerd), waar `findCollidingTags` nu
+  naar delegeert — één botsingsregel, twee ingangen.
+- **Het bestandsplafond ging van zeven naar vier** — zie §1.5 voor de
+  nameting; `ranglijst.tsx` en `friends.tsx` zijn eraf.
+- **Wat deze fase nog steeds niet doet, precies zoals gepland:** geen
+  zoekbalk, geen keuken, geen mede-eters, geen volgwerk.
 
 ⚠ **HERZIEN.** De eerste versie beschreef deze fase als *"de drie bronnen
 (proof, send, kring) worden één lijst"*. Dat is niet meer wat er gebouwd wordt.

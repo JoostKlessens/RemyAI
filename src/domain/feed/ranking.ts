@@ -104,6 +104,38 @@ function fitsTimeBudgetScore(meal: Meal | null, household: Household): number {
 }
 
 /**
+ * The one rule for "does this collide with what this household may not
+ * eat", over a bare tag list rather than over a row.
+ *
+ * EXPORTED ON 11 SEPTEMBER 2026 FOR THE LIVE SEND CARD, and the signature
+ * is why it is a separate function rather than a second copy. A `SentMeal`
+ * (src/lib/repository/social/types.ts) is deliberately NOT a `Meal` — it
+ * carries no `householdId` and no `allergenTagStatus`, because a friend's
+ * safety judgement may not travel between households (PD-006) — but it
+ * does carry `ingredientTags`, which is a PRESENCE claim and the one
+ * allergen fact that is allowed to cross that boundary. So the send card
+ * needs exactly this rule and none of the row around it.
+ *
+ * ⚠ IT IS NOT A SECOND RESOLVER, AND THAT IS THE WHOLE POINT.
+ * friendFeedPresentation.ts's header forbids a collision resolver living
+ * in the presentation layer — "two answers to 'does this contain nuts?'
+ * is worse than one" — so the send card builder calls THIS, and
+ * `findCollidingTags` below now delegates to it rather than repeating the
+ * filter. One rule, two entry points, and the normalization can only ever
+ * be wrong in one place.
+ *
+ * Tags come back AS STORED and not normalized: the normalized form is the
+ * comparison key, and the stored form is what PD-007a's card label prints
+ * ("bevat noten").
+ */
+export function findCollidingIngredientTags(
+  ingredientTags: readonly string[],
+  excludedTags: ReadonlySet<string>,
+): readonly string[] {
+  return ingredientTags.filter((tag) => excludedTags.has(normalizeTag(tag)));
+}
+
+/**
  * The linked meal's own ingredient tags (as stored, not normalized —
  * these are for display in the PD-007a card label, e.g. "bevat noten") that
  * collide with an active household restriction. No linked meal means no
@@ -113,7 +145,7 @@ function findCollidingTags(meal: Meal | null, excludedTags: ReadonlySet<string>)
   if (meal === null) {
     return [];
   }
-  return meal.ingredientTags.filter((tag) => excludedTags.has(normalizeTag(tag)));
+  return findCollidingIngredientTags(meal.ingredientTags, excludedTags);
 }
 
 function restrictionCollisionScore(collidingTags: readonly string[]): number {

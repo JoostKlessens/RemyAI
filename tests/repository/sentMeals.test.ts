@@ -76,6 +76,10 @@ async function seedMeal(overrides: Record<string, unknown> = {}): Promise<void> 
     },
     { id: 'mi-1', mealId: 'meal-1', name: 'tagliatelle', quantity: '250', unit: 'g', allergenTags: [], sortOrder: 0 },
   ]);
+  await createTableAccessor<Record<string, unknown>>(store, 'remy:meal_steps').replaceAll([
+    { id: 'ms-2', mealId: 'meal-1', stepNumber: 2, instruction: 'Meng de pesto erdoor.', durationMinutes: null },
+    { id: 'ms-1', mealId: 'meal-1', stepNumber: 1, instruction: 'Kook de tagliatelle.', durationMinutes: null },
+  ]);
 }
 
 async function seedFriendship(): Promise<void> {
@@ -118,6 +122,29 @@ describe('the local store', () => {
   });
 
   /**
+   * The read `SentMeal` was missing until 11 September 2026 — see
+   * `/friends/[feedItemId].tsx`'s header on the notice it used to send a
+   * live send to for want of exactly this. `meal_steps_select_sent_to_me`
+   * (0009) needed no migration; only this field and its two fillers were
+   * missing.
+   */
+  test('a live send carries its steps too, in recipe order and stripped to text plus sortOrder', async () => {
+    await seedMeal();
+    await repository.sendRecipe({
+      mealId: 'meal-1',
+      senderProfileId: PROFILE_A,
+      recipientProfileId: PROFILE_B,
+      note: null,
+    });
+
+    const [sent] = await repository.listMealsSentToMe(PROFILE_B);
+    expect(sent?.steps).toEqual([
+      { text: 'Kook de tagliatelle.', sortOrder: 1 },
+      { text: 'Meng de pesto erdoor.', sortOrder: 2 },
+    ]);
+  });
+
+  /**
    * PD-007a needs the presence claim and PD-010 forbids the absence one.
    * `ingredientTags` travels so a collision can still be labelled on a
    * friend's dish; `allergenTagStatus` deliberately does not, because a
@@ -146,6 +173,7 @@ describe('the local store', () => {
         'servings',
         'shareId',
         'sourceUrl',
+        'steps',
         'thumbnailUrl',
         'title',
       ].sort(),
@@ -269,14 +297,19 @@ const ingredientRows = [
   { meal_id: 'meal-1', name: 'tagliatelle', quantity: '250', unit: 'g', sort_order: 0 },
 ];
 
+const stepRows = [
+  { meal_id: 'meal-1', step_number: 2, instruction: 'Meng de pesto erdoor.' },
+  { meal_id: 'meal-1', step_number: 1, instruction: 'Kook de tagliatelle.' },
+];
+
 describe('the Postgres backend', () => {
   test('derives every meal id from the reader own live sends, never from an argument', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     await repository.listMealsSentToMe('p-joost');
 
-    expect(fake.tables).toEqual(['recipe_shares', 'meals', 'meal_ingredients']);
+    expect(fake.tables).toEqual(['recipe_shares', 'meals', 'meal_ingredients', 'meal_steps']);
     expect(fake.log).toContain('eq(recipient_profile_id,p-joost)');
     expect(fake.log).toContain('in(id,[meal-1])');
     expect(fake.log).toContain('in(meal_id,[meal-1])');
@@ -284,7 +317,7 @@ describe('the Postgres backend', () => {
 
   /** `eq(col, null)` is not a null test in PostgREST and would match no row at all. */
   test('filters withdrawn sends out with a null test', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     await repository.listMealsSentToMe('p-joost');
@@ -294,7 +327,7 @@ describe('the Postgres backend', () => {
 
   /** The projection is the privacy model written as a column list. */
   test('never asks for the household id or the allergen verdict', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     await repository.listMealsSentToMe('p-joost');
@@ -304,8 +337,8 @@ describe('the Postgres backend', () => {
     expect(mealSelect).not.toContain('allergen_tag_status');
   });
 
-  test('maps every snake_case column onto its domain name and sorts ingredients by recipe order', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows)]);
+  test('maps every snake_case column onto its domain name and sorts ingredients and steps by recipe order', async () => {
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     expect(await repository.listMealsSentToMe('p-joost')).toEqual([
@@ -323,6 +356,10 @@ describe('the Postgres backend', () => {
         ingredients: [
           { name: 'tagliatelle', quantity: '250', unit: 'g', sortOrder: 0 },
           { name: 'pijnboompitten', quantity: '30', unit: 'g', sortOrder: 1 },
+        ],
+        steps: [
+          { text: 'Kook de tagliatelle.', sortOrder: 1 },
+          { text: 'Meng de pesto erdoor.', sortOrder: 2 },
         ],
       },
     ]);

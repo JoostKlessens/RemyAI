@@ -74,6 +74,7 @@ import {
   CANONICAL_RECIPE_STEP_COLUMNS,
   SENT_MEAL_COLUMNS,
   SENT_MEAL_INGREDIENT_COLUMNS,
+  SENT_MEAL_STEP_COLUMNS,
   fail,
   toCanonicalRecipe,
   toCanonicalRecipeDetail,
@@ -94,6 +95,7 @@ import {
   type RecipeShareRow,
   type SentMealIngredientRow,
   type SentMealRow,
+  type SentMealStepRow,
   type SentShareRow,
   type SharedCookRow,
   // The wire shape and the domain shape share a name across the seam;
@@ -463,11 +465,24 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
     },
 
     async listFriendCookedRecipes(): Promise<readonly FriendCook[]> {
-      // No filter and no friendship clause, deliberately: `shared_cooks`
-      // gates itself on `is_friend_of` inside the view body (0009), so
-      // the rows this returns are already scoped to the caller's accepted
-      // friends. Adding a WHERE here would be a second copy of a
-      // permission rule — and the copy that is easiest to get wrong.
+      // No filter and no graph clause, deliberately: `shared_cooks` gates
+      // itself inside the view body, so the rows this returns are already
+      // scoped to whoever the caller is allowed to see. Adding a WHERE here
+      // would be a second copy of a permission rule — and the copy that is
+      // easiest to get wrong.
+      //
+      // ⚠ WHICH PREDICATE THAT IS CHANGES WITH MIGRATION 0022, WHICH IS
+      // WRITTEN AND NOT YET RUN. Until it does, the view gates on
+      // `is_friend_of` (0009:155) and this is the reader's MUTUAL friends.
+      // After it, `i_follow` — the people the reader follows, who need not
+      // follow back. This line needs no edit either way, which is the
+      // point of not copying the rule; the comment is dated so the next
+      // reader knows which world they are in.
+      //
+      // ⚠ AND THIS METHOD HAS TWO CALLERS, NOT ONE. `gekooktSource.ts`
+      // builds Ontdek's proof cards from it, and `friendProof.ts` feeds
+      // `FRIEND_PROOF_BOOST` into Kiezen's decision engine. So 0022
+      // widens BOTH — see that migration's header.
       const { data, error } = await client.from('shared_cooks').select('profile_id, recipe_id');
       if (error) {
         fail('Reading cook proof', error);
@@ -663,9 +678,14 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
       }
 
       const mealIds = [...new Set(shares.map((share) => share.meal_id))];
-      const [mealResult, ingredientResult] = await Promise.all([
+      const [mealResult, ingredientResult, stepResult] = await Promise.all([
         client.from('meals').select(SENT_MEAL_COLUMNS).in('id', mealIds),
         client.from('meal_ingredients').select(SENT_MEAL_INGREDIENT_COLUMNS).in('meal_id', mealIds),
+        // Reads under `meal_steps_select_sent_to_me` (0009) exactly as the
+        // ingredients read above reads under its own added policy — see
+        // `SentMealStep`'s header (./types.ts) on why a step may cross
+        // this boundary at all.
+        client.from('meal_steps').select(SENT_MEAL_STEP_COLUMNS).in('meal_id', mealIds),
       ]);
 
       if (mealResult.error) {
@@ -674,9 +694,13 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
       if (ingredientResult.error) {
         fail('Reading the ingredients of a dish somebody sent you', ingredientResult.error);
       }
+      if (stepResult.error) {
+        fail('Reading the steps of a dish somebody sent you', stepResult.error);
+      }
 
       const mealsById = new Map((mealResult.data as SentMealRow[] | null ?? []).map((meal) => [meal.id, meal]));
       const ingredientRows = (ingredientResult.data as SentMealIngredientRow[] | null) ?? [];
+      const stepRows = (stepResult.data as SentMealStepRow[] | null) ?? [];
 
       return shares.flatMap((share): readonly SentMeal[] => {
         const meal = mealsById.get(share.meal_id);
@@ -688,7 +712,14 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
           // lesser card.
           return [];
         }
-        return [toSentMeal(share, meal, ingredientRows.filter((row) => row.meal_id === meal.id))];
+        return [
+          toSentMeal(
+            share,
+            meal,
+            ingredientRows.filter((row) => row.meal_id === meal.id),
+            stepRows.filter((row) => row.meal_id === meal.id),
+          ),
+        ];
       });
     },
 

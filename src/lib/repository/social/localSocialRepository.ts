@@ -44,7 +44,7 @@ import type {
   RecipeRating,
 } from '@/domain/social/types';
 import type { SuggestedFriendRow } from '@/domain/social/friendSuggestions';
-import type { Household, IsoDateTimeString, Meal, MealId, MealIngredient } from '@/domain/types';
+import type { Household, IsoDateTimeString, Meal, MealId, MealIngredient, MealStep } from '@/domain/types';
 import { nowIso } from '../clock';
 import { generateLocalId } from '../id';
 import type { KeyValueStore } from '../keyValueStore';
@@ -136,14 +136,17 @@ interface SocialTables {
    * licence for more — a fourth crossing needs its own paragraph here,
    * naming the view or policy it mirrors.
    *
-   * KNOWN DUPLICATION, stated rather than hidden: the three key strings
-   * are spelled here and in local/tables.ts. Importing that module would
-   * drag a nine-table constructor and its whole type graph in to read
-   * three keys, so the smaller wrong is three string literals with this
-   * comment pointing at the other copy.
+   * KNOWN DUPLICATION, stated rather than hidden: the four key strings
+   * are spelled here and in local/tables.ts (`meal_steps` joined the other
+   * three on 11 September 2026, for `SentMealStep` — see this file's
+   * `toSentMeal`). Importing that module would drag a nine-table
+   * constructor and its whole type graph in to read four keys, so the
+   * smaller wrong is four string literals with this comment pointing at
+   * the other copy.
    */
   readonly meals: TableAccessor<Meal>;
   readonly mealIngredients: TableAccessor<MealIngredient>;
+  readonly mealSteps: TableAccessor<MealStep>;
   readonly households: TableAccessor<Household>;
 }
 
@@ -158,6 +161,7 @@ function createSocialTables(store: KeyValueStore): SocialTables {
     recipeShares: createTableAccessor<StoredRecipeShare>(store, 'remy:recipe_shares'),
     meals: createTableAccessor<Meal>(store, 'remy:meals'),
     mealIngredients: createTableAccessor<MealIngredient>(store, 'remy:meal_ingredients'),
+    mealSteps: createTableAccessor<MealStep>(store, 'remy:meal_steps'),
     households: createTableAccessor<Household>(store, 'remy:households'),
   };
 }
@@ -172,7 +176,12 @@ function createSocialTables(store: KeyValueStore): SocialTables {
  * header explains why each of those must not travel; this function is
  * where that stops being a comment.
  */
-function toSentMeal(share: StoredRecipeShare, meal: Meal, ingredients: readonly MealIngredient[]): SentMeal {
+function toSentMeal(
+  share: StoredRecipeShare,
+  meal: Meal,
+  ingredients: readonly MealIngredient[],
+  steps: readonly MealStep[],
+): SentMeal {
   return {
     shareId: share.id,
     mealId: meal.id,
@@ -195,6 +204,15 @@ function toSentMeal(share: StoredRecipeShare, meal: Meal, ingredients: readonly 
         quantity: ingredient.quantity,
         unit: ingredient.unit,
         sortOrder: ingredient.sortOrder,
+      })),
+    // Sorted here for `SentMealIngredient.sortOrder`'s reason: a caller
+    // never has to. `stepNumber` becomes `sortOrder` and `instruction`
+    // becomes `text` — see `SentMealStep`'s header (./types.ts).
+    steps: [...steps]
+      .sort((a, b) => a.stepNumber - b.stepNumber)
+      .map((step) => ({
+        text: step.instruction,
+        sortOrder: step.stepNumber,
       })),
   };
 }
@@ -688,7 +706,11 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
         return [];
       }
 
-      const [meals, ingredients] = await Promise.all([tables.meals.list(), tables.mealIngredients.list()]);
+      const [meals, ingredients, steps] = await Promise.all([
+        tables.meals.list(),
+        tables.mealIngredients.list(),
+        tables.mealSteps.list(),
+      ]);
       const mealsById = new Map(meals.map((meal) => [meal.id, meal]));
 
       return live.flatMap((share): readonly SentMeal[] => {
@@ -702,7 +724,14 @@ export function createLocalSocialRepository(store: KeyValueStore): RemySocialRep
           // opens a full recipe, so there is nothing lesser to render.
           return [];
         }
-        return [toSentMeal(share, meal, ingredients.filter((ingredient) => ingredient.mealId === meal.id))];
+        return [
+          toSentMeal(
+            share,
+            meal,
+            ingredients.filter((ingredient) => ingredient.mealId === meal.id),
+            steps.filter((step) => step.mealId === meal.id),
+          ),
+        ];
       });
     },
 

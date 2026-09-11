@@ -1,15 +1,32 @@
 /**
- * The live number behind `Vrienden · 2` (PD-020.1), shared between the tab
- * bar that shows it and the Vrienden screen that clears it.
+ * The live number that was behind `Vrienden · 2` (PD-020.1), shared between
+ * the tab bar that showed it and the screen that clears it.
  *
- * WHY THERE IS A MODULE-SCOPED STORE HERE AT ALL. The count is read by
- * src/app/(tabs)/_layout.tsx and zeroed by src/app/(tabs)/friends.tsx, and
- * those two are siblings — the tab bar is not an ancestor of the screen,
- * so there is no prop to pass and this app has no store or context to put
- * it in. The alternative is the layout re-reading on a timer, which is
- * exactly what the rest of this file argues against. One number, one
- * listener set, no dependency: smaller than a context provider, and it
- * cannot leak into anything that does not import it.
+ * ⚠ THE STORE IS WRITE-ONLY AS OF 11 SEPTEMBER 2026, AND THAT IS RECORDED
+ * HERE RATHER THAN LEFT TO BE DISCOVERED. O-1b moved the count off the tab
+ * label and onto one line at the top of Ontdek, which reads
+ * `FriendsData.unseenBandSize` — the snapshot the band itself was built
+ * from — instead of this hook. So `useUnseenSendCount` now has NO CALLER,
+ * while `clearUnseenSendCount` still runs inside `markVisitSeen`
+ * (src/lib/gekooktSource.ts) and publishes to a store nobody subscribes to.
+ *
+ * NOTHING IS DELETED HERE YET, and that is a judgement rather than
+ * laziness: the read this module performs is the correct one for a count
+ * that has to survive `markSendsSeen`, and the day any surface outside
+ * Ontdek needs that number it should come back through this module rather
+ * than through a second copy of it. ⚠ If no such surface arrives, the
+ * honest end state is that this file and its `clearUnseenSendCount` call
+ * both go. That belongs on the LONGLIST rather than in this diff, because
+ * removing a read is a behaviour change and this phase already carries two.
+ *
+ * WHY THERE IS A MODULE-SCOPED STORE HERE AT ALL. The count was read by
+ * src/app/(tabs)/_layout.tsx and zeroed by the feed screen, and those two
+ * are siblings — the tab bar is not an ancestor of the screen, so there is
+ * no prop to pass and this app has no store or context to put it in. The
+ * alternative is the layout re-reading on a timer, which is exactly what
+ * the rest of this file argues against. One number, one listener set, no
+ * dependency: smaller than a context provider, and it cannot leak into
+ * anything that does not import it.
  *
  * IT DOES NOT POLL, AND IT MUST NOT. The read happens once per identity,
  * when the tab bar mounts. A send that arrives while the app is open does

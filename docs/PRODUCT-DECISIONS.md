@@ -1652,3 +1652,64 @@ this product cannot currently even express. Three build rules follow, and they a
 the duplication in copy.* Rejected because an explanation of why the same dinner appears in two
 places is an explanation about the architecture rather than about the food — and because it is not
 what was asked for.
+
+### PD-024a — Landed: fase 2 ships, 11 September 2026
+
+**What is reversed.** Nothing new beyond what PD-024 above already priced. The two social tabs are
+now, in running code and not only on paper, one tab `Ontdek`: the route segment stays `ranglijst`,
+only the label changed; `(tabs)/friends.tsx` is a 36-line `<Redirect href="/ranglijst" />` (was 907)
+with `href: null` in `_layout.tsx`, so `/friends` stays a reachable address without sitting in the
+bar.
+
+**What is bought.** The feed and explore split is real now, not a diagram. `ranglijst.tsx` (742
+lines, was 934) holds two surfaces behind a pager, switch `Vrienden | Ontdekken` (O-2c, answered 11
+September — see `ONTDEK-PLAN.md`). The feed side reads proof cards gated on `i_follow` instead of
+`is_friend_of` (migration `0022_feed_follows_the_follow.sql`, written and not run), the sends
+(`buildSentMealCardModels`, new), and the grade per O-2's recommendation A. Explore stays
+byte-for-byte the global list.
+
+**(a) `rankKring` loses its ordering role — landed, and what survives is exactly what PD-024 said
+would survive.** `trendingSource.ts` dropped from 350 to 221 lines: `readFriendVotes`, `toKringRecipe`
+and `friendRows` are gone from it. `rankKring`, `assembleKring`, `KringRowModel` and
+`kringPresentation.ts`'s list copy now have **no production caller** — not deleted, still tested,
+recorded as `docs/LONGLIST.md` ONT-07 with the reason they stay: ONT-02's third card kind (a friend
+who voted without cooking) is the case that revives them, and throwing away a tested ranking to
+rewrite it later is the expensive order. The average and the named voters survive on the proof card;
+the consent-gated `listNamableRecipeVotes` (migration 0016) moved from `trendingSource.ts` to
+`gekooktSource.ts` (353 → 465 lines), where it now feeds the grade on that card instead of ordering a
+list.
+
+**(b) `loadLiveTrending()` takes no arguments — and that makes PD-014.6 sharper, not just
+unchanged.** It was `loadLiveTrending(profileId: ProfileId | null)`. Explore's data layer no longer
+receives a reader identity AT ALL, in any form, including a nullable one it could have chosen to
+ignore. "No personalisation, ever" stops being a property of what `rankRecipes` does with the caller's
+identity and becomes a property of the function signature itself: there is no parameter left through
+which a future change could quietly start reading who is asking. The friend-scoped read that used to
+share this file's fetch now lives entirely on the feed side, in `gekooktSource.ts` and
+`friendFeedPresentation.ts`, which do take an identity — because the feed is personal by definition
+and explore is not, and the two are now different files rather than two branches of one function.
+
+**(c) The boundary earned its test — `tests/ontdekBoundary.test.ts` (230 lines, 16 tests).** This is
+the test PD-024 asked for by name above: "that is §8's 'no padding the kring', inverted, and it earns
+a test — one that nails down that no row produced by `rankRecipes` can land on the feed side." The
+file's own header records why leaning on the existing `isProofCard` guard would not have been enough:
+that guard is `'recipeId' in card`, and a `BoardRowModel` (an explore row) also carries a `recipeId` —
+a board row IS a canonical recipe, same as a proof card is. A board row spliced into the feed would
+therefore narrow as proof, render with `FriendProofCard`, and put a stranger's anonymous average
+exactly where a friend's name belongs, looking entirely ordinary while doing it. `isFeedCard` exists
+because of that gap, and the test asserts the mis-narrowing directly.
+
+**What is spent.** The plan's own estimate of the remaining precondition was wrong, and the file is
+the honest record of that: `ONTDEK-PLAN.md`'s fase 2 section called the send-card gap "one type
+change (attribution instead of `Creator`)" that had to land before this fase. What it actually needed
+was a function, `buildSentMealCardModels`, that did not exist — while `friendFeedPresentation.ts`'s
+own header had claimed for months, in two separate places, that it did ("`buildSentMealCardModels` at
+the foot of this file"). Two headers agreed on a function neither of them had written. That is now
+built (`friendFeedPresentation.ts` 488 → 629 lines) and both headers are corrected.
+
+**What is NOT reversed.** Every one of PD-024's own "what is NOT reversed" conditions above still
+holds and none of them needed amending to ship this: both surfaces still measure on save-to-cook, a
+person is still never ranked, there is still no push, `meals.visibility` still has no `public`
+member. The file ceiling count PD-024 inherited from `ONTDEK-PLAN.md` §1.5 moved from seven files
+over 800 lines to four — `ranglijst.tsx` and `friends.tsx` are off it — and is tracked there, not
+here, because it is a measurement and not a decision.

@@ -179,9 +179,13 @@ function CanonicalRecipeWithSave(props: { readonly view: SharedRecipeView }): JS
   // is shared anyway; narrowing it here would be a second shape for one
   // field.
   // PD-024. `'proof'` because a proof card is the only thing that routes
-  // here today (`friends.tsx`'s `onOpenCanonicalRecipe`). ⚠ When the kring
-  // and the search results start opening this same route, this literal has
-  // to become a route param — see `useSharedRecipeSave`'s header.
+  // here today — `onOpenCanonicalRecipe` on Ontdek's feed side, which was
+  // `(tabs)/friends.tsx`'s until fase 2 merged that screen into
+  // `(tabs)/ranglijst.tsx`. ⚠ The kring is no longer a list and so can no
+  // longer open this route; what will is fase 3's search results. When they
+  // do, this literal has to become a route param — see
+  // `useSharedRecipeSave`'s header, and `saves.origin` in migration 0020,
+  // which already has a `'zoek'` member waiting for exactly that.
   const save = useSharedRecipeSave(view.canonicalRecipeId, 'proof');
 
   return (

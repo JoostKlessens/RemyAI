@@ -77,7 +77,12 @@
 
 import { isValidRating, RATING_MAX } from '@/domain/rating';
 import { filterServableFeedItems } from '@/domain/feed/eligibility';
-import { getCollidingTagsByFeedItem, rankFeedItems, type FeedRankingRequest } from '@/domain/feed/ranking';
+import {
+  findCollidingIngredientTags,
+  getCollidingTagsByFeedItem,
+  rankFeedItems,
+  type FeedRankingRequest,
+} from '@/domain/feed/ranking';
 import { formatGrade } from './ratingScaleCopy';
 import { getPlatformDisplayName } from './creatorPresentation';
 import {
@@ -88,8 +93,8 @@ import {
 } from './friendCardVocabulary';
 import { buildCreatorAttribution, type RecipeAttribution } from './recipeAttribution';
 import type { Creator, CreatorId, CreatorPlatform, FeedItem, FeedItemId } from '@/domain/feed/types';
-import type { RecipeId } from '@/domain/social/types';
-import type { RecipeShareId } from '@/lib/repository/social/types';
+import type { ProfileId, RecipeId } from '@/domain/social/types';
+import type { RecipeShareId, SentMeal } from '@/lib/repository/social/types';
 import type { Household, IsoDateString, Meal, MealId, MealIngredient, Member, Restriction } from '@/domain/types';
 
 /**
@@ -484,4 +489,141 @@ function describeMetaForScreenReader(estimatedMinutes: number | null, rating: nu
     parts.push(`beoordeeld met ${rating} van ${RATING_MAX}`);
   }
   return parts.join(', ');
+}
+
+/**
+ * Everything a LIVE send card needs, already looked up — the send-side
+ * twin of `FriendFeedSource` above.
+ *
+ * WRITTEN ON 11 SEPTEMBER 2026, AND THIS FILE'S OWN HEADER HAD BEEN
+ * PROMISING IT. The paragraph on `attribution` closed with "and
+ * `buildSentMealCardModels` at the foot of this file builds a card out of
+ * a `SentMeal` without inventing anything" — which was a description of
+ * work that had not been done. `grep` found the name in exactly one place:
+ * that sentence. It is recorded rather than quietly fixed, because a
+ * header that describes a function nobody wrote is the most expensive kind
+ * of comment in this repo: it makes the gap unfindable.
+ *
+ * WHY A SECOND BUILDER AND NOT A BRANCH IN `buildCardModel`. The two read
+ * different objects under different permissions. The creator-fed path
+ * resolves a `FeedItem` against a gated `Creator` and a household's own
+ * `Meal`; this one resolves a `SentMeal` — another kitchen's row, readable
+ * only while `has_active_send_to_me()` says so, and deliberately NOT a
+ * `Meal` (no `householdId`, no `allergenTagStatus`). A flag on one builder
+ * is how one of them eventually runs the other's rules, which is the same
+ * argument `buildCreatorAttribution` and `buildAuthorAttribution` already
+ * settled one file away.
+ *
+ * EVERY FIELD IS LOOKED UP BY THE CALLER, and that is the layering rather
+ * than laziness: this module may not fetch, and the joins below
+ * (share -> note, sender -> name, share -> grade, recipe -> attribution)
+ * each need a read. `src/lib/gekooktSource.ts` performs them; this file
+ * maps what comes back.
+ */
+export interface SentMealFeedSource {
+  /** The meals sent to this reader, in the order the repository returned them. Order is preserved. */
+  readonly meals: readonly SentMeal[];
+  /** `recipe_shares.note`, verbatim. Absent and null mean the same thing: the sender wrote nothing. */
+  readonly notesByShareId: ReadonlyMap<RecipeShareId, string | null>;
+  /**
+   * The sender's display name. A sender who is not in here loses their
+   * card entirely — see `buildSentMealCardModel`.
+   */
+  readonly senderNamesByProfileId: ReadonlyMap<ProfileId, string>;
+  /**
+   * The SENDER'S OWN public vote on the canonical recipe behind this send,
+   * keyed by share so two friends sending the same dish keep their own
+   * numbers.
+   *
+   * ⚠ NEVER `cook_events.rating`. That column is the decision engine's
+   * private input and never crosses a household boundary — the identical
+   * sentence is on `FriendProofCardModel.grade`, and it is the same rule
+   * for the same reason. What may be shown is the public `recipe_ratings`
+   * vote, and only where the sender's own consent already makes it
+   * namable (`namable_recipe_votes`, migration 0016).
+   */
+  readonly gradesByShareId: ReadonlyMap<RecipeShareId, number>;
+  /**
+   * Who to credit for the original post, off the CANONICAL row rather than
+   * off the friend's meal. A `SentMeal` carries `sourceUrl` and no author
+   * at all, so the credit can only come from `recipes.author_name` via
+   * `meals.recipe_id` — which is exactly what PD-010.1 asks for and the
+   * only place the fact exists.
+   */
+  readonly attributionsByRecipeId: ReadonlyMap<RecipeId, RecipeAttribution>;
+  /**
+   * `collectExcludedTags(members, restrictions)` for the READING household
+   * — never the sender's. PD-006's asymmetry in one line: a tag that
+   * travels may only ever ADD a "bevat noten" label, never remove one, and
+   * whose allergy it is is decided on this side.
+   */
+  readonly excludedTags: ReadonlySet<string>;
+}
+
+/**
+ * Resolves each sent meal into a renderable card, dropping the ones that
+ * cannot honestly be rendered.
+ *
+ * IT DOES NOT RANK, and that is a statement about live data rather than a
+ * deferral. `rankFeedItems` scores a `FeedItem` against a `Meal` in the
+ * READER's household, and a friend's sent meal is neither, so there is no
+ * cookability score to sort on — the same reason live proof cards arrive
+ * unranked (see `src/lib/gekooktSource.ts`). Input order is preserved
+ * exactly, and PD-020.1's unseen band is a stable partition applied
+ * afterwards by gekooktPresentation.ts. What must NOT happen here is a
+ * sort by `sentAt` to fill the gap: `RecipeShare.sentAt`'s own doc
+ * forbids it, and a recency sort is the thing PD-004 measures this
+ * surface against.
+ */
+export function buildSentMealCardModels(source: SentMealFeedSource): readonly FriendRecipeCardModel[] {
+  const models: FriendRecipeCardModel[] = [];
+  for (const meal of source.meals) {
+    const model = buildSentMealCardModel(meal, source);
+    if (model !== null) {
+      models.push(model);
+    }
+  }
+  return models;
+}
+
+/**
+ * One card, or null when the sender cannot be named.
+ *
+ * THE ONE FAIL-CLOSED DROP, and it is the same one the proof side makes:
+ * `assembleFriendProof` "drops an unnameable cook rather than rendering
+ * 'iemand maakte dit'". A send card's entire eyebrow is "GEDEELD DOOR
+ * JORIS"; without a name it would say that somebody, unspecified, handed
+ * you their kitchen's copy of a dish. Nothing else is dropped — a missing
+ * note, a missing grade, a missing attribution and a hand-entered dish
+ * with no canonical row are all ordinary states with a real rendering,
+ * and each is null rather than invented.
+ */
+function buildSentMealCardModel(meal: SentMeal, source: SentMealFeedSource): FriendRecipeCardModel | null {
+  const friendName = source.senderNamesByProfileId.get(meal.senderProfileId);
+  if (friendName === undefined || friendName.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    // The `recipe_shares` id, not a `feed_items` id — see
+    // `FriendRecipeCardModel.feedItemId`, whose union records exactly this
+    // distinction and which row produced the card.
+    feedItemId: meal.shareId,
+    mealId: meal.mealId,
+    title: meal.title,
+    thumbnailUrl: meal.thumbnailUrl,
+    estimatedMinutes: meal.estimatedMinutes,
+    servings: meal.servings,
+    rating: source.gradesByShareId.get(meal.shareId) ?? null,
+    friendName,
+    note: source.notesByShareId.get(meal.shareId) ?? null,
+    canonicalRecipeId: meal.recipeId,
+    attribution: meal.recipeId === null ? null : (source.attributionsByRecipeId.get(meal.recipeId) ?? null),
+    sourceUrl: meal.sourceUrl,
+    keyIngredients: summarizeKeyIngredients(meal.ingredients),
+    // The shared rule, not a second one — see `findCollidingIngredientTags`
+    // in src/domain/feed/ranking.ts, and this file's header on why a
+    // collision resolver may not live in the presentation layer.
+    collidingTags: findCollidingIngredientTags(meal.ingredientTags, source.excludedTags),
+  };
 }

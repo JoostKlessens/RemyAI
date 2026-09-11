@@ -75,48 +75,76 @@
  * all: a send without one is ordinary, and the canonical recipe screen
  * beside this one never has one at all — §4.3's "minus note".
  *
- * ⚠ THE READING HALF IS STILL FIXTURES, AND AS OF 10 SEPTEMBER 2026 IT IS
- * BEHIND `__DEV__` — WHICH IS THE HONEST HALF OF THE FIX, NOT THE WHOLE
- * ONE. What stood here before said "on every build and behind no flag",
- * and that was true and was a live defect: a production deep link to
- * `/friends/<a fixture id>` rendered Sanne's invented pasta as though it
- * were somebody's dinner, with a `Bewaren` that could only ever fail —
- * `FIXTURE_RECIPE_IDS` exist in no database, by design. In a production
- * build the fixture read is now simply not there, and an unresolvable
- * `feedItemId` gets `describeSharedRecipeNotice('missing')`, which is true.
+ * ⚠ THE READ WAS FIXTURES-ONLY, BEHIND `__DEV__`, UNTIL 11 SEPTEMBER 2026 —
+ * AND IS NOW TWO PATHS RATHER THAN ONE. The `__DEV__` fixture path below is
+ * unchanged in shape (synchronous, gated, resolved through
+ * `assembleFriendFeed`) and still runs FIRST when it matches, so switching
+ * scenarios on the Vrienden tab renders exactly what it did before. What
+ * changed is what happens when it does not match: instead of falling
+ * straight to `describeSharedRecipeNotice('missing')` regardless of what
+ * the id actually names, the screen now treats `feedItemId` as a
+ * `RecipeShareId` and reads it LIVE, through `useLiveSharedRecipe`
+ * (src/hooks) — which calls `listMealsSentToMe(profileId)` and looks for
+ * the row whose `shareId` matches. A production build never has a fixture
+ * to prefer, so this is the only path it takes. That is the bug this
+ * closed: a live send's id used to resolve to nothing on the screen it
+ * opens, no matter what the row actually held.
  *
- * WHAT WOULD MAKE IT LIVE, MEASURED RATHER THAN GUESSED, because the next
- * reader will want to know whether this is a day's work or a week's:
+ * NO MIGRATION WAS NEEDED. 0009 already shipped
+ * `meal_steps_select_sent_to_me`, `for select using
+ * (public.has_active_send_to_me(meal_id))`, so the missing piece was
+ * entirely TypeScript: a `steps` field on `SentMeal`
+ * (src/lib/repository/social/types.ts), filled symmetrically with
+ * `ingredients` in both repository implementations.
  *
- *   1. `SentMeal` (src/lib/repository/social/types.ts) carries no STEPS.
- *      `listMealsSentToMe` reads `meals` and `meal_ingredients` and stops.
- *      No migration is needed for the third read — 0009 already ships
- *      `meal_steps_select_sent_to_me`, `for select using
- *      (public.has_active_send_to_me(meal_id))`, and migrations 0001-0019
- *      are all applied. This is an interface field, one more `.in()` in
- *      the Supabase implementation, the mirror of it in the local one, and
- *      a row mapper.
- *   2. `SentMeal` carries no ATTRIBUTION — no author name, platform or
- *      profile url, only `sourceUrl`. It does carry `recipeId`
- *      (`meals.recipe_id`), and the canonical row behind it holds all
- *      three and is world-readable, so the attribution is reachable
- *      through `getCanonicalRecipe` without any new permission. A friend's
- *      hand-entered dish has no such row and would credit nobody, which
- *      `SharedRecipeArticle` already renders correctly (null attribution).
- *   3. The LIST has to produce a live send card first, and that is the
- *      real gate: `FriendRecipeCardModel.creator` is a whole `Creator`,
- *      i.e. a PD-007 consent record, and `assembleFriendFeed` is built
- *      around `FeedItem`/`Creator`/`Meal` triples that a live send is not.
- *      src/lib/gekooktSource.ts carries that argument in full. Until the
- *      list produces one, a live read here would be a screen nothing
- *      reaches — which is why this change stops at the `__DEV__` gate
- *      rather than building half of (1) and (2).
+ * WHAT THE LIVE PATH STILL DOES NOT CARRY, MEASURED RATHER THAN GUESSED,
+ * because the next reader should not assume the card is complete now that
+ * the notice is merely correct:
+ *
+ *   1. NO NOTE. `SentMeal` has no `note` field — it lives on
+ *      `IncomingSend`, behind `listSendsToMe`, a second read this path
+ *      does not make. `buildLiveSentSharedRecipe`
+ *      (src/components/sharedRecipePresentation.ts) passes `note: null`.
+ *   2. NO ATTRIBUTION. `SentMeal` carries only `recipeId`; the credit
+ *      behind it is reachable through `getCanonicalRecipe` without any new
+ *      permission (see that interface's own comment) but that read is not
+ *      made here either. `SharedRecipeArticle` already renders this
+ *      correctly — null attribution is a real, drawn state, not a gap.
+ *   3. NO ALLERGEN COLLISION LABEL. A real one needs THIS household's own
+ *      restriction set, which lives on `RemyRepository` — a seam
+ *      `useLiveSharedRecipe` never touches. `buildAllergenCollisionLabel([])`
+ *      is still called, so the label is null rather than wrong, the same
+ *      move `buildCanonicalSharedRecipe` makes for a different reason.
+ *      PD-007a's "ranked down AND labelled, never hidden" is a rule about
+ *      the LIST; a single deep-linked item is not the list.
+ *
+ * Each is a nullable field on `SharedRecipeView` for exactly this reason —
+ * a view that knows less is still a correct view, never a broken one.
+ *
+ * ⚠ THE LIST PRODUCES A LIVE SEND CARD AS OF 11 SEPTEMBER 2026, AND THIS
+ * PARAGRAPH SAID THE OPPOSITE UNTIL THAT AFTERNOON. It read "THE LIST
+ * STILL PRODUCES NO LIVE SEND CARD", which was true when it was written
+ * and stopped being true a few hours later on the same day: fase 2 built
+ * `buildSentMealCardModels` and wired it into `loadLiveFriends`, so
+ * Ontdek's feed side now carries both card kinds live. The correction is
+ * recorded rather than quietly swapped, because this file's own history is
+ * the argument for doing so — the blocker it used to name (a whole
+ * `Creator`, i.e. a PD-007 consent record, where a friend's imported meal
+ * has only attribution) had ALREADY been cleared on 10 September without
+ * anybody updating the headers that cited it, and that is how the gap
+ * survived the change that unblocked it.
+ *
+ * WHAT WAS TRUE AND STAYS TRUE is that this file's fix was independent of
+ * that one: it never went through `assembleFriendFeed` for the live case
+ * at all, only through `listMealsSentToMe` keyed on the route's own id. So
+ * the screen a live card opens told the truth before the card existed, and
+ * tells it now that the card does.
  *
  * THE SAVE WAS NEVER A FIXTURE and still is not: `Bewaren` reads `recipes`
  * through the Supabase social repository and writes through the app
- * repository. On a fixture card that read answers null and the zone shows
- * its not-found line. When this screen gains a live read, the save works
- * unchanged.
+ * repository. On a fixture card, or a live send whose `canonicalRecipeId`
+ * is null, that read answers null and the zone shows its not-found line —
+ * unchanged by any of the above, on both the fixture and the live path.
  */
 
 import { useMemo, type JSX } from 'react';
@@ -136,7 +164,9 @@ import {
   type SharedRecipeView,
 } from '@/components/sharedRecipePresentation';
 import { SharedRecipeSaveZone } from '@/components/SharedRecipeSaveZone';
+import { useLiveSharedRecipe } from '@/hooks/useLiveSharedRecipe';
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { useSession } from '@/hooks/useSession';
 import { useSharedRecipeSave } from '@/hooks/useSharedRecipeSave';
 import { getColors, spacing } from '@/theme/tokens';
 
@@ -148,6 +178,7 @@ export default function SharedRecipeScreen(): JSX.Element {
     feedItemId?: string;
     scenario?: string;
   }>();
+  const { userId } = useSession();
 
   /**
    * Resolved through the SAME `assembleFriendFeed` the list uses, rather
@@ -164,8 +195,14 @@ export default function SharedRecipeScreen(): JSX.Element {
    * than around the component so there is exactly one branch, and it
    * collapses to `null` — which every consumer below already handles,
    * because a withdrawn recipe produces the same null.
+   *
+   * STILL RUNS FIRST, AND STILL SYNCHRONOUS. Nothing about adding the live
+   * path below changes this one: a fixture id never collides with a real
+   * `recipe_shares` uuid, so the two paths never disagree about the same
+   * id, and a `__DEV__` build gets the instant fixture answer it always
+   * did rather than waiting on a network round trip it does not need.
    */
-  const view = useMemo<SharedRecipeView | null>(() => {
+  const fixtureView = useMemo<SharedRecipeView | null>(() => {
     if (!__DEV__) {
       return null;
     }
@@ -183,6 +220,17 @@ export default function SharedRecipeScreen(): JSX.Element {
     );
   }, [feedItemId, rawScenario]);
 
+  /**
+   * The LIVE path (this file's header). Held off entirely once the
+   * fixture already answered — passing `null` through both arguments
+   * leaves `useLiveSharedRecipe` at its `loading` state without reading
+   * anything, so a `__DEV__` scenario tap never fires a network request
+   * for an id it was never going to find.
+   */
+  const live = useLiveSharedRecipe(fixtureView === null ? userId : null, fixtureView === null ? (feedItemId ?? null) : null);
+
+  const view: SharedRecipeView | null = fixtureView ?? (live.kind === 'view' ? live.view : null);
+
   // All four edges now, where this screen used to leave the bottom to its
   // scroll padding: the save zone is pinned under the scroll, and it has to
   // clear the home indicator the way `/recipe/[mealId]`'s footer does.
@@ -199,7 +247,16 @@ export default function SharedRecipeScreen(): JSX.Element {
       </View>
 
       {view === null ? (
-        <SharedRecipeNoticeState notice={describeSharedRecipeNotice('missing')} onBack={() => router.back()} />
+        // `fixtureView` is null on every branch that reaches here, so
+        // `live.kind` is 'notice' whenever it is not 'view' — the three
+        // states `describeSharedRecipeNotice` distinguishes (loading,
+        // missing, failed) are exactly `live.notice`, never hard-coded to
+        // 'missing' the way this line used to be before the live path
+        // existed.
+        <SharedRecipeNoticeState
+          notice={describeSharedRecipeNotice(live.kind === 'notice' ? live.notice : 'loading')}
+          onBack={() => router.back()}
+        />
       ) : (
         <SharedRecipeWithSave view={view} />
       )}

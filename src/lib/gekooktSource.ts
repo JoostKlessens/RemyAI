@@ -67,24 +67,29 @@
  * different question with a different answer — see the narrowing inside
  * `loadLiveFriends`.
  *
- * THE LIVE READ IS THE AMBIENT HALF, AND THIS SAYS WHICH HALF.
- * `listFriendCookedRecipes` (the `shared_cooks` view, self-gating on
- * friendship) plus `listCanonicalRecipes` plus `assembleFriendProofCards`
- * produce real proof cards from real cook events. Live SEND cards are one
- * step behind them and the reason is specific rather than general:
- * `listMealsSentToMe` now returns a friend's meal with its ingredients —
- * that was the missing read — but `FriendRecipeCardModel.creator` is a
- * whole `Creator`, and a `Creator` is a CONSENT record (PD-007,
- * `creators.opted_in_at`). A friend's imported meal has no `creators` row
- * behind it; it has ATTRIBUTION, which 0006 is explicit is a different
- * thing. Fabricating a `Creator` from `recipes.author_name` to fill the
- * field would be exactly the conflation that schema comment warns
- * against, so the honest fix is for the send card's model to carry an
- * attribution-only shape — a change that reaches `CreatorAttribution` and
- * the shared recipe screen, and belongs in their change rather than this
- * one. Until then the live list shows proof, and the `__DEV__` scenarios
- * carry both kinds so the send card, its note and the unseen band all
- * stay designable.
+ * BOTH CARD KINDS ARE LIVE SINCE 11 SEPTEMBER 2026, AND THIS PARAGRAPH
+ * USED TO SAY THE OPPOSITE. What stood here explained that live SEND
+ * cards were "one step behind" because `FriendRecipeCardModel.creator`
+ * was a whole `Creator` — a PD-007 CONSENT record — and a friend's
+ * imported meal has only ATTRIBUTION. That blockage was cleared when the
+ * field became `attribution: RecipeAttribution | null`, and this header
+ * was not updated with it, so it went on describing a wall that had
+ * already been taken down.
+ *
+ * ⚠ AND THE REPLACEMENT WAS NEVER WRITTEN EITHER.
+ * friendFeedPresentation.ts's own header promised
+ * `buildSentMealCardModels` "at the foot of this file"; `grep` found that
+ * name in that one sentence and nowhere else. Two headers agreed about a
+ * function that did not exist, which is why the gap survived the very type
+ * change that had unblocked it. The function exists now, and this module
+ * is its only production caller.
+ *
+ * SO THE LIVE LIST IS BOTH HALVES: `listFriendCookedRecipes` (the
+ * `shared_cooks` view, self-gating) plus `assembleFriendProofCards` for
+ * the ambient half, and `listMealsSentToMe` plus `listSendsToMe` plus
+ * `buildSentMealCardModels` for the directed half. The `__DEV__`
+ * scenarios still carry both kinds, and now they describe the same world
+ * a device does rather than a richer one.
  *
  * TWO THINGS LIVE PROOF CANNOT SAY YET, stated rather than glossed.
  * `CanonicalRecipeSummary` is a LIST projection and carries no cook time
@@ -113,14 +118,21 @@ import {
   type FriendFeedScenario,
 } from '@/fixtures/friendFeedFixtures';
 import { getProofFixture } from '@/fixtures/friendProofFixtures';
-import { assembleFriendFeed } from '@/components/friendFeedPresentation';
+import {
+  assembleFriendFeed,
+  buildSentMealCardModels,
+  type SentMealFeedSource,
+} from '@/components/friendFeedPresentation';
+import { buildAuthorAttribution } from '@/components/recipeAttribution';
 import { assembleFriendProofCards, type ProofRecipe } from '@/components/friendProofPresentation';
 import { collectUnseenSendMealIds, orderGekooktList, type GekooktList } from '@/components/gekooktPresentation';
-import type { ProfileId, RecipeId } from '@/domain/social/types';
+import { collectExcludedTags } from '@/domain/exclusions';
+import type { ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
 import { clearUnseenSendCount } from '@/hooks/useUnseenSendCount';
 import { loadFollowedIds } from '@/lib/followGraphReads';
+import { ensureSeeded, getAppRepository } from '@/lib/repository';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
-import type { CanonicalRecipeSummary } from '@/lib/repository/social/types';
+import type { CanonicalRecipeSummary, IncomingSend, SentMeal } from '@/lib/repository/social/types';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -142,14 +154,41 @@ import { supabase } from '@/lib/supabase';
  * tab stamps them. Ordering once, at load, is what lets the band survive
  * the `markSendsSeen` that immediately follows it.
  */
-export type FriendsData = GekooktList;
+export interface FriendsData extends GekooktList {
+  /**
+   * Whether the SEND half of this list is whole.
+   *
+   * ⚠ IT EXISTS TO GATE `markVisitSeen`, AND THAT IS THE WHOLE OF IT. A
+   * send is stamped "seen" once, on the server, permanently — there is no
+   * way back and that is deliberate (§3.2: unseen "clears permanently on
+   * viewing, so there is no loop to run"). So the stamp may only ever
+   * follow a read that actually PUT THE CARDS ON SCREEN.
+   *
+   * `readExcludedTags` can fail — a cold start, a slow AsyncStorage, a race
+   * during onboarding — and when it does the send half is dropped rather
+   * than drawn without its PD-007a label. That is the right direction to
+   * fail in. What would NOT be right is stamping those sends as seen on the
+   * way past: the reader never saw them, and `markSendsSeen`'s own doc
+   * calls that "a false entry in the one column this system keeps about
+   * their attention". The card would return on the next successful read,
+   * but never again in the band and never again in the line at the top —
+   * post missed silently, once and for all.
+   *
+   * True when the send half is whole, INCLUDING when there was simply no
+   * send to show. False only when one was withheld.
+   */
+  readonly sendsShown: boolean;
+}
 
 /**
  * The honest zero. Exported because the screen's own `INITIAL_STATE` is
  * built from it — a second empty literal there would be one more place to
  * forget a field when this shape grows.
+ *
+ * `sendsShown: true` because nothing is being withheld from anybody here:
+ * an empty list has no send it failed to draw.
  */
-export const NO_FRIENDS_DATA: FriendsData = { cards: [], unseenBandSize: 0 };
+export const NO_FRIENDS_DATA: FriendsData = { cards: [], unseenBandSize: 0, sendsShown: true };
 
 /**
  * A canonical recipe, dressed for a proof card.
@@ -184,6 +223,47 @@ function toProofRecipe(recipe: CanonicalRecipeSummary): ProofRecipe {
 }
 
 /**
+ * The READING household's own exclusion set, and null when it cannot be
+ * read.
+ *
+ * NULL IS FAIL-CLOSED AND NOT A SHRUG. The only card kind that can carry a
+ * PD-007a collision label on live data is the SEND card — a canonical
+ * `recipes` row has no allergen tags at all (PD-006, see `toProofRecipe`),
+ * so a proof card is unaffected either way. Without the reader's
+ * restrictions a send card would draw with `collidingTags: []`, and an
+ * empty collision list is indistinguishable on screen from "checked and
+ * clean". That is the one direction this app never guesses in, so the
+ * caller drops the send half rather than drawing it unlabelled, and the
+ * ambient half — which had nothing to lose — stays.
+ *
+ * ⚠ IT IS THE READER'S HOUSEHOLD AND NEVER THE SENDER'S. PD-006's
+ * asymmetry in one line: a tag that travels may only ever ADD a "bevat
+ * noten" label, never remove one, and whose allergy it is is decided on
+ * this side of the send.
+ */
+async function readExcludedTags(): Promise<ReadonlySet<string> | null> {
+  try {
+    await ensureSeeded();
+    const repository = getAppRepository();
+    const householdId = await repository.getCurrentHouseholdId();
+    const [members, restrictions] = await Promise.all([
+      repository.listMembers(householdId),
+      repository.listRestrictions(householdId),
+    ]);
+    return collectExcludedTags(members, restrictions);
+  } catch {
+    // See above. A local store that will not answer costs the send cards
+    // and nothing else; it must not blank a feed that otherwise loaded.
+    return null;
+  }
+}
+
+/** One person's vote on one recipe. Keyed on both, because a recipe collects a vote per person. */
+function voteKey(raterProfileId: ProfileId, recipeId: RecipeId): string {
+  return `${raterProfileId}::${recipeId}`;
+}
+
+/**
  * Reads the circle: ~~who your friends are~~ WHO YOU FOLLOW, what they
  * cooked, how they graded it, what is waiting for you, and what all those
  * recipes are called.
@@ -195,91 +275,91 @@ function toProofRecipe(recipe: CanonicalRecipeSummary): ProofRecipe {
  *
  * ORDERED SO NOTHING UNNECESSARY IS FETCHED. Following nobody means no
  * proof, no grades and — RLS being what it is — no sends either, so the
- * whole read short-circuits. That matters most for `listAllRecipeRatings`,
- * which is the whole-table read Trending also performs.
+ * whole read short-circuits.
  *
- * THE RATINGS ARE STILL READ, AND THEY ARE NOT THE KRING. `rankKring` and
- * its list live on Trending now; what is left here is the GRADE ON A PROOF
- * CARD — "Sanne maakte dit, 8,5" — which `assembleFriendProofCards` builds
- * from the same narrowed votes. Narrowing before anything is scored stays
- * non-negotiable either way; the set itself is
- * ~~`src/domain/social/friendship.ts`~~ `src/domain/social/follow.ts`'s,
- * fetched through `loadFollowedIds`.
- *
- * `listCanonicalRecipes` IS ASKED ONLY FOR WHAT WAS COOKED. It used to be
- * asked for the voted recipes as well, because de kring needed to name
- * them; nothing on this screen does any more, and a wider read would drag
- * rows in that no card can render.
+ * ⚠ THE GRADES COME FROM `namable_recipe_votes` NOW, WHERE THEY USED TO
+ * COME FROM `listAllRecipeRatings`. That is the one behavioural change in
+ * this function that is not the send card, and it is a NARROWING rather
+ * than a widening. Migration 0016 exists to decide which votes may be
+ * shown BESIDE A NAME, through two anti-joins the whole-table read knows
+ * nothing about; every surface that prints a person's name next to a
+ * number is supposed to read it. This one prints "Sanne maakte dit" over a
+ * grade, so it is one of them. It moved here from `trendingSource.ts`,
+ * where it fed de kring — the list fase 2 dissolves (ONTDEK-PLAN.md's
+ * valkuil 7). The consent-gated read outlives the list it was written for,
+ * and that was always the load-bearing half of de kring.
  *
  * NOTHING HERE IS ORDERED BY RECENCY, and nothing here is ordered by
- * cookability either — which is worth stating rather than leaving to be
- * discovered. `rankFeedItems` scores a `FeedItem` against a `Meal` in the
- * READER's household, and a canonical recipe a friend cooked has neither,
- * so live proof arrives in the order `listCanonicalRecipes` returned it.
- * It is sorted by title below only so the list is STABLE between reads: an
- * arbitrary order that reshuffles looks like a bug, and a title sort is
- * the one tiebreak that carries no opinion about what you should cook. It
- * is a placeholder for ranking, not a ranking.
+ * cookability either — worth stating rather than leaving to be discovered.
+ * `rankFeedItems` scores a `FeedItem` against a `Meal` in the READER's
+ * household, and neither a canonical recipe a friend cooked nor a meal a
+ * friend sent is either of those, so live cards arrive in the order their
+ * reads returned them. Proof is sorted by title below only so the list is
+ * STABLE between reads: an arbitrary order that reshuffles looks like a
+ * bug, and a title sort is the one tiebreak that carries no opinion about
+ * what you should cook. It is a placeholder for ranking, not a ranking.
+ * `RecipeShare.sentAt` is NOT used to order the send half, and its own doc
+ * forbids exactly that.
  */
 export async function loadLiveFriends(profileId: ProfileId): Promise<FriendsData> {
   const repository = createSupabaseSocialRepository(supabase);
   // NARROWING BEFORE SCORING IS NOT OPTIONAL. There is no repository method
-  // that filters ratings by rater, so the narrowing happens here, on the
-  // way in — handing a whole-table read of `recipe_ratings` to anything
-  // that grades is how a stranger's vote ends up on a friend's card. The
-  // set itself is `src/domain/social/follow.ts`'s; it was a local copy
-  // here until it had two of them and no test.
+  // that filters votes by rater, so the narrowing happens here, on the way
+  // in — handing a whole-relation read to anything that grades is how a
+  // stranger's vote ends up on a friend's card. The set itself is
+  // `src/domain/social/follow.ts`'s; it was a local copy here until it had
+  // two of them and no test.
   //
   // ⚠ AND IT IS "IK VOLG HEN" RATHER THAN "WEDERZIJDS" — the decision
   // PD-024 forced on this line, and ONTDEK-PLAN.md O-11b's table settles it
   // in one sentence: `shared_cooks` (proof) becomes "ik volg hen", because
-  // *"dat ís de feed. Asymmetrie hoort hier of nergens."* This is the tab
-  // the whole follow model was built for. If the feed showed only people
-  // who follow back, following would grant nothing friendship did not
-  // already grant and the second table would have bought nothing.
+  // *"dat ís de feed. Asymmetrie hoort hier of nergens."*
   //
-  // WHAT MAKES THE WIDER SET SAFE IS O-11c's CONSENT, not this file being
-  // generous. Every id below belongs to somebody who ACCEPTED being
-  // followed — a fresh permission granted per person, which §5's single
-  // global switch cannot express — and §5's switch still sits above it, so
-  // a household that shares nothing shows nothing to an accepted follower
-  // either. Consent stacks; it does not substitute.
-  //
-  // ⚠ THE COOK HALF IS STILL NARROWER THAN THIS SET TODAY, and that is the
-  // migration's doing rather than a bug here. `shared_cooks` (0009:155)
-  // gates itself on `is_friend_of`, which 0021 rewrote to MUTUAL, and
-  // `i_follow` — the asymmetric predicate — landed in 0021 with zero
-  // callers on purpose, so that the migration changes nothing observable.
-  // So proof cards remain the intersection until fase 2 widens that view.
-  // The grades below are NOT gated that way: `listAllRecipeRatings` is
-  // narrowed here and nowhere else, so this line is what decides them, and
-  // it is already right for the day the view catches up.
+  // ⚠ THE SEND HALF IS NARROWER THAN THIS SET AND STAYS THAT WAY. A send is
+  // inserted under `recipe_shares_insert`, which 0009 gates on
+  // `is_friend_of` — MUTUAL — and migration 0022 deliberately leaves that
+  // policy alone while moving `shared_cooks` to `i_follow`. So proof is
+  // one-way and post is two-way, because a send is a message to one person
+  // and one-way delivery would make it unsolicited post. Every sender is
+  // therefore already inside `followedIds`, which is what lets the one
+  // profile read below name both halves.
   const followedIds = await loadFollowedIds(repository, profileId);
   if (followedIds.size === 0) {
     return NO_FRIENDS_DATA;
   }
 
-  const [allRatings, friendProfiles, cooks, sends] = await Promise.all([
-    repository.listAllRecipeRatings(),
+  const [namableVotes, friendProfiles, cooks, sends, sentMeals, excludedTags] = await Promise.all([
+    // Consent-gated, and read after the follow check for the ordinary
+    // reason: following nobody means there is nothing to narrow to.
+    repository.listNamableRecipeVotes(),
     Promise.all([...followedIds].map((followedId) => repository.getProfile(followedId))),
     // `shared_cooks` gates itself inside the view body, so this is already
-    // scoped to the people who opted in — MUTUAL ones until fase 2 widens
-    // the view from `is_friend_of` to `i_follow` (see the narrowing above).
-    // Most households never opt in, and an empty result is the ordinary
-    // case rather than a failure.
+    // scoped to the people who opted in. Most households never opt in, and
+    // an empty result is the ordinary case rather than a failure.
     repository.listFriendCookedRecipes(),
     repository.listSendsToMe(profileId),
+    repository.listMealsSentToMe(profileId),
+    readExcludedTags(),
   ]);
 
   // Somebody whose profile row failed to load keeps their vote and their
-  // cook, and loses their name: `assembleFriendProof` drops an unnameable
-  // cook rather than rendering "iemand maakte dit".
+  // cook, and loses their name: both builders drop an unnameable person
+  // rather than rendering "iemand maakte dit".
   const displayNamesByProfile = new Map(
     friendProfiles.flatMap((profile) => (profile === null ? [] : [[profile.id, profile.displayName] as const])),
   );
-  const votes = allRatings.filter((rating) => followedIds.has(rating.raterProfileId));
+  const votes = namableVotes.filter((vote) => followedIds.has(vote.raterProfileId));
+
   const cookedRecipeIds = new Set<RecipeId>(cooks.map((cook) => cook.recipeId));
-  const recipes = await repository.listCanonicalRecipes([...cookedRecipeIds]);
+  const sentRecipeIds = new Set<RecipeId>(
+    sentMeals.flatMap((meal) => (meal.recipeId === null ? [] : [meal.recipeId])),
+  );
+  // ONE CALL FOR BOTH HALVES. The two name overlapping dishes — a friend
+  // may well send you the thing she also cooked — and asking twice would be
+  // two round trips for one answer.
+  const recipes = await repository.listCanonicalRecipes([
+    ...new Set<RecipeId>([...cookedRecipeIds, ...sentRecipeIds]),
+  ]);
 
   const proofCards = assembleFriendProofCards({
     cooks,
@@ -297,12 +377,80 @@ export async function loadLiveFriends(profileId: ProfileId): Promise<FriendsData
     collidingTagsByRecipeId: new Map(),
   });
 
-  // The band runs over whatever cards there are, and today that is proof
-  // only — which is exactly why it is applied here rather than being
-  // skipped: `collectUnseenSendMealIds` produces a real set from a real
-  // read, no proof card can match it, and the day live send cards land the
-  // band lights up with no change to this line.
-  return orderGekooktList(proofCards, collectUnseenSendMealIds(sends));
+  const sendCards =
+    excludedTags === null
+      ? []
+      : buildSentMealCardModels(
+          toSentMealSource({ sentMeals, sends, recipes, votes, displayNamesByProfile, excludedTags }),
+        );
+
+  // Sends before proof, matching the fixture path exactly — see
+  // `loadFixtureFriends`. The band then lifts the unseen sends above both,
+  // which is the one movement this list makes.
+  //
+  // ⚠ `sendsShown` CARRIES THE FAILURE OUT OF HERE rather than being
+  // swallowed, so the caller can decline to stamp what it did not draw.
+  // See the field's own doc; it is the difference between failing safely
+  // and losing somebody's post in silence.
+  return {
+    ...orderGekooktList([...sendCards, ...proofCards], collectUnseenSendMealIds(sends)),
+    sendsShown: excludedTags !== null,
+  };
+}
+
+/** The rows `toSentMealSource` joins, named so the call site reads as a sentence rather than as six positions. */
+interface SentMealJoinInput {
+  readonly sentMeals: readonly SentMeal[];
+  readonly sends: readonly IncomingSend[];
+  readonly recipes: readonly CanonicalRecipeSummary[];
+  readonly votes: readonly RecipeRating[];
+  readonly displayNamesByProfile: ReadonlyMap<ProfileId, string>;
+  readonly excludedTags: ReadonlySet<string>;
+}
+
+/**
+ * The four joins a send card needs, performed once.
+ *
+ * IT IS ITS OWN FUNCTION BECAUSE THE JOINS ARE THE INTERESTING PART, and
+ * `loadLiveFriends` is already at its readable length. Each map below
+ * answers one question the presentation layer is not allowed to ask,
+ * because asking it would mean fetching.
+ */
+function toSentMealSource(input: SentMealJoinInput): SentMealFeedSource {
+  const { sentMeals, sends, recipes, votes, displayNamesByProfile, excludedTags } = input;
+  const votesByVoter = new Map(
+    votes.map((vote) => [voteKey(vote.raterProfileId, vote.recipeId), vote.rating] as const),
+  );
+
+  return {
+    meals: sentMeals,
+    notesByShareId: new Map(sends.map((send) => [send.id, send.note] as const)),
+    senderNamesByProfileId: displayNamesByProfile,
+    // THE SENDER'S OWN VOTE, never an average and never `cook_events.rating`.
+    // A card reading "Joris deelde dit, 8,5" where the 8,5 was the world's
+    // average would put a number in his mouth that he never said.
+    gradesByShareId: new Map(
+      sentMeals.flatMap((meal) => {
+        if (meal.recipeId === null) {
+          return [];
+        }
+        const grade = votesByVoter.get(voteKey(meal.senderProfileId, meal.recipeId));
+        return grade === undefined ? [] : [[meal.shareId, grade] as const];
+      }),
+    ),
+    // PD-010.1's credit, off the CANONICAL row. A `SentMeal` carries a
+    // `sourceUrl` and no author at all, so this is the only place the fact
+    // exists — and `CanonicalRecipeSummary` is a list projection with no
+    // `authorUrl`, which `buildAuthorAttribution` already expects: it takes
+    // three columns rather than a row type for exactly this caller.
+    attributionsByRecipeId: new Map(
+      recipes.flatMap((recipe) => {
+        const attribution = buildAuthorAttribution(recipe.authorName, recipe.platform, null);
+        return attribution === null ? [] : [[recipe.recipeId, attribution] as const];
+      }),
+    ),
+    excludedTags,
+  };
 }
 
 /**
@@ -318,7 +466,12 @@ export function loadFixtureFriends(scenario: FriendFeedScenario): FriendsData {
   const sendCards = assembleFriendFeed({ ...getFriendFeedFixture(scenario), targetDate: FIXTURE_TARGET_DATE });
   const proofCards = assembleFriendProofCards(getProofFixture(scenario));
 
-  return orderGekooktList([...sendCards, ...proofCards], getUnseenSendMealIds(scenario));
+  // `sendsShown: true` — a fixture has no read to fail. It never reaches
+  // `markVisitSeen` either way, because that call is live-only.
+  return {
+    ...orderGekooktList([...sendCards, ...proofCards], getUnseenSendMealIds(scenario)),
+    sendsShown: true,
+  };
 }
 
 /**

@@ -364,6 +364,18 @@ PD-014; was "Ranglijst"), in that order. No tab icons — text-only labels in
 > because one opened up is precisely the mistake this rule was written
 > against. Read PD-024 before changing the tab bar.
 
+> ⚠ **BANNER, 11 September 2026 — the above is no longer upcoming, it is
+> BUILT.** `Kiezen | Mijn recepten | Ontdek`, three tabs, is what runs.
+> `(tabs)/friends.tsx` is a 36-line `<Redirect href="/ranglijst" />` (was
+> 907) with `href: null` in `_layout.tsx`; the route segment stays
+> `ranglijst`, only the label changed. See `docs/ONTDEK-PLAN.md`'s fase 2 and
+> `PRODUCT-DECISIONS.md` PD-024a.
+>
+> **The slot arithmetic, from the tab bar's own measured advance widths.**
+> The slot went from `width / 4 - 2 × 5` to `width / 3 - 2 × 5`: **121,00pt**
+> on a 393pt device, **115,00pt** on 375pt, **96,67pt** on 320pt. ⚠ **This is
+> ARITHMETIC and has never been seen on a device.**
+
 **This document said "no third tab" until PD-010, and it was right to.**
 The argument was that the product has two tasks — deciding and keeping —
 and that a third tab is how a decision tool turns into a browsing app.

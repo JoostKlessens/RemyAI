@@ -1,7 +1,26 @@
 /**
  * The Gekookt list itself: the union of its two card kinds, PD-020.1's
- * unseen band, and the `Vrienden · 2` count that reads the same rows
- * (docs/DESIGN.md §8, docs/DESIGN-SOCIAL.md §3.2 and §4.2).
+ * unseen band, and the count that reads the same rows (docs/DESIGN.md §8,
+ * docs/DESIGN-SOCIAL.md §3.2 and §4.2).
+ *
+ * ⚠ THE LIST IS ONTDEK'S FEED SIDE SINCE 11 SEPTEMBER 2026, not the
+ * Vrienden tab's. PD-024 merged that tab into `(tabs)/ranglijst.tsx`, and
+ * this module went across unchanged — the union, the band and the
+ * discriminator are the same code they were. That is the point rather than
+ * a coincidence: the merge was a decomposition, not a rewrite. The word
+ * "Gekookt" survives here because it is what this list has always been
+ * called in the code.
+ *
+ * ⚠ AND `buildVriendenTabLabel` / `buildVriendenTabAccessibilityLabel` NO
+ * LONGER HAVE A CALLER, which O-1b decided rather than an oversight. The
+ * count moved off the tab bar and onto one line at the top of Ontdek,
+ * beside the cards it counts (`formatWaitingPost`, ontdekCopy.ts) — it had
+ * been reading `listSendsToMe` for real while the list underneath rendered
+ * no send cards at all. The two builders are kept with their tests because
+ * they hold the rules that SURVIVED the move: the ceiling at 99, the
+ * refusal to become a badge, and the spoken form. The day a count returns
+ * to any label it must return through them rather than around them.
+ * `countUnseenSends` and `collectUnseenSendMealIds` are both still live.
  *
  * WHY A THIRD MODULE. friendFeedPresentation.ts owns the SEND card and
  * friendProofPresentation.ts owns the PROOF card, and neither imports the

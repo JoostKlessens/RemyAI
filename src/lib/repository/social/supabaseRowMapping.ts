@@ -246,10 +246,19 @@ export interface SentMealIngredientRow {
   readonly sort_order: number;
 }
 
+/** `meal_steps`, as the additional `meal_steps_select_sent_to_me` policy (0009) exposes it to a recipient — see `SentMealStep`'s header (./types.ts) on why this table may cross where `households`/`allergen_tag_status` never do. No `duration_minutes`: that column drives the SENDER's own cook-mode timer. */
+export interface SentMealStepRow {
+  readonly meal_id: string;
+  readonly step_number: number;
+  readonly instruction: string;
+}
+
 /** Spelled out rather than `*` — see `SentMealRow` on why the column list is load-bearing here. */
 export const SENT_MEAL_COLUMNS = 'id, title, estimated_minutes, servings, ingredient_tags, source_url, thumbnail_url, recipe_id';
 
 export const SENT_MEAL_INGREDIENT_COLUMNS = 'meal_id, name, quantity, unit, sort_order';
+
+export const SENT_MEAL_STEP_COLUMNS = 'meal_id, step_number, instruction';
 
 /**
  * Postgres time to this codebase's fixed-width UTC string. See the header:
@@ -377,6 +386,7 @@ export function toSentMeal(
   share: SentShareRow,
   meal: SentMealRow,
   ingredients: readonly SentMealIngredientRow[],
+  steps: readonly SentMealStepRow[],
 ): SentMeal {
   return {
     shareId: share.id,
@@ -400,6 +410,16 @@ export function toSentMeal(
         quantity: ingredient.quantity,
         unit: ingredient.unit,
         sortOrder: ingredient.sort_order,
+      })),
+    // Sorted here for `SentMealIngredient.sortOrder`'s reason: a caller
+    // never has to. `step_number` becomes `sortOrder` and `instruction`
+    // becomes `text` — see `SentMealStep`'s header (./types.ts) on why the
+    // rename rather than a reused field name.
+    steps: [...steps]
+      .sort((a, b) => a.step_number - b.step_number)
+      .map((step) => ({
+        text: step.instruction,
+        sortOrder: step.step_number,
       })),
   };
 }

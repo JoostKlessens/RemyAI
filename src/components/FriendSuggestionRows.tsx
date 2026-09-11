@@ -40,10 +40,26 @@ import {
 } from './friendSuggestionCopy';
 
 export interface PendingRequestsLineProps {
-  /** Already formatted by `formatPendingRequests`; the caller draws nothing when that returns null. */
+  /** Already formatted by `formatWaitingPost`; the caller draws nothing when that returns null. */
   readonly text: string;
   readonly colors: ColorTokens;
-  readonly onPress: () => void;
+  /**
+   * Where the line goes, or null when it goes nowhere.
+   *
+   * ⚠ NULLABLE SINCE FASE 2, AND THE NULL BRANCH IS THE INTERESTING ONE.
+   * This line used to count exactly one kind of post — an incoming follow
+   * request, which can only be answered on `/friends/add`, so there was
+   * always somewhere to go. O-1b moved the send count here too, and a send
+   * is NOT somewhere else: it is the band immediately beneath this line,
+   * already on screen. A control that offered a tap to a screen unrelated
+   * to what it had just said would be worse than a line that offers none,
+   * so when the count is sends only this renders as a plain statement.
+   *
+   * `resolveWaitingPostDestination` (ontdekPresentation.ts) is what decides
+   * it, and it is tested there. It stays ONE line and ONE count either way;
+   * what changes is whether it is tappable.
+   */
+  readonly onPress: (() => void) | null;
 }
 
 /**
@@ -66,6 +82,16 @@ export interface PendingRequestsLineProps {
  */
 export function PendingRequestsLine(props: PendingRequestsLineProps): JSX.Element {
   const { text, colors, onPress } = props;
+  const line = <Text style={[typeScale.bodySmall, { color: colors.accent }]}>{text}</Text>;
+
+  if (onPress === null) {
+    // A statement rather than a control — see `onPress`. Same face, same
+    // accent, same box, so the line does not change SHAPE when the kind of
+    // post behind it changes; only the affordance goes. A button that opens
+    // a screen unrelated to the sentence above it is the thing being
+    // avoided, and a button that does nothing at all is worse than both.
+    return <View style={[styles.pending, { borderColor: colors.border }]}>{line}</View>;
+  }
 
   return (
     <Pressable
@@ -74,7 +100,7 @@ export function PendingRequestsLine(props: PendingRequestsLineProps): JSX.Elemen
       accessibilityLabel={PENDING_REQUESTS_ACCESSIBILITY_LABEL}
       style={[styles.pending, { borderColor: colors.border }]}
     >
-      <Text style={[typeScale.bodySmall, { color: colors.accent }]}>{text}</Text>
+      {line}
     </Pressable>
   );
 }

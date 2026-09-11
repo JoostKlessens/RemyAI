@@ -1,5 +1,33 @@
 /**
- * Trending's data layer: the two lists behind the tab's two scopes.
+ * Explore's data layer: the global board, and nothing else.
+ *
+ * ⚠ IT FILLED TWO LISTS UNTIL 11 SEPTEMBER 2026 AND NOW FILLS ONE — the
+ * second time that sentence has been true about this seam, and the
+ * opposite move from the first. On 8 September de kring moved INTO this
+ * file, out of Vrienden, because a friends-scoped ranking answered the
+ * SAME question as the global one at a different scope, and that is what a
+ * scope switch is for. PD-024 reverses the frame it rested on: the
+ * question is no longer "what is highly rated, at which scope" but "whose
+ * evidence am I looking at" — the people I follow, or everybody — and
+ * those are two SURFACES rather than two scopes of one list.
+ *
+ * SO THE FRIEND EVIDENCE WENT BACK TO THE FEED, AND WHAT IT LOST ON THE
+ * WAY IS THE ORDERING. ONTDEK-PLAN.md's valkuil 7 states the price
+ * plainly: `rankKring` sorted the friends list by score, and on the feed
+ * nothing sorts by score — a grade is decoration on a card whose subject
+ * is a person. The average and the named voters survive; the ORDER does
+ * not. What actually moved is the read: the consent-gated
+ * `listNamableRecipeVotes` (migration 0016) now lives in
+ * `src/lib/gekooktSource.ts`, narrowed by the same follow set, feeding the
+ * grade on a proof card. That was always the load-bearing half.
+ *
+ * ⚠ `rankKring`, `assembleKring`, `KringRowModel` and
+ * `kringPresentation.ts`'s list copy therefore have NO PRODUCTION CALLER
+ * as of this change. They are not deleted, they are still tested, and
+ * docs/LONGLIST.md ONT-07 records why: ONT-02's third card kind — the
+ * friend who voted without cooking — is the case that revives them, and
+ * throwing away a tested ranking in order to rewrite it later is the
+ * expensive order to do this in.
  *
  * WHERE IT LIVES, AND WHY THAT CHANGED. This was
  * src/app/ranglijst/_trendingSource.ts. The leading underscore was
@@ -9,51 +37,37 @@
  * on every launch. It is in src/lib now for the reason `gekooktSource.ts`
  * beside it spells out at length: this directory is the impure shell that
  * fetches, and a module under src/app cannot be imported by any test in
- * this repo. With its sibling `boardFixtures.ts` gone to `@/fixtures`, the
- * `src/app/ranglijst/` directory held nothing and was removed — the route
- * was always `(tabs)/ranglijst.tsx` and still is.
+ * this repo.
  *
- * WHAT MOVED, AND WHY. Trending used to answer one question — "what is
- * highly rated, everywhere" — and a second list answering the same question
- * about your friends lived on Vrienden, behind a `Gekookt | Kring`
- * segmented control. That was the wrong seam. The owner said so plainly: he
- * wanted his friends' best-rated recipes on the ranking tab, not in a
- * separate list on a tab about what people cooked. So the friends ranking
- * moved here, beside the global one, and Vrienden went back to being one
- * list. Nothing about the ranking itself changed: `rankKring`,
- * `assembleKring`, `KringRow` and every string in `kringPresentation.ts`
- * are reused exactly as they were, and this module is the read that
- * followed them across.
+ * ===========================================================================
+ * THE HARD BOUNDARY OF FASE 2, AND THIS FILE IS ONE OF ITS TWO HALVES
+ * ===========================================================================
  *
- * The friends read below is `gekooktSource.ts`'s kring half, carried over
- * with its comments intact — the same kind of carve that produced
- * `gekooktSource.ts` itself. What is genuinely new is only the sharing:
- * both scopes now come out of ONE `listAllRecipeRatings`.
+ * PD-024: "nothing from the feed may touch explore's ordering, and explore
+ * may never backfill the feed. That is §8's 'no padding the kring',
+ * inverted, and it earns a test — one that nails down that no row produced
+ * by `rankRecipes` can land on the feed side."
  *
- * THAT SHARING IS THE POINT, NOT AN OPTIMISATION. A global board means
- * fetching every rating row in the database in order to rank them —
- * `boardFixtures.ts`'s header flags that as the thing to fix before this scales
- * — and doing it a second time on the same screen, to narrow the same rows
- * to a handful of friends, would be indefensible. One whole-table read, two
- * independent rankings over it. The single `listCanonicalRecipes` call
- * below is there for the same reason: the two scopes name overlapping
- * dishes, and asking twice would be two round trips for one answer.
+ * ⚠ `loadLiveTrending` TAKES NO ARGUMENTS, AND THAT IS THE ENFORCEMENT
+ * RATHER THAN A TIDY-UP. It used to take a `ProfileId | null`, because the
+ * friends scope needed one to narrow on. With that scope gone there is
+ * nothing left on this surface that may know who is reading, so the
+ * parameter is REMOVED rather than left unused: PD-014's sixth condition
+ * is "no personalisation, ever", and a function that is never told the
+ * reader's identity cannot personalise even by accident. Adding the
+ * parameter back is the change a reviewer should refuse — there is no read
+ * on this surface that needs it.
  *
- * THE TWO LISTS ARE NEVER MERGED, NEVER BACKFILLED, NEVER PADDED
- * (DESIGN-SOCIAL.md §2.2). They share a fetch and nothing else: two
- * assemblers, two orderings, two lists, and a thin friends ranking stays
- * visibly thin. Topping one up from the other would rebuild the refused
- * "Ontdekken" surface out of spare parts, and `assembleKring` has no
- * parameter to do it with — deliberately, and that stays true.
+ * The two surfaces now share NOTHING: not a read, not a type, not a
+ * module. `src/components/ontdekPresentation.ts` holds the type-level half
+ * of the same boundary, and tests/ontdekBoundary.test.ts is the test
+ * PD-024 asked for.
  *
- * THE FLOOR APPLIES TO ONE SCOPE ONLY, and that asymmetry is real rather
- * than an oversight. `rankRecipes` shrinks toward a population prior and
- * refuses anything under the minimum vote count, because its voters are
- * strangers; `rankKring` applies no floor and no shrinkage, because two
- * named friends are evidence where a stranger's single vote is noise. So
- * the global list can be empty while the friends list is full. That is not
- * a bug, and the `__DEV__` mapping at the bottom deliberately makes it easy
- * to look at.
+ * THE FLOOR IS THIS SURFACE'S ALONE, and the asymmetry that used to be
+ * explained here has gone with the list it separated. `rankRecipes`
+ * shrinks toward a population prior and refuses anything under
+ * `LEADERBOARD_MIN_VOTES`, because its voters are strangers. There is no
+ * second ranking here any more to contrast it with.
  *
  * NOTHING HERE IS ORDERED BY RECENCY, and nothing here reads a timestamp
  * into a view model. `RecipeRating.ratedAt` passes through untouched. A
@@ -84,64 +98,50 @@
  * it fails. The design that survives its own stated ceiling is the one that
  * ships.
  *
- * MEASURED ON TODAY'S DATA THE TWO ARE INDISTINGUISHABLE, which is why the
- * ceiling had to decide it. The demo seed holds 8 recipes and 18 ratings, of
- * which exactly 3 recipes clear the floor — so the ranked set and the top 25
- * are the same three rows, and both designs fetch the same three recipes.
- * Nothing measurable today separates them.
- *
- * WHAT PAYS FOR THE REFUSAL IS THE CHIP ROW, not a compromise in here. The
- * chips Trending offers are collected from the cards that are actually on
- * screen (`collectSelectableBoardDishTags`), so a tag no top-25 recipe
- * carries is never offered — a reader cannot tap their way to the empty
- * result the "before" design was meant to avoid. The only way left to empty
- * the feed is a COMBINATION, and "Wissen" undoes that in one tap.
- *
- * ⚠ SO THIS FILE IS UNCHANGED BY THE FILTER, deliberately: same two reads,
- * same slice to LEADERBOARD_MAX_ROWS, same `assembleLeaderboard`. The filter
- * is pure and runs on the screen over rows already in hand, which is also
- * what keeps a chip tap from producing a spinner — the same property the
- * scope switch has and for the same reason.
+ * ⚠ SO THIS FILE IS UNCHANGED BY THE FILTER, deliberately: same read, same
+ * slice to LEADERBOARD_MAX_ROWS, same `assembleLeaderboard`. The filter is
+ * pure and runs on the screen over rows already in hand, which is also what
+ * keeps a chip tap from producing a spinner — the same property the surface
+ * switch has, and for the same reason.
  */
 
-import { getKringFixture, type FriendFeedScenario } from '@/fixtures/friendFeedFixtures';
 import { getBoardFixture, type BoardScenario } from '@/fixtures/boardFixtures';
-import { assembleKring, type KringRecipe, type KringRowModel } from '@/components/kringPresentation';
 import {
   LEADERBOARD_MAX_ROWS,
   assembleLeaderboard,
   type BoardRecipe,
   type BoardRowModel,
 } from '@/components/leaderboardPresentation';
-import { collectFollowedIds } from '@/domain/social/follow';
 import { buildLeaderboard } from '@/domain/social/leaderboard';
-import type { ProfileId, RecipeId, RecipeRating } from '@/domain/social/types';
+import type { RecipeId } from '@/domain/social/types';
 import { createSupabaseSocialRepository } from '@/lib/repository/social/supabaseSocialRepository';
 import type { CanonicalRecipeSummary } from '@/lib/repository/social/types';
 import { supabase } from '@/lib/supabase';
 
-/** Both scopes, from whichever source produced them. Held together because one read fills both. */
+/**
+ * The one list this surface has.
+ *
+ * IT IS STILL AN OBJECT AND NOT A BARE ARRAY, on purpose. Fase 3 adds a
+ * search result beside the board (ONTDEK-PLAN.md), and that is a SECOND
+ * list on this surface whose relationship to the board has to be declared
+ * somewhere. A bare array would make that arrival a change to every call
+ * site; an object with one field makes it a new field with its own doc.
+ *
+ * ⚠ WHAT IT MAY NEVER GROW IS A FIELD FED BY THE FEED. No proof cards, no
+ * sends, no follow-scoped rows, under any name. See this file's header on
+ * the boundary, and the test that holds it.
+ */
 export interface TrendingData {
   /** Everyone's ranking — `rankRecipes`, with its prior, its shrinkage and its floor. */
   readonly boardRows: readonly BoardRowModel[];
-  /** Your friends' ranking — `rankKring`, plain averages with the voters named. */
-  readonly friendRows: readonly KringRowModel[];
 }
 
 /**
- * The honest zero for both scopes. Exported because the screen's own
- * initial state is built from it — a second empty literal there would be
- * one more place to forget a field when this shape grows.
+ * The honest zero. Exported because the screen's own initial state is built
+ * from it — a second empty literal there would be one more place to forget
+ * a field when this shape grows.
  */
-export const NO_TRENDING_DATA: TrendingData = { boardRows: [], friendRows: [] };
-
-/** The friends half of one read: the votes that count, and the names behind them. */
-interface FriendVotes {
-  readonly votes: readonly RecipeRating[];
-  readonly voterNames: ReadonlyMap<ProfileId, string>;
-}
-
-const NO_FRIEND_VOTES: FriendVotes = { votes: [], voterNames: new Map() };
+export const NO_TRENDING_DATA: TrendingData = { boardRows: [] };
 
 /**
  * A canonical recipe, dressed for a board row.
@@ -174,136 +174,37 @@ function toBoardRecipe(recipe: CanonicalRecipeSummary): BoardRecipe {
   };
 }
 
-/** `toBoardRecipe`'s sibling for the friends scope. The same PD-006 argument applies, unchanged. */
-function toKringRecipe(recipe: CanonicalRecipeSummary): KringRecipe {
-  return {
-    recipeId: recipe.recipeId,
-    title: recipe.title,
-    creatorHandle: recipe.authorName ?? '',
-    creatorPlatform: recipe.platform,
-    thumbnailUrl: recipe.thumbnailUrl,
-    allergenTags: [],
-    // Carried since 8 September 2026, so this scope draws the same card as
-    // the board. Both come off the canonical row this function is already
-    // handed — see `toBoardRecipe` directly above, which does the identical
-    // thing for the identical reason.
-    dishTags: recipe.dishTags,
-    estimatedMinutes: recipe.estimatedMinutes,
-  };
-}
-
 /**
- * Who this reader's friends are, and which of the ratings already in hand
- * are theirs.
+ * Reads the board.
  *
- * NARROWING BEFORE RANKING IS NOT OPTIONAL. `rankKring`'s own header says
- * so in as many words: handing it every vote in the database would silently
- * produce a second global board with none of the board's protections. There
- * is no repository method that filters ratings by rater, so the narrowing
- * happens here, on the way in, and never after ranking. The set itself is
- * `src/domain/social/friendship.ts`'s.
+ * ⚠ IT TAKES NOTHING, AND THAT IS LOAD-BEARING — see this file's header.
+ * There is no identity on this surface to narrow with, so there is no
+ * parameter to narrow with either.
  *
- * A null id is NOT a signed-out branch — PD-012 means the root layout
- * answers that before this tab ever renders. It only means the identity has
- * not resolved yet, and reading without one would ask the database a
- * question with no `auth.uid()` behind it. Following nobody short-
- * circuits for the ordinary reason: there is nothing to narrow to.
- *
- * IT READS ITS OWN VOTES, AND NOT THE BOARD'S. This used to be handed
- * `allRatings` — the whole of `recipe_ratings` — and filter it down. The
- * two scopes now need two different row sets, because de kring NAMES its
- * voters and the board does not: a household that unticked "vrienden mogen
- * zien dat ik dit heb gemaakt" on a cook keeps its grade in the board's
- * anonymous average and loses its name from the kring row. That difference
- * is `namable_recipe_votes` (0016), and it cannot be computed here — the
- * predicate reads another household's `meals`, which RLS refuses to every
- * reader, so a client attempt would see nothing excluded and fail open. It
- * is therefore a second whole-relation read rather than a second filter,
- * and the extra round trip is what buys a privacy filter that cannot be
- * got wrong from this side.
- */
-async function readFriendVotes(profileId: ProfileId | null): Promise<FriendVotes> {
-  if (profileId === null) {
-    return NO_FRIEND_VOTES;
-  }
-
-  const repository = createSupabaseSocialRepository(supabase);
-  // ⚠ THE KRING IS NARROWED HERE AND NOWHERE ELSE, WHICH IS WHY THIS LINE
-  // HAD TO MOVE BY HAND FOR PD-024. `namable_recipe_votes` (0016) is NOT
-  // friend-gated — its own header says the friend narrowing is "the
-  // caller's job and happens in the query that reads friendships", and
-  // this is that query. So rewriting `is_friend_of` in migration 0021
-  // carried the proof projection and the send policies along and carried
-  // the kring NOWHERE. A reader who assumed otherwise would have shipped a
-  // surface still answering from the frozen `friendships` table.
-  //
-  // AND IT BECOMES "IK VOLG HEN", not "wederzijds" — ONTDEK-PLAN.md
-  // O-11b's table. The kring follows the feed: it is evidence from the
-  // people whose cooking you chose to see, and asymmetry belongs here or
-  // nowhere. Sends go the other way and stay mutual, because a send is a
-  // message to one person and one-way would make it unsolicited post.
-  //
-  // `listBlocks` rides along because `collectFollowedIds` needs it: an
-  // accepted follow from before a block never counts again, standing or
-  // lifted, and leaving that to the caller is how one of six call sites
-  // forgets.
-  const [follows, blocks] = await Promise.all([
-    repository.listFollows(profileId),
-    repository.listBlocks(profileId),
-  ]);
-  const friendIds = collectFollowedIds(follows, blocks, profileId);
-  if (friendIds.size === 0) {
-    return NO_FRIEND_VOTES;
-  }
-  // After the follow check, not before: following nobody means no kring at
-  // all, and this is a whole-relation read worth not making.
-  const namableVotes = await repository.listNamableRecipeVotes();
-
-  const friendProfiles = await Promise.all([...friendIds].map((friendId) => repository.getProfile(friendId)));
-  // A friend whose profile row failed to load keeps their vote and loses
-  // their name: `buildKringMetaLine` falls back to a count rather than
-  // shrinking the sample it claims.
-  const voterNames = new Map(
-    friendProfiles.flatMap((profile) => (profile === null ? [] : [[profile.id, profile.displayName] as const])),
-  );
-  return { votes: namableVotes.filter((rating) => friendIds.has(rating.raterProfileId)), voterNames };
-}
-
-/**
- * Reads both scopes.
- *
- * ORDERED SO NOTHING UNNECESSARY IS FETCHED. Each ranking runs first, over
- * rows already in hand, and only the recipes that made one of the two cuts
- * are named — the alternative is pulling every canonical recipe in the
- * database to render at most LEADERBOARD_MAX_ROWS of them plus a handful of
- * friends' picks.
+ * ORDERED SO NOTHING UNNECESSARY IS FETCHED. The ranking runs first, over
+ * rows already in hand, and only the recipes that made the cut are named —
+ * the alternative is pulling every canonical recipe in the database in
+ * order to render at most LEADERBOARD_MAX_ROWS of them.
  *
  * `buildLeaderboard` runs twice — once here to learn which ids matter, once
- * inside `assembleLeaderboard`. That is deliberate and was true before this
+ * inside `assembleLeaderboard`. That is deliberate and predates this
  * change. It is a pure function of the same input, so the two runs cannot
  * disagree, and paying for it twice is cheaper than giving this module its
  * own copy of the ranking to keep in step with the domain's.
  */
-export async function loadLiveTrending(profileId: ProfileId | null): Promise<TrendingData> {
+export async function loadLiveTrending(): Promise<TrendingData> {
   const repository = createSupabaseSocialRepository(supabase);
-  // Two reads, and they are not the same list: `allRatings` is every vote
-  // and feeds the board's anonymous average, while `readFriendVotes` reads
-  // `namable_recipe_votes` for the one surface that prints names. See that
-  // function's header. In parallel because neither needs the other, and the
-  // narrower one short-circuits on its own when there are no friends.
-  const [allRatings, { votes, voterNames }] = await Promise.all([
-    repository.listAllRecipeRatings(),
-    readFriendVotes(profileId),
-  ]);
+  // Every vote in the database, feeding the board's anonymous average.
+  // `boardFixtures.ts`'s header flags this whole-relation read as the thing
+  // to fix before this scales, and `BOARD_RATING_ROW_CEILING` is the
+  // standing brake on it.
+  const allRatings = await repository.listAllRecipeRatings();
 
   const rankedBoardIds = buildLeaderboard(allRatings)
     .slice(0, LEADERBOARD_MAX_ROWS)
     .map((entry) => entry.recipeId);
 
-  // One call for both scopes — see this file's header.
-  const recipes = await repository.listCanonicalRecipes([
-    ...new Set<RecipeId>([...rankedBoardIds, ...votes.map((vote) => vote.recipeId)]),
-  ]);
+  const recipes = await repository.listCanonicalRecipes([...new Set<RecipeId>(rankedBoardIds)]);
 
   return {
     boardRows: assembleLeaderboard({
@@ -311,39 +212,10 @@ export async function loadLiveTrending(profileId: ProfileId | null): Promise<Tre
       recipes: recipes.map(toBoardRecipe),
       excludedAllergenTags: [],
     }),
-    friendRows:
-      votes.length === 0
-        ? []
-        : assembleKring({ votes, recipes: recipes.map(toKringRecipe), voterNames, excludedAllergenTags: [] }),
   };
 }
 
-/**
- * Which friends-scope fixture stands beside each board fixture, so one
- * `__DEV__` switch moves both scopes at once.
- *
- * `net-te-weinig` is the one worth flipping to, and the mapping is chosen
- * for it: every recipe sits one vote under the board's floor, so the global
- * scope renders its empty state while the friends scope stays full. That is
- * the asymmetry this file's header describes — a floor on one ranking and
- * none on the other — and it is the state a reader is most likely to
- * mistake for a bug, so it should be easy to look at rather than reachable
- * only in production.
- *
- * `zonder_allergie` is deliberately not reached from here. It lives on
- * Vrienden's own dev row, where the appearing and disappearing "bevat
- * noten" label makes PD-006's point about the proof cards on that screen.
- */
-const FRIEND_FIXTURE_BY_BOARD_SCENARIO: Readonly<Record<BoardScenario, FriendFeedScenario>> = {
-  gevuld: 'gedeeld',
-  'net-te-weinig': 'gedeeld',
-  leeg: 'leeg',
-};
-
-/** Assembles both scopes from one `__DEV__` scenario, so a switch moves them together. */
+/** Assembles the board from one `__DEV__` scenario. */
 export function loadFixtureTrending(scenario: BoardScenario): TrendingData {
-  return {
-    boardRows: assembleLeaderboard(getBoardFixture(scenario)),
-    friendRows: assembleKring(getKringFixture(FRIEND_FIXTURE_BY_BOARD_SCENARIO[scenario])),
-  };
+  return { boardRows: assembleLeaderboard(getBoardFixture(scenario)) };
 }

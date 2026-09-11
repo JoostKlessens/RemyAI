@@ -31,6 +31,7 @@ import {
   SHARED_RECIPE_SENT_TAG_CAVEAT,
   buildCanonicalAttribution,
   buildCanonicalSharedRecipe,
+  buildLiveSentSharedRecipe,
   buildSentSharedRecipe,
   buildSharedRecipeEyebrow,
   describeSharedRecipeNotice,
@@ -40,7 +41,7 @@ import { buildCreatorCreditLine } from '@/components/friendCardVocabulary';
 import { buildCreatorAttribution } from '@/components/recipeAttribution';
 import { buildCreatorCreditAccessibilityLabel } from '@/components/creatorPresentation';
 import type { FriendRecipeCardModel } from '@/components/friendFeedPresentation';
-import type { CanonicalRecipe } from '@/lib/repository/social/types';
+import type { CanonicalRecipe, SentMeal } from '@/lib/repository/social/types';
 import type { MealIngredient, MealStep } from '@/domain/types';
 import { makeCreator } from './feed/fixtures';
 
@@ -104,6 +105,24 @@ function makeMealStep(stepNumber: number, instruction: string): MealStep {
   return { id: `step-${stepNumber}`, mealId: 'meal-1', stepNumber, instruction, durationMinutes: null };
 }
 
+function makeSentMeal(overrides: Partial<SentMeal> = {}): SentMeal {
+  return {
+    shareId: 'share-1',
+    mealId: 'meal-1',
+    senderProfileId: 'profile-sanne',
+    title: 'Romige pasta pesto',
+    thumbnailUrl: null,
+    estimatedMinutes: 20,
+    servings: 2,
+    ingredientTags: [],
+    sourceUrl: 'https://www.tiktok.com/@chefremy/video/123',
+    recipeId: 'recipe-9',
+    ingredients: [],
+    steps: [],
+    ...overrides,
+  };
+}
+
 describe('buildSharedRecipeEyebrow', () => {
   test('names the friend who sent it', () => {
     expect(buildSharedRecipeEyebrow('Sanne')).toBe('Gedeeld door Sanne');
@@ -161,6 +180,79 @@ describe('buildSentSharedRecipe', () => {
   test('carries the canonical recipe id the save is keyed on, and null for a hand-entered dish', () => {
     expect(buildSentSharedRecipe(makeSendCard(), [], []).canonicalRecipeId).toBe('recipe-9');
     expect(buildSentSharedRecipe(makeSendCard({ canonicalRecipeId: null }), [], []).canonicalRecipeId).toBeNull();
+  });
+});
+
+describe('buildLiveSentSharedRecipe', () => {
+  test('names the sender in the eyebrow from the resolved profile name, not from SentMeal itself', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne').eyebrow).toBe('Gedeeld door Sanne');
+  });
+
+  test('leaves note, attribution and the original-post label null — SentMeal carries none of the three', () => {
+    const view = buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne');
+
+    expect(view.note).toBeNull();
+    expect(view.attribution).toBeNull();
+    expect(view.originalPostLabel).toBeNull();
+  });
+
+  test('leaves the collision label null rather than guessing without the household restriction set', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal({ ingredientTags: ['noten'] }), 'Sanne').collisionLabel).toBeNull();
+  });
+
+  test('shows the cook time and never a grade, because SentMeal carries no rating', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal({ estimatedMinutes: 20 }), 'Sanne').metaLine).toBe('20 min');
+  });
+
+  test('sorts ingredients and steps into recipe order regardless of input order', () => {
+    const view = buildLiveSentSharedRecipe(
+      makeSentMeal({
+        ingredients: [
+          { name: 'citroen', quantity: '1', unit: null, sortOrder: 1 },
+          { name: 'kip', quantity: '600', unit: 'g', sortOrder: 0 },
+        ],
+        steps: [
+          { text: 'Bakken.', sortOrder: 2 },
+          { text: 'Snijden.', sortOrder: 1 },
+        ],
+      }),
+      'Sanne',
+    );
+
+    expect(view.ingredientLines.map((line) => line.text)).toEqual(['600 g kip', '1 citroen']);
+    expect(view.stepLines.map((line) => line.text)).toEqual(['1. Snijden.', '2. Bakken.']);
+  });
+
+  test('keys every line on the meal plus its position, since SentMealIngredient/SentMealStep carry no id', () => {
+    const view = buildLiveSentSharedRecipe(
+      makeSentMeal({
+        mealId: 'meal-7',
+        ingredients: [{ name: 'kip', quantity: null, unit: null, sortOrder: 0 }],
+        steps: [{ text: 'Snijden.', sortOrder: 1 }],
+      }),
+      'Sanne',
+    );
+
+    expect(view.ingredientLines[0]?.key).toBe('meal-7-0');
+    expect(view.stepLines[0]?.key).toBe('meal-7-1');
+  });
+
+  test('carries the sender caveat, matching the fixture-fed path', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne').tagCaveat).toBe(SHARED_RECIPE_SENT_TAG_CAVEAT);
+  });
+
+  test('carries the canonical recipe id the save is keyed on, and null for a hand-entered dish', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal({ recipeId: 'recipe-9' }), 'Sanne').canonicalRecipeId).toBe(
+      'recipe-9',
+    );
+    expect(buildLiveSentSharedRecipe(makeSentMeal({ recipeId: null }), 'Sanne').canonicalRecipeId).toBeNull();
+  });
+
+  test('carries the source url through for PD-010.2, even though there is no label to pair it with yet', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal({ sourceUrl: null }), 'Sanne').sourceUrl).toBeNull();
+    expect(buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne').sourceUrl).toBe(
+      'https://www.tiktok.com/@chefremy/video/123',
+    );
   });
 });
 

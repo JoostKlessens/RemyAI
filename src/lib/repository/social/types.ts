@@ -366,6 +366,46 @@ export interface SentMealIngredient {
 }
 
 /**
+ * One step of a meal somebody sent you — the read `SentMeal` was missing
+ * until 11 September 2026, and the one `/friends/[feedItemId].tsx`'s header
+ * named as the whole cost of closing the seam where a live send tapped
+ * through to the wrong notice (`describeSharedRecipeNotice('missing')`,
+ * printed for a recipe that existed and was simply never read).
+ *
+ * WHY A STEP MAY TRAVEL WHERE `allergenTagStatus` AND `householdId` MAY
+ * NOT (`SentMeal`'s header, below, gives the refusal for both). Those two
+ * are facts ABOUT the sender's kitchen: a verification her household
+ * performed, and an identifier that would let a reader ask for anything
+ * else in it. PD-010 is explicit that neither crosses a household
+ * boundary. A step is neither kind of fact — it is the instruction for
+ * the dish itself, the thing the sender chose to hand over the moment
+ * they tapped "Stuur". `has_active_send_to_me()` (0009) already gates the
+ * whole meal on that one choice, and a step is not a finer-grained secret
+ * sitting behind it; it is the reason the send happened at all.
+ * Withholding the method while granting the ingredients would be a card
+ * that opens a shopping list with no dish behind it — exactly the "card
+ * that never opens" PD-010 was written to rule out.
+ *
+ * DELIBERATELY NOT `MealStep` (src/domain/types.ts), for `SentMealIngredient`'s
+ * reason immediately above it: no `id`, because nothing on the receiving
+ * side ever addresses one of these, and no `mealId`, because the step is
+ * already inside its meal. Also no `durationMinutes`: that field drives
+ * THIS household's own cook-mode timer, and a recipient reading a recipe
+ * screen is not standing at a stove running the sender's cook mode.
+ *
+ * RENAMED RATHER THAN REUSED FIELD FOR FIELD, matching the shape
+ * `SentMealIngredient` already set: `MealStep.stepNumber` becomes
+ * `sortOrder` and `MealStep.instruction` becomes `text`, so a caller that
+ * already knows how to order and key an ingredient list knows how to
+ * order and key this one too, with one vocabulary rather than two.
+ */
+export interface SentMealStep {
+  readonly text: string;
+  /** Recipe order, exactly as `SentMealIngredient.sortOrder` is — the implementations sort by it, so a caller never has to. */
+  readonly sortOrder: number;
+}
+
+/**
  * A friend's own `meals` row, as the person it was SENT to may see it —
  * the payload behind DESIGN-SOCIAL.md §4.2's send card.
  *
@@ -428,6 +468,8 @@ export interface SentMeal {
   /** `meals.recipe_id` (0006). Null for the hand-entered and seeded majority; when set, it is the join to a public grade. */
   readonly recipeId: RecipeId | null;
   readonly ingredients: readonly SentMealIngredient[];
+  /** See `SentMealStep`'s header for why this may travel here at all. */
+  readonly steps: readonly SentMealStep[];
 }
 
 /**
@@ -666,8 +708,8 @@ export interface RemySocialRepository extends RemyFollowGraphRepository {
 
   /**
    * The DISHES behind those sends: a friend's own `meals` rows, with the
-   * ingredients a card summarises, for every live send addressed to this
-   * reader.
+   * ingredients and steps a card summarises, for every live send addressed
+   * to this reader.
    *
    * WHY IT IS ON THIS INTERFACE AND NOT ON `RemyRepository`. Every method
    * there is scoped by `householdId` and RLS backs that with

@@ -1058,6 +1058,21 @@ asked. Recorded in PD-022.)**
 - **No padding the kring.** A thin friends list is never blended with
   global rows to look fuller — that would rebuild the refused Ontdekken
   surface out of spare parts. Thin is the honest state (§2.2).
+
+  > **AMENDED 2026-09-11 — this refusal, inverted, now has a test.**
+  > PD-024's hard boundary — "nothing from the feed may touch explore's
+  > ordering, and explore may never backfill the feed" — is
+  > `tests/ontdekBoundary.test.ts` (16 tests) since fase 2 landed. **Leaning
+  > on `isProofCard` alone would not have caught the mistake this refusal
+  > warns about**, and that is why `isFeedCard` exists as a second guard:
+  > `isProofCard` is `'recipeId' in card`, and a `BoardRowModel` — an
+  > explore row — carries a `recipeId` too, because a board row IS a
+  > canonical recipe, same as a proof card is. A board row spliced into the
+  > feed would therefore narrow as proof, render with `FriendProofCard`, and
+  > put a stranger's anonymous average exactly where a friend's name
+  > belongs, looking entirely ordinary while doing it. The test asserts that
+  > mis-narrowing directly rather than only asserting that correct data
+  > works.
 - **~~No follower model~~, no public profiles, ~~no vrienden-van-vrienden~~,
   no contact-book upload.** The graph is built by handle exchange between
   people who already know each other; growth loops over Article-9-
@@ -1233,6 +1248,11 @@ recipe as a natural key, and that is precisely what feeds are a surrogate for.~~
 > feed, dat is waar we naartoe willen."* The two surfaces are called Ontdek
 > together — a feed of the accounts you follow, and an explore holding the
 > global board and, later, search.
+>
+> **UPDATED 2026-09-11 — it is built.** Fase 2 of `ONTDEK-PLAN.md` landed:
+> `Kiezen | Mijn recepten | Ontdek`, three tabs, `ranglijst.tsx` as the
+> merged screen behind a pager. See `PRODUCT-DECISIONS.md` PD-024a for what
+> shipped against what this section and PD-024 priced.
 >
 > **The argument above is not refuted. It is overruled, and it stays here
 > because it is still true.** Remy does have the recipe as a natural key, and

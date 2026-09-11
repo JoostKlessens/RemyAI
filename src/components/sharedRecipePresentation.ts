@@ -44,7 +44,7 @@
 
 import type { RecipeId } from '@/domain/social/types';
 import type { MealIngredient, MealStep } from '@/domain/types';
-import type { CanonicalRecipe } from '@/lib/repository/social/types';
+import type { CanonicalRecipe, SentMeal } from '@/lib/repository/social/types';
 import { buildAllergenCollisionLabel, formatIngredientLine } from './friendCardVocabulary';
 import { buildAuthorAttribution, type RecipeAttribution } from './recipeAttribution';
 import {
@@ -165,6 +165,75 @@ export function buildSentSharedRecipe(
       .map((step) => ({ key: step.id, text: formatStepLine(step.stepNumber, step.instruction) })),
     tagCaveat: SHARED_RECIPE_SENT_TAG_CAVEAT,
     canonicalRecipeId: card.canonicalRecipeId,
+  };
+}
+
+/**
+ * The send screen's article, built straight off a LIVE `SentMeal` — no
+ * `FriendRecipeCardModel` in hand, because a live send produces none yet
+ * (`/friends/[feedItemId].tsx`'s header carries why: the LIST side of this
+ * is a separate, larger change owned in src/lib/gekooktSource.ts). This is
+ * the narrower read behind a deep link: one `recipe_shares` row, looked up
+ * by id, turned into the same `SharedRecipeView` the fixture path builds.
+ *
+ * `friendName` ARRIVES AS A PLAIN STRING, RESOLVED BY THE CALLER. `SentMeal`
+ * carries `senderProfileId` and nothing else naming its sender, so the
+ * route's hook reads it off `getProfile` — the same call
+ * gekooktSource.ts, trendingSource.ts and friendProof.ts already make to
+ * turn a profile id into a name — and hands the result in here already
+ * resolved, keeping this function itself free of I/O.
+ *
+ * THREE FIELDS ARE DELIBERATELY NULL HERE THAT `buildSentSharedRecipe`
+ * FILLS FROM A CARD, and each is a stated gap rather than an oversight
+ * smoothed over with an empty string:
+ *
+ *   - `note` — lives on `IncomingSend` (`listSendsToMe`), not on `SentMeal`;
+ *     this function is handed only the latter.
+ *   - `attribution` — `SentMeal` carries `recipeId` and nothing else about
+ *     the original creator; the credit behind it is reachable through
+ *     `getCanonicalRecipe` (see that interface's own comment) but this
+ *     function does not fetch it.
+ *   - `collisionLabel` — computing a real one needs THIS household's own
+ *     restriction set, which lives on `RemyRepository`, a seam this
+ *     function never touches; `buildAllergenCollisionLabel([])` is called
+ *     anyway, exactly as `buildCanonicalSharedRecipe` already does for a
+ *     different reason, so the label stays null rather than wrong.
+ *
+ * Each of those three is a nullable field on `SharedRecipeView` for
+ * exactly this reason: a view that knows less is still a correct view,
+ * never a broken one — and PD-007a's "ranked down AND labelled, never
+ * hidden" is a rule about the LIST, which this single-item read is not.
+ */
+export function buildLiveSentSharedRecipe(meal: SentMeal, friendName: string): SharedRecipeView {
+  return {
+    title: meal.title,
+    eyebrow: buildSharedRecipeEyebrow(friendName),
+    note: null,
+    metaLine: buildFriendRecipeMetaLine(meal.estimatedMinutes, null),
+    collisionLabel: buildAllergenCollisionLabel([]),
+    attribution: null,
+    sourceUrl: meal.sourceUrl,
+    // No attribution means no platform, and no platform means there is
+    // nothing to name in the label — see `SharedRecipeView.originalPostLabel`.
+    originalPostLabel: null,
+    ingredientLines: [...meal.ingredients]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((ingredient) => ({
+        // `SentMealIngredient` carries no id of its own — see that
+        // interface's header — so the key is the meal plus its position,
+        // stable across renders the way `buildCanonicalSharedRecipe`'s
+        // ingredient key already is.
+        key: `${meal.mealId}-${ingredient.sortOrder}`,
+        text: formatIngredientLine(ingredient),
+      })),
+    stepLines: [...meal.steps]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((step) => ({
+        key: `${meal.mealId}-${step.sortOrder}`,
+        text: formatStepLine(step.sortOrder, step.text),
+      })),
+    tagCaveat: SHARED_RECIPE_SENT_TAG_CAVEAT,
+    canonicalRecipeId: meal.recipeId,
   };
 }
 

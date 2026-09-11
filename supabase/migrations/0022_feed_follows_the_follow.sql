@@ -1,0 +1,214 @@
+-- Remy — the feed follows the follow: shared_cooks ported from is_friend_of
+-- to i_follow (PD-024, docs/ONTDEK-PLAN.md fase 2)
+--
+-- ONTDEK-PLAN.md fase 2, item 2, verbatim: "De feedkant krijgt proof-kaarten
+-- (uit `shared_cooks`, nu gepoort op `i_follow`)." This migration is that
+-- one sentence, and nothing else.
+--
+-- ===========================================================================
+-- WHY THIS IS THE FIRST MIGRATION THAT CALLS i_follow
+-- ===========================================================================
+--
+-- 0021 landed `i_follow(target_profile_id)` beside the rewritten
+-- `is_friend_of`, with NO caller, and said exactly why on the function's own
+-- comment: "Deliberately has NO callers as of migration 0021 - shared_cooks
+-- reads it in fase 2, when the feed becomes 'the people you follow'; landing
+-- it unused beside the rewritten is_friend_of is what lets 0021 be verified
+-- as a no-op on observable behaviour." That promise is the reason 0021 could
+-- rewrite the product's second RLS predicate wholesale and still be reviewed
+-- as changing nothing visible — every existing surface kept reading
+-- `is_friend_of`, and `is_friend_of` kept meaning mutual.
+--
+-- This file redeems that promise. `shared_cooks` becomes the first, and as
+-- of this migration the ONLY, object in the schema that calls `i_follow`.
+-- From here on "kookbewijs op je feed" stops meaning "a mutual friend cooked
+-- this" and starts meaning "someone you follow cooked this" — the sentence
+-- PD-024 exists to make true, and one that was not true anywhere in the
+-- running system before this file, `i_follow`'s mere existence
+-- notwithstanding.
+--
+-- ===========================================================================
+-- WHAT ACTUALLY BECOMES VISIBLE
+-- ===========================================================================
+--
+-- Plainly: someone you follow, who has never followed you back and with
+-- whom you are therefore NOT mutually accepted friends under `is_friend_of`,
+-- can from this migration onward put a "X maakte dit" card on your feed.
+-- That was impossible before this file — `is_friend_of` requires acceptance
+-- in both directions, `i_follow` requires it in exactly one, yours.
+--
+-- Two things do NOT change, and both were already load-bearing before this
+-- file existed:
+--
+--   1. `households.share_cooks_with_friends` is still the outermost gate.
+--      A household that never opted in produces zero proof, for a follower
+--      or a mutual friend alike — this migration touches neither the
+--      column nor the view's `where h.share_cooks_with_friends` clause.
+--   2. `follows.status = 'accepted'` is still the approval step `i_follow`
+--      reads, filtered further by `follow_survives_blocks` (0021). A
+--      pending follow request grants nothing; the target has to have said
+--      yes, and a block since the acceptance withdraws it again.
+--
+-- Consent STACKS here; it is not bypassed. Opting the household in is still
+-- one act, and accepting a follower is still a second, per-person act. What
+-- this migration removes is the THIRD act the old body implicitly demanded
+-- — that the follower ALSO be followed back — which DESIGN-SOCIAL.md never
+-- asked of cook proof and which 0021's own header names as precisely the
+-- distinction the asymmetric half of the graph was built to make available.
+--
+-- ===========================================================================
+-- WHY `create or replace view` IS THE RIGHT SHAPE HERE
+-- ===========================================================================
+--
+-- Postgres allows `create or replace view` only when the new query returns
+-- the same column names, in the same order, with the same types as the one
+-- it replaces. This view's projection is untouched — `(profile_id uuid,
+-- recipe_id uuid)`, exactly as 0009 defined it — so the constraint is met.
+-- Confirmed by reading 0009_cook_proof_and_sends.sql in full before writing
+-- this file, not assumed from the task description. No `security_invoker`
+-- option, no other clause, nothing else attached to the view that a
+-- same-signature replace could trip over.
+--
+-- It is also the shape 0021 already argued for the identical situation on
+-- `is_friend_of`: a `create or replace` preserves whatever grants the
+-- object already carries, where `drop` then `create` would silently lose
+-- them and require this file to re-derive and re-issue every grant 0009 (or
+-- anything since) may have set. 0009 issued none explicitly on this view —
+-- it relies on Postgres's default owner grant plus whatever the underlying
+-- tables' RLS already restricts — so there is nothing to lose either way
+-- here, but the shape is still the conservative one, and it is the one
+-- every other single-clause rewrite in this schema uses.
+--
+-- Grepped across all of supabase/ for `shared_cooks` before writing this
+-- file: no view, function, policy, trigger or index references it as a
+-- database object. The other hits — migrations 0011, 0015, 0016, 0017,
+-- 0021, and supabase/seed/demo_social.sql — are prose comments citing or
+-- explaining the 0009 view, not schema that depends on it. The only real
+-- reader is the client, over PostgREST (src/lib/friendProof.ts and
+-- src/components/FriendProofCard.tsx), which asks for `(profile_id,
+-- recipe_id)` by column name — unchanged by this migration. So `drop view;
+-- create view;` was never required here on dependency grounds either; it is
+-- ruled out on both counts, not just the signature one the task raised.
+--
+-- ===========================================================================
+-- shared_cooks — same body, one clause repointed
+-- ===========================================================================
+--
+-- Every clause below other than the last is copied verbatim from
+-- 0009_cook_proof_and_sends.sql:132-155 — the `select distinct`, all four
+-- joins, the household opt-in, the per-meal exclusion, the
+-- canonical-recipe requirement, the linked-account requirement. Only the
+-- final predicate changes, from `is_friend_of` to `i_follow`.
+
+create or replace view public.shared_cooks as
+  select distinct
+    hm.auth_user_id as profile_id,
+    m.recipe_id     as recipe_id
+  from cook_events ce
+  join meals m
+    on m.id = ce.meal_id
+  join household_members hm
+    on hm.household_id = ce.household_id
+  join households h
+    on h.id = ce.household_id
+  where h.share_cooks_with_friends
+    and not m.excluded_from_cook_proof
+    -- Only canonical recipes carry proof. A meal with no recipe_id is a
+    -- seeded, curated or hand-entered dish that exists in exactly one
+    -- household, so there is no shared object for a friend's cook to be
+    -- evidence ABOUT — the whole mechanism is "we are talking about the
+    -- same recipe".
+    and m.recipe_id is not null
+    and hm.auth_user_id is not null
+    -- The gate, in the body rather than in a policy: see 0009's header for
+    -- why it has to live here — a plain view runs with its owner's rights
+    -- and does not re-enter cook_events' or meals' RLS. Ported from
+    -- `is_friend_of` (mutual) to `i_follow` (one direction, accepted,
+    -- unblocked) — PD-024, ONTDEK-PLAN.md fase 2. A reader can now see
+    -- proof about anyone they follow with an accepted, unblocked follow,
+    -- whether or not that person follows back.
+    and public.i_follow(hm.auth_user_id);
+
+comment on view public.shared_cooks is
+  'Ambient cook proof (DESIGN-SOCIAL.md §1): which canonical recipes the people you follow have cooked, for households that opted in and meals not excluded. Recomputed per read, so an opt-out or an exclusion takes effect immediately and retroactively. Carries (profile_id, recipe_id) and nothing else — no timestamp, no count, and structurally no rating. Gated on public.i_follow() as of migration 0022 (PD-024): an ACCEPTED, unblocked follow in the viewer''s own direction is enough, and the target need not follow back. Gated on public.is_friend_of() (mutual) from 0009 through 0021; that predicate is unchanged and still governs recipe_shares_insert and is_meal_shared_with_me.';
+
+-- ===========================================================================
+-- CORRECTION: 0021 misnames the 0007:614 caller
+-- ===========================================================================
+--
+-- 0021's own comment on `is_friend_of` (0021_directed_graph.sql:621,
+-- repeated in the function's `comment on function` at 0021:683) lists this
+-- predicate's three server callers as `shared_cooks 0009:155`,
+-- `recipe_shares_insert 0009:229`, and `can_read_shared_meal 0007:614`.
+-- There is no function named `can_read_shared_meal` anywhere in this
+-- schema, in 0007 or since. The function actually declared at
+-- 0007_social.sql:598-624, calling `is_friend_of` at 0007:614, is
+-- `public.is_meal_shared_with_me(target_meal_id uuid)`. Recorded here so
+-- the next reader who greps for `can_read_shared_meal` lands on this line
+-- instead of on nothing.
+--
+-- ===========================================================================
+-- WHAT ELSE THIS WIDENS, WHICH IS NOT ONLY THE FEED
+-- ===========================================================================
+--
+-- ⚠ `shared_cooks` HAS TWO READERS AND THIS FILE IS NAMED AFTER ONE OF
+-- THEM. `src/lib/gekooktSource.ts` builds Ontdek's proof cards from it —
+-- that is the feed, and the whole argument above is about it. But
+-- `src/lib/friendProof.ts` reads the same view to feed `FRIEND_PROOF_BOOST`
+-- into Kiezen's decision engine (`src/domain/decide.ts`), so a dish a
+-- friend cooked is nudged up in tonight's single suggestion.
+--
+-- So this migration widens BOTH. After it runs, somebody the reader
+-- follows one-way can also raise a dish on Kiezen, where before it took a
+-- mutual friendship. That is a real change to the surface this product
+-- exists for, and it is written down here rather than discovered later.
+--
+-- IT IS JUDGED ACCEPTABLE, AND HERE IS WHY. The boost is a ranking nudge
+-- over the household's OWN meals, never a new row and never a name: PD-004
+-- measures Kiezen on save-to-cook, and "somebody I chose to follow cooked
+-- this" is evidence of exactly the kind that signal is for. Every gate
+-- above it still holds — `households.share_cooks_with_friends` is still
+-- the outer switch, `follows.status = 'accepted'` is still the approval
+-- step, and the reader still chose to follow that person. Nothing about a
+-- friend becomes VISIBLE on Kiezen that was not visible before; only the
+-- order of the reader's own dishes moves.
+--
+-- ⚠ IF THAT IS NOT WANTED, the fix is NOT to narrow this view again — it
+-- is to give `friendProof.ts` its own read that keeps the mutual gate, and
+-- that is a code change rather than a migration. Recorded so the choice
+-- stays open and visible.
+--
+-- ===========================================================================
+-- WHAT THIS FILE DELIBERATELY DOES NOT DO
+-- ===========================================================================
+--
+--   * It does not touch the `recipe_shares_insert` policy
+--     (0009_cook_proof_and_sends.sql:226-236), which stays on
+--     `is_friend_of`. A send is a message aimed at one named person
+--     (`sender_profile_id = auth.uid() and
+--     public.is_friend_of(recipient_profile_id)`), and porting it to
+--     one-directional following would let somebody send an unsolicited
+--     "ik moest aan jou denken" to a person who merely follows them and
+--     never accepted them back. Cook proof is ambient and consented to
+--     once, in general, per household; a send is a directed act aimed at
+--     one specific person, and the mutual-acceptance bar for THAT act does
+--     not move here.
+--   * It does not touch `public.is_meal_shared_with_me(target_meal_id
+--     uuid)` (0007_social.sql:598-624, calling `is_friend_of` at 0007:614),
+--     for the identical reason: it gates the full recipe behind a card
+--     shared to one specific viewer, the same directed shape as a send,
+--     not the ambient shape `shared_cooks` has.
+--   * It does not touch `public.is_friend_of()`. Its body, its signature,
+--     and its two remaining server callers — `recipe_shares_insert` and
+--     `is_meal_shared_with_me`, down from three now that `shared_cooks` has
+--     moved off it — are unchanged.
+--   * It does not touch `public.i_follow()`, `follows`, or `blocks`. This
+--     file adds `i_follow` a caller; it does not change what is being
+--     called or how.
+--   * It does not touch `public.namable_recipe_votes` (0016). The kring's
+--     friend-narrowing is the client's job by 0016's own design
+--     (src/lib/trendingSource.ts), and nothing here moves it.
+--   * It creates no table and no index, and migrates no data.
+--     `shared_cooks` is a view; every row is computed at read time, so
+--     there is no backfill for a repointed `WHERE` clause to need — the
+--     next read of the feed simply sees a wider result.
