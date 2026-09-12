@@ -8,7 +8,7 @@
  * only way to check a guess was to open
  * node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Feather.json
  * by hand. That is how four call sites became untraceable, and how the
- * roughly twenty icon proposals in docs/ui-research/WS4 ended up blocked on
+ * roughly twenty icon proposals in docs/archief/ui-research/WS4 ended up blocked on
  * a question nobody could answer locally (GAP-19). One module answers it
  * now. Every call site names an icon from `IconName` and gets a truthful
  * yes or no from `isIconAvailable`.
@@ -139,7 +139,7 @@ export const ICON_NAMES = [
   'shuffle',
   'timer',
   'warning',
-  // Display glyphs, at 48-64 pt. `cooking-pot` is the one docs/HANDOVER.md
+  // Display glyphs, at 48-64 pt. `cooking-pot` is the one docs/archief/HANDOVER.md
   // names by hand as waiting on GAP-19 and nothing else ("de `cooking-pot`
   // op de lege bibliotheek").
   'cooking-pot',

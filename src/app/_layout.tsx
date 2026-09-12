@@ -139,7 +139,7 @@ export default function RootLayout(): JSX.Element | null {
        THIS IS NOT A DIAGNOSIS OF THE OWNER'S REPORT (8 September: "als ik
        op die pagina zit en op terug probeer te klikken werkt dit niet").
        That cause has NOT been found — four candidates were measured and
-       ruled out, see docs/RONDE-8-SEPTEMBER-TRENDING.md taak B. This prop
+       ruled out, see docs/archief/RONDE-8-SEPTEMBER-TRENDING.md taak B. This prop
        is here because it is a real gap on its own terms and the library
        documents it as the recommended setup; that it also happens to fit
        the word "soms" is a reason to look, not a finding. */

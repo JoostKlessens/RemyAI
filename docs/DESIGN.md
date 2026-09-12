@@ -567,7 +567,7 @@ buys. Then on 7 September the row moved anyway: GAP-36 dropped it roughly
 34pt by removing a double-counted inset, and the same day it went from two
 stacked buttons to one line of two, which changes its height and every
 thumb target on it. The sentence is kept because
-`ui-research/WS5-motion-feedback-cook-mode.md:307-308` cites it by name as
+`archief/ui-research/WS5-motion-feedback-cook-mode.md` cites it by name as
 "§1 says the action row never moves" and reasons from it; anyone
 re-deriving motion from that passage is reasoning from a screen that no
 longer exists.

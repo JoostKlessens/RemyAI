@@ -5,7 +5,7 @@
  * IT FILLS RATHER THAN JUMPING, WHICH IT DID NOT USED TO. The rule was a
  * plain `width: '43%'` that snapped to its next value on the frame the
  * step changed — and a bar that teleports is read as a redrawn screen
- * rather than as progress through one. STYLING-PLAN.md records it as a
+ * rather than as progress through one. archief/STYLING-PLAN.md records it as a
  * defect; this is the fix.
  *
  * SCALE, NOT WIDTH, and that is the whole reason this component now has a

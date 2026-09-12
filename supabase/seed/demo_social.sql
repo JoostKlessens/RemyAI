@@ -44,7 +44,7 @@ do $$
 declare
   -- JE HOEFT HIER NIETS MEER IN TE VULLEN, en dat is een verandering ten
   -- opzichte van de vorige versie van dit bestand. Die eiste dat je je eigen
-  -- handle intypte; het stond in HANDOVER.md als openstaand punt 2 en het is
+  -- handle intypte; het stond in archief/HANDOVER.md als openstaand punt 2 en het is
   -- vier dagen niet gebeurd. Een script dat pas werkt na een bewerking is een
   -- script dat blijft liggen.
   --

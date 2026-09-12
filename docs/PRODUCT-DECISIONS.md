@@ -1302,7 +1302,7 @@ that was a household quietly staying private, which was the safe direction. Unde
 a household that never receives the state the product now considers standard, and the sharp end of
 that is a friend who wonders why nothing she cooks ever shows up. Either a second asking moment
 exists or that silence is accepted; it is the owner's call, recorded as open question J in
-`OPEN-BESLISSINGEN.md`.
+`archief/OPEN-BESLISSINGEN.md`.
 
 ---
 
@@ -1403,7 +1403,7 @@ vote, under no opt-in, past the checkbox. Two consequences, and the second one r
 suppresses the vote as well as the name — which costs the board precisely the rows this decision was
 taken to get — or "keep this one to myself" means "keep it out of the Gekookt list" and the copy
 beside the checkbox must say only that and never more. It is the owner's call, recorded as open
-question I in `OPEN-BESLISSINGEN.md`. **Until it is answered, the checkbox's copy may not promise
+question I in `archief/OPEN-BESLISSINGEN.md`. **Until it is answered, the checkbox's copy may not promise
 that a dish stays private**, because on today's code it does not.
 
 **What did NOT change, said out loud because it is the obvious misreading.** `shared_cooks` did
@@ -1713,3 +1713,73 @@ person is still never ranked, there is still no push, `meals.visibility` still h
 member. The file ceiling count PD-024 inherited from `ONTDEK-PLAN.md` §1.5 moved from seven files
 over 800 lines to four — `ranglijst.tsx` and `friends.tsx` are off it — and is tracked there, not
 here, because it is a measurement and not a decision.
+
+---
+
+# Open vragen
+
+> Nederlands, zoals de rest van `docs/`. Overgezet op 12 september 2026 uit
+> `archief/OPEN-BESLISSINGEN.md`, dat op een stand van 2 september stond en dus
+> niet meer als levend document te lezen was. **Alleen wat nog open is, staat
+> hier**; de volledige afweging per vraag — inclusief de beantwoorde B, I en J en
+> de besluiten DEC-01 t/m DEC-04 — ligt in dat archiefbestand.
+>
+> Dit document draagt de vraag; `LONGLIST.md` draagt de code die eraan hangt, en
+> heeft een tabel die de twee aan elkaar knoopt. **Geen van deze vragen blokkeert
+> het bouwen van wat er in `STATUS.md` bovenaan staat.**
+
+## A — Mag een webpagina een canonieke receptrij hebben? (GAP-02)
+
+**De vraag die `0011` bewust liet liggen.** Een videocaption ligt vast. Een
+webpagina niet: uitgevers corrigeren hoeveelheden, passen oventemperaturen aan,
+herschrijven stappen. Een rij die in maart gecachet wordt en in november aan een
+nieuw huishouden geserveerd wordt, geeft ze een versie die de uitgever allang
+heeft rechtgezet, zonder enig signaal.
+
+**Wat het kost dat dit open staat, en het is niet notioneel.** Een populair
+blogrecept is één canonieke URL die veel huishoudens delen — juist de route die
+het meest aan de cache zou hebben, en hij is uitgesloten. Geen deduplicatie, en
+geen kookbewijs: `shared_cooks` joint op de canonieke rij, dus een webgeïmporteerd
+gerecht dat iemand écht gekookt heeft blijft onzichtbaar voor de sociale laag.
+
+Drie verdedigbare antwoorden: nooit opnieuw ophalen (goedkoopst, minst waar over
+tijd); opnieuw ophalen na N dagen; of opnieuw ophalen en vergelijken, de rij
+behouden maar als verouderd markeren.
+
+⚠ **Het is geen kwestie van één woord toevoegen.** `STORED_ROW_PROVENANCE` in
+`src/domain/import/canonicalRecipe.ts` rapporteert elke opgeslagen rij als
+`'model_from_caption'`. Dat is een deductie uit welke platforms opgeslagen kúnnen
+worden, en hij overleefde `0011` alleen omdat YouTube óók een captionroute is. Een
+webrij komt uit JSON-LD en is `'publisher_structured_data'`. `'web'` toevoegen
+zonder die constante mee te veranderen vertelt een gebruiker dat het recept van de
+uitgever door software geïnterpreteerd is.
+
+## K — Hoe diep mag de feed op explore? (GAP-56)
+
+`LEADERBOARD_MIN_VOTES = 3` maakt explore op de demo-data drie kaarten diep. Dat
+is niet de ervaring die de eigenaar vroeg — *"zoals instagram met foto's"* — en de
+vloer verlagen maakt de ranglijst minder waar. Geen bug; een afweging tussen
+diepte en betrouwbaarheid die alleen de eigenaar kan maken.
+
+## D t/m H — de vier strategische, alle vier onbeantwoord
+
+| | Vraag | Wat vaststaat | Code |
+|---|---|---|---|
+| **D** | Waar ligt de betaalgrens? | Niet op imports — dat wurgt de invoer waar de app op draait, en SlimMandje's eigen reviews laten zien wat dat kost. Niet op de sociale laag, want die *is* het product. | BIZ-03, BIZ-01 |
+| **E** | Voedingswaarden overnemen of schatten? | JSON-LD levert ze feitelijk; uit een caption zou het verzinnen zijn, en het is gezondheidsdata onder PD-005. | RCP-02 |
+| **F** | Hoe groepeer je zonder een kerkhof te bouwen? | PD-004a verbiedt bewaren-zonder-voorstellen; mappen zijn de standaardvorm van precies dat. | LIB-02 |
+| **G** | De supermarkt in? | Geen publieke product-API bij AH of Jumbo; scrapen is doorlopend onderhoud én Jumbo verbiedt het bij naam met een beroep op databankrecht. De tussenweg (BSK-01, lijst zonder prijzen) is al gebouwd. | BSK-04/05/06, DEC-03 |
+| **H** | Engelse vertaling waard? | Copy zit hardcoded Nederlands in tientallen `*Copy.ts`-modules; er is geen i18n-laag. | OPS-03 |
+
+## C — De read-then-write race in de throttle ⚖
+
+**Onderzocht en bewust zo gelaten, dus geen openstaande vraag.** De poort leest
+het venster, beslist, en schrijft dan de poging; twee gelijktijdige verzoeken van
+dezelfde beller kunnen allebei onder het plafond lezen, dus de effectieve limiet
+is het plafond plus wat er in de lucht hangt. Dichten kost een extra round trip op
+élke import om een handvol modelaanroepen terug te winnen.
+
+Het oordeel is dat het lek acceptabel is en de kosten niet: dit verdedigt tegen
+een lus, en een lus die zijn eigen gelijktijdigheid overschiet wordt nog steeds
+gestopt. **Hier opgeschreven zodat een licht overschreden plafond herkend wordt
+als bekend, niet als bug.**

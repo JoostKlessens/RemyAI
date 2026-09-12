@@ -5,7 +5,7 @@
 -- false in the one direction that costs something: it told an operator
 -- reading this file that the deploy blocker was discharged, when running
 -- this migration is the FIRST item on the blocking list in
--- docs/OPEN-BESLISSINGEN.md §1 and the gate in index.ts fails closed without
+-- docs/archief/OPEN-BESLISSINGEN.md §1 and the gate in index.ts fails closed without
 -- the table. Whoever runs `supabase db push` should flip this line in the
 -- same commit as the push — a status comment nobody updates is worse than no
 -- status comment at all, because the next reader cannot tell which of the

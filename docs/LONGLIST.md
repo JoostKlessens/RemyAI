@@ -1,184 +1,34 @@
 # Longlist
 
-De genummerde backlog. `OPEN-BESLISSINGEN.md` en de commit-messages van
-september 2026 verwijzen naar de codes hieronder; dit is waar ze gedefinieerd
-staan.
+De genummerde backlog. Code, commit-messages en de andere documenten verwijzen
+naar de codes hieronder — IMP-, SRC-, ENT-, BSK-, RCP-, PRF-, LIB-, OPS-, BIZ-,
+GAP- en ONT- — en dit is waar ze gedefinieerd staan.
+
+> **Waar we staan en wat er nu gebeurt, staat in [`STATUS.md`](STATUS.md).**
+> Dit document bevat geen stand, geen testaantal en geen migratiestand. Die
+> stonden hier tot 12 september 2026 in dertien opgestapelde blokken die elkaar
+> tegenspraken, en dat is precies hoe een verouderde meting hier jarenlang als
+> actueel gelezen werd.
 
 Ontstaan uit een vergelijking met **SlimMandje**, een Nederlandse app die
 recepten uit TikTok, Instagram, YouTube, Facebook en Pinterest omzet in een
 boodschappenmand bij Albert Heijn of Jumbo. De overlap met Remy is uitsluitend
 de import; hun tweede helft (boodschappen, prijzen, supermarktkoppeling) is
-grotendeels bewust niet overgenomen.
+grotendeels bewust niet overgenomen — zie de slotsectie.
 
-**Stand:** 11 september 2026, laat, `feat/live-import-and-plan-phases`, t/m
-`a9ba259` **gecommit én gepusht** — `HEAD` gelijk aan `@{u}`, werkmap schoon,
-zelf gemeten. Daarin: Ontdek fase 0, 1 en 2 (PD-024, `ONTDEK-PLAN.md`), de
-vormwijziging waarmee beide kanten van Ontdek dezelfde kaart tekenen, en het
-spoor daarvan: **ONT-06 en ONT-08 zijn dicht, ONT-07 is gesloten als BEWAARD.**
-**Vijf poorten groen, alle vijf zelf gedraaid 's avonds:** typecheck 0, lint 0,
-`check:functions` 0, `check:seed` 0, **3809 tests over 160 bestanden**. ⚠ Dat
-aantal is gelijk aan de vorige meting: er zijn deze ronde geen tests
-bijgekomen, omdat het gebouwde grotendeels een prop door drie bestanden is en
-deze repo geen render-test kent. Zie `HANDOVER.md`; het staat daar met de reden
-in plaats van weggelaten.
-
-✅ **ALLE TWEEËNTWINTIG MIGRATIES DRAAIEN — `0001` t/m `0022`, `local` en
-`remote` gelijk, gemeten met `npx supabase migration list`.** De eigenaar heeft
-`db push` op 10 september 's avonds gedraaid. ~~⚠ Migratie `0020` en `0021`
-zijn GESCHREVEN en NIET GEDRAAID — en `0021` moet vóór de bijbehorende code
-live, want andersom leest `listFollows` een tabel die niet bestaat.~~ Die
-waarschuwing is vervúld en niet vervallen: de volgorde klopte, en hij is in de
-goede richting doorlopen.
-
-⚠ **EN DIT IS DE VIJFDE KEER DAT DE MIGRATIESTAND IN DEZE DOCUMENTEN TE
-PESSIMISTISCH BLEEK.** Eerder: `0011`/`0012`, `0014`, `0015`/`0016`, `0018` —
-en nu `0020`/`0021`/`0022`. Altijd dezelfde kant op, nooit andersom.
-`HANDOVER.md` onder *Wat er draait* benoemt de oorzaak: "ik heb een
-migratiebestand toegevoegd" wordt opgeschreven als "de migratie staat nog niet
-remote", en dat is een aanname vermomd als stand. **Meet het of vraag het;
-allebei kost twintig seconden, en vier eerdere keren was dat goedkoper geweest
-dan wat eruit volgde.**
-
-~~Oude stand, 10 september 2026: t/m `e3685d2` gecommit maar NIET gepusht — dit
-is nachtwerk en er is bewust geen `git push` gedraaid; de eigenaar wil het
-'s ochtends eerst zelf zien.~~
-Tien commits bovenop `72eccde`: `cd4d09d`, `feffdfe`, `3632188`, `5767bda`,
-`eca0cf1`, `4bfbcd8`, `5d06b7b`, `579a2b7`, `516299b`, `e3685d2`.
-
-⚠ **De meting hieronder is die van 10 september en staat er als geschiedenis;
-de geldende staat bovenaan dit blok.** Twee getallen die na elkaar staan en
-allebei "nu" beweren, is precies hoe dit document eerder een verouderde meting
-als een actuele liet lezen.
-
-~~**Vijf poorten groen, alle vijf zelf gedraaid op 10 september ná `e3685d2` en
-niet overgeschreven:** typecheck 0, lint 0, `check:functions` 0, `check:seed` 0,
-**3478 tests over 146 bestanden**.~~ De uitgangsmeting op 9 september 's avonds
-was 3338 over 139; GAP-33 bracht er 13 bij, GAP-32/55 er 54, GAP-34 er 28 en de
-splitsing van `confirm.tsx` er 45, met vijf nieuwe testbestanden.
-
-⚠ **`check:functions` is GEEN functielengte-controle**, en dit document heeft
-dat nooit rechtgezet. Het is `tsc -p supabase/functions/tsconfig.json` — de
-typecheck over de Edge Functions. De regel "functies onder 50 regels" heeft
-in deze repo GEEN geautomatiseerde poort en wordt met de hand gehouden.
-
-✅ **De drie kritieke stukken van die nacht zijn alle drie af**: GAP-33
-(`cd4d09d`), GAP-32/55 (`5767bda`) en GAP-34 (`5d06b7b`). OPS-16 viel als
-bijvangst dicht. ⚠ **Er staat niets half in de boom** — `git status --short`
-gaf nul regels ná de laatste commit, zelf gemeten.
-
-⚠ **HET TESTAANTAL DAALDE VAN 3344 NAAR 3338 EN DAT IS GEEN REGRESSIE.**
-`Wissen` en `Geavanceerd` zijn verwijderd (GAP-59), dus hun assertions ook —
-zes weg, drie smallere ervoor terug. Een dalend getal is hier het bewijs dat
-de tests de controls volgden en niet andersom.
-
-⚠ **HET RIJTJE IS VIJF EN GEEN VIER.** `check:seed` kwam er op 9 september bij
-en dit document liet je er dagenlang vier opzeggen. Draai hem mee.
-
-⚠ **`✅` BETEKENT VANDAAG WEL DEGELIJK "GEPUSHT" — en meet dat zelf opnieuw.**
-Dit blok heeft de andere kant op gestaan en is al vier keer in de verkeerde
-richting ingevuld; de meting hierboven is van ná de laatste push van
-9 september (`f53d18d..a7720b2`, zes commits). En onthoud dat "pushen" hier
-twee dingen betekent: dit gaat over git, `npx supabase migration list` gaat
-over de database.
-
-⚠ **EN "PUSHEN" BETEKENT HIER TWEE DINGEN.** Dit document heeft op
-7 september beweerd dat de eigenaar dacht gepusht te hebben terwijl er elf
-commits lokaal stonden. De meting klopte; de conclusie niet. Hij had
-`npx supabase db push` gedraaid — de migratie — en dat was precies wat hem
-gevraagd was. Meet ze allebei of vraag welke bedoeld wordt.
-
-**De eigenaar denkt van wél, en de reden waarom is het opschrijven waard:**
-hij zag de wijzigingen op zijn telefoon. Expo Go serveert rechtstreeks van de
-laptop over wifi, dus dat bewijst dat de metro-server draait en niets over
-git. Zolang dit blok er staat is `✅` hieronder te lezen als "gebouwd, groen,
-gecommit — en alleen op deze laptop".
-
-**Dit document is op 5 september herzien.** Alles wat af is staat nu onder
-**Afgerond** onderaan in plaats van tussen het openstaande werk; het bovenste
-deel gaat alleen nog over wat er nog te doen is.
-
-**Toegevoegd op 6 september 2026: PRF-05, GAP-31 en GAP-32**, het werk dat
-volgt uit PD-022 en PD-023 — de twee omkeringen die de eigenaar die dag vroeg.
-Ze brengen twee nieuwe open vragen mee, I en J in `OPEN-BESLISSINGEN.md`; **I
-is inmiddels beantwoord** (naam verbergen, getal behouden — migratie `0016`),
-J is in de code met één regel beantwoord en staat nog niet schriftelijk vast.
-
-**Toegevoegd op 7 september 2026: LIB-06 t/m LIB-08, PRF-06, OPS-10 t/m
-OPS-12, GAP-33 en GAP-34.** De eerste vier komen uit de ontwerpronde van de
-eigenaar, de drie OPS-regels uit één Expo Go-log, en de twee GAP-regels zijn
-metingen die daarbij vandaan vielen — allebei een filter dat er is maar niet
-filtert.
-
-**Toegevoegd op 8 september 2026: GAP-46 t/m GAP-50.** Vier daarvan komen uit
-één dag toestelgebruik door de eigenaar; GAP-50 is bijvangst. ~~GAP-46 is de
-enige met status 🟡 en het enige onaffe werk in de boom.~~ **GAP-46 is op
-9 september afgebouwd** — de sheet staat, `OutcomeCard` vraagt het cijfer niet
-meer, 23 tests erbij. **Er staat nu niets meer half in de boom.**
-
-**Gedaan op 9 september 2026, 's middags: GAP-58 en GAP-46, plus het laatste
-stuk fase 2** (`accentMuted` van de avatarschijven en het toestemmingsvinkje
-af). Vier commits, `2c47995` t/m `a5ef8f2`, vijf poorten groen — 139 bestanden
-en 3344 tests. ⚠ **Bij GAP-58 is de reparatie die dit document zelf
-voorschreef AFGEWEZEN**, op wat `design/icons-v2/tools/palette.py` opschrijft.
-Lees die regel: de afwijzing is het leerzame deel, niet de fix.
-
-De database is bij: `0001` t/m **`0019`** draaien, nagemeten op 9 september
-tegen de live database met `npx supabase migration list` — `local` en `remote`
-gelijk voor alle negentien. ✅ En sinds 8 september is dit schema ook één keer
-**vanaf nul** opgebouwd: `npm run db:reset` speelt alle negentien af tegen een
-lege database, exit 0. Die vraag was nooit gesteld. ⚠ Hier stond dat `0015`, `0016` en `0017` nog niet remote
-waren en het testen blokkeerden; **onwaar, en de derde keer dat de
-migratiestand in de documenten te pessimistisch bleek**. ⚠ En daar is een
-vierde bij gekomen: **`0018` (de ingrediënt-subsecties) stond in de opdracht
-voor deze ronde als "nog niet gedraaid" en is dat evenmin** — gemeten
-antwoord `{"local":"0018","remote":"0018"}`. RCP-10 hieronder is dus niet
-geblokkeerd op een `db push`. Zie `HANDOVER.md` onder *Wat er draait*.
-De drie secrets staan er. De edge functie is gedeployed, dus de throttlepoort
-en de dichting van het anon-key-gat zijn werkelijk actief. Vier checks groen:
-typecheck 0, `check:functions` 0, lint 0, **3249 tests over 135 bestanden**
-(gedraaid, niet opgehoogd; hier stond eerder 3137 over 130).
+**Alles wat af is staat onder [Afgerond](#afgerond) onderaan**, verplaatst en
+niet verwijderd: een code die nergens meer op uitkomt maakt elke verwijzing
+ernaar stuk, en de argumentatie bij een afgerond punt is juist wat je nodig hebt
+als je later wil weten waaróm iets werkt zoals het werkt.
 
 | Status | Betekenis |
 |---|---|
-| ✅ | Gebouwd, getest, gepusht — ⚠ vandaag alleen gecommit, zie de standregel hierboven |
+| ✅ | Gebouwd, getest, gepusht |
 | 🟡 | Deels — domeinlaag af, geen scherm of geen aanroeper |
 | ⬜ | Open, geen blokkade |
-| 🔒 | Geblokkeerd — wacht op een beslissing, zie `OPEN-BESLISSINGEN.md` |
+| 🔒 | Geblokkeerd — wacht op een beslissing, zie `PRODUCT-DECISIONS.md` |
 | ⛔ | Onderzocht en afgewezen — de blokkade is een feit, geen openstaande vraag |
 | ⚖ | Onderzocht en bewust zo gelaten — een afweging, geen openstaand punt |
-
----
-
-## Een ✅ betekent nu wat het zegt
-
-**Sinds 2 september 2026 staat er niets meer tussen deze lijst en een
-werkende deploy.** De drie acties die er stonden zijn alle drie gedaan, en
-daarmee vervalt het voorbehoud dat hier jarenlang stond: `✅` betekende "de
-code staat er", en betekent nu "dit draait". De drie, met hun herkomst,
-omdat dit document één keer een onbevestigde zin als feit heeft
-doorgegeven:
-
-1. ~~Migraties~~ — **klaar, en dit blok beweerde jarenlang het
-   tegendeel.** Op 2 september nagemeten tegen de live database: `0011` en
-   `0012` bleken allang toegepast (de CHECK noemt `'youtube'`,
-   `import_attempts` staat er compleet), en `0013` is diezelfde middag
-   toegevoegd via de SQL-editor. Grootboek: `0001` t/m `0013`. **Vervalt
-   daarmee: "zonder die tabel faalt élke import"** — die zin was
-   overgeschreven en nooit geverifieerd. Een document nakijken vindt zoiets
-   niet; alleen de database vragen vindt het.
-2. ~~Secrets~~ — **alle drie aanwezig**, op 2 september door de eigenaar
-   afgelezen van de secrets-pagina: `IMPORT_FINGERPRINT_SALT`,
-   `YOUTUBE_API_KEY` én `GEMINI_API_KEY`. Die derde stond nooit in dit
-   lijstje terwijl de hele modelroute erop draait (`env.ts:33`) — hij
-   ontbrak omdát hij er al was en dus nooit gemist werd.
-3. **Eén echte import door de flow, plus de throttle-test** — het enige
-   losse eindje, en geen blokkade. 21 imports binnen tien minuten hoort de
-   21e te weigeren met `import_throttled`. De
-   resolutiekant is sinds deze sessie deels afgedekt door een ESLint-regel
-   over `src/domain/import/**` (zie OPS-09), en er staat vandaag geen
-   extensieloze value-import in de Deno-graaf — nagemeten: 0 van de 87
-   relatieve specifiers. `deno check` blijft ongedraaid en dekt nog steeds
-   wat die regel niet ziet.
 
 ---
 
@@ -193,16 +43,16 @@ doorgegeven:
 
 | # | Status | Wat |
 |---|---|---|
-| SRC-04 | ⛔ | Instagram volledige extractie. **DEC-01 is beantwoord en het antwoord is nee** — Meta's gebruiksbeperking staat er onveranderd, alleen de tokeneis verviel op 15 juni 2026. Herzien vergt een licentie of een andere bron, niet een nieuwe lezing. Zie `OPEN-BESLISSINGEN.md` |
+| SRC-04 | ⛔ | Instagram volledige extractie. **DEC-01 is beantwoord en het antwoord is nee** — Meta's gebruiksbeperking staat er onveranderd, alleen de tokeneis verviel op 15 juni 2026. Herzien vergt een licentie of een andere bron, niet een nieuwe lezing. Zie `archief/OPEN-BESLISSINGEN.md` |
 | SRC-06 | 🔒 | Facebook. Zelfde Meta-voorwaarden als Instagram, en weinig NL-kookcontent |
 | SRC-07 | ⬜ | **Foto van een kookboek of screenshot — door de eigenaar gevraagd op 5 september 2026.** Juridisch het schoonste van alle bronnen: het is je eigen boek, er is geen platform wiens voorwaarden je leest, geen creator om te crediteren en geen oEmbed-endpoint dat nee zegt. Technisch is het ook de goedkoopste nieuwe route die er ligt: Gemini staat er al, is multimodaal, en `buildExtractionRequest` bouwt de aanvraag al — dit is een tweede soort *invoer* naar een pijplijn die verder onveranderd blijft, precies zoals SRC-08 dat was. **Wat het wél nieuw maakt:** camera-permissie, een afbeelding die naar de edge functie moet in plaats van tekst, en een keuze over of het beeld bewaard wordt (voorkeur: nee — lezen, verwerken, weggooien). `provenance` heeft een vierde waarde nodig naast `publisher_structured_data`, `model_from_caption` en `model_from_pasted_text`, want het bevestigingsscherm moet eerlijk kunnen zeggen dat een model dit van een foto heeft gelezen |
-| SRC-09 | 🔒 | Audio-transcriptie of OCR van de video. DEC-02 is nu een besluit: telemetrie loopt, **eerstvolgende meetmoment begin oktober 2026**. Grep op `import_event outcome=no_recipe_in_caption`, per platform gesplitst. ⚠ **Het meetvenster heeft een gat:** de Gemini-facturering faalde vóór 2 september 2026 en is die dag hersteld. Dat blaast `no_recipe_in_caption` niet op — een geweigerde aanroep wordt `llm_request_failed` — maar het verkort wél de noemer, dus die periode hoort uit de oktober-meting. Zie DEC-02 in `OPEN-BESLISSINGEN.md` |
+| SRC-09 | 🔒 | Audio-transcriptie of OCR van de video. DEC-02 is nu een besluit: telemetrie loopt, **eerstvolgende meetmoment begin oktober 2026**. Grep op `import_event outcome=no_recipe_in_caption`, per platform gesplitst. ⚠ **Het meetvenster heeft een gat:** de Gemini-facturering faalde vóór 2 september 2026 en is die dag hersteld. Dat blaast `no_recipe_in_caption` niet op — een geweigerde aanroep wordt `llm_request_failed` — maar het verkort wél de noemer, dus die periode hoort uit de oktober-meting. Zie DEC-02 in `archief/OPEN-BESLISSINGEN.md` |
 
 ## ENT — hoe recepten binnenkomen
 
 | # | Status | Wat |
 |---|---|---|
-| ENT-01 | 🔒 | **Share extension — door de eigenaar gevraagd op 5 september 2026, in zijn woorden: op de deelknop van Instagram of Facebook klikken en het met deze app delen.** Nog steeds het item met de meeste hefboom, en sinds 3 september half ontgrendeld: OPS-01 is rond, dus de SDK staat niet meer in de weg. **Wat blijft is een harde, niet-onderhandelbare blokkade: dit werkt niet in Expo Go.** Een share extension is native code — op iOS een aparte target in het app-bundel, op Android een `intent-filter` in het manifest — en Expo Go is één vaste app die alle projecten draait, dus die kan geen extensie registreren die van jouw project is. Zolang de telefoon via QR-code test, is dit letterlijk onbouwbaar. Het vraagt OPS-02: `eas.json`, `expo-dev-client`, een EAS-account, en voor iOS een betaald Apple Developer-account. Dat is de echte prijs van dit item, en hij is niet in code te betalen. ⚠ **HERBEVESTIGD EN VERBREED OP 9 SEPTEMBER 2026, en er is bewust géén nieuwe code voor aangemaakt** — de eigenaar vroeg om "een share sheet extentie zodat je recepten van instagram, youtube en tiktok makkelijk kan delen zonder de url te kopiëren en plakken". Dat is ditzelfde item met één platform erbij (YouTube) en één minder genoemd (Facebook). Twee dingen die de scope niet veranderen maar de inschatting wel. **(a) De extensie hoeft niets te parsen.** TikTok en YouTube delen doorgaans een korte link, en die keten bestaat al en is getest: `urlParsing.ts` kent `vm.tiktok.com`, `vt.tiktok.com`, `youtu.be` en `youtube.com/shorts/<id>` bij naam, en `resolveShortLinkTarget.ts` volgt ze met een begrensd aantal hops en een host-allowlist. De extensie hoeft de gedeelde string alleen af te leveren waar het plakveld hem vandaag aflevert. **(b) Er is een kandidaat, nagekeken op npm op 9 september: `expo-share-intent@8.0.1`** ([achorein/expo-share-intent](https://github.com/achorein/expo-share-intent)), een config plugin die zowel de iOS-target als de Android `intent-filter` genereert. Niet geïnstalleerd, niet op veiligheid beoordeeld, geen keuze — een naam om het onderzoek mee te beginnen. ⚠ **En de prijs die het minst genoemd wordt is niet het Apple-account maar het testritueel:** zodra dit bestaat is de QR-code van Expo Go geen testpad meer, en `docs/LOKAAL-DRAAIEN.md` en `docs/TOESTELTEST.md` gaan allebei nog volledig van Expo Go uit |
+| ENT-01 | 🔒 | **Share extension — door de eigenaar gevraagd op 5 september 2026, in zijn woorden: op de deelknop van Instagram of Facebook klikken en het met deze app delen.** Nog steeds het item met de meeste hefboom, en sinds 3 september half ontgrendeld: OPS-01 is rond, dus de SDK staat niet meer in de weg. **Wat blijft is een harde, niet-onderhandelbare blokkade: dit werkt niet in Expo Go.** Een share extension is native code — op iOS een aparte target in het app-bundel, op Android een `intent-filter` in het manifest — en Expo Go is één vaste app die alle projecten draait, dus die kan geen extensie registreren die van jouw project is. Zolang de telefoon via QR-code test, is dit letterlijk onbouwbaar. Het vraagt OPS-02: `eas.json`, `expo-dev-client`, een EAS-account, en voor iOS een betaald Apple Developer-account. Dat is de echte prijs van dit item, en hij is niet in code te betalen. ⚠ **HERBEVESTIGD EN VERBREED OP 9 SEPTEMBER 2026, en er is bewust géén nieuwe code voor aangemaakt** — de eigenaar vroeg om "een share sheet extentie zodat je recepten van instagram, youtube en tiktok makkelijk kan delen zonder de url te kopiëren en plakken". Dat is ditzelfde item met één platform erbij (YouTube) en één minder genoemd (Facebook). Twee dingen die de scope niet veranderen maar de inschatting wel. **(a) De extensie hoeft niets te parsen.** TikTok en YouTube delen doorgaans een korte link, en die keten bestaat al en is getest: `urlParsing.ts` kent `vm.tiktok.com`, `vt.tiktok.com`, `youtu.be` en `youtube.com/shorts/<id>` bij naam, en `resolveShortLinkTarget.ts` volgt ze met een begrensd aantal hops en een host-allowlist. De extensie hoeft de gedeelde string alleen af te leveren waar het plakveld hem vandaag aflevert. **(b) Er is een kandidaat, nagekeken op npm op 9 september: `expo-share-intent@8.0.1`** ([achorein/expo-share-intent](https://github.com/achorein/expo-share-intent)), een config plugin die zowel de iOS-target als de Android `intent-filter` genereert. Niet geïnstalleerd, niet op veiligheid beoordeeld, geen keuze — een naam om het onderzoek mee te beginnen. ⚠ **En de prijs die het minst genoemd wordt is niet het Apple-account maar het testritueel:** zodra dit bestaat is de QR-code van Expo Go geen testpad meer, en `docs/LOKAAL-DRAAIEN.md` en `archief/TOESTELTEST.md` gaan allebei nog volledig van Expo Go uit |
 | ENT-02 | 🔒 | Achtergrond-import met notificatie. Volgt op ENT-01 |
 | ENT-03 | ⛔ | **Geschrapt door de eigenaar op 2 september 2026.** Klembord-*detectie* vereist precies wat `paste.tsx:8-23` in hoofdletters verbiedt — het scherm inspecteert de geplakte string nooit om de modus te kiezen — en het kost een gemeterde modelaanroep om een link als `{text}` te versturen. De enige variant die daar niet mee botst (aanbieden wat op het klembord staat, bínnen de al gekozen modus) voegt vrijwel niets toe aan de plak-knop die al op `paste.tsx:530` staat. Twee wegen: een die een vastgelegde beslissing omkeert, en een die werk is zonder winst. Geen van beide is de moeite, dus dit item is dicht in plaats van eeuwig open |
 | ENT-04 | ⬜ | Meerdere links tegelijk |
@@ -266,7 +116,7 @@ doorgegeven:
 | OPS-16 | ✅ | **Dicht op 10 september 2026 (`5d06b7b`), als bijvangst van GAP-34: 825 → 702 regels.** De laadfunctie is uit het routebestand gelicht naar `src/lib/liveSession.ts`, gesplitst op zijn twee leesgrenzen. ⚠ **`confirm.tsx` is op 10 september zelf ook gesplitst (`516299b`): 963 → 737, met 45 tests erbij.** ~~En is nu de enige die over het plafond zit.~~ **ONWAAR, en nagemeten:** `wc -l` over `src/` geeft er **zeven**, met `src/app/import/paste.tsx` op **1244** als grootste — dezelfde importstroom, anderhalf keer confirm. Daarna `ranglijst.tsx` 934, `types.ts` 894, `friends.tsx` 882, `cook/[mealId].tsx` 848, `friends/add.tsx` 814, `tokens.ts` 804, plus vijf testbestanden. **`paste.tsx` is de volgende, niet confirm.** ~~Oude tekst:~~ **`src/app/(tabs)/index.tsx` is over het plafond van 800 regels, en was dat al vóór iemand hem deze week aanraakte.** Gemeten 9 september 2026: **816 regels op HEAD**, 825 na GAP-33 — de negen erbij zijn vrijwel geheel het commentaar dat uitlegt waarom de chips per render worden afgeleid. Dit is dus geen regressie van GAP-33 maar een schuld die zichtbaar werd. Tweede plek na `src/app/import/confirm.tsx` (963) die opgesplitst moet worden, en de goedkope helft is dezelfde: de laadfunctie en de sessie-afleiding zijn domeinwerk dat in een eigen module hoort, niet in een routebestand **Gedaan op 10 september 2026, als bijvangst van GAP-34:** precies de goedkope helft hierboven. `LiveSession`, `loadLiveSession` en `createTodayDecisionIfSuggested` staan nu in `src/lib/liveSession.ts` (verplaatst, één keer gesplitst op de leesgrens om onder de 50-regelregel te blijven), en `index.tsx` is **702 regels**. `confirm.tsx` (963) staat nog. |
 | OPS-09 | 🟡 | Deno's resolutieregel is nu **half** afgedekt, en dat is een echte stap. `lint/eslint.flat.config.mjs` draagt een `@typescript-eslint/no-restricted-imports`-regel over `src/domain/import/**` die een relatieve **value**-import zonder `.ts` afkeurt. `allowTypeImports: true` is het dragende stuk: de 14 extensieloze imports in die map zijn allemaal `import type`, die Deno wist vóór resolutie, dus die mogen niet afgekeurd worden. Empirisch nagemeten: 0 fouten op `src/domain/import`, en de regel vuurt wél op een echte overtreding (`src/lib/auth.ts:29`). Nul nieuwe dependencies — `typescript-eslint` zat er al. **Wat nog open is:** `supabase/functions/**` staat nog steeds in ESLint's `ignores`, dus die 13 bestanden zijn onbewaakt (ze zijn vandaag allemaal correct), en een aanwezige-maar-verkeerde extensie (`./x.js` voor een `x.ts`) vangt alleen `deno check`. `deno check` is nog nooit gedraaid; Deno is niet geïnstalleerd |
 | OPS-14 | 🔒 | **Greptile-account om de codebase te laten nakijken — gevraagd door de eigenaar op 9 september 2026.** Greptile indexeert een repo en reviewt pull requests; deze repo staat op GitHub (`JoostKlessens/RemyAI`), dus de koppeling zelf is triviaal. **Twee voorwaarden die vandaag niet bestaan.** (a) Een betaald account — niet in code te betalen, dezelfde soort prijs als OPS-02. (b) **Pull requests.** `git log --merges` geeft nul treffers: er wordt rechtstreeks op `feat/live-import-and-plan-phases` gecommit en `main` loopt achter. Greptiles hoofdmodus is een review óp een PR, dus zonder PR-ritme koop je vooral de tweede modus — vragen stellen over de codebase — en dat is een ander product dan wat de vraag suggereert. **Waarom het hier meer zou opleveren dan nog een linter:** de vijf poorten van dit project (typecheck, lint, `check:functions`, `check:seed`, 3315 tests) lezen geen bedoeling. Het karakteristieke defect van deze repo is een bewering die van de code afdrijft — 26 van 26 kleurtokens die twee dagen ongebruikt bleken, een migratiestand die vier keer onwaar was, 0 van 21 lege toestanden, en op 9 september nog een aanbeveling die door de eigen contrastpoort verboden bleek. Dat is precies het soort vraag dat een geïndexeerde codebase kan beantwoorden en dat `tsc` structureel niet ziet. ⚠ **De prijs staat er los van en hoort hier genoemd:** een derde partij krijgt leesrechten op de hele repo. `.env` en `research/13-legal-tos.md` staan in `.gitignore` en gaan niet mee; al het overige wel, `supabase/` inbegrepen |
-| OPS-15 | ⚖ | **Een Xcode-MCP om de iOS-logs te lezen — gevraagd door de eigenaar op 9 september 2026, en het antwoord is nee mét een alternatief.** Zijn vraag, letterlijk: *"are we using xcode mcp? I think it would help a lot with looking at logs for the ios app."* **HIJ KAN OP DEZE MACHINE NIET BESTAAN, en dat is gemeten en niet vermoed.** Elke Xcode-MCP (XcodeBuildMCP, ios-simulator-mcp) is een omhulsel om `xcrun simctl`, `xcodebuild` en macOS' `log stream`; deze machine draait Windows en heeft **geen `xcrun` op PATH**, dus zo'n server faalt bij elke aanroep. ⚠ **En hij zou óók op een Mac het verkeerde instrument zijn:** dit project heeft geen development build en geen EAS-pijplijn (OPS-02), dus er is geen `.app` die een simulator kan draaien. De iPhone draait Expo Go over wifi, en die logs zijn **JavaScript**-logs over de Metro-verbinding — geen device syslog. **WAT HET ECHTE GAT WAS, en dat is kleiner dan de vraag suggereert:** de logs die ertoe doen bereikten de terminal al. OPS-10 is gevonden uit negen *"Route … is missing the required default export"*-regels bij het opstarten, OPS-11 uit een require-cycle-waarschuwing, OPS-12 uit een `expo-notifications`-throw — alle drie uit `expo start`. Het gat was dat die log in een terminal stond die niemand anders kon lezen. **Gebouwd:** `scripts/dev-log.mjs` en `npm run start:log` — dezelfde `expo start`, met stdout én stderr ook naar `dev-server.log` in de projectmap. Geen dependency, geen MCP, kale Node; stdin wordt doorgegeven zodat `r`/`j`/`m` blijven werken. Per run afgekapt, want een log over meerdere sessies maakt *"stond deze waarschuwing bij DEZE start"* onbeantwoordbaar — precies de vraag waar die drie vondsten antwoorden op waren. Valt onder de bestaande `*.log`-regel in `.gitignore`, wat hier uitmaakt omdat Expo de LAN-URL afdrukt. `TOESTELTEST.md` wijst er nu naar. ⚠ **Wat er NIET in komt:** een native crash onder de JS-laag. Metro ziet die niet en dit bestand dus ook niet — dat vraagt macOS met Xcode, of `idevicesyslog` (libimobiledevice) op Windows mét Apple's device drivers, een luidruchtige device-brede syslog. **Heroverweeg deze regel zodra er een Mac of een development build is**; vandaag zou de MCP decoratie zijn |
+| OPS-15 | ⚖ | **Een Xcode-MCP om de iOS-logs te lezen — gevraagd door de eigenaar op 9 september 2026, en het antwoord is nee mét een alternatief.** Zijn vraag, letterlijk: *"are we using xcode mcp? I think it would help a lot with looking at logs for the ios app."* **HIJ KAN OP DEZE MACHINE NIET BESTAAN, en dat is gemeten en niet vermoed.** Elke Xcode-MCP (XcodeBuildMCP, ios-simulator-mcp) is een omhulsel om `xcrun simctl`, `xcodebuild` en macOS' `log stream`; deze machine draait Windows en heeft **geen `xcrun` op PATH**, dus zo'n server faalt bij elke aanroep. ⚠ **En hij zou óók op een Mac het verkeerde instrument zijn:** dit project heeft geen development build en geen EAS-pijplijn (OPS-02), dus er is geen `.app` die een simulator kan draaien. De iPhone draait Expo Go over wifi, en die logs zijn **JavaScript**-logs over de Metro-verbinding — geen device syslog. **WAT HET ECHTE GAT WAS, en dat is kleiner dan de vraag suggereert:** de logs die ertoe doen bereikten de terminal al. OPS-10 is gevonden uit negen *"Route … is missing the required default export"*-regels bij het opstarten, OPS-11 uit een require-cycle-waarschuwing, OPS-12 uit een `expo-notifications`-throw — alle drie uit `expo start`. Het gat was dat die log in een terminal stond die niemand anders kon lezen. **Gebouwd:** `scripts/dev-log.mjs` en `npm run start:log` — dezelfde `expo start`, met stdout én stderr ook naar `dev-server.log` in de projectmap. Geen dependency, geen MCP, kale Node; stdin wordt doorgegeven zodat `r`/`j`/`m` blijven werken. Per run afgekapt, want een log over meerdere sessies maakt *"stond deze waarschuwing bij DEZE start"* onbeantwoordbaar — precies de vraag waar die drie vondsten antwoorden op waren. Valt onder de bestaande `*.log`-regel in `.gitignore`, wat hier uitmaakt omdat Expo de LAN-URL afdrukt. `archief/TOESTELTEST.md` wijst er nu naar. ⚠ **Wat er NIET in komt:** een native crash onder de JS-laag. Metro ziet die niet en dit bestand dus ook niet — dat vraagt macOS met Xcode, of `idevicesyslog` (libimobiledevice) op Windows mét Apple's device drivers, een luidruchtige device-brede syslog. **Heroverweeg deze regel zodra er een Mac of een development build is**; vandaag zou de MCP decoratie zijn |
 
 ## BIZ — verdienmodel
 
@@ -291,7 +141,7 @@ een commit er niet naar kon verwijzen; sinds 2 september hebben ze er één.
 | GAP-54 | ✅ | **Trending is een kaartenfeed met een filter geworden, en de foto was een defect — 8 september 2026.** De eigenaar: *"een soort scroll feature zou ik hier liever willen dan een ranking … zoals instagram met foto's werkt. Ook hier wil ik dat je een filter kan aanzetten."* **Twee klachten, twee verschillende soorten antwoord, en dat onderscheid is de kern.** *"Geen foto"* was géén ontwerpbesluit: `BoardRowModel` droeg `thumbnailUrl` al en `toBoardRecipe` vulde hem al — `BoardRow` tekende alleen nooit een `<Image>`. Onafhankelijk bevestigd doordat `useThumbnailFallback.ts`' header de vier `<Image>`-plekken van de app opsomt en deze niet noemt. **De standaardscope van deze tab heeft dus nooit een foto kunnen tonen terwijl de `Vrienden`-scope ernaast het altijd kon.** De scrollfeed is de amendering, de foto is een reparatie. Wat NIET meegaf: toevoer (`LEADERBOARD_MAX_ROWS` 25, `buildLeaderboard` ongewijzigd), ordening (score, nooit recency — nagemeten: geen timestamp bereikt een viewmodel op deze route), en personalisatie (`rankRecipes` ziet het huishouden niet). ⚠ **`onEndReached` staat nergens, en die afwezigheid is nu de voorwaarde in plaats van een omissie** — het is de ene regel die PD-014's tweede voorwaarde stil zou ondermijnen. Het filter heeft twee assen, gerechttags en tijd; mood en gang zijn geweigerd op het SCHEMA en niet op smaak (0010 en 0017 hangen alleen aan `meals`). Filteren gebeurt ná de snede, en de reden staat in de code: vóór de snede vraagt tot ~16.600 ids in één `in.()` — ±600 kB URL. ⚠ **De twee scopes tekenen nu verschillende vormen**: `Iedereen` is een kaartenfeed, `Vrienden` bleef `KringRow`'s compacte strip, omdat `KringRecipe` geen `dishTags` en geen `estimatedMinutes` draagt. Dat ziet de eigenaar bij de eerste tik op de segmentknop. PD-014a legt de amendering vast, met alle zes voorwaarden stuk voor stuk nagelopen |
 | GAP-55 | ✅ | **Het schrijfpad bestaat sinds 9 september 2026 (`5767bda`); wat rest is de ROUTE, niet de data.** `buildMealCopy` (`src/domain/social/recipeCopy.ts`) kopieert een canonieke `recipes`-rij naar een `meals`-rij, en `getCanonicalRecipe` staat op de interface én in beide implementaties. `allergenTagStatus` is het LITERALE `'unknown'` op het type, dus de compiler bewaakt PD-010, en `ingredientTags` is een hardgecodeerde `[]`. Geen migratie nodig — 0006's trigger `meals_recipe_copy_starts_unverified` dwingt hetzelfde serverzijdig af. ⚠ **Wat nog open staat is smaller dan deze regel beweerde**: een route `/recept/[recipeId]` en een attributie-vorm voor `CreatorAttribution`, zodat bewijskaarten en Trending erín kunnen. ~~Oude tekst:~~ **Een canoniek receptscherm met `Bewaren` — PD-014's vierde voorwaarde, en de enige van de zes die niet gehaald wordt.** Nagemeten op 8 september 2026 tijdens GAP-54, en de meting corrigeerde de opdracht: er is **geen enkel schrijfpad in deze codebase dat een `recipes`-rij naar `meals` kopieert.** `importRecipe.ts` post een **URL** naar de edge-functie en herparseert; `/friends/[feedItemId]` heeft geen `Bewaren` om precies die reden en zegt dat in zijn eigen header. Daarom kan een Trending-kaart nergens heen: `/recipe/[mealId]` leest het eigen `meals`-record, en `/friends/[feedItemId]` zou een recipe-id beantwoorden met *"Dit recept staat er niet meer"* — een leugen over een recept dat bestaat. ⚠ **Voorwaarde 4 was ook vóór deze ronde niet vervuld**; PD-014a vinkt hem niet stilzwijgend af maar noemt hem openstaand. Wat nodig is: een route (`/recept/[recipeId]`), een repository-lees die ingrediënten en stappen van een `recipes`-rij teruggeeft (bestaat niet — `listCanonicalRecipes` geeft een *summary*), en een schrijver die er een `meals`-kopie van maakt met `allergenTagStatus: 'unknown'` (PD-010). **Dit blokkeert de tik op Trending én op de vriendenscope**, en het is de hoogste-waarde vervolgstap van deze ronde |
 | GAP-52 | ✅ | **Een vriendschapsverzoek accepteren heeft nooit gewerkt, en de oorzaak is een statementvorm — 8 september 2026.** De eigenaar: *"Ik kan het vriendschapsverzoek niet accepteren."* `actOnFriendship` stuurde één `.upsert(row, { onConflict: 'id' })` voor zowel een nieuw verzoek als elke overgang. PostgREST maakt daar `INSERT … ON CONFLICT (id) DO UPDATE` van, en **Postgres toetst voor die statementvorm de `WITH CHECK` van de INSERT-policy op de nieuwe rij, ook als het conflict de UPDATE-tak neemt.** `friendships_insert` (0007) laat maar twee vormen toe — een `pending`-rij met mij als requester, of een `blocked`-rij met mij als blokkeerder — dus élke overgang op een BESTAANDE rij kwam terug met `42501`: accepteren, weigeren, opnieuw vragen, en blokkeren van iemand met wie al een rij bestond. Een níeuw verzoek werkte wél, want dat is echt een insert van een pending-rij met de aanroeper als requester — precies de helft van dat scherm die de eigenaar nog kon gebruiken. **Gemeten en niet geredeneerd**, tegen een lokale stack met echte RLS en een echte sessie: de upsert geeft HTTP 403, dezelfde overgang als `PATCH` geeft HTTP 200, en `guard_friendship_transition()` liet hem gewoon door — de trigger was nooit de weigeraar. Welke policy het wél was, is bewezen met twee identieke `on conflict`-statements in een teruggedraaide transactie: verscheept → fout, policy tijdelijk verbreed → `INSERT 0 1`. **De policy verbreden is expliciet afgewezen**: 0007 zegt dat een rij alleen mag ONTSTAAN als een openstaand verzoek van mij of een blokkade door mij, en dat is de zin waar de hele tabel op leunt. De fix splitst op `current`: `insert`, of `update … eq('id')`. ⚠ Beide zijden van het paar gaan mee in de update, want een her-verzoek uit `declined` wisselt requester en addressee om en de trigger bewaakt het PAAR — weglaten geeft `P0001`, ook gemeten. Drie tests pinnen de wire-vorm: een neptclient kan de RLS-weigering per definitie niet reproduceren, maar wél de statementvorm die hem veroorzaakte |
-| GAP-53 | 🟡 | **De terugknop op `/friends/add` reageert soms niet, en de oorzaak is NIET gevonden — 8 september 2026.** De eigenaar: *"als ik op die pagina zit en op terug probeer te klikken werkt dit niet … dat betekent dat dit pagina terug teken iets lager moet om te voorkomen dat je hier soms niet op kan klikken."* **Vier verklaringen zijn gemeten en afgevallen**, en dat is het waardevolle deel van deze regel. (1) *"`SafeAreaView` mist `edges`"* — waar en onschadelijk: zonder `edges` is de default alle vier, dus de top-inset wórdt toegepast; de schermen mét `edges={['top','left','right']}` zijn de TABschermen, waar de bottom-edge weg moet omdat de tabbalk die al verrekent. (2) *"hitbox te klein"* — `styles.back` had al `minHeight` én `minWidth` op `spacing.touchTargetMin` = 44. (3) *"deze header wijkt af"* — byte voor byte identiek aan `recipe/[mealId].tsx:630`, `import/paste.tsx:1202` en `settings.tsx:471`; de bewering in add.tsx' eigen header dat dit "to the pixel" gekopieerd is, is dus wáár. (4) *"`router.back()` heeft geen bestemming"* — beide deuren zijn `router.push`. **Daaruit volgt een falsifieerbare voorspelling: is het raakvlak de oorzaak, dan mankeren die drie andere schermen het net zo goed.** Wat er wél is gedaan: `initialMetrics={initialWindowMetrics}` op de `SafeAreaProvider` (zonder die prop renderen de eerste frames met insets `{0,0,0,0}`, wat op een `fullScreenModal` de headerrij een moment op y=8 zet in plaats van y≈67 — in de zone van de Dynamic Island), en `hitSlop={8}` op alle vier de schermen die deze rij delen. ⚠ **Geen van beide is een diagnose**, en de code zegt dat zelf. ⚠ **De rij is NIET verplaatst**, hoewel de eigenaar daar letterlijk om vroeg: dat zou een pleister op een niet-gevonden oorzaak zijn. En `hitSlop` wint hier omhóóg en zijwaarts, niet omlaag — op iOS bereikt een tik buiten de bounds van de óuderview het kind niet, en deze rij is maar zo hoog als 8pt padding plus de knop. Blijft een toestelvraag | ⚠ **EN DE VIJFDE VERKLARING IS OP 8 SEPTEMBER OOK GEVALLEN, DOOR DE ENIGE TEST DIE TELT.** `SafeAreaProvider` kreeg `initialMetrics`, wat een echt defect verhelpt — zonder die prop renderen de eerste frames van een `fullScreenModal` met nul-insets, en dan staat de terugrij even op y=8 in plaats van y≈67, onder de Dynamic Island. Dat verklaarde bovendien het woord *soms* in de melding. De eigenaar daarna: *"De terug knop werkt nog niet."* Gefalsifieerd, niet onbevestigd. **Wat er nu ligt:** de rij staat 24pt lager in plaats van 8pt (hij vroeg er twee keer om; de eerste keer is dat geweigerd op grond van een mechanisme dat nu weerlegd is), en `router.back()` valt terug op `router.replace('/friends')` als `canGoBack()` false is — de enige resterende oorzaak die exact "tikken doet niets" oplevert bij een perfecte hitbox, en een reload in Expo Go maakt `/friends/add` werkelijk de eerste route. Nog steeds niet bewezen zíjn pad. ⚠ **DE VOLGENDE STAP IS EEN METING EN GEEN HYPOTHESE:** dezelfde terugtik op Instellingen (`TOESTELTEST.md` §8c). Werkt hij daar wel, dan is het dit scherm; faalt hij daar ook, dan de gedeelde rij of de modal. Voeg geen zesde verklaring toe voordat die twintig seconden gedaan zijn |
+| GAP-53 | 🟡 | **De terugknop op `/friends/add` reageert soms niet, en de oorzaak is NIET gevonden — 8 september 2026.** De eigenaar: *"als ik op die pagina zit en op terug probeer te klikken werkt dit niet … dat betekent dat dit pagina terug teken iets lager moet om te voorkomen dat je hier soms niet op kan klikken."* **Vier verklaringen zijn gemeten en afgevallen**, en dat is het waardevolle deel van deze regel. (1) *"`SafeAreaView` mist `edges`"* — waar en onschadelijk: zonder `edges` is de default alle vier, dus de top-inset wórdt toegepast; de schermen mét `edges={['top','left','right']}` zijn de TABschermen, waar de bottom-edge weg moet omdat de tabbalk die al verrekent. (2) *"hitbox te klein"* — `styles.back` had al `minHeight` én `minWidth` op `spacing.touchTargetMin` = 44. (3) *"deze header wijkt af"* — byte voor byte identiek aan `recipe/[mealId].tsx:630`, `import/paste.tsx:1202` en `settings.tsx:471`; de bewering in add.tsx' eigen header dat dit "to the pixel" gekopieerd is, is dus wáár. (4) *"`router.back()` heeft geen bestemming"* — beide deuren zijn `router.push`. **Daaruit volgt een falsifieerbare voorspelling: is het raakvlak de oorzaak, dan mankeren die drie andere schermen het net zo goed.** Wat er wél is gedaan: `initialMetrics={initialWindowMetrics}` op de `SafeAreaProvider` (zonder die prop renderen de eerste frames met insets `{0,0,0,0}`, wat op een `fullScreenModal` de headerrij een moment op y=8 zet in plaats van y≈67 — in de zone van de Dynamic Island), en `hitSlop={8}` op alle vier de schermen die deze rij delen. ⚠ **Geen van beide is een diagnose**, en de code zegt dat zelf. ⚠ **De rij is NIET verplaatst**, hoewel de eigenaar daar letterlijk om vroeg: dat zou een pleister op een niet-gevonden oorzaak zijn. En `hitSlop` wint hier omhóóg en zijwaarts, niet omlaag — op iOS bereikt een tik buiten de bounds van de óuderview het kind niet, en deze rij is maar zo hoog als 8pt padding plus de knop. Blijft een toestelvraag | ⚠ **EN DE VIJFDE VERKLARING IS OP 8 SEPTEMBER OOK GEVALLEN, DOOR DE ENIGE TEST DIE TELT.** `SafeAreaProvider` kreeg `initialMetrics`, wat een echt defect verhelpt — zonder die prop renderen de eerste frames van een `fullScreenModal` met nul-insets, en dan staat de terugrij even op y=8 in plaats van y≈67, onder de Dynamic Island. Dat verklaarde bovendien het woord *soms* in de melding. De eigenaar daarna: *"De terug knop werkt nog niet."* Gefalsifieerd, niet onbevestigd. **Wat er nu ligt:** de rij staat 24pt lager in plaats van 8pt (hij vroeg er twee keer om; de eerste keer is dat geweigerd op grond van een mechanisme dat nu weerlegd is), en `router.back()` valt terug op `router.replace('/friends')` als `canGoBack()` false is — de enige resterende oorzaak die exact "tikken doet niets" oplevert bij een perfecte hitbox, en een reload in Expo Go maakt `/friends/add` werkelijk de eerste route. Nog steeds niet bewezen zíjn pad. ⚠ **DE VOLGENDE STAP IS EEN METING EN GEEN HYPOTHESE:** dezelfde terugtik op Instellingen (`archief/TOESTELTEST.md` §8c). Werkt hij daar wel, dan is het dit scherm; faalt hij daar ook, dan de gedeelde rij of de modal. Voeg geen zesde verklaring toe voordat die twintig seconden gedaan zijn |
 | GAP-46 | ✅ | **De cijfervraag pas twaalf uur na het koken — op 9 september 2026 afgebouwd.** Door de eigenaar gevraagd op 8 september: "Daarnaast wil ik dat je pas een cijfer kan geven de eerste keer dat je de app opent na 12 uur sinds het afronden van het recept. Anders heb je het waarschijnlijk nog helemaal niet gegeten." Het domein stond compleet met 16 tests en had sinds de dag dat het geschreven werd NUL aanroepers; dit is de bedrading, en er is niets aan de regel opnieuw besloten. **Weg bij `OutcomeCard`: alleen het CIJFER** — de schaal, zijn draft-state, de commit-haptic, de uitgesproken bevestiging en de exit-beat die daarop liep. Blijven staan: "Gemaakt!" met de groene haarlijn, het deel-vinkje, de moodrij en `Stuur door`, want die gaan over de KOOKSESSIE die net gebeurd is. **Nieuw:** `src/lib/pendingRating.ts` (de beslissing, want een routemodule is voor geen enkele test bereikbaar), `PendingRatingSheet.tsx`, `pendingRatingCopy.ts` en een `PendingRatingGate` naast `HouseholdBootstrapGate`. Die gate draait bij MOUNT en niet op elke foreground — een sheet die terugkomt zodra je even naar een andere app kijkt is een zeurpiet, en zijn zin is "de eerste keer dat je de app opent". ⚠ **EEN ASYMMETRIE DIE NIEMAND HAD GEZIEN EN DIE HIERDOOR WEG IS:** `(tabs)/index.tsx` s `handleOutcomeRate` schreef ALLEEN het private cijfer, zonder `castPublicVote`, terwijl `cook/[mealId].tsx` er twee schreef — een gerecht dat je vanaf Kiezen beoordeelde bereikte Ranglijst dus nooit en hetzelfde gerecht vanuit Kookmodus wel. Geen test kon dat zien. Nu schrijft `recordPendingRating` beide rijen, waar de kooksessie ook begon. **De sheet liegt nooit over WANNEER**: `selectPendingRating` geeft de OUDSTE die toe is, dus na een stille week is dat niet gisteravond, en een test bewaakt precies die afwezigheid. 23 tests erbij. ✅ Op een screenshot bevestigd, met een kooksessie van dertien uur oud. ⚠ **Nog niet op een toestel gezien** |
 | GAP-47 | ✅ | **De 45 tekeningen aangesloten, en MaterialCommunityIcons eruit — 8 september 2026.** De eigenaar keurde ze goed en zag ze daarna niet werken; terecht, ze lagen onbedraad onder `design/icons-v2/` omdat zijn eigen voorwaarde was ze eerst te bekijken. `src/components/iconArtwork/` is de kopie in de app: `drawings.ts` (211 elementen over 45 tekeningen, gegenereerd uit de bron), `palette.ts` (22 kleuren) en `IconArtwork.tsx`. Geen nieuwe dependency — `react-native-svg` stond er al — en geen buildstap; data en geen 45 componenten, hetzelfde argument dat `remyGlyphs.ts` maakte tegen een gegenereerde `.ttf`. **De bundlewinst is de opbrengst:** `iconFont.ts` had de prijs van MaterialCommunityIcons zelf gemeten op 1277 KB `.ttf` plus 212 KB glyphmap-JSON voor 28 glyphs van de 7448, en schreef erbij die ruil te maken zodra de bundle pijn deed. `@expo/vector-icons` laadt per familie, dus met de laatste aanroepplek weg stopt de familie met meeliften. ⚠ **`Icon`'s `color`-prop is inert geworden** voor elke naam met artwork, en dat is alle namen — een tekening die ÍS een wortel kan geen `textMuted` aannemen en een wortel blijven. `Chip` tintte zijn glyph mee met de geselecteerde staat; dat is weg, en overleefbaar omdat `Chip`'s eigen header al betoogt dat die staat de vulling plus de rand is. ⚠ **Donkere modus is een regel, geen tweede set:** de kleuren heten bij rol, de vier neutralen flippen, de vijftien kleuren blijven byte-identiek. Dat palet is afgeleid en door geen mens bekeken. Negen nieuwe tests, waarvan de eerste bewijst dat het fontpad onbereikbaar is |
 | GAP-48 | ✅ | **Demo-data voor de sociale laag, herkenbaar aan één voorvoegsel — 8 september 2026.** De eigenaar meldde dat Vrienden en Ranglijst leeg zijn. Geen defect: `loadLiveFriends` keert vroeg terug zodra `collectAcceptedFriendIds` leeg is, en Ranglijst rangschikt `recipe_ratings`-rijen die niet bestaan. `supabase/seed/demo_social.sql` maakt de hele keten, en die is langer dan "voeg een vriend toe" — de view `shared_cooks` (0009) poort op VIER dingen tegelijk: wederzijds geaccepteerde vriendschap, `households.share_cooks_with_friends`, een maaltijd die niet is uitgesloten, én een `recipe_id`. Mist er één, dan blijft de feed leeg zonder dat iets zegt waarom. **Elke id die de seed schrijft begint met `5eed5eed`**, in elke tabel — nagemeten: de enige niet-gemarkeerde uuid in het bestand is Supabase's vaste `instance_id`. Daardoor hoeft `demo_social_teardown.sql` niet te weten welke rijen het waren; hij vraagt het de database. De handles heten `demo_sanne`/`demo_bram`/`demo_fatima` met "(demo)" achter de naam, zodat het ook op het scherm zichtbaar is. Geen migratie en geen kolom: is de nepdata weg, dan is er geen spoor dat ze er ooit was. ⚠ **HERSCHREVEN OP 8 SEPTEMBER, EN DE REDEN IS LEERZAAM.** Hier stond "nog niet gedraaid — één regel invullen en plakken", en dat is vier dagen niet gebeurd. **Een script dat pas werkt na een bewerking is een script dat blijft liggen.** Hij zoekt nu zelf het enige profiel dat niet met `demo_` begint, en weigert mét opsomming bij nul of meer dan één. Het netwerk ging van drie naar zeven personen en is drie stappen diep, omdat GAP-51's suggesties op de TWEEDE stap leunen en die met twee vrienden onzichtbaar is; Tessa staat erin om te kúnnen zien dat ze er NIET in hoort te staan. ⚠ **En dat criterium bleek zélf fout**, gevonden bij review op 8 september: haar ene stem liet haar kwalificeren via de activiteitspool, mét `mutual_friends = 0` — de tweede hop deed het dus goed en de test keurde hem af. `0019` heeft nu een ondergrens van drie stemmen op de kwalificatie (niet op de telling), en haar stem blijft staan als bewijs dát die drempel werkt. Acht recepten, achttien stemmen, zes kookgebeurtenissen. ⚠ **Nog steeds niet gedraaid** — er draait geen Postgres op deze machine, dus de SQL is tegen het schema nagelopen en niet uitgevoerd. Onderaan het bestand staat nu een controlequery die de verwachte aantallen teruggeeft |
@@ -313,16 +163,16 @@ een commit er niet naar kon verwijzen; sinds 2 september hebben ze er één.
 | GAP-09 | ⚖ | **De read-then-write race in de throttle.** Twee gelijktijdige verzoeken van dezelfde beller kunnen allebei onder het plafond lezen. Dichten kost een extra round trip op élke import om een handvol modelaanroepen terug te winnen; het oordeel is dat het lek acceptabel is en de kosten niet. Een licht overschreden plafond is bekend gedrag, geen bug. Open vraag C |
 | GAP-11 | 🟡 | **De onjuiste tellingen zijn weg, de onvolledige niet.** Gerepareerd: `index.ts` noemde "nine sibling modules" en somde er negen op terwijl het er elf zijn — de twee ontbrekende waren `importBudget.ts` en `supabaseImportBudgetStore.ts`, dezelfde IMP-06/IMP-10-wijziging die GAP-10 veroorzaakte; `importResult.ts` zei vijf modules importeren `types.ts`, het zijn er acht; `types.ts` beweerde dat een gebroken specifier "door niets" wordt gevangen, wat sinds `check:functions` onwaar is; en `index.ts:191` zei dat geen typechecker deze map ziet, wat diezelfde dag ophield te kloppen. **Wat blijft staan:** een zestal comments zegt dat `supabase/functions/**` buiten `tsc --noEmit`, ESLint en vitest valt. Dat is niet ónwaar — de root-tsconfig sluit de map echt uit, en de ESLint- en vitest-helften kloppen onverkort — maar het is onvolledig sinds `check:functions`, en hun architectuurargument (leg logica in `src/domain`) rust nog steeds op de twee helften die wél gelden. Losse comment-edits, geen haast |
 | GAP-12 | 🟡 | **Inloggen per link werkte op een telefoon niet, en de ontbrekende helft was het ontvangen.** `requestMagicLink` stuurde altijd al een link met `emailRedirectTo`, en `supabase.ts:52-59` legt uit dat `detectSessionInUrl` web-only is omdat de link op native als deeplink binnenkomt en expliciet ingewisseld moet worden — maar niets wisselde hem in. De mail opende de app en de app negeerde hem; op een iPhone zie je dan een sprong door Safari en kom je niet langs het inlogscherm. Gebouwd: `readAuthRedirect` (`src/domain/social/authRedirect.ts`, 13 tests) leest de fragmenttokens, `completeSignInFromUrl` zet de sessie, en `Linking.useURL()` in `_layout.tsx` vangt zowel een koude start als een draaiende app — twee verschillende API's, en alleen de eerste vangen werkt in elke test en faalt voor elke echte eerste login. **🟡 omdat er nog een dashboardactie bij hoort:** de redirect-URL moet in Supabase onder Authentication → URL Configuration → Redirect URLs staan, en onder Expo Go bevat die je LAN-IP, dus hij verandert met je netwerk. Een ontwikkelbuild met het vaste `remy://`-schema maakt dat blijvend |
-| GAP-13 | ⬜ | **Het UI-onderzoek vond fouten in de staande documenten, en die zijn nooit teruggevouwen.** `ui-research/ASSEMBLY.md` zegt expliciet dat het "what the research found to be factually wrong in the standing documents" vastlegt. `DESIGN-SOCIAL.md` is bij het landen van de makeover (`5cca816`) bijgewerkt; `DESIGN.md` (27 aug), `PRODUCT-DECISIONS.md` (27 aug) en `ARCHITECTURE.md` (23 aug) niet — alle drie van vóór het onderzoek. Die correcties leven dus alleen in `ui-research/`, terwijl `DESIGN.md` uit tientallen bronbestanden wordt aangehaald als gezag. Gevonden op 3 september bij het opruimen van `docs/`, en de reden dat die map blijft staan terwijl de drie procesdocumenten eromheen verwijderd zijn |
+| GAP-13 | ⬜ | **Het UI-onderzoek vond fouten in de staande documenten, en die zijn nooit teruggevouwen.** `archief/ui-research/ASSEMBLY.md` zegt expliciet dat het "what the research found to be factually wrong in the standing documents" vastlegt. `DESIGN-SOCIAL.md` is bij het landen van de makeover (`5cca816`) bijgewerkt; `DESIGN.md` (27 aug), `PRODUCT-DECISIONS.md` (27 aug) en `ARCHITECTURE.md` (23 aug) niet — alle drie van vóór het onderzoek. Die correcties leven dus alleen in `ui-research/`, terwijl `DESIGN.md` uit tientallen bronbestanden wordt aangehaald als gezag. Gevonden op 3 september bij het opruimen van `docs/`, en de reden dat die map blijft staan terwijl de drie procesdocumenten eromheen verwijderd zijn |
 | GAP-14 | 🟡 | **Inloggen met een getypte code, in plaats van een link.** `auth.ts` betoogde jarenlang dat een code "the better fit for a phone app" is en dat hij "not available to us" was: de code staat alleen in de mail als de template `{{ .Token }}` bevat, en Supabase zet template-bewerking achter custom SMTP. Dat argument stond nog steeds; alleen de premisse veranderde. Gebouwd: `readSignInCode` (`src/domain/social/signInCode.ts`, 11 tests) beoordeelt de invoer vóór er een verzoek aan opgaat, `verifySignInCode` wisselt hem in via `verifyOtp` met `type: 'email'` — níét `'magiclink'`, want dat verwacht de hash uit een aangeklikte URL en laat elke juiste code als ongeldig terugkomen — en `sign-in.tsx` heeft een tweede formulier met `textContentType="oneTimeCode"`, zodat iOS de code boven het toetsenbord aanbiedt en de reis naar de mail-app helemaal wegvalt. **Verlopen en onjuist zijn aparte uitkomsten**, omdat het ene je terugstuurt naar de mail en het andere naar een nieuwe aanvraag. 🟡 tot custom SMTP staat: zonder dat blijft de template onbewerkbaar en komt er geen code in de mail |
-| GAP-18 | 🟡 | **Eén van de drie resterende WS1-onderdelen is nu wél toegepast.** `ASSEMBLY.md:218-220` noemt de volledige prijs: "26 colour values per scheme, five `fontFamily` entries, one `typeScale.button` family, three `radii` values, two `@expo-google-fonts` packages added and one removed. No new component." De kleuren waren al gedaan; **`typeScale.button` is nu van monospace af** naar `fontFamily.sansMedium` met `letterSpacing` op 0 — het enige token dat het onderzoek bij naam vroeg, twee keer en van twee kanten: WS1 noemt het "the single-token change with the highest ratio of effect to risk in the repo" (`Ja · Iets anders · Niet koken` leest in mono als een shellprompt), en WS6 kwam er onafhankelijk op uit via `Stuur`, de warmste tik in het product, gerenderd als een terminalcommando. Geen nieuw font: `Archivo_600SemiBold` werd al geladen. **Wat blijft staan:** de vijf `fontFamily`-entries (de families zelf staan nog op Archivo + IBM Plex Mono), de drie `radii`-waarden (nog 0/4/8/16/999), en WS2 t/m WS6 op layout, copy en de sociale laag. De iconen-, beeld- en motionhelft daarvan is wél nagelopen — zie `STYLING-PLAN.md` en GAP-19 t/m GAP-23 |
-| GAP-19 | ✅ | ⚠ **VERVANGEN DOOR GAP-47 OP 8 SEPTEMBER — lees dit voor het argument, niet voor de stand. MaterialCommunityIcons tekent niets meer; de app draait op eigen gekleurde tekeningen.** **Er is nu een icoonfont, en het stond er al — gebouwd op 7 september 2026.** WS4 §1 koos een gegenereerde Phosphor-subset op grond van één juiste waarneming: Feather heeft nul keukenglyphs, nagemeten en waar. Maar Feather is één van de **vijftien** families die `@expo/vector-icons` al meelevert, en de andere veertien waren nooit gecontroleerd. MaterialCommunityIcons heeft er **7448** en tekent alle zeventien `DISH_TAGS` — zonder nieuwe dependency, zonder `.ttf`-generatie en zonder buildstap. **De conclusie van WS4 was juist voor de premisse die onderzocht was; de premisse was te smal**: één bron uitputtend nagekeken, veertien buren overgeslagen. **Wat er gebouwd is:** `iconFont.ts` geeft geen kale glyphnaam meer terug maar `{ family, name }`, zodat `Icon.tsx` elke naam in de `name`-prop van zijn eigen familie legt en de compiler hem tegen de echte glyphmap houdt — een `Record<IconFamily, Component>` was het afgewezen alternatief, want dan compileert `pot-mix` als Feather-glyph en tekent als leeg vierkantje. `isIconAvailable` ging van 15 van de 33 naar **33 van de 33**; geen enkele aanroepplek is aangeraakt, wat de belofte was die de seam deed. `timer` kreeg eindelijk een eigen glyph (`timer-sand`, niet de klok — het argument "een polshorloge is geen kookwekker" overleeft de wijziging). **De prijs, gemeten:** MaterialCommunityIcons kost **1277 KB `.ttf` plus 212 KB glyphmap-JSON** tegen Feathers 54,3 KB en 6,0 KB — 28 glyphs van de 7448, dus 0,38% van de glyphs voor 100% van het gewicht (hier stond "achttien" en "0,24%" — al onwaar bij het schrijven, want de ingrediëntcategorieën voegden er die dag negen toe). De goedkopere weg (`createIconSet` met een eigen glyphmap tegen dezelfde `.ttf`) is bewust niet genomen: die kost de compilercontrole en spijkert codepoints vast. ⚠ **Drie van de zeventien mappings zijn een gok en geen meting** — het font heeft geen aardappel, geen salade en niets veganistisch, dus `aardappel → food-variant`, `salade → leaf` en het kruisende dieetpaar (`vegetarisch → sprout`, `veganistisch → leaf-circle`) horen door een mens beoordeeld te worden; ze staan met die waarschuwing in `iconFont.ts` zelf. **Wat hierdoor niet meer geblokkeerd is en nog wel openstaat:** de **21 empty-state markeringen** uit WS4 §5.3-5.5, nog steeds nul geleverd. En de zeventien chips zijn nooit op een toestel gezien. Zie `HANDOVER.md` punt 6 voor de volledige verantwoording |
+| GAP-18 | 🟡 | **Eén van de drie resterende WS1-onderdelen is nu wél toegepast.** `ASSEMBLY.md:218-220` noemt de volledige prijs: "26 colour values per scheme, five `fontFamily` entries, one `typeScale.button` family, three `radii` values, two `@expo-google-fonts` packages added and one removed. No new component." De kleuren waren al gedaan; **`typeScale.button` is nu van monospace af** naar `fontFamily.sansMedium` met `letterSpacing` op 0 — het enige token dat het onderzoek bij naam vroeg, twee keer en van twee kanten: WS1 noemt het "the single-token change with the highest ratio of effect to risk in the repo" (`Ja · Iets anders · Niet koken` leest in mono als een shellprompt), en WS6 kwam er onafhankelijk op uit via `Stuur`, de warmste tik in het product, gerenderd als een terminalcommando. Geen nieuw font: `Archivo_600SemiBold` werd al geladen. **Wat blijft staan:** de vijf `fontFamily`-entries (de families zelf staan nog op Archivo + IBM Plex Mono), de drie `radii`-waarden (nog 0/4/8/16/999), en WS2 t/m WS6 op layout, copy en de sociale laag. De iconen-, beeld- en motionhelft daarvan is wél nagelopen — zie `archief/STYLING-PLAN.md` en GAP-19 t/m GAP-23 |
+| GAP-19 | ✅ | ⚠ **VERVANGEN DOOR GAP-47 OP 8 SEPTEMBER — lees dit voor het argument, niet voor de stand. MaterialCommunityIcons tekent niets meer; de app draait op eigen gekleurde tekeningen.** **Er is nu een icoonfont, en het stond er al — gebouwd op 7 september 2026.** WS4 §1 koos een gegenereerde Phosphor-subset op grond van één juiste waarneming: Feather heeft nul keukenglyphs, nagemeten en waar. Maar Feather is één van de **vijftien** families die `@expo/vector-icons` al meelevert, en de andere veertien waren nooit gecontroleerd. MaterialCommunityIcons heeft er **7448** en tekent alle zeventien `DISH_TAGS` — zonder nieuwe dependency, zonder `.ttf`-generatie en zonder buildstap. **De conclusie van WS4 was juist voor de premisse die onderzocht was; de premisse was te smal**: één bron uitputtend nagekeken, veertien buren overgeslagen. **Wat er gebouwd is:** `iconFont.ts` geeft geen kale glyphnaam meer terug maar `{ family, name }`, zodat `Icon.tsx` elke naam in de `name`-prop van zijn eigen familie legt en de compiler hem tegen de echte glyphmap houdt — een `Record<IconFamily, Component>` was het afgewezen alternatief, want dan compileert `pot-mix` als Feather-glyph en tekent als leeg vierkantje. `isIconAvailable` ging van 15 van de 33 naar **33 van de 33**; geen enkele aanroepplek is aangeraakt, wat de belofte was die de seam deed. `timer` kreeg eindelijk een eigen glyph (`timer-sand`, niet de klok — het argument "een polshorloge is geen kookwekker" overleeft de wijziging). **De prijs, gemeten:** MaterialCommunityIcons kost **1277 KB `.ttf` plus 212 KB glyphmap-JSON** tegen Feathers 54,3 KB en 6,0 KB — 28 glyphs van de 7448, dus 0,38% van de glyphs voor 100% van het gewicht (hier stond "achttien" en "0,24%" — al onwaar bij het schrijven, want de ingrediëntcategorieën voegden er die dag negen toe). De goedkopere weg (`createIconSet` met een eigen glyphmap tegen dezelfde `.ttf`) is bewust niet genomen: die kost de compilercontrole en spijkert codepoints vast. ⚠ **Drie van de zeventien mappings zijn een gok en geen meting** — het font heeft geen aardappel, geen salade en niets veganistisch, dus `aardappel → food-variant`, `salade → leaf` en het kruisende dieetpaar (`vegetarisch → sprout`, `veganistisch → leaf-circle`) horen door een mens beoordeeld te worden; ze staan met die waarschuwing in `iconFont.ts` zelf. **Wat hierdoor niet meer geblokkeerd is en nog wel openstaat:** de **21 empty-state markeringen** uit WS4 §5.3-5.5, nog steeds nul geleverd. En de zeventien chips zijn nooit op een toestel gezien. Zie `archief/HANDOVER.md` punt 6 voor de volledige verantwoording |
 | GAP-39 | ✅ | **Kiezen is minder druk geworden: de filters in een lade, de foto 2,5× zo breed — door de eigenaar gevraagd op 7 september 2026, in twee gekoppelde instructies.** Letterlijk: *"De bovenstaande aanpassingen moeten eigenlijk pas zichtbaar zijn als er op een knopje bovenaan geklikt wordt met 'filters' zodat de 'kiezen' pagina ook minder druk is"* en *"1. Verwijder de teksten 'hoeveel tijd' en kiezen. 2. Zorg dat 'Ja' … en 'iets anders' naast elkaar komen te staan … Zo kunnen we de thumbnail een stuk groter maken."* **Gemeten uit de stylesheets in plaats van geschat: 73pt dicht**, tegen 235pt open voor een gewone bibliotheek (6 tags, geen moods) en 462pt in het slechtste geval (17 tags, 6 moods, wrappend) — dus 162pt respectievelijk 389pt minder dan de altijd-open balk. **De eigenschap die meer waard is dan beide getallen:** dicht hangt de hoogte niet meer af van hoe groot de bibliotheek is, precies wat LIB-06 een dag kostte voor Mijn recepten. Het woord is `Filters` en niet `Geavanceerd`, en dat is geen smaak: `Geavanceerd` belooft iets *bóven* de gewone controls, waar is voor een lade over twee van vier assen en onwaar hier, waar de lade álles bevat. `PHOTO_WIDTH` ging van 80 naar 200 — 2,5× de breedte, 6,25× het oppervlak — betaald door de `KIEZEN`-eyebrow en de gestapelde knoppen, niet door de gerechtnaam. `Ja` heet `Dit koken`: dat overruled `ui-research/WS3` §3.10 ("the whole thesis in two letters"), op de koppeling dat WS3 die zin schreef over een scherm mét een eyebrow erboven — zonder vraag antwoordt `Ja` nergens op — en op de meting in `VANAVOND_LABEL_LENGTH_TOLERANCE`: naast elkaar in even brede vakken laat `Ja` (2 tekens) naast `Iets anders` (11) de primaire knop grotendeels leeg. Twee nieuwe copy-modules met tests (`decisionFilterCopy.ts`, `vanavondActionCopy.ts`), want de woorden zaten als JSX-literals in een `.tsx` en waren daarmee voor geen enkele test bereikbaar. ⚠ **Één ding in deze ronde is niet gevraagd:** Kiezens tagchips tekenen nu dezelfde glyphs als de bibliotheek (`IconChip` + `iconForDishTag`). In één regel terug te draaien. ⚠ **Ongecommit in de werkboom** |
 | GAP-40 | ✅ | **Androids hardware-terugknop deed niets terwijl de uitkomstkaart openstond — door niemand gemeld, gevonden tijdens GAP-39.** `(tabs)/index.tsx` droeg de enige `<Modal>` van zes in de app zonder `onRequestClose`. Op Android is dat de handler die de systeemterugknop en de terugveeg aanroepen; zonder hem is de kaart een venster dat het besturingssysteem niet kan sluiten. De verzendsheet eronder heeft hem niet nodig en dat staat er nu bij: die is een genéste `<Modal>` en erft de afhandeling van zijn ouder. ⚠ Ongecommit in de werkboom |
 | GAP-41 | ✅ | **De laadstaat van Kookmodus had geen uitgang, en — dit is het eigenlijke punt — die branche kan nooit uit zichzelf eindigen.** Gevonden tijdens de terugknop-ronde. `loadMealData` kent geen timeout en `setLoadState('error')` draait uitsluitend uit de `.catch`, dus een read die **hangt** in plaats van te verwerpen bereikt de foutstaat nooit: het scherm blijft in "Laden…" staan. En het staat daar in een `presentation: 'fullScreenModal'`, die op iOS geen veegdismiss heeft — een branche die geen control tekent, tekent dus geen deur. De drie zusterbranches (error, geen stappen, geen huidige stap) beantwoordden hun eigen doodlopende weg al zo; deze was overgeslagen, vermoedelijk omdat "laden" als tijdelijk leest. **`Terug` en niet `Stoppen`:** `Stoppen` is het woord van dit scherm voor een kooksessie die lóópt, met een hint die "Er wordt niets opgeslagen" belooft — een geruststelling die alleen betekenis heeft als er voortgang is die verloren kon gaan. Hier is nog niets onderweg. ⚠ **Wat dit NÍET repareert: de timeout.** Er staat nu een deur in een kamer die nog steeds nooit vanzelf opengaat |
 | GAP-42 | ✅ | **De terugknop van `friends/add.tsx` scrolde weg met de rest van het scherm.** Hij was het eerste kind van de `ScrollView` in plaats van een vaste header eronder — op een scherm dat je eigen handle, een invoerveld, een knop, een bericht én drie lijsten draagt, en waarvan de lijsten na elke accept of decline opnieuw gelezen en getekend worden. De uitgang stond dus waar de lezer zijn scrolloffset toevallig had gelaten. Elk ander gepusht scherm in de app tekent zijn uitgang al als een vaste `styles.header`-rij direct onder de `SafeAreaView` (`recipe/[mealId].tsx` en `import/paste.tsx` zijn hier letterlijk overgenomen, tot de kleinere horizontale inset aan toe); dit was het enige dat het niet deed. **Een verplaatsing en geen herontwerp:** het woord, het toegankelijkheidslabel en de typografie zijn onaangeraakt overgezet — ook al is `typeScale.button` in `textSecondary` hier tegen `bodySmall` in `textMuted` op de acht andere schermen een echte inconsistentie, want die verzoenen is GAP-43 en geen bijwerking van het verplaatsen van één `View`. ⚠ Ongecommit in de werkboom |
 | GAP-43 | ⬜ | **De terugknoppen zijn er wél, ze zijn alleen niet te vínden — en dat is bijna zeker wat de eigenaar bedoelde.** Nagemeten over alle routebestanden: van de dertien niet-tab-schermen hebben er **twáálf** een uitgang. Het probleem is dus vindbaarheid en niet aanwezigheid. Elke deur is 14pt `bodySmall` in `textMuted` **zonder pijl**, en er zijn **vier verschillende woorden** in omloop: `Terug`, `Annuleren`, `Sluiten`, `Stoppen`. ⚠ **Er is geen pijlglyph in dit project**: `ICON_NAMES` kent `chevron-right` en `close` en géén `chevron-left` of `arrow-left`, en er een toevoegen raakt de uitputtende `Record<IconFamily, …>` in `iconFont.ts` plus `remyGlyphs.ts` en `tests/iconFont.test.ts` — een eigen ronde, niet een regel. **Één gedeeld terug-component of één woord is het dúúrdere alternatief en niet het goedkopere:** het raakt acht routebestanden en drie copy-modules, en het overruled twee vastgelegde onderscheiden (`Annuleren` op een editor is niet `Terug` op een leesscherm). ⚠ **Het dertiende scherm is `claim-handle.tsx` en dat heeft hélemaal geen uitgang** — `grep -c "router\."` geeft **nul** treffers in het hele bestand; zijn enige control is `Klaar`, die opslaat. Dat stond in geen enkel overzicht en het is de enige echte doodlopende route in de app. ⚠ **En er is een veertiende scherm dat nergens geteld werd:** `src/app/dev-embed-probe.tsx`, 296 regels, dev-only, met dezelfde scroll-fout die GAP-42 hierboven wegnam én een `router.replace('/')` op `:229` waar `router.back()` hoort — dat wist de navigatiestack in plaats van één stap terug te gaan |
-| GAP-44 | ⬜ | **Het oude palet leeft nog op drie plekken, en één ervan is echte configuratie.** (1) **`app.json:25`** zet de Android-accentkleur van expo-notifications op een hardgecodeerde `#ffffff`, nooit afgeleid van het palet en dus niet meegegaan met `55c3187` — dat is de kleur achter de melding waar het hele product op draait. (2) **`docs/ui-research/WS1-direction-and-palette.md:600-676`** draagt het volledige oude palet, en **`:1221-1264` specificeert app-icoon én splash in het oude blauw**: `#1D4094` als vouw en accent op een `#DDD9D0`-grond, met een varianten-tabel voor licht, donker en tinted en een splash die diezelfde grond herhaalt. Die specificatie is nu achterhaald tot en met de `focusRing`; ⚠ `ui-research/` is gedateerd onderzoeksarchief en wordt **niet bewerkt**, dus dit is de plek waar het staat. (3) **`OutcomeCard.tsx:544-545`** verdedigt `textSecondary` boven `textMuted` met "3,60:1 (light) / 4,26:1 (dark) tegen `surfaceRaised`" — `git log -S` legt die regel in `52b45d0` van 23 augustus 2026, het MVP-palet. **De beslissing houdt** en `tests/contrast.test.ts` bewijst dat elke ronde opnieuw; het zijn de getallen die niets meer meten. Zelfde vorm als `tokens.ts:264-265`, waar dit al met een banner is opgelost |
+| GAP-44 | ⬜ | **Het oude palet leeft nog op drie plekken, en één ervan is echte configuratie.** (1) **`app.json:25`** zet de Android-accentkleur van expo-notifications op een hardgecodeerde `#ffffff`, nooit afgeleid van het palet en dus niet meegegaan met `55c3187` — dat is de kleur achter de melding waar het hele product op draait. (2) **`archief/ui-research/WS1-direction-and-palette.md:600-676`** draagt het volledige oude palet, en **`:1221-1264` specificeert app-icoon én splash in het oude blauw**: `#1D4094` als vouw en accent op een `#DDD9D0`-grond, met een varianten-tabel voor licht, donker en tinted en een splash die diezelfde grond herhaalt. Die specificatie is nu achterhaald tot en met de `focusRing`; ⚠ `ui-research/` is gedateerd onderzoeksarchief en wordt **niet bewerkt**, dus dit is de plek waar het staat. (3) **`OutcomeCard.tsx:544-545`** verdedigt `textSecondary` boven `textMuted` met "3,60:1 (light) / 4,26:1 (dark) tegen `surfaceRaised`" — `git log -S` legt die regel in `52b45d0` van 23 augustus 2026, het MVP-palet. **De beslissing houdt** en `tests/contrast.test.ts` bewijst dat elke ronde opnieuw; het zijn de getallen die niets meer meten. Zelfde vorm als `tokens.ts:264-265`, waar dit al met een banner is opgelost |
 | GAP-45 | 🔒 | ⚠ **LEES DIT EERST — DE TELLING IS OP 10 SEPTEMBER RECHTGEZET: ÉÉN VAN DE VIER KREEG EEN AANROEPER, NIET TWEE.** GAP-34 is geland en gebruikt `ingredientCategories.ts` (`categorizeIngredient`, `CATEGORY_BY_WORD`, `splitIntoWords`) — die is dus **niet meer dood** en valt buiten deze beslissing. **`mainIngredients.ts` kreeg er géén**: `NameableIngredient` eist een `sortOrder` die het dislike-predicaat nooit leest, dus dat gebruikt `Pick<MealIngredient, 'name'>`, en de normalisator komt uit `shopping/normalizeIngredient.ts`. Deze beslissing gaat dus nog over `mainIngredients.ts`, `ingredientCategoryIcons.ts` en de twee tekeningen. ~~Wat hier op 9 september stond:~~ **TWEE VAN DE VIER KRIJGEN EEN AANROEPER.** GAP-34 heeft een matcher over ingrediëntnamen nodig — hele woorden, nooit substrings — en die bestaat al, onder test, in precies deze modules: `ingredientCategories.ts` (`categorizeIngredient`, `CATEGORY_BY_WORD`, `CATEGORY_BY_PHRASE`) en `mainIngredients.ts` (`NameableIngredient`). Wie deze regel uitvoert vóór GAP-34, gooit weg wat GAP-34 nodig heeft — en `mainIngredients.ts`' eigen kop voorspelt dat: *“deleting a heuristic in order to re-derive it later — badly, from the same absent data — is how a codebase forgets what it already decided.”* Dat is geen sentiment maar een gemeten aanroeper die op komst is. **Vier dingen hebben nul productie-aanroepers, en weggooien is een beslissing van de eigenaar en niet van een agent.** `src/domain/mainIngredients.ts` (dood sinds GAP-35), `src/domain/ingredientCategories.ts` en `src/components/ingredientCategoryIcons.ts` (dood sinds RCP-10 de icoontjes van de ingrediëntenlijst haalde — nagemeten: elke overgebleven verwijzing is een comment of een test), plus de 45 hertekende iconen onder **`design/icons-v2/`** (`d908a1b`), die nooit bedraad zijn: 45 `.svg`-bestanden, een contactsheet en een palet-script, en geen enkel bestand onder `src/` dat ernaar verwijst. ⚠ **Dit is het patroon dat zich twee dagen achter elkaar heeft herhaald:** RCP-08 en RCP-09 zijn op 7 september op verzoek van de eigenaar gebouwd en één dag later door een ander verzoek van dezelfde eigenaar dood gemaakt. De modules blijven staan met hun tests, en `ingredientCategoryIcons.ts` zegt in zijn eigen header dat niets in `src/` hem nog importeert. **Wat hier gekozen moet worden is niet "opruimen" maar "welke van deze vier komt terug"** — de iconen wachten op een oordeel dat alleen op een toestel te geven is ⚠ **Nagemeten 10 september 2026, ná GAP-34: ÉÉN van de vier kreeg een aanroeper, niet twee.** `ingredientCategories.ts` heeft er weer een (`dislikedIngredients.ts`: `splitIntoWords` en `categorizeIngredient`). `mainIngredients.ts` níet — `NameableIngredient` eist een `sortOrder` die het dislike-predicaat nooit leest, dus het veld werd `Pick<MealIngredient, 'name'>`. De beslissing van deze rij gaat dus nog over drie dingen: `mainIngredients.ts`, `ingredientCategoryIcons.ts` en de iconen. |
 
 ---
@@ -457,9 +307,12 @@ weg te gooien.
 
 ---
 
-## Waar de open vragen uit `OPEN-BESLISSINGEN.md` landen
+## Waar de open vragen landen
 
-Dat document stelt de vraag; dit document draagt de code. De vertaling:
+`PRODUCT-DECISIONS.md` stelt de vraag; dit document draagt de code. De
+vertaling. ⚠ De letters A t/m K komen uit `archief/OPEN-BESLISSINGEN.md`, waar
+de lange afweging per vraag staat; de nog openstaande zijn overgezet naar
+`PRODUCT-DECISIONS.md`.
 
 | Open vraag | Longlist |
 |---|---|
@@ -480,109 +333,93 @@ Dat document stelt de vraag; dit document draagt de code. De vertaling:
 
 ---
 
-## Wat er nog open ligt
-
-Bijgewerkt na de sessies van 2 en 3 september. Geland sinds de vorige versie:
-RCP-01, ENT-05, IMP-09, GAP-07, GAP-10, OPS-08 (gedraaid) en de ESLint-helft
-van OPS-09. Geschrapt: ENT-03. Beslist: GAP-08 blijft optioneel.
-
-**Bijgewerkt op 9 september 2026.** Geland die middag: **GAP-58** (de trechter
-tekent zijn actieve staat, en de reparatie die dit document zelf voorschreef
-is afgewezen — lees die regel), **GAP-46** (de cijfervraag na twaalf uur, van
-domein-zonder-aanroepers naar een sheet) en het laatste stuk fase 2
-(`accentMuted` van de avatarschijven en het toestemmingsvinkje af). Beslist:
-**DEC-04**, het bord houdt twee decimalen. Punt 0 hieronder is beantwoord.
-
-⚠ **Er staat nu niets meer half in de boom.** GAP-46 was het laatste onaffe
-werk; wat overblijft is óf onbegonnen óf geblokkeerd, niet halverwege.
-
-~~**Er staat geen enkele beslissing van de eigenaar meer in de weg.** Dat was
-sinds augustus niet zo.~~ **(HERZIEN, 6 september 2026: er staan er weer twee,
-en allebei zijn ze door PD-022 en PD-023 zelf opgeworpen — open vragen I en J.
-Geen van beide blokkeert het bouwen; I blokkeert wél de copy naast het vinkje,
-want tot hij beantwoord is mag die tekst niet beloven dat een gerecht privé
-blijft.)**
-
-### ~~De grootste~~ — gedaan op 3 september
-
-**OPS-01 is rond.** SDK 51 → 57 in zes stappen, elk met een eigen commit en
-dezelfde vier checks erachteraan. De aanleiding was de vraag hoe je deze app
-op een iPhone zet; het antwoord was dat Expo Go alleen de nieuwste SDK
-ondersteunt en deze app zes majors achterliep. Dat is weg.
-
-**Wat er nu wél kan:** de app op een iPhone draaien via Expo Go uit de App
-Store, zonder ontwikkelbuild en zonder betaald Apple-account.
-
-**Wat OPS-02 nog steeds blokkeert:** ENT-01. Een share extension is native
-code en draait per definitie niet in Expo Go, hoe actueel de SDK ook is.
-
-**Wat geen enkele check kon zeggen.** De nieuwe architectuur draait sinds
-stap vier — niet als keuze, maar omdat SDK 55 `newArchEnabled` uit het schema
-haalde. De typelaag en 2548 tests merken daar niets van, en dat is precies de
-helft die het niet kan merken: `Animated` in `TimerDisplay` en
-`DecisionCard`, `expo-haptics` en safe-area zitten nu op een ander
-renderpad. Dat blijkt op een toestel of nergens.
-
-### Daarna, op volgorde van hefboom
-
-0. ✅ ~~**De terugknop-meting op Instellingen (GAP-53).**~~ **GEDAAN OP
-   9 SEPTEMBER, en de meting van twintig seconden deed precies wat ervan
-   beloofd was.** De eigenaar is gevraagd wat hier stond. Over `/friends/add`:
-   *"Hij werkt maar is nog steeds lastig te klikken"*; over Instellingen:
-   *"Deze knop werkt wel"*. Dat bevestigt de `canGoBack()`-diagnose in plaats
-   van haar alleen niet te weerspreken. **Dit punt heeft drie dagen bovenaan
-   gestaan op een premisse die met één vraag te falsificeren was** — vijf
-   verklaringen gemeten en gevallen, terwijl de goedkoopste stap was om het
-   te vrágen. ⚠ Wat ervan overbleef is een ánder defect en niet het raakvlak:
-   alle vier de rijen zaten al op 44pt, dus de doos was nooit te klein; het
-   ZICHTBARE doel was dat wel, en `BackButton.tsx` (`3a3796e`) maakt er een
-   pijl van 20pt in `textPrimary` van.
-
-1. **De app op een toestel zetten en er doorheen lopen.**
-   **`npm run start:log`** (niet `npx expo start` — dan is de Metro-log
-   achteraf leesbaar in plaats van over te typen, zie OPS-15),
-   Expo Go, en dan één echte import door de flow plus de throttle-test (21
-   binnen tien minuten, de 21e hoort `import_throttled` te krijgen). Dubbel
-   zo waardevol als gisteren: het test de deploy én het renderpad van de
-   nieuwe architectuur, en dat laatste heeft geen enkele andere dekking.
-   **`docs/TOESTELTEST.md` loopt dit sinds 8 september punt voor punt af**,
-   met Android bovenaan omdat nooit geverifieerd is dat de app daar start.
-   ⚠ Eén echte import is nu extra waardevol: het is de ENIGE manier om een
-   foto op Trending te zien — de demo-seed kan er geen krijgen, want
-   oEmbed-URL's zijn kortlevend en ondertekend en kopiëren mag niet (PD-007).
-
-1b. ⚠ **Draai `demo_social_teardown.sql` vóór er vrienden op de app komen.**
-   `suggested_friends()` leest `recipe_ratings` globaal, dus drie
-   demo-profielen (Sanne 4 stemmen, Bram 4, Daan 6 — nageteld) verschijnen bij
-   elke echte tester in "Misschien ken je". Geen bug in `0019`: de seed doet
-   zijn werk op een scherm waar hij niet voor bedoeld was. Staat als regel nul
-   in `MEETPLAN.md`.
-   ⚠ **En tot 11 september 's avonds deed de teardown dat niet volledig** — hij
-   liet de dertien rijen in `follows` staan en gaf toch exit 0 (ONT-06, nu
-   gerepareerd). **Draaide je hem die dag al, draai hem dan opnieuw**; dat is
-   veilig, want elke delete is een no-op op een lege verzameling.
-2. **IMP-05** — één secret, geen code. `GEMINI_MODEL` op een gedateerde
-   snapshot pinnen. Extra reden sinds 2 september: een verschoven alias
-   faalt als `llm_request_failed`, dezelfde emmer als de facturatiestoring,
-   en die is in niets wat je kunt tellen te onderscheiden.
-3. **GAP-02 / open vraag A** — mag een webpagina een canonieke receptrij
-   hebben? Het duurst betaalde openstaande punt: een populair blogrecept is
-   één URL die veel huishoudens delen, en juist die route is uitgesloten van
-   de cache én van kookbewijs.
-4. **PRF-03, RCP-04, LIB-05, ENT-04, ENT-06, SRC-07** — kleiner, allemaal
-   vrij, geen van alle geblokkeerd.
-5. **GAP-11's rest en OPS-09's tweede helft** — comment-onderhoud en
-   `supabase/functions/**` uit ESLint's `ignores`. Pas urgent zodra er een
-   echte `npm:`/`jsr:`-specifier in de functie komt.
-
-### Wacht op iets buiten de code
-
-**SRC-09** meet begin oktober (en dat venster heeft een gat, zie DEC-02).
-**BSK-04/05/06**, **RCP-02**, **LIB-02**, **OPS-03**, **BIZ-01/03** wachten
-op de open vragen D t/m H. **SRC-06** en **SRC-04** wachten op Meta, wat
-neerkomt op: niet.
-
 ---
+
+## Schulden die nergens anders staan
+
+Verhuisd uit `archief/HANDOVER.md` op 12 september 2026, omdat dit het enige
+stuk van dat dagboek was dat geen geschiedenis beschreef maar openstaand werk —
+en het stond nergens anders.
+
+**`DESIGN.md` is ouder dan het onderzoek dat hem tegenspreekt** (GAP-13), en
+sinds 7 september 's avonds ook ouder dan de code — maar §1 en §2 dragen nu wel
+een omkeringsbanner, met elke verloren zin doorgestreept en de reden erbij.
+
+⚠ **Citeer `DESIGN.md` op zijn kopregels en nooit op regelnummers.** De ankers
+die hier stonden waren 202 regels verschoven, nagemeten en niet geschat: `:181`,
+`:206` en `:209-221` klopten tegen `b03fa30`, en `55c3187` voegde de kleursectie
+in bóven §1. Een anker in een document dat van boven groeit, schuift stil mee.
+
+⚠ **`archief/ui-research/WS5-motion-feedback-cook-mode.md` citeert de
+"never moves"-zin nog bij naam en redeneert eruit.** Dat bestand is gedateerd
+onderzoeksarchief en wordt niet bewerkt; de omkeringsbanner in `DESIGN.md` §1
+noemt dit citaat expliciet, zodat wie vanaf WS5 terugleest merkt dat hij over een
+scherm redeneert dat niet meer bestaat.
+
+**`archief/ui-research/ASSEMBLY.md` noteert wat het onderzoek "factually wrong"
+vond in de staande documenten.** `DESIGN-SOCIAL.md` is bij de makeover
+bijgewerkt; `DESIGN.md`, `PRODUCT-DECISIONS.md` en `ARCHITECTURE.md` niet. Die
+correcties leven alleen in het archief, terwijl `DESIGN.md` uit tientallen
+bronbestanden als gezag wordt aangehaald.
+
+**De weigermeting is weg en er is geen vervanging.** `handleDecline` was de enige
+plek die `status: 'skipped'` schreef, en met `Niet koken` is die verdwenen
+(PD-021). Een geweigerde avond staat nu voor altijd op `'pending'`, niet te
+onderscheiden van een avond waarop niemand de app opende. Bewust geaccepteerd, en
+`RespondToDecisionInput` houdt expres nog de vorm waarin een weigering
+vastgelegd kan worden — als de meting ooit nodig blijkt is het eerlijke
+instrument een decision-viewed-event, geen knop die iemand moet indrukken om
+geteld te worden.
+
+**Het oude palet leeft nog in één echt configuratiebestand, en dat telt.**
+`app.json:25` zet de Android-accentkleur van expo-notifications op een
+hardgecodeerde `#ffffff`, nooit afgeleid van het palet en dus niet meegegaan met
+`55c3187` — dat is de kleur achter de notificatie die het hele product moet
+aankondigen. ⚠ En `archief/ui-research/WS1-direction-and-palette.md` draagt het
+volledige oude palet plus een app-icoon- én splash-specificatie in het oude blauw
+(`#1D4094` op `#DDD9D0`). Die specificatie is achterhaald tot en met de
+`focusRing`. Het archief wordt niet bewerkt; dit staat hier omdat het de enige
+plek is waar een lezer erover struikelt vóór hij een icoon laat maken.
+
+**Twee contrastcijfers in de bron komen uit een palet van vóór alles.**
+`OutcomeCard.tsx` verdedigt `textSecondary` boven `textMuted` met "3,60:1 (light)
+/ 4,26:1 (dark)". `git log -S` legt die regel in `52b45d0` van 23 augustus 2026,
+het MVP-palet — de cijfers gaan dus over kleuren die daarna vervangen zijn. **De
+beslissing houdt** en `tests/contrast.test.ts` bewijst dat elke ronde opnieuw;
+het zijn alleen de getallen die niets meer meten. Wie erlangs komt haalt ze weg
+of hertelt ze; niemand moet ze citeren.
+
+**Er is geen pijlglyph in dit project** (GAP-43). Van de dertien niet-tab-schermen
+hebben er twaalf een uitgang, dus de klacht van de eigenaar ging over
+**vindbaarheid** en niet over aanwezigheid. Elke deur is 14pt `bodySmall` in
+`textMuted` zonder pijl, met vier verschillende woorden — `Terug`, `Annuleren`,
+`Sluiten`, `Stoppen`. Een pijl toevoegen kan niet goedkoop: `ICON_NAMES` kent
+`chevron-right` en `close` en géén `chevron-left`, en er een toevoegen raakt de
+uitputtende `Record<IconFamily, …>` in `iconFont.ts` plus `remyGlyphs.ts` en
+`tests/iconFont.test.ts`.
+
+⚠ **`claim-handle.tsx` slaat die ronde over.** Nul `router.`-treffers is daar
+geen ontbrekende uitgang maar een ontwerp dat op drie plaatsen vastligt
+(`_layout.tsx`'s `gestureEnabled: false`, de `router.replace` bij
+`needs_profile`, en `sessionRevalidation.ts`: *"the claim-handle screen
+deliberately does not navigate"*). Zonder een `profiles`-rij geeft de halve app
+stil niets terug, dus **een terugknop is daar een uitgang naar een kapotte
+staat.** Er is niets te repareren, er is een regel te schrappen.
+
+⚠ **En er is een veertiende scherm dat nergens geteld werd:**
+`src/app/dev-embed-probe.tsx`, 296 regels, dev-only. Het heeft een
+`router.replace('/')` waar `router.back()` hoort — dat wist de navigatiestack in
+plaats van één stap terug te gaan.
+
+**`thumbZoneMinHeight` wordt nergens gelezen.** Alleen gedeclareerd en gezet op
+96 in `tokens.ts`; geen enkele lezer. Bewust behouden — 96 is een gemeten
+ondergrens die het waard is te hebben op de dag dat een scherm hem wél afdwingt.
+
+**WS2, WS3 en het grootste deel van WS6 zijn nooit tegen de code gehouden**
+(GAP-18). De styling-audit raakte ze alleen waar ze iconen, beeld en motion
+kruisten. Gegeven dat 26 van 26 kleuren en 0 van 21 markeringen gemist bleken, is
+de kans klein dat layout, copy en de sociale laag wél volledig geland zijn.
+
 
 ## Wat bewust niet overgenomen is van SlimMandje
 

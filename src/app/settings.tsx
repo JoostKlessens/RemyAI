@@ -349,7 +349,7 @@ export default function SettingsScreen(): JSX.Element {
             Dutch moves into `accessibilityLabel`, unshortened.
 
             THIS SCREEN IS ALSO HALF OF THE MEASUREMENT THAT CLOSED OPEN
-            POINT A. docs/TOESTELTEST.md §8c asked whether this same tap works
+            POINT A. docs/archief/TOESTELTEST.md §8c asked whether this same tap works
             here when it appeared not to on friends/add. Asked on 9 September,
             the owner's answer was that both work. */}
         <BackButton onPress={() => router.back()} accessibilityLabel="Sluiten, terug naar Mijn recepten" />

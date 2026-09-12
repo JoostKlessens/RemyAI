@@ -339,7 +339,7 @@ export interface DecisionCardProps {
  * could see the other's contribution to it, and the number that broke was the
  * one neither owned. Disjoint files are not disjoint layouts.
  *
- * 9:16 AND NOT 4:5, even though ui-research/ASSEMBLY.md §2.2 recommends 4:5:
+ * 9:16 AND NOT 4:5, even though archief/ui-research/ASSEMBLY.md §2.2 recommends 4:5:
  * that recommendation is about DENSITY (5.8 tiles per screen against 3.7)
  * and it is D11, an owner decision that has not landed. Nothing here is a
  * grid, so none of the density argument reaches this card — and cropping the

@@ -20,8 +20,8 @@
  *     resolved; `canGoBack() ? back() : replace('/friends')` shipped, and
  *     asked to press it again the owner answered "hij werkt". The same tap
  *     on Instellingen also works, which is exactly the twenty-second
- *     measurement docs/TOESTELTEST.md §8c asked for. Open point A in
- *     HANDOVER.md is therefore closed, and closed by measurement rather than
+ *     measurement docs/archief/TOESTELTEST.md §8c asked for. Open point A in
+ *     archief/HANDOVER.md is therefore closed, and closed by measurement rather than
  *     by reasoning.
  *   - The TARGET WAS ALREADY 44 x 44, AND THIS COMPONENT DOES NOT ENLARGE
  *     IT. That has to be said plainly, because the obvious repair is the

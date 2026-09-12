@@ -29,7 +29,7 @@
  * WHY 4:5 AND NOT DESIGN.md §2's 9:16
  * ===========================================================================
  *
- * WS-2 §5.2 measured it, and `ui-research/ASSEMBLY.md` §2.2 refereed it in
+ * WS-2 §5.2 measured it, and `archief/ui-research/ASSEMBLY.md` §2.2 refereed it in
  * WS-2's favour: at 393pt a two-column 9:16 tile is 303.1pt tall and the
  * library shows 3.7 recipes per screen, on a surface `DESIGN.md` §1.1 says
  * must "grow from nothing to hundreds" and whose stated measure of good is

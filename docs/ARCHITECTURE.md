@@ -179,3 +179,72 @@ periodic read) rather than the app needing to fire it client-side.
   responded to." See the architect report for the full list, including
   simplifications worth a second look (e.g. any household member can edit
   any other member's row).
+
+---
+
+# Wat er draait
+
+> Vanaf hier Nederlands, zoals de rest van `docs/`. Deze twee secties zijn op
+> 12 september 2026 uit `archief/HANDOVER.md` gelicht: ze beschreven geen
+> geschiedenis maar de staande infrastructuur, en hoorden dus niet in een
+> dagboek.
+
+**De infrastructuur staat, en is gemeten in plaats van aangenomen.** Migraties
+`0001` t/m **`0022`** draaien tegen de live database — `npx supabase migration
+list` geeft `local` en `remote` gelijk voor alle tweeëntwintig. Er staat niets
+klaar dat nog gedraaid moet worden.
+
+**Het schema bouwt vanaf nul op.** `npm run db:reset` tegen een lokale stack
+speelt alle migraties af tegen een lege database, exit 0. Die vraag was tot
+8 september nooit gesteld, en twee reviewrondes over `0019` kwamen niet verder
+dan "geen blokkerende fout gevonden" — wat iets anders is dan "hij draait".
+`LOKAAL-DRAAIEN.md` beschrijft de lus.
+
+De drie secrets staan er: `IMPORT_FINGERPRINT_SALT`, `YOUTUBE_API_KEY` en
+`GEMINI_API_KEY`. De edge functie is gedeployed, dus de throttlepoort en de
+dichting van het anon-key-gat zijn werkelijk actief.
+
+⚠ **Meet de migratiestand voordat je erover schrijft.** Hij is in deze
+documenten **vijf keer** onwaar gebleken en altijd dezelfde kant op: het document
+beweerde dat een migratie nog niet gedraaid was terwijl hij allang liep. Eerst
+`0011`/`0012`, toen `0014`, toen `0015`/`0016`, toen `0018`, en tenslotte
+`0020`/`0021`/`0022`. De oorzaak is telkens dat "ik heb een migratiebestand
+toegevoegd" wordt opgeschreven als "de migratie staat nog niet remote" — een
+aanname vermomd als stand. `migration list` leest en wijzigt niets.
+
+---
+
+# Inloggen — drie routes, één werkt
+
+Dit heeft twee dagen gekost en de uitkomst is de moeite waard om precies op te
+schrijven.
+
+**1. Wachtwoord, alleen in ontwikkeling — dit is de route die werkt.** Maak een
+gebruiker in Supabase onder Authentication → Users → Add user, met **Auto Confirm
+User aan**. Op het inlogscherm staat onder het echte formulier een blok `ALLEEN
+IN ONTWIKKELING`. Dat levert dezelfde sessie op als een magic link — echt
+`sub`-claim, echte RLS, echte `onAuthStateChange` — dus wat je test is de app en
+geen namaak ervan. Dubbel afgeschermd: `{__DEV__ ? … : null}` bij de aanroeper én
+een weigering in `signInWithDevPassword` zelf.
+
+**2. Inloglink — gebouwd, nooit bevestigd.** De ontvangende helft
+(`readAuthRedirect`, `completeSignInFromUrl`, `Linking.useURL()` in
+`_layout.tsx`) staat er. `exp://<lan-ip>:8081/--/**` moet in Supabase onder
+Authentication → URL Configuration → Redirect URLs staan. ⚠ **Dat IP en die poort
+zijn die van de laptop.** Verandert je netwerk, of pakt Metro poort 8082 omdat
+8081 bezet is, dan matcht de allowlist niet meer en valt Supabase stil terug op
+de Site URL — wat zich voordoet als een onverklaarde sprong naar Safari. Precies
+dat is twee dagen lang de fout geweest. Zie `/CLAUDE.md` voor waarom 8081 bezet
+kan raken.
+
+**3. Zes cijfers — gebouwd, wacht op een mailserver.** `readSignInCode` en
+`verifySignInCode` staan er met elf tests. De code komt alleen in de mail als de
+template `{{ .Token }}` bevat, en Supabase laat die template pas bewerken zodra
+er custom SMTP staat. **De eigenaar wil Resend niet.** Elke SMTP-server waar je
+zelf inloggegevens van hebt voldoet — Supabase kijkt naar *of* er custom SMTP is,
+niet van wie.
+
+⚠ **Wat de ingebouwde mailer van Supabase niet kan**, en dat is drie keer een
+blokkade geweest: een handvol berichten per uur, geen bewerkbare templates, en
+hij weigert élk adres dat niet in het projectteam zit. **Zonder eigen SMTP kan
+dus geen enkele testgebruiker ooit inloggen.**

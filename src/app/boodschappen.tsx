@@ -196,7 +196,7 @@ export default function ShoppingListScreen(): JSX.Element {
   useFocusEffect(refresh);
 
   /**
-   * The research never looked at this screen (STYLING-PLAN.md: neither WS4
+   * The research never looked at this screen (archief/STYLING-PLAN.md: neither WS4
    * nor WS5 has a single mention of `boodschappen`), so the haptic is read
    * off WS5 §3.2's vocabulary rather than lifted from a row of its table.
    * Checking an item off is "a value moved, and it is reversible" — the

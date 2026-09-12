@@ -318,7 +318,7 @@ export interface CreateSaveInput {
    * have no answer; a NEW save always does, and the only thing standing
    * between "always" and "usually" is this question mark not being here.
    * The `?` on `CreateMealInput.dishTags` is the cautionary case, recorded
-   * as GAP-08 in OPEN-BESLISSINGEN.md: every literal that ever omitted it
+   * as GAP-08 in archief/OPEN-BESLISSINGEN.md: every literal that ever omitted it
    * was a bug, and only the type could have caught them.
    */
   readonly origin: SaveOrigin;

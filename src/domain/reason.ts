@@ -42,7 +42,7 @@
  * stated to the decisions row instead of to the reader. DESIGN.md §1 still
  * draws the block ("Reason block: `label` 'REDEN' over one line of
  * `body`/`textSecondary`") and is wrong about the screen from 6 September
- * 2026 onward; ui-research/ASSEMBLY.md §3 already lists that document as
+ * 2026 onward; archief/ui-research/ASSEMBLY.md §3 already lists that document as
  * older than the work that contradicts it.
  *
  * Weekday names come from `dutchWeekdayName` (date.ts), which derives the

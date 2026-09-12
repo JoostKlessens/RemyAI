@@ -1,5 +1,25 @@
 # Ontdek — het plan
 
+> ## Lees dit eerst — wat af is en wat niet, 12 september 2026
+>
+> **Fase 0, 1 en 2 zijn gebouwd en draaien.** De graaf is gericht (`follows`,
+> migratie `0021`), de twee sociale tabs zijn één scherm geworden met een feed en
+> een explore, en beide kanten tekenen sinds de vormwijziging dezelfde kaart.
+> Migraties `0020` t/m `0022` staan `local` én `remote`.
+>
+> **Wat nog vóór ons ligt:** fase 3 (zoeken op ingrediënt en receptnaam), fase 4
+> (keuken), fase 5 (mede-eters) en fase 6 (zoeken op mensen). Ze staan in DEEL IV.
+> Fase 3 is het eerstvolgende bouwwerk — zie `STATUS.md`.
+>
+> **Dit document is geen stand en geen backlog.** Het is het beslisdossier van de
+> sociale laag, en het staat nog in `docs/` en niet in `archief/` om één reden:
+> **code citeert er 23 keer uit** — elf keer `O-11b`'s tabel (welke lezing elk
+> oppervlak van de graaf krijgt), negen keer een fase bij naam, en verder `§1.5`,
+> `O-5c`, `O-9`, `O-11d` en valkuil 7. Inkorten zou die verwijzingen stranden.
+>
+> DEEL I t/m III beschrijven de meting en de beslissingen die tot fase 0–2
+> leidden. Dat is geschiedenis — maar wel de geciteerde soort, dus ze blijven.
+
 Geschreven op 10 september 2026, op verzoek van de eigenaar. **Dit document
 bouwt niets.** Het meet wat er vandaag staat, legt de beslissingen die alleen
 de eigenaar kan nemen als vragen voor, en zet daarna pas een volgorde. Er is
@@ -837,7 +857,7 @@ hun plek met ✅ in de kop:
 
 ~~**Nog open, en geen ervan blokkeert fase 0 of fase 1:** O-2b, O-2c, O-4, O-6, O-7,
 O-8, O-10. Fase 2 wacht op O-2b en O-2c; fase 3 op O-8 (en op open vraag A in
-`OPEN-BESLISSINGEN.md`); fase 4 op O-10; fase 5 op O-6 en O-7; fase 6 op O-4.~~
+`archief/OPEN-BESLISSINGEN.md`); fase 4 op O-10; fase 5 op O-6 en O-7; fase 6 op O-4.~~
 ⚠ **Achterhaald — zie de DERDE HERZIENING hieronder: O-2b en O-2c zijn dicht,
 en fase 2 is inmiddels gebouwd en wachtte dus nergens meer op.**
 
@@ -850,7 +870,7 @@ is gebouwd.** Ze staan hieronder op hun plek met ✅ in de kop:
 | **O-2c** (wat blijft er over van de `Iedereen | Vrienden`-schakelaar) | ✅ **A: hij blijft, en schakelt voortaan tussen oppervlakken, met de woorden `Vrienden | Ontdekken`.** ⚠ De eigenaar koos expliciet dat `ranglijst.tsx:216` — *"Wat over alle keukens heen het hoogst scoort."* — letterlijk blijft staan op de explorekant. |
 
 **Nog open, en geen ervan blokkeert fase 2:** O-4, O-6, O-7, O-8, O-10. Fase 3
-wacht op O-8 (en op open vraag A in `OPEN-BESLISSINGEN.md`); fase 4 op O-10;
+wacht op O-8 (en op open vraag A in `archief/OPEN-BESLISSINGEN.md`); fase 4 op O-10;
 fase 5 op O-6 en O-7; fase 6 op O-4.
 
 ---
@@ -1350,7 +1370,7 @@ Vandaag heeft alleen een TikTok-, Instagram- of YouTube-import een
 | **C. Een canonieke rij zonder URL toestaan** voor foto en tekst | `normalized_url` is `unique` en is de dedup-sleutel; `canonicalRecipe.ts` betoogt dat `'text'` structureel buiten de tabel valt. Dit vraagt een tweede sleutelbegrip (inhoudshash?) en dat is een eigen ontwerp. | Zes van zes, en een hele nieuwe klasse dedup-fouten. |
 
 **Aanbeveling: B behandelen als een blokkade voor fase 3 en niet als een
-optionele verbetering** — open vraag A in `OPEN-BESLISSINGEN.md` stelt hem al en
+optionele verbetering** — open vraag A in `archief/OPEN-BESLISSINGEN.md` stelt hem al en
 hij is nog onbeantwoord. C is een eigen ronde.
 
 ---

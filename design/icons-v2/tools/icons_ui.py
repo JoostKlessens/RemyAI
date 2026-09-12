@@ -184,7 +184,7 @@ UI_ICONS = [
 
 DISPLAY_ICONS = [
     # THE ONLY GREEN VESSEL IN THE SET, and that is the point: this is the
-    # glyph docs/HANDOVER.md names by hand for the empty library — the first
+    # glyph docs/archief/HANDOVER.md names by hand for the empty library — the first
     # thing a new user sees — so it carries the brand colour while every other
     # pot, pan and bowl stays cream. Nothing else competes with it.
     ("cooking-pot", [

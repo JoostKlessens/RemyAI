@@ -504,7 +504,7 @@ export default function AddFriendScreen(): JSX.Element {
             question in the same breath, reported that Instellingen works
             too. That settles the diagnosis above rather than merely failing
             to contradict it: the no-op `back()` was the cause and
-            `canGoBack()` is the fix. Open point A in docs/HANDOVER.md is
+            `canGoBack()` is the fix. Open point A in docs/archief/HANDOVER.md is
             closed. What survived is a different complaint — "nog steeds
             lastig te klikken" — which is about aiming, and is answered by
             the arrow rather than by this handler.

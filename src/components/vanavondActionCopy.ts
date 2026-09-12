@@ -25,7 +25,7 @@
  *
  * He gave permission, not an order — "dit mag je overigens" — and the rename
  * is taken anyway, against a research document that says in as many words not
- * to. docs/ui-research/WS3 §3.10 "Deliberately unchanged, and why" lists
+ * to. docs/archief/ui-research/WS3 §3.10 "Deliberately unchanged, and why" lists
  * `Ja` · `Iets anders` · `Ik kies zelf` · `Niet koken` as "the four best
  * labels in the product" and calls `Ja` "the whole thesis in two letters".
  * That was written while `DecisionCard` drew a `KIEZEN` eyebrow ABOVE the

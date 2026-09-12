@@ -82,7 +82,7 @@
  * next to each other), and it buys the one thing this field needs and those
  * two do not: exhaustiveness. A `Record<DishCourse, …>` — a label map, an
  * icon map, an ordering — fails to compile the day a fifth course is added,
- * which is exactly the check `docs/HANDOVER.md` records the photo-import
+ * which is exactly the check `docs/archief/HANDOVER.md` records the photo-import
  * agent tripping over on `ImportPlatform` and `RecipeProvenance`. Being
  * forced to visit every map that reasons over the vocabulary is the feature,
  * not the cost, for a vocabulary that is genuinely closed at four.

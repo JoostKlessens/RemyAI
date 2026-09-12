@@ -27,7 +27,7 @@ zitten.
 | Seed | `supabase/seed/demo_social.sql` + `supabase/seed/demo_social_teardown.sql` |
 | Project gelinkt aan productie | **JA.** `supabase/.temp/project-ref` bestaat (gemaakt 2 september). Zie hoofdstuk 6 — dat is het gevaarlijke deel |
 | Docker | Staat niet op deze machine. Dat is hoofdstuk 1 |
-| App | `npx expo start`, Expo Go, QR scannen — zie `docs/HANDOVER.md`, "Wat er draait" |
+| App | `npx expo start`, Expo Go, QR scannen — zie `docs/ARCHITECTURE.md`, "Wat er draait" |
 
 De CLI meldt bij elke aanroep dat `2.117.0` beschikbaar is. Dat is informatie,
 geen fout; upgrade als je wilt, maar niet halverwege een sessie waarin je iets
@@ -370,7 +370,7 @@ Twee dingen kunnen dan nog in de weg zitten:
   plaats van op een foutmelding.
 - **Verander je van netwerk, dan verandert dat IP** en klopt `.env.local` niet
   meer. Precies hetzelfde probleem dat de magic-link-route twee dagen kostte
-  (zie `docs/HANDOVER.md`, "Inloggen — drie routes").
+  (zie `docs/ARCHITECTURE.md`, "Inloggen — drie routes").
 
 Draai je de app in de browser (`npm run web`) op dezelfde machine, dan volstaat
 `http://127.0.0.1:54321`.
@@ -429,7 +429,7 @@ Twee dingen die ook helpen om te weten waar je bent:
   Andere URL, andere kleur in de adresbalk. De SQL-editor waar de twee ongelukken
   van 8 september in gebeurden, was de tweede.
 - **`npx supabase migration list`** zonder vlag zet `local` en `remote` naast
-  elkaar. Dat is de meting die `docs/HANDOVER.md` vier keer had moeten doen
+  elkaar. Dat is de meting die `docs/archief/HANDOVER.md` vier keer had moeten doen
   voordat het iets over de migratiestand beweerde, en het leest en wijzigt niets.
 
 ---
@@ -531,7 +531,7 @@ data.
 ⚠ `suggested_friends()` staat met opzet **niet** in die query. Die functie leest
 `auth.uid()`, en een SQL-editor draait als `postgres` zonder JWT — hij zou nul
 rijen geven, wat eruitziet als een defect terwijl het de beveiliging is die
-werkt. Dat deel test je op een toestel; zie `docs/TOESTELTEST.md`.
+werkt. Dat deel test je op een toestel; zie `docs/archief/TOESTELTEST.md`.
 
 ---
 
@@ -546,7 +546,7 @@ npm run db:status      # URL en anon key ophalen
 npx expo start         # app tegen lokaal
 # gebruiker aanmaken + handle claimen in de app
 npm run db:seed        # demo-vrienden erbij
-# … testen, zie docs/TOESTELTEST.md …
+# … testen, zie docs/archief/TOESTELTEST.md …
 npm run db:seed:teardown
 npm run db:stop
 ```

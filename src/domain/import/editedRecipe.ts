@@ -4,7 +4,7 @@
  *
  * EXTRACTED FROM src/app/import/confirm.tsx ON 10 SEPTEMBER 2026, and the
  * move is the point rather than a consequence of it. That file stood at
- * 963 lines against the 800 cap (docs/HANDOVER.md), but the cap is not
+ * 963 lines against the 800 cap (docs/archief/HANDOVER.md), but the cap is not
  * what makes this worth doing: vitest cannot import src/app — the
  * measurement is src/domain/offerablePool.ts's header — so a
  * rebuild-from-scratch living in a route module was logic no test could

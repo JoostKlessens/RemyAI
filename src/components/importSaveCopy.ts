@@ -56,7 +56,7 @@
  * "Doorgaan" was honest while a sheet came next; nothing comes next now, so
  * the label has to be the act. "Bewaren" rather than "Opslaan" because the
  * product already calls this act bewaren everywhere the household meets it —
- * the removed sheet was titled "Bewaard. Wanneer?", and `STYLING-PLAN.md`
+ * the removed sheet was titled "Bewaard. Wanneer?", and `archief/STYLING-PLAN.md`
  * names the same control `Bewaren` where it is still missing on the shared
  * recipe screen. "Opslaan" is reserved for `recipe-edit`, where what is
  * being saved is a CHANGE to something already kept, which is a different
