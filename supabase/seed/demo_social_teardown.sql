@@ -20,16 +20,38 @@
 -- database achterlaat — de toestand waarin "is de demo-data weg?" geen
 -- eenduidig antwoord meer heeft.
 --
--- (!) follows EN blocks ZIJN ER OP 11 SEPTEMBER 2026 BIJ GEKOMEN, en de reden
--- dat ze ontbraken is het leerzame deel. Migratie 0021 maakte `follows` DE
--- graaf en `friendships` een bevroren kopie; demo_social.sql verhuisde diezelfde
--- dag mee en schrijft sindsdien dertien rijen in `follows`. Dit bestand
--- verhuisde NIET mee en bleef alleen `friendships` legen — dus "de teardown is
--- gedraaid" betekende dertien demo-volgrelaties die bleven staan, precies de
--- toestand waar de kop hierboven voor waarschuwt. De EEN-VOORVOEGSEL-regel
--- beschermt tegen een verouderde lijst BINNEN een tabel; tegen een tabel die
--- er niet bij staat beschermt hij niets, en dat verschil was onopgemerkt.
--- `scripts/check-seed-teardown.mjs` is de poort die dit voortaan vindt.
+-- (!) follows EN blocks ZIJN ER OP 11 SEPTEMBER 2026 BIJ GEKOMEN, en op
+-- 12 september is de reden NAGEMETEN EN BIJGESTELD. Lees dit als het bewijs
+-- dat "plausibel" en "gemeten" twee verschillende dingen zijn.
+--
+-- WAT ER GEBEURDE. Migratie 0021 maakte `follows` DE graaf en `friendships` een
+-- bevroren kopie; demo_social.sql verhuisde diezelfde dag mee en schrijft
+-- sindsdien dertien rijen in `follows`. Dit bestand verhuisde NIET mee.
+--
+-- ~~WAT DAAR EERST OVER BEWEERD WERD: dat "de teardown is gedraaid" dertien
+-- demo-volgrelaties liet staan.~~ ⚠ ONJUIST, en nu gemeten in plaats van
+-- geredeneerd: tegen een lokale stack met de seed erin geeft de OUDE teardown
+-- `select count(*) from public.follows` = **0**. `follows.follower_id` en
+-- `followee_id` verwijzen allebei naar `profiles (id) ON DELETE CASCADE`
+-- (0021), dus het verwijderen van de demo-profielen ruimde de volgrelaties
+-- vanzelf op. Er is nooit demo-data blijven staan.
+--
+-- WAT WÉL HET DEFECT WAS, en het blijft er een. De CONTROLEQUERY onderaan telde
+-- `follows` en `blocks` niet. Die select is precies wat je afleest om te
+-- geloven dat het gelukt is, dus de opruiming werkte terwijl niets het liet
+-- zien — en of het lukte hing aan een cascade in een andere migratie in plaats
+-- van aan iets wat dit bestand zelf doet.
+--
+-- EN DAAROM BLIJVEN DE TWEE DELETES STAAN: de kop hierboven kiest expliciet
+-- tegen leunen op cascades ("expliciet verwijderen zegt precies wat er weggaat
+-- in plaats van het over te laten aan een cascade die iemand later kan
+-- wijzigen"). Dat argument gold vóór deze meting en geldt erna nog steeds.
+-- Verandert iemand ooit `on delete cascade` in `on delete set null` — een
+-- aannemelijke wijziging, want een volgrelatie overleeft een verwijderd profiel
+-- niet zinvol — dan is dit bestand de enige plek die het nog opruimt.
+--
+-- `scripts/check-seed-teardown.mjs` is de poort die een ontbrekende tabel
+-- voortaan vindt, in beide helften: niet geleegd én niet geteld.
 --
 -- (!) blocks STAAT ER TERWIJL DE SEED ER GEEN RIJ IN SCHRIJFT, en dat is geen
 -- vergissing om op te ruimen. De delete is een no-op op een lege verzameling

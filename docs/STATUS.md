@@ -51,10 +51,17 @@ Neem mee in dezelfde zitting:
 
 ⚠ **Draai `supabase/seed/demo_social_teardown.sql` vóórdat er echte vrienden op
 de app komen.** `suggested_friends()` leest `recipe_ratings` globaal, dus drie
-demo-profielen verschijnen bij elke tester in "Misschien ken je". En: **draaide
-je die teardown op 11 september overdag, draai hem dan opnieuw** — hij was toen
-stuk en liet de dertien demo-volgrelaties staan (ONT-06, inmiddels gerepareerd
-en met een poort erachter). Opnieuw draaien is veilig.
+demo-profielen verschijnen bij elke tester in "Misschien ken je".
+
+~~En: draaide je die teardown op 11 september overdag, draai hem dan opnieuw —
+hij was toen stuk en liet de dertien demo-volgrelaties staan.~~ **Dat was
+onjuist, en het is op 12 september nagemeten.** De oude teardown liet niets
+staan: `follows` hangt met `on delete cascade` aan `profiles`, dus de
+volgrelaties verdwenen mee met de profielen. Wat er wél mis was is kleiner en
+nog steeds echt — de controlequery telde `follows` en `blocks` niet, dus je kon
+niet zíén of het gelukt was, en of het lukte hing aan een cascade in een andere
+migratie. Beide tellingen staan er nu, en de teardown is lokaal **gedraaid**:
+twaalf tabellen, alle nul.
 
 De oude checklist staat in `docs/archief/TOESTELTEST.md`. Hij is geschreven voor
 het werk van 4 tot 8 september, dus loop hem na op wat er sindsdien bij kwam.

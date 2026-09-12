@@ -169,17 +169,27 @@ Drie verzonnen mensen in het eerste sociale scherm dat je testers zien is nog
 steeds drie te veel. **Haal de demo weg vóór de vriendentest**
 (`demo_social_teardown.sql`).
 
-⚠ **HEB JE DE TEARDOWN TUSSEN 11 SEPTEMBER OVERDAG EN 11 SEPTEMBER 'S AVONDS
-GEDRAAID, DRAAI HEM DAN OPNIEUW.** In dat venster was hij stuk: de seed was die
-ochtend van `friendships` naar `follows` verhuisd (migratie 0021 maakte
-`follows` de graaf) en de teardown niet, dus hij verwijderde alles behalve de
-dertien demo-volgrelaties — en gaf exit 0 alsof hij klaar was. Juist `follows`
-voedt de graaf achter "Misschien ken je". **Opnieuw draaien is veilig:** elke
-delete is een no-op op een lege verzameling, en twee keer draaien doet niets
-anders dan één keer. Dat het nu te ZIEN is, is het verschil: de controletelling
-onderaan telt `follows` en `blocks` mee, dus een rest is af te lezen in plaats
-van te vermoeden. En `npm run check:seed` weigert voortaan elke teardown die een
-tabel van de seed overslaat — die poort bestond niet toen dit misging.
+⚠ **DIT BESTAND IS ARCHIEF EN WORDT NIET MEER BIJGEWERKT. De uitvoerbare versie
+van laag 1 staat in `supabase/meting/laag1-nulmeting.sql`**, en die is op
+12 september 2026 tegen een lokale stack **gedraaid** — alle 21 queries, exit 0.
+Dat was het grootste openstaande punt van dit document ("Geen enkele query is
+uitgevoerd"). Eén query bleek stil fout: de vriendschapsvraag las `friendships`,
+dat sinds `0021` een bevroren kopie is. Herschreven naar `follows`, dat gericht
+is, plus een telling van wederzijdse paren en één voor `blocks`.
+
+⚠ En regel nul is niet langer een bewering maar een meting: met de volledige
+demo-seed in de database geven alle 21 queries **nul**, en zonder het
+`5eed5eed`-filter geven dezelfde queries 18 stemmen, 13 volgrelaties en 6
+kookmomenten. Het filter doet dus het werk, en dat is het verschil tussen "nul
+omdat het klopt" en "nul omdat de query stuk is".
+
+~~HEB JE DE TEARDOWN TUSSEN 11 SEPTEMBER OVERDAG EN 'S AVONDS GEDRAAID, DRAAI
+HEM DAN OPNIEUW — hij verwijderde alles behalve de dertien demo-volgrelaties.~~
+**ONJUIST, nagemeten op 12 september.** De oude teardown liet niets staan:
+`follows` hangt met `on delete cascade` aan `profiles`, dus de volgrelaties
+gingen mee met de profielen. Het echte defect was dat de controletelling
+`follows` en `blocks` niet meenam, waardoor je niet kon zien of het gelukt was.
+Beide staan er nu, en de teardown is lokaal gedraaid: twaalf tabellen, alle nul.
 
 ⚠ **Twee views geven in de SQL-editor altijd nul terug, en dat is geen
 defect.** `shared_cooks` (`0009`) en `namable_recipe_votes` (`0016`) gaten op

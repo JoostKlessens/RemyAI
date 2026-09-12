@@ -4,11 +4,39 @@
 // DIT IS DE POORT DIE DE FOUT VAN 11 SEPTEMBER 2026 HAD GEVONDEN. Migratie
 // 0021 maakte `follows` de sociale graaf en `friendships` een bevroren kopie.
 // demo_social.sql verhuisde diezelfde dag mee en schrijft sindsdien dertien
-// rijen in `public.follows`. demo_social_teardown.sql verhuisde NIET mee. Het
-// gevolg is de ergste soort: een opruimscript dat exit 0 geeft en zegt dat het
-// klaar is, terwijl er dertien demo-volgrelaties blijven staan. En juist die
-// tabel voedt "Misschien ken je", dus wie de teardown draaide vóór een echte
-// tester en hem vertrouwde, liet drie neppe mensen op diens scherm staan.
+// rijen in `public.follows`. demo_social_teardown.sql verhuisde NIET mee.
+//
+// ⚠ WAT HET GEVOLG DAARVAN WAS, IS OP 12 SEPTEMBER BIJGESTELD — en die
+// bijstelling hoort in de kop van de poort zelf, want hij bepaalt waartegen dit
+// script eigenlijk beschermt.
+//
+// ~~Hier stond: een opruimscript dat exit 0 geeft terwijl er dertien
+// demo-volgrelaties blijven staan.~~ ONJUIST, en het was geredeneerd uit een
+// ontbrekende regel in plaats van gedraaid. Tegen een lokale stack met de seed
+// erin geeft de OUDE teardown `count(*) from public.follows` = 0:
+// `follows.follower_id` en `followee_id` hangen met `on delete cascade` aan
+// `profiles`, dus de volgrelaties verdwenen mee met de demo-profielen.
+//
+// WAT DEZE POORT DUS WERKELIJK BEWAAKT, en het is nog steeds de moeite waard:
+//  (a) de CONTROLEQUERY van de teardown, die `follows` en `blocks` niet telde —
+//      de opruiming werkte, maar niets liet het zien, en of het lukte hing aan
+//      een cascade in een ANDERE migratie in plaats van aan dat bestand zelf;
+//  (b) de dag waarop een nieuwe seed-tabel NIET aan zo'n cascade hangt. Vandaag
+//      hangt elke tabel die de seed vult met `on delete cascade` aan
+//      `profiles`, `households` of `meals`, en die drie verwijdert de teardown
+//      expliciet — dus vandaag is de schade nul. Dat is een eigenschap van het
+//      huidige schema en geen garantie.
+//
+// ⚠ EN DAT TWEEDE PUNT IS ZELF EEN GECORRIGEERDE AANNAME. Hier stond eerst dat
+// `saves` het levende voorbeeld was van een tabel zonder cascadepad. Onjuist:
+// `saves.household_id` en `saves.meal_id` hangen allebei met `on delete
+// cascade` aan tabellen die de teardown expliciet leegt (0001). Twee keer
+// achter elkaar dezelfde fout in hetzelfde bestand — een gevolgtrekking over
+// foreign keys opschrijven zonder ze op te zoeken.
+//
+// De les die overblijft is scherper dan de oorspronkelijke: een ontbrekende
+// `delete` is zichtbaar, maar of dat gevólgen heeft hangt af van cascades in
+// andere migraties. Dat lees je niet af; dat draai je.
 //
 // ---------------------------------------------------------------------------
 // WAAROM check-seed-uuids.mjs DIT NIET KON VINDEN, EN WAAROM DAT GEEN GEBREK
