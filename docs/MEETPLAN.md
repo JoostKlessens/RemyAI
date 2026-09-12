@@ -169,6 +169,18 @@ Drie verzonnen mensen in het eerste sociale scherm dat je testers zien is nog
 steeds drie te veel. **Haal de demo weg vóór de vriendentest**
 (`demo_social_teardown.sql`).
 
+⚠ **HEB JE DE TEARDOWN TUSSEN 11 SEPTEMBER OVERDAG EN 11 SEPTEMBER 'S AVONDS
+GEDRAAID, DRAAI HEM DAN OPNIEUW.** In dat venster was hij stuk: de seed was die
+ochtend van `friendships` naar `follows` verhuisd (migratie 0021 maakte
+`follows` de graaf) en de teardown niet, dus hij verwijderde alles behalve de
+dertien demo-volgrelaties — en gaf exit 0 alsof hij klaar was. Juist `follows`
+voedt de graaf achter "Misschien ken je". **Opnieuw draaien is veilig:** elke
+delete is een no-op op een lege verzameling, en twee keer draaien doet niets
+anders dan één keer. Dat het nu te ZIEN is, is het verschil: de controletelling
+onderaan telt `follows` en `blocks` mee, dus een rest is af te lezen in plaats
+van te vermoeden. En `npm run check:seed` weigert voortaan elke teardown die een
+tabel van de seed overslaat — die poort bestond niet toen dit misging.
+
 ⚠ **Twee views geven in de SQL-editor altijd nul terug, en dat is geen
 defect.** `shared_cooks` (`0009`) en `namable_recipe_votes` (`0016`) gaten op
 `auth.uid()` respectievelijk `is_friend_of()`. De editor draait als

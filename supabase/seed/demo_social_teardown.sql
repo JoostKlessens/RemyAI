@@ -20,6 +20,24 @@
 -- database achterlaat — de toestand waarin "is de demo-data weg?" geen
 -- eenduidig antwoord meer heeft.
 --
+-- (!) follows EN blocks ZIJN ER OP 11 SEPTEMBER 2026 BIJ GEKOMEN, en de reden
+-- dat ze ontbraken is het leerzame deel. Migratie 0021 maakte `follows` DE
+-- graaf en `friendships` een bevroren kopie; demo_social.sql verhuisde diezelfde
+-- dag mee en schrijft sindsdien dertien rijen in `follows`. Dit bestand
+-- verhuisde NIET mee en bleef alleen `friendships` legen — dus "de teardown is
+-- gedraaid" betekende dertien demo-volgrelaties die bleven staan, precies de
+-- toestand waar de kop hierboven voor waarschuwt. De EEN-VOORVOEGSEL-regel
+-- beschermt tegen een verouderde lijst BINNEN een tabel; tegen een tabel die
+-- er niet bij staat beschermt hij niets, en dat verschil was onopgemerkt.
+-- `scripts/check-seed-teardown.mjs` is de poort die dit voortaan vindt.
+--
+-- (!) blocks STAAT ER TERWIJL DE SEED ER GEEN RIJ IN SCHRIJFT, en dat is geen
+-- vergissing om op te ruimen. De delete is een no-op op een lege verzameling
+-- (zie VEILIG OM TE DRAAIEN hierboven) en kost niets; wat hij wél doet is de
+-- dag opvangen waarop iemand een geblokkeerd demo-profiel toevoegt om het
+-- blokkeerscherm te kunnen zien. Dat is exact het scenario dat `follows`
+-- hierboven wél overkwam.
+--
 -- (!) auth.users GAAT ALS LAATSTE. profiles hangt eraan met een cascade, dus
 -- die rijen zouden vanzelf meegaan. Ze staan er apart in omdat een
 -- auth-gebruiker die blijft rondhangen het enige spoor is dat je niet in het
@@ -36,6 +54,8 @@ delete from public.meals             where id::text like '5eed5eed%';
 delete from public.household_members where id::text like '5eed5eed%';
 delete from public.households        where id::text like '5eed5eed%';
 delete from public.recipes           where id::text like '5eed5eed%';
+delete from public.follows           where id::text like '5eed5eed%';
+delete from public.blocks            where id::text like '5eed5eed%';
 delete from public.friendships       where id::text like '5eed5eed%';
 delete from public.profiles          where id::text like '5eed5eed%';
 delete from auth.users               where id::text like '5eed5eed%';
@@ -46,6 +66,8 @@ commit;
 -- dan is er een tabel bijgekomen die de seed wel vult en dit bestand niet
 -- leegt.
 select 'profiles' as tabel, count(*) from public.profiles where id::text like '5eed5eed%'
+union all select 'follows',           count(*) from public.follows           where id::text like '5eed5eed%'
+union all select 'blocks',            count(*) from public.blocks            where id::text like '5eed5eed%'
 union all select 'friendships',       count(*) from public.friendships       where id::text like '5eed5eed%'
 union all select 'recipes',           count(*) from public.recipes           where id::text like '5eed5eed%'
 union all select 'households',        count(*) from public.households        where id::text like '5eed5eed%'

@@ -1,6 +1,27 @@
 /**
  * De kring — what the people you know think (docs/DESIGN-SOCIAL.md §2.2).
  *
+ * ⚠ DORMANT SINCE 11 SEPTEMBER 2026 (ONT-07), AND DORMANT IS NOT DEAD.
+ * `rankKring` has exactly two readers — `kringPresentation.ts`, which has no
+ * production caller of its own since fase 2, and `tests/social/kring.test.ts`.
+ * No screen reaches this file. That is worth stating at the top, because
+ * everything BELOW this block is written in the present tense about a list
+ * that is not currently drawn anywhere, and a reader who takes it at face
+ * value will think the kring ships today. It does not; the friend evidence
+ * became proof cards on Ontdek's feed, and the kring stopped being a list.
+ *
+ * WHY IT IS KEPT — the argument is LONGLIST ONT-07's and belongs here too.
+ * ONT-02's third card kind is the friend who VOTED without cooking; that
+ * person has no proof card, `namable_recipe_votes` (0016) makes the vote
+ * nameable, and the ranking that would place such a card is this function.
+ * A tested ranking discarded now is a ranking rewritten later.
+ *
+ * ⚠ AND THE ARGUMENT BELOW SURVIVES THE DORMANCY INTACT, which is why it is
+ * not struck through: "do not make this a mode of the board" is a statement
+ * about PD-014's protected object, and PD-014 did not change. If ONT-02 ever
+ * wakes this file, that paragraph is the first thing its author needs and the
+ * easiest thing to lose.
+ *
  * A DIFFERENT LIST ANSWERING A DIFFERENT QUESTION, NOT A FILTER ON THE
  * BOARD. Ranglijst answers "wat is hier echt goed?" — the population's
  * verdict — and stays global and identical for every reader, which is

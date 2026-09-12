@@ -78,6 +78,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { FeedCardFace, feedCardPanelStyle } from './FeedCardFace';
+import { ONTDEK_CARD_PRESS_HINT } from './ontdekCopy';
 import {
   CLOSED_LOOP_CHIP_COPY,
   buildAllergenCollisionLabel,
@@ -189,7 +190,7 @@ export function FriendProofCard(props: FriendProofCardProps): JSX.Element {
           onPressIn: () => animateTo(PRESS_SCALE),
           onPressOut: () => animateTo(1),
           accessibilityRole: 'button' as const,
-          accessibilityHint: 'Open het volledige recept',
+          accessibilityHint: ONTDEK_CARD_PRESS_HINT,
         };
 
   return (

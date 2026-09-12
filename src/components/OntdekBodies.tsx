@@ -199,6 +199,18 @@ export interface OntdekExploreBodyProps {
   /** `boardRows` with the reader's filter applied. Never a re-ordering — see PD-014a. */
   readonly visibleRows: readonly BoardRowModel[];
   readonly message: string | null;
+  /**
+   * ONT-08. The SAME handler the feed side gets, and that is the point.
+   *
+   * A board row and a proof card both carry a canonical `recipes.id`, both
+   * open `/friends/recipe/[recipeId]`, and both read the row 0006 grants to
+   * every authenticated reader. Two handlers here would be two answers to one
+   * question, and the second one is where a household's own meal id
+   * eventually gets passed by somebody who did not read this file.
+   */
+  readonly onOpenCanonicalRecipe: (recipeId: string) => void;
+  /** Threaded for the card's press feedback; see `TrendingCardProps`. */
+  readonly reduceMotionEnabled: boolean;
 }
 
 /**
@@ -224,7 +236,13 @@ export function OntdekExploreBody(props: OntdekExploreBodyProps): JSX.Element {
     case 'filtered-out':
       return <FilteredOutState />;
     default:
-      return <BoardList rows={props.visibleRows} />;
+      return (
+        <BoardList
+          rows={props.visibleRows}
+          onOpenCanonicalRecipe={props.onOpenCanonicalRecipe}
+          reduceMotionEnabled={props.reduceMotionEnabled}
+        />
+      );
   }
 }
 
@@ -234,12 +252,24 @@ export function OntdekExploreBody(props: OntdekExploreBodyProps): JSX.Element {
  * scroll, no pull-for-more", and that one prop is what would undo it
  * silently. `BOARD_END_COPY` in the footer is what this list says instead.
  */
-function BoardList(props: { readonly rows: readonly BoardRowModel[] }): JSX.Element {
+interface BoardListProps {
+  readonly rows: readonly BoardRowModel[];
+  readonly onOpenCanonicalRecipe: (recipeId: string) => void;
+  readonly reduceMotionEnabled: boolean;
+}
+
+function BoardList(props: BoardListProps): JSX.Element {
   return (
     <FlatList
       data={props.rows}
       keyExtractor={(row: BoardRowModel) => row.recipeId}
-      renderItem={({ item }: { item: BoardRowModel }) => <TrendingCard row={item} />}
+      renderItem={({ item }: { item: BoardRowModel }) => (
+        <TrendingCard
+          row={item}
+          onPress={props.onOpenCanonicalRecipe}
+          reduceMotionEnabled={props.reduceMotionEnabled}
+        />
+      )}
       ItemSeparatorComponent={ListGap}
       ListFooterComponent={BoardEndNote}
       contentContainerStyle={styles.listContent}

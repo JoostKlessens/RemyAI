@@ -129,14 +129,18 @@
  * (`getCanonicalRecipe`, which returns ingredients AND steps — the thing C
  * said did not exist), and the `recipes` -> `meals` write that shipped with
  * `Bewaren` on 9 September (`5767bda`). It was built for GAP-32's proof
- * cards on the Vrienden tab, and THIS card is still not wired to it.
+ * cards on the Vrienden tab. ~~and THIS card is still not wired to it.~~
+ * **ON 11 SEPTEMBER 2026 IT IS (ONT-08)** — see the block above the component
+ * for the PD-014 question that was left over, and how it was answered.
  *
  * The correction is recorded rather than the paragraph deleted, because
  * what is left is a genuinely different question. C's blockers are gone;
  * what remains is PD-014, which is about this tab and not about this
  * component: the board is "identical for every reader" and a tap that leads
  * to a household's own save is the first place that could stop being true.
- * Whoever answers it has one line to write, not a package.
+ * Whoever answers it has one line to write, not a package. **It was one
+ * line, and the answer is that the destination is canonical for every
+ * reader — the door differs from the room.**
  *
  * IT DOES NOT ANIMATE. `DecisionCard` fades and rises because it is one
  * verdict arriving; a feed where every card did that on scroll would be
@@ -145,10 +149,12 @@
  */
 
 import type { JSX } from 'react';
-import { View, useColorScheme } from 'react-native';
-import { getColors } from '@/theme/tokens';
+import { useRef } from 'react';
+import { Animated, Easing, Pressable, useColorScheme } from 'react-native';
+import { getColors, motion, resolveDuration } from '@/theme/tokens';
 import { FeedCardFace, feedCardPanelStyle } from './FeedCardFace';
 import { buildBoardRowAccessibilityLabel } from './leaderboardPresentation';
+import { ONTDEK_CARD_PRESS_HINT } from './ontdekCopy';
 
 /**
  * Exactly what this card draws, and nothing else.
@@ -177,7 +183,30 @@ export interface TrendingCardModel {
 
 export interface TrendingCardProps {
   readonly row: TrendingCardModel;
+  /**
+   * Opens the canonical recipe, or absent for a card that does not press.
+   *
+   * OPTIONAL FOR THE REASON THE HEADER GIVES: a prop nobody can fill in
+   * honestly is an invitation to fill it in dishonestly, so the affordance
+   * appears only when a caller actually supplies a destination. Omit it and
+   * this card is exactly what it was before ONT-08 — no role, no hint, no
+   * press feedback.
+   */
+  readonly onPress?: (recipeId: string) => void;
+  /**
+   * Honoured by the press feedback, exactly as the two friend cards honour it.
+   *
+   * ⚠ IT IS NOT OPTIONAL EVEN THOUGH `onPress` IS. A default of `false` would
+   * be a caller forgetting to ask the system and this card deciding for them
+   * that motion is fine — and `resolveDuration` exists precisely so that is
+   * never a default. A card that never presses ignores the value; a caller
+   * that wires the tap must still have asked.
+   */
+  readonly reduceMotionEnabled: boolean;
 }
+
+/** Matches FriendProofCard's and FriendRecipeCard's press feedback exactly, so every tappable object feels like one product. */
+const PRESS_SCALE = 0.98;
 
 /**
  * ⚠ THE COMPOSITION LEFT THIS FILE ON 11 SEPTEMBER 2026 AND IS NOW SHARED.
@@ -196,47 +225,105 @@ export interface TrendingCardProps {
  * structurally, "without either becoming the other" — applied to the two
  * SURFACES the tabs merged into.
  *
- * WHAT DID NOT MOVE: this card's model, its accessibility sentence, and the
- * fact that it does not press. `TrendingCardModel` is still the structural
- * shape above, `BoardRowModel` still satisfies it without importing it, and
- * the open PD-014 question about the tap is still open and still recorded in
- * this header.
+ * WHAT DID NOT MOVE: this card's model and its accessibility sentence.
+ * `TrendingCardModel` is still the structural shape above, and
+ * `BoardRowModel` still satisfies it without importing it.
+ *
+ * ===========================================================================
+ * ⚠ IT PRESSES SINCE 11 SEPTEMBER 2026 (ONT-08), AND PD-014's OBJECTION WAS
+ * ANSWERED BY THE CARD NEXT TO IT RATHER THAN BY AN ARGUMENT
+ * ===========================================================================
+ *
+ * The header above left exactly one thing standing after destination C got
+ * built: is a tap that leads to a household's own save the first place the
+ * board stops being "identical for every reader"? It is not, and the reason
+ * is a fact on the screen rather than a reading of the decision. The
+ * destination is `/friends/recipe/[recipeId]`, which reads the CANONICAL
+ * `recipes` row that 0006 grants to every authenticated reader — the same row
+ * for every reader, no household state in it. Saving from there is a separate,
+ * deliberate act on a second screen, which is PD-004's shape and not a leak in
+ * this one. What PD-014 forbids is the LIST differing per reader; what this
+ * adds is a door, and the room behind it is the same room for everybody.
+ *
+ * AND THE COUNTERFACTUAL IS NOW WORSE THAN THE RISK. Since fase 2 these are
+ * two pages of one screen drawing one `FeedCardFace`, so a reader swipes from
+ * a card that opens to an identical-looking card that ignores the thumb. The
+ * argument for the absence was "an action that silently does nothing is worse
+ * than no action"; one swipe away from two cards that do act, NO action is
+ * what now reads as the broken one. The owner asked for this first — "kan ik
+ * niet op de recepten klikken die ik daar zie" — and this is the line that
+ * owes him the answer.
+ *
+ * IT STILL DOES NOT ANIMATE ON SCROLL, and that is a different question from
+ * this one. PD-020.1's entrance announces a directed send arriving and stays
+ * reserved for the send card; press feedback answers a thumb that is already
+ * touching this card. The first would be motion for its own sake, the second
+ * is the same 0.98 every other tappable object in this product uses.
  */
 export function TrendingCard(props: TrendingCardProps): JSX.Element {
-  const { row } = props;
+  const { row, onPress, reduceMotionEnabled } = props;
   const colors = getColors(useColorScheme());
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const animateTo = (toValue: number): void => {
+    Animated.timing(scale, {
+      toValue,
+      duration: resolveDuration(motion.durationInstant, reduceMotionEnabled),
+      easing: Easing.bezier(...motion.easingStandard),
+      useNativeDriver: true,
+    }).start();
+  };
+
+  /**
+   * Every affordance that claims this card is a button lives here together,
+   * so the claim and the destination cannot drift apart — the same shape
+   * `FriendProofCard` uses, for the same reason.
+   */
+  const pressAffordance =
+    onPress === undefined
+      ? {}
+      : {
+          onPress: () => onPress(row.recipeId),
+          onPressIn: () => animateTo(PRESS_SCALE),
+          onPressOut: () => animateTo(1),
+          accessibilityRole: 'button' as const,
+          accessibilityHint: ONTDEK_CARD_PRESS_HINT,
+        };
 
   return (
-    <View
-      style={[feedCardPanelStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
-      accessible
-      accessibilityLabel={buildBoardRowAccessibilityLabel(row)}
-    >
-      <FeedCardFace
-        // Null, because nobody on the board is named and nothing on it was
-        // addressed to anybody. The two friend cards pass a person here; that
-        // difference is the surfaces speaking, not the card.
-        eyebrow={null}
-        title={row.title}
-        estimatedMinutes={row.estimatedMinutes}
-        // No source URL, deliberately: `BoardRecipe` does not carry one, and a
-        // leaderboard capped at 25 rows is populated by a ranking rather than
-        // by anything this household did. See useThumbnailFallback.ts.
-        thumbnailUrl={row.thumbnailUrl}
-        // A canonical list projection carries no ingredients — see
-        // `CanonicalRecipeSummary`. Null is the projection, not the schema.
-        keyIngredientsText={null}
-        // The verdict and its evidence, never one without the other. PD-014's
-        // justification for this whole surface rests on the vote count being
-        // here: a grade with its sample removed is a picture with a number on
-        // it, and this would be a stream of plates.
-        metaLine={row.metaLine}
-        creatorLine={row.creatorLine}
-        // PD-007a: labelled, never hidden, and never ranked down on this
-        // surface — see leaderboardPresentation.ts for why the ordering is the
-        // half that gives. Its absence says nothing about the dish.
-        collisionLabel={row.collisionLabel}
-      />
-    </View>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        {...pressAffordance}
+        style={[feedCardPanelStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        accessible
+        accessibilityLabel={buildBoardRowAccessibilityLabel(row)}
+      >
+        <FeedCardFace
+          // Null, because nobody on the board is named and nothing on it was
+          // addressed to anybody. The two friend cards pass a person here; that
+          // difference is the surfaces speaking, not the card.
+          eyebrow={null}
+          title={row.title}
+          estimatedMinutes={row.estimatedMinutes}
+          // No source URL, deliberately: `BoardRecipe` does not carry one, and a
+          // leaderboard capped at 25 rows is populated by a ranking rather than
+          // by anything this household did. See useThumbnailFallback.ts.
+          thumbnailUrl={row.thumbnailUrl}
+          // A canonical list projection carries no ingredients — see
+          // `CanonicalRecipeSummary`. Null is the projection, not the schema.
+          keyIngredientsText={null}
+          // The verdict and its evidence, never one without the other. PD-014's
+          // justification for this whole surface rests on the vote count being
+          // here: a grade with its sample removed is a picture with a number on
+          // it, and this would be a stream of plates.
+          metaLine={row.metaLine}
+          creatorLine={row.creatorLine}
+          // PD-007a: labelled, never hidden, and never ranked down on this
+          // surface — see leaderboardPresentation.ts for why the ordering is the
+          // half that gives. Its absence says nothing about the dish.
+          collisionLabel={row.collisionLabel}
+        />
+      </Pressable>
+    </Animated.View>
   );
 }

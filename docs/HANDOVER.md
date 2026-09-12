@@ -3,6 +3,161 @@
 Waar dit project op dit moment staat, geschreven voor een verse sessie die
 niets van de voorgaande gesprekken gelezen heeft.
 
+**Stand: 11 september 2026, laat — dit blok vervangt de twee blokken eronder.
+Het eerste daarvan zegt dat de vormwijziging "nog NIET gecommit is"; dat is
+achterhaald.** Branch `feat/live-import-and-plan-phases`. De vormwijziging zit
+in **`a9ba259`**, de werkmap is schoon (`git status --short` gaf nul regels) en
+`HEAD` is gelijk aan `@{u}` — **alles is gecommit én gepusht**, zelf gemeten.
+
+⚠ **DE DRIE MIGRATIES DRAAIEN. DIT DOCUMENT ZEI VIJF REGELS LANG HET
+TEGENDEEL, EN DAT IS DE VIJFDE KEER.** `npx supabase migration list` geeft
+`local` en `remote` gelijk voor **alle tweeëntwintig**, `0001` t/m `0022` —
+`0020_save_origin.sql`, `0021_directed_graph.sql` en
+`0022_feed_follows_the_follow.sql` inbegrepen. De eigenaar heeft `db push`
+gisteravond gedraaid. Dus `follows`, `blocks`, `i_follow()` en `saves.origin`
+bestaan live, en de waarschuwing "eerst `db push`, dan de code" is vervuld in
+plaats van open.
+
+**Lees daarbij het blok *Wat er draait* verderop, dat deze fout al vier keer
+opschreef en er nu vijf van maakt** — `0011`/`0012`, `0014`, `0015`/`0016`,
+`0018`, en nu `0020`/`0021`/`0022`. Altijd dezelfde kant op: het document
+beweert dat een migratie niet gedraaid is terwijl hij loopt. De oorzaak die
+daar staat geldt onverkort: *"ik heb een migratiebestand toegevoegd"* wordt
+hier opgeschreven als *"de migratie staat nog niet remote"*, en dat is een
+aanname vermomd als stand. **Vraag het de database of vraag het de eigenaar;
+allebei kost twintig seconden.**
+
+**Vijf poorten groen, alle vijf zelf gedraaid op 11 september 's avonds en
+overgeschreven uit de terminal:** typecheck 0, lint 0, `check:functions` 0,
+`check:seed` 0, **3809 tests over 160 bestanden**.
+
+⚠ **HET TESTAANTAL IS GELIJK GEBLEVEN EN DAT IS GEEN VERZUIM MAAR EEN GRENS.**
+Er is deze ronde geen enkele test bijgekomen, en dat hoort hardop gezegd in
+plaats van weggelaten. Wat er gebouwd is, is grotendeels een PROP die door drie
+bestanden geregen wordt, en deze repo kent geen render-test: er is geen enkel
+`.tsx`-testbestand, en een route-module is voor vitest onbereikbaar (expo-router
+en react-native parsen niet onder Vite) — `tests/ontdekPresentation.test.ts`
+legt dat in zijn eigen kop vast. Het ENIGE deel dat wél te bewijzen viel, de
+nieuwe seed-poort, is bewezen door hem tegen het kapotte bestand van vóór de
+reparatie te draaien; dat staat hieronder met het commando erbij.
+
+## Wat er op 11 september 's avonds landde — het spoor van fase 2
+
+Drie punten uit de ONT-rij van `LONGLIST.md`, gekozen omdat het alle drie
+gevolgen van fase 2 zijn die in het kielzog waren blijven liggen.
+
+**ONT-06 — de teardown was stuk, en het was de gevaarlijkste van de drie.**
+`demo_social.sql` verhuisde op 11 september van `friendships` naar `follows` en
+schrijft daar dertien rijen; `demo_social_teardown.sql` verhuisde NIET mee en
+verwijderde alleen `friendships`. Het gevolg is de ergste soort: een
+opruimscript dat exit 0 geeft en zegt dat het klaar is, terwijl er dertien
+demo-volgrelaties blijven staan — en juist `follows` voedt "Misschien ken je".
+Wie de teardown draaide vóór een echte tester en hem vertrouwde, liet drie
+neppe mensen op diens scherm staan. **Dat is regel 1b in `LONGLIST.md` en regel
+nul in `MEETPLAN.md`, dus het is een instructie die dit project actief geeft.**
+Twee deletes en twee telregels erbij (`follows` en `blocks`), met het waarom in
+de kop van het bestand.
+
+⚠ **`blocks` KRIJGT EEN DELETE TERWIJL DE SEED ER GEEN RIJ IN SCHRIJFT.** Geen
+vergissing: de delete is een no-op op een lege verzameling, en hij vangt de dag
+op waarop iemand een geblokkeerd demo-profiel toevoegt om dat scherm te kunnen
+zien. Dat is exact wat `follows` hierboven overkwam.
+
+**En de poort die dit voortaan vindt: `scripts/check-seed-teardown.mjs`.** Hij
+leest beide bestanden zonder database, en meldt (a) elke tabel die de seed vult
+en de teardown niet leegt, en (b) elke tabel die de teardown wél leegt maar niet
+meetelt in zijn eigen controle-select. Hij hangt aan `check:seed` met `&&`, dus
+**het rijtje poorten blijft vijf** — een zesde npm-script had 24 regels in deze
+documenten laten liegen.
+
+⚠ **DE POORT IS BEWEZEN TEGEN DE KAPOTTE VERSIE, NIET TEGEN DE GEREPAREERDE.**
+Een controle die groen is op het bestand dat je zojuist goed hebt gezet, toont
+niets aan. Daarom nemen beide bestanden een argument, en dit is de meting:
+
+```
+git show HEAD:supabase/seed/demo_social_teardown.sql > /tmp/oud.sql
+node scripts/check-seed-teardown.mjs supabase/seed/demo_social.sql /tmp/oud.sql
+#  → TABELLEN DIE DE SEED VULT EN DE TEARDOWN NIET LEEGT: 1
+#      public.follows
+#    exit=1
+```
+
+Eén treffer, de juiste, en geen valse. ⚠ **`check:seed` kon dit per constructie
+niet vinden, en dat is geen gebrek aan die poort**: hij parseert uuid-LITERALS,
+en elk id in het nieuwe `follows`-blok is een geldig uuid. Een tabelnaam die in
+het ENE bestand staat en in het ANDERE niet, is geen eigenschap van een waarde
+maar van het verschil tussen twee bestanden.
+
+⚠ **EN DE "EEN VOORVOEGSEL EN NIETS ANDERS"-REGEL BESCHERMDE HIER NIET TEGEN,
+wat het leerzame deel is.** De kop van de teardown draagt een sterk en juist
+argument: houd geen lijst van RIJEN bij, want die raakt achter zodra de seed
+groeit — vraag het de database via `id like '5eed5eed%'`. Dat klopt, maar het
+beschermt tegen een verouderde lijst BINNEN een tabel. De verzameling TABELLEN
+is nog altijd een handmatige lijst, in twee bestanden, en niets hield die twee
+in de pas. **Een goed argument dat één laag lager niet meer geldt is moeilijker
+te zien dan een fout argument.**
+
+**ONT-08 — de tap op explore's kaart, die de eigenaar als eerste vroeg.**
+*"Kan ik niet op de recepten klikken die ik daar zie"*. `TrendingCard` heeft nu
+een optionele `onPress` en opent `/friends/recipe/[recipeId]`, hetzelfde scherm
+dat de proof-kaart één veeg verderop al opende, via **dezelfde handler**:
+`openCanonicalRecipe` in `ranglijst.tsx`, waar de feedkant het regel-literal had
+en explore de tweede kopie zou zijn geweest.
+
+**De PD-014-vraag die het kopblok van dat bestand openliet, is beantwoord — en
+door een feit op het scherm, niet door een lezing van de beslissing.** De
+bestemming is de CANONIEKE `recipes`-rij die 0006 aan elke ingelogde lezer
+geeft: dezelfde rij voor iedereen, geen huishoudstaat erin. Bewaren is een
+aparte, bewuste daad op een tweede scherm. Wat PD-014 verbiedt is dat de LIJST
+per lezer verschilt; wat dit toevoegt is een deur, en de kamer erachter is voor
+iedereen dezelfde kamer.
+
+⚠ **EN HET TEGENDEEL IS INMIDDELS ERGER DAN HET RISICO.** Het argument voor de
+afwezigheid was *"een actie die stilletjes niets doet is erger dan geen actie"*.
+Sinds fase 2 zijn dit twee pagina's van één scherm die één `FeedCardFace`
+tekenen, dus je veegt van een kaart die opent naar een kaart die er identiek
+uitziet en de duim negeert. Eén veeg van twee kaarten die wél reageren, is
+GEEN actie wat nu als de kapotte leest.
+
+⚠ **`reduceMotionEnabled` IS VERPLICHT OP DIE KAART EN `onPress` IS DAT NIET.**
+Een default van `false` zou betekenen dat een aanroeper vergat het systeem te
+vragen en deze kaart voor hem besloot dat beweging in orde is — en
+`resolveDuration` bestaat juist zodat dat nooit een default is. De
+press-feedback is dezelfde 0.98 als elk ander aantikbaar object in dit product.
+**De entrance blijft weg:** PD-020.1's beweging kondigt een gerichte send aan,
+en dat is een andere vraag dan een duim die de kaart al aanraakt.
+
+**Bijvangst, en het was er bijna een derde kopie:** de zin die een screenreader
+hoort — *"Open het volledige recept"* — stond twee keer hardgecodeerd en zou de
+derde krijgen. Hij staat nu één keer, als `ONTDEK_CARD_PRESS_HINT` in
+`ontdekCopy.ts`. ⚠ **Alleen de HINT is gedeeld, nooit het LABEL**: het label
+zegt wélk recept en verschilt per kaart (een vriendnaam tegenover een
+stemmenaantal), en dat samenvoegen zou de discriminator zijn die `FeedCardFace`
+weigert, binnengekomen via de achterdeur.
+
+**ONT-07 — NIET verwijderd, en de longlist had gelijk.** Het plan voor deze
+ronde was de kring-code weg te halen: `rankKring`, `assembleKring`,
+`KringRowModel` en `KringRow` hebben nul productie-aanroepers, en getest dode
+code is de soort die groen blijft terwijl hij niets doet. **Maar ONT-07 draagt
+zelf een argument tégen verwijderen, en dat argument is concreet:** ONT-02's
+derde kaartsoort — de vriend die STEMDE zonder te koken — is precies het geval
+dat deze ranking weer nodig heeft, `namable_recipe_votes` (0016) maakt zo'n stem
+naambaar, en een geteste ranking weggooien om hem later te herschrijven is de
+dure volgorde.
+
+**Wat er dan wél moest gebeuren, en het was een echt defect.** `KringRow.tsx`
+zei sinds 8 september zelf al dat hij slaapt. De andere twee zeiden niets — en
+`kringPresentation.ts` beweerde actief iets onwaars: *"`(tabs)/ranglijst.tsx`
+is the only consumer of this module"*, wat sinds fase 2 niet meer klopt. Beide
+koppen dragen nu een gemeten dormancy-blok met de ONT-02-reden erin, zodat de
+volgende lezer ze niet per ongeluk bedraadt én niet per ongeluk weggooit. ⚠ En
+met de waarschuwing erbij die de rij zelf niet geeft: **wie dit wakker maakt
+moet het eerst hérlezen** — het is geschreven voor een LIJST op een tab, en
+ONT-02 wil een KAART in een feed. De ordening overleeft dat; de lijst-copy
+vrijwel zeker niet.
+
+---
+
 **Stand: 11 september 2026, avond — dit blok vervangt het blok eronder, dat
 geschreven was vóórdat fase 2 gecommit werd en vóór de vormwijziging.**
 Branch `feat/live-import-and-plan-phases`. **Fase 2 ZIT NU WEL IN EEN

@@ -70,6 +70,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { FeedCardFace, feedCardPanelStyle } from './FeedCardFace';
+import { ONTDEK_CARD_PRESS_HINT } from './ontdekCopy';
 import { buildAllergenCollisionLabel, buildCardCreditLine } from './friendCardVocabulary';
 import {
   buildFriendRecipeCardAccessibilityLabel,
@@ -181,7 +182,7 @@ export function FriendRecipeCard(props: FriendRecipeCardProps): JSX.Element {
         accessible
         accessibilityRole="button"
         accessibilityLabel={buildFriendRecipeCardAccessibilityLabel(model)}
-        accessibilityHint="Open het volledige recept"
+        accessibilityHint={ONTDEK_CARD_PRESS_HINT}
         style={[feedCardPanelStyle, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
         <FeedCardFace

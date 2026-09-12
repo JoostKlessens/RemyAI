@@ -145,6 +145,24 @@ export const FEED_END_COPY = 'Dat is alles wat er gedeeld is.';
 export const EXPLORE_EMPTY_TITLE = 'Nog niets beoordeeld';
 export const EXPLORE_EMPTY_FOOTNOTE = 'Een recept komt hier pas op zodra genoeg mensen het beoordeeld hebben.';
 
+/**
+ * What a screen reader is told a tap on a card will do — one sentence for all
+ * three cards on this screen.
+ *
+ * IT WAS TWICE HARDGECODEERD AND WAS ABOUT TO BE A THIRD TIME.
+ * `FriendProofCard` and `FriendRecipeCard` each carried this literal, which
+ * was harmless while they were the only two. ONT-08 wires `TrendingCard` to
+ * the same destination, and three copies of a sentence that MUST agree is the
+ * shape in which one of them quietly stops agreeing.
+ *
+ * ⚠ IT IS A HINT AND NEVER A LABEL. The label says WHICH recipe and differs
+ * per card — `buildFriendProofCardAccessibilityLabel` names a friend,
+ * `buildBoardRowAccessibilityLabel` names a vote count. Only the ACTION is
+ * the same, and only the action is shared here. Merging the labels too would
+ * be the discriminator that `FeedCardFace` refuses, arriving by the back door.
+ */
+export const ONTDEK_CARD_PRESS_HINT = 'Open het volledige recept';
+
 /** The `__DEV__` row. Never rendered in a production build; see `OntdekScenario`. */
 export const ONTDEK_DEV_ROW_LABEL = 'Ontwikkelaarsmodus: demoscenario kiezen';
 

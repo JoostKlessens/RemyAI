@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "check:functions": "tsc -p supabase/functions/tsconfig.json",
-    "check:seed": "node scripts/check-seed-uuids.mjs",
+    "check:seed": "node scripts/check-seed-uuids.mjs && node scripts/check-seed-teardown.mjs",
     "lint": "eslint --config lint/eslint.flat.config.mjs .",
     "db:start": "supabase start",
     "db:stop": "supabase stop",

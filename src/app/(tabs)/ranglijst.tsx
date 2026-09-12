@@ -518,6 +518,25 @@ export default function OntdekScreen(): JSX.Element {
     router.push(fixture === null ? `/friends/${feedItemId}` : `/friends/${feedItemId}?scenario=${fixture}`);
   };
 
+  /**
+   * A canonical recipe opens the SAME row for every reader — and since ONT-08
+   * both surfaces of this screen use this one handler.
+   *
+   * ⚠ IT TAKES NO SCENARIO, AND THAT IS THE DIFFERENCE WITH `openSend` ABOVE.
+   * A send resolves a feed item that a fixture can invent, so a fixture send
+   * must say which scenario it came from. A canonical recipe is a `recipes`
+   * row that exists or does not; there is no fixture variant of it, and
+   * passing one would invite a demo id into a world-readable route.
+   *
+   * ONE HANDLER RATHER THAN TWO IDENTICAL ONES. The line was written inline
+   * for the feed on 11 September and explore would have been the second copy
+   * — the shape in which one of them later gets a `meals` id, under different
+   * permissions, and keeps working just long enough not to be noticed.
+   */
+  const openCanonicalRecipe = (recipeId: string): void => {
+    router.push(`/friends/recipe/${recipeId}`);
+  };
+
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
       {__DEV__ && DEV_SCENARIO_ROWS_VISIBLE ? <DevScenarioRow active={scenario} onSelect={setScenario} /> : null}
@@ -592,7 +611,7 @@ export default function OntdekScreen(): JSX.Element {
             reduceMotionEnabled={reduceMotionEnabled}
             footer={footer}
             onOpenSend={openSend}
-            onOpenCanonicalRecipe={(recipeId: string) => router.push(`/friends/recipe/${recipeId}`)}
+            onOpenCanonicalRecipe={openCanonicalRecipe}
           />
         </View>
         <View style={[styles.page, { width: pageWidth }]}>
@@ -601,6 +620,10 @@ export default function OntdekScreen(): JSX.Element {
             boardRows={explore.boardRows}
             visibleRows={visibleBoardRows}
             message={explore.message}
+            // ONT-08: the same handler the feed gets, one line above. Both
+            // sides of this screen now open a canonical recipe the same way.
+            onOpenCanonicalRecipe={openCanonicalRecipe}
+            reduceMotionEnabled={reduceMotionEnabled}
           />
         </View>
       </ScrollView>

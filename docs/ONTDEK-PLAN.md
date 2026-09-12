@@ -1796,7 +1796,11 @@ aankomen:**
   personalisation, ever": explore weet niet wie er leest. ⚠ `rankKring`,
   `assembleKring`, `KringRowModel` en `kringPresentation.ts`'s lijst-copy
   hebben hierdoor geen productie-aanroeper meer. Ze zijn niet verwijderd, hun
-  tests draaien nog, en de reden staat op `docs/LONGLIST.md` ONT-07.
+  tests draaien nog, en de reden staat op `docs/LONGLIST.md` ONT-07. ✅ **Op
+  11 september is ONT-07 gesloten als BEWAARD en is de bewaar-reden in de
+  koppen van `kring.ts` en `kringPresentation.ts` zelf gezet** — die laatste
+  beweerde tot dan toe nog dat `(tabs)/ranglijst.tsx` zijn enige consument
+  was, wat vanaf déze fase onwaar is.
 - **De consent-gepoorte lees `listNamableRecipeVotes` (migratie 0016) is
   verhuisd** van `trendingSource.ts` naar `gekooktSource.ts` (353 → 465
   regels), waar hij nu het cijfer op een proof-kaart voedt.
@@ -1805,8 +1809,10 @@ aankomen:**
   (414), `tests/ontdekBoundary.test.ts` (230, 16 tests — de grens die PD-024
   als test opeiste: geen rij van `rankRecipes` mag op de feed landen),
   `tests/ontdekPresentation.test.ts` (222, 20 tests),
-  `supabase/migrations/0022_feed_follows_the_follow.sql` (183, GESCHREVEN EN
-  NIET GEDRAAID).
+  `supabase/migrations/0022_feed_follows_the_follow.sql` (183, ~~GESCHREVEN EN
+  NIET GEDRAAID~~ — **hij DRAAIT sinds 10 september 's avonds; `local` en
+  `remote` staan allebei op `0022`, gemeten met `npx supabase migration list`
+  op 11 september**).
 - **Nieuwe gedeelde regel `findCollidingIngredientTags`** in
   `src/domain/feed/ranking.ts` (geëxporteerd), waar `findCollidingTags` nu
   naar delegeert — één botsingsregel, twee ingangen.

@@ -2,12 +2,37 @@
  * De kring's presentation layer — the copy and view models for the
  * friends scope of Trending (docs/DESIGN-SOCIAL.md §2.2, §4.2, as amended).
  *
- * IT IS NOT A MODE OF Vrienden, which is what §2.2 and §4.2 were written
+ * ⚠ ZERO PRODUCTION CALLERS SINCE 11 SEPTEMBER 2026 (ONT-07), AND THE
+ * PARAGRAPH BELOW NAMES A CONSUMER THAT NO LONGER EXISTS. Fase 2 moved the
+ * friend evidence onto the feed, where a proof card draws it; the kring
+ * stopped being a list and `loadLiveTrending()` stopped taking arguments.
+ * `assembleKring`, `buildKringMetaLine`, `buildKringRowAccessibilityLabel`
+ * and `KringRowModel` are now reached only by `KringRow.tsx` (itself without
+ * callers since 8 September), by `friendFeedFixtures.ts` for two TYPES, and
+ * by this module's own tests. Measured, not assumed:
+ * `grep -rn "kringPresentation'" src/ tests/`.
+ *
+ * KEPT RATHER THAN DELETED, and the reason is specific rather than
+ * sentimental — it is LONGLIST ONT-07's, recorded here so it survives
+ * without the LONGLIST in hand. ONT-02's third card kind, the friend who
+ * VOTED without cooking, is exactly the case that wakes this module up:
+ * `namable_recipe_votes` (0016) makes such a vote nameable, that person has
+ * no proof card to sit on, and a named-voter meta line over a ranked list is
+ * precisely what lives here. Throwing away a tested ranking to rewrite it
+ * later is the expensive order. ⚠ WHOEVER WAKES IT MUST RE-READ IT FIRST:
+ * it was written for a LIST on a tab, and ONT-02 would want a CARD in a
+ * feed — the ordering survives that, the list copy below almost certainly
+ * does not.
+ *
+ * ~~IT IS NOT A MODE OF Vrienden, which is what §2.2 and §4.2 were written
  * against. The owner moved this list to the ranking tab, where the friends
  * scope answers the SAME question as the global one — `(tabs)/ranglijst.tsx`
- * is the only consumer of this module. DESIGN.md §8 and PD-018 record the
+ * is the only consumer of this module.~~ DESIGN.md §8 and PD-018 record the
  * move; DESIGN-SOCIAL §7 asserted the ranking tab was untouched until that
- * was corrected on 6 September 2026.
+ * was corrected on 6 September 2026. The struck sentence was true from
+ * 6 to 11 September and is kept because the history is the point: this
+ * module has now been re-homed twice, and both moves were the owner asking
+ * two surfaces to stop disagreeing.
  *
  * WHY THIS IS NOT A MODE OF leaderboardPresentation.ts. The two lists
  * answer different questions and print different numbers: the board shows

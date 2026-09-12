@@ -42,6 +42,7 @@
 
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
+import { stripCommentaar } from './sql-comments.mjs';
 
 /** Wat Postgres accepteert als uuid: acht-vier-vier-vier-twaalf, hex, hoofdletters mogen. */
 const GELDIGE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,33 +63,11 @@ const UUID_VORMIG =
  */
 const BIJNA_UUID = /'([0-9a-zA-Z]+(?:-[0-9a-zA-Z]+){4})'/g;
 
-/**
- * Haalt `--`-commentaar weg, maar niet als het binnen een string staat.
- *
- * Zonder deze stap meldt de controle zijn eigen documentatie als fout: de
- * header van demo_social.sql citeert het kapotte id om uit te leggen wat er
- * misging. Regelnummers blijven kloppen — commentaar wordt afgekapt, regels
- * worden niet weggegooid.
- */
-function stripCommentaar(regel) {
-  let inString = false;
-  for (let i = 0; i < regel.length; i += 1) {
-    const teken = regel[i];
-    if (teken === "'") {
-      // '' binnen een string is een ontsnapt aanhalingsteken, geen einde.
-      if (inString && regel[i + 1] === "'") {
-        i += 1;
-        continue;
-      }
-      inString = !inString;
-      continue;
-    }
-    if (!inString && teken === '-' && regel[i + 1] === '-') {
-      return regel.slice(0, i);
-    }
-  }
-  return regel;
-}
+// `stripCommentaar` stond hier tot 11 september 2026 en is naar
+// ./sql-comments.mjs verhuisd toen check-seed-teardown.mjs hem ook nodig had.
+// Zonder die stap meldt deze controle zijn eigen documentatie als fout: de
+// header van demo_social.sql citeert het kapotte id om uit te leggen wat er
+// misging.
 
 function controleerBestand(pad) {
   const bevindingen = [];
