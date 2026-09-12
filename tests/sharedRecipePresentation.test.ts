@@ -119,6 +119,10 @@ function makeSentMeal(overrides: Partial<SentMeal> = {}): SentMeal {
     recipeId: 'recipe-9',
     ingredients: [],
     steps: [],
+    // Null by default because the hand-entered and seeded majority has no
+    // canonical row at all — the ordinary case, and the one this screen has
+    // always rendered. The tests that care about the credit pass one.
+    creator: null,
     ...overrides,
   };
 }
@@ -188,10 +192,50 @@ describe('buildLiveSentSharedRecipe', () => {
     expect(buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne').eyebrow).toBe('Gedeeld door Sanne');
   });
 
-  test('leaves note, attribution and the original-post label null — SentMeal carries none of the three', () => {
-    const view = buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne');
+  /**
+   * ⚠ THIS BLOCK ASSERTED THE OPPOSITE UNTIL 12 SEPTEMBER 2026, and the old
+   * assertion is worth naming rather than quietly replacing: it read "leaves
+   * note, attribution and the original-post label null — SentMeal carries
+   * none of the three". Two of those three were true of the TYPE and not of
+   * the product, and they were the reason the send screen was the one place
+   * this app dropped the creator credit (GAP-32 point b). `SentMeal.creator`
+   * closed it; `note` stays null, because that one really is absent.
+   */
+  test('still leaves note null — SentMeal genuinely carries none', () => {
+    expect(buildLiveSentSharedRecipe(makeSentMeal(), 'Sanne').note).toBeNull();
+  });
 
-    expect(view.note).toBeNull();
+  test('credits the creator and names the platform when the canonical row has one', () => {
+    const view = buildLiveSentSharedRecipe(
+      makeSentMeal({ creator: { authorName: 'kokenmetkees', platform: 'tiktok', authorUrl: null } }),
+      'Sanne',
+    );
+
+    expect(view.attribution?.handle).toBe('kokenmetkees');
+    expect(view.attribution?.platform).toBe('tiktok');
+    expect(view.originalPostLabel).toBe('Bekijk het originele filmpje op TikTok');
+  });
+
+  test('gives no credit and no label when the meal has no canonical row — the hand-entered majority', () => {
+    const view = buildLiveSentSharedRecipe(makeSentMeal({ creator: null }), 'Sanne');
+
+    expect(view.attribution).toBeNull();
+    expect(view.originalPostLabel).toBeNull();
+  });
+
+  /**
+   * The blank-name rule lives in `buildAuthorAttribution` and is asserted
+   * here on the SEND path specifically, because a second implementation of
+   * it on this side is exactly what the two callers must never grow. A
+   * canonical row whose oEmbed returned no name credits nobody — and then
+   * there is no platform to name either, so the label goes with it.
+   */
+  test('credits nobody when the canonical row carries a blank author name', () => {
+    const view = buildLiveSentSharedRecipe(
+      makeSentMeal({ creator: { authorName: '   ', platform: 'tiktok', authorUrl: null } }),
+      'Sanne',
+    );
+
     expect(view.attribution).toBeNull();
     expect(view.originalPostLabel).toBeNull();
   });

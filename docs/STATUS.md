@@ -12,10 +12,10 @@ plaats van aangevuld** — dit document heeft geen geschiedenis; die staat in
 
 | | |
 |---|---|
-| **Poorten** | Alle vijf groen: typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3809 tests over 160 bestanden** |
+| **Poorten** | Alle vijf groen: typecheck 0, lint 0, `check:functions` 0, `check:seed` 0, **3815 tests over 160 bestanden** |
 | **Database** | Migraties **`0001` t/m `0022`**, `local` en `remote` gelijk. Er staat niets klaar dat nog gedraaid moet worden. |
 | **Werkmap** | Schoon. Er ligt geen ongecommit werk en niets staat half geschreven. |
-| **Backlog** | 90 af, **25 open**, 15 geblokkeerd op een beslissing, **8 halverwege**, 5 afgewogen, 2 afgewezen. Gedefinieerd in `LONGLIST.md`. |
+| **Backlog** | 91 af, **25 open**, 15 geblokkeerd op een beslissing, **7 halverwege**, 5 afgewogen, 2 afgewezen. Gedefinieerd in `LONGLIST.md`. |
 | **Op een toestel gezien** | Het meeste wel, sinds 9 september. Wat sindsdien gebouwd is niet — zie punt 1 hieronder. |
 
 **Wat er de laatste ronde landde:** Ontdek fase 0, 1 en 2 (de sociale graaf werd
@@ -94,19 +94,19 @@ Elk met de reden erbij in `LONGLIST.md`. De twee met de meeste hefboom:
   `isSocialSaveOrigin` is er, en er is nog geen enkele lezer. ⚠ `saves` is
   vandaag local-only.
 
-### 5. De acht die halverwege staan
+### 5. De zeven die halverwege staan
 
 ⚠ **Deze regel is er op 12 september bij gekomen omdat de telling fout was.**
 Er stond hier "niets staat halverwege" — overgenomen uit een zin in `LONGLIST.md`
-die over de *werkmap* ging, niet over de *backlog*. Acht codes staan op 🟡, wat
-"domeinlaag af, geen scherm of geen aanroeper" betekent. Dat is niet erg, maar
-het is wél werk dat niemand ziet:
+die over de *werkmap* ging, niet over de *backlog*. Er stonden er acht op 🟡 —
+"domeinlaag af, geen scherm of geen aanroeper" — en na GAP-32 zijn het er zeven.
+Dat is niet erg, maar het is wél werk dat niemand ziet:
 
 | | Wat er ligt zonder aanroeper |
 |---|---|
 | `GAP-12`, `GAP-14` | De twee inlogroutes naast het wachtwoord: link en zescijferige code. Gebouwd en getest; de code wacht op een mailserver (zie `ARCHITECTURE.md`). |
 | `GAP-53` | De terugknop op `/friends/add` reageert soms niet, en de oorzaak is nooit gevonden — de reparatie die er staat is de `canGoBack()`-vorm. Vraagt een meting op een toestel, dus hoort bij punt 1. |
-| `GAP-32` | Punt (1) is dicht; wat resteert staat in de regel zelf. |
+| ~~`GAP-32`~~ | ✅ **Af op 12 september.** Een verzonden recept credite niemand — `buildLiveSentSharedRecipe` gaf hardgecodeerd geen attributie, en daarmee ook geen link naar de oorspronkelijke post. `SentMeal.creator` leest die nu van de canonieke rij; geen migratie, geen nieuwe rechten. |
 | `GAP-02` | Wacht op open vraag A. |
 | `GAP-11`, `GAP-18`, `OPS-09` | Onderhoud: onvolledige tellingen in commentaar, WS1-onderdelen die nooit tegen de code gehouden zijn, en de tweede helft van Deno's resolutieregel. |
 
@@ -128,11 +128,18 @@ Geen van deze blokkeert punt 1 t/m 5 hierboven. De volledige uitwerking staat in
 | **K** | Hoe diep mag de feed op explore? (`LEADERBOARD_MIN_VOTES = 3`) | Op de demo-data is explore drie kaarten diep. De vloer verlagen maakt de ranglijst minder waar. |
 | **D–H** | Betaalgrens, voedingswaarden, groeperen, supermarkt, Engelse vertaling | Blokkeren BSK-04/05/06, RCP-02, LIB-02, OPS-03 en BIZ-01/03. |
 
-**En één ding dat de eigenaar al gevraagd heeft maar dat nog geen plan met een
-datum is:** meten wat mensen daadwerkelijk gebruiken. Zijn woorden: *"Ik wil door
-en door begrijpen wat mensen gebruiken en wat niet."* Het plan ligt in
-`docs/archief/MEETPLAN.md` — inhoudelijk bruikbaar, maar geschreven op de aanname
-dat `0019` nog niet gedraaid was, dus de aanleiding klopt niet meer.
+**En het meten is begonnen.** De eigenaar vroeg erom — *"Ik wil door en door
+begrijpen wat mensen gebruiken en wat niet"* — en laag 1 van het plan staat nu
+als één draaibaar bestand in **`supabase/meting/laag1-nulmeting.sql`**. Alle 21
+queries zijn op 12 september tegen een lokale stack gedraaid, exit 0; dat was het
+grootste openstaande punt van het plan, dat van zichzelf zei dat geen enkele
+query ooit was uitgevoerd.
+
+**Wat er nog van jou is:** plak dat bestand in de SQL-editor van het dashboard en
+draai het één keer als nulmeting tegen productie. Alles erin is een `select`.
+Noteer erbij of de demo-seed er op dat moment in zat. Laag 2 — een eigen
+eventtabel — begint pas ná de vriendentest, en alleen voor vragen waarvan laag 1
+aantoont dat ze daar niet te beantwoorden zijn.
 
 ---
 

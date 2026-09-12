@@ -470,6 +470,48 @@ export interface SentMeal {
   readonly ingredients: readonly SentMealIngredient[];
   /** See `SentMealStep`'s header for why this may travel here at all. */
   readonly steps: readonly SentMealStep[];
+  /**
+   * Who made the dish, read off the CANONICAL recipe behind `recipeId`.
+   * Null when there is no canonical row, or when oEmbed never gave a name.
+   *
+   * WHY THIS TRAVELS WHERE `householdId` AND `allergenTagStatus` MAY NOT,
+   * and the distinction is the same one `SentMealStep` makes. Those two are
+   * facts about the SENDER'S KITCHEN. This is a fact about the CREATOR, and
+   * it is already world-readable: `recipes` grants SELECT to every
+   * authenticated reader (`can_read_recipe`, 0006), so a reader who can see
+   * this send could read the same three columns directly. Nothing new is
+   * disclosed by putting them here — only a round trip is saved.
+   *
+   * ⚠ AND WITHOUT IT THE SEND SCREEN WAS THE ONE PLACE THIS PRODUCT DROPPED
+   * THE CREDIT. `buildLiveSentSharedRecipe` returned `attribution: null`
+   * and, because no attribution means no platform, `originalPostLabel: null`
+   * with it — so a live send showed neither the creator nor PD-010.2's link
+   * to the original post, while the canonical screen one tap away showed
+   * both. That was GAP-32's last open point (b).
+   */
+  readonly creator: SentMealCreator | null;
+}
+
+/**
+ * The creator credit behind a sent meal — three columns of the canonical
+ * `recipes` row and nothing else.
+ *
+ * IT IS A GROUPED NULLABLE AND NOT THREE NULLABLE FIELDS, because the three
+ * are only meaningful together: `buildAuthorAttribution` refuses a blank
+ * name outright, and a platform without a name credits nobody. One null says
+ * "there is no credit to give" once, instead of leaving every caller to work
+ * out which combination of three nulls means that.
+ *
+ * ⚠ `platform` IS NOT NULLABLE INSIDE IT. `recipes.platform` is `not null`
+ * with a CHECK (0006, widened in 0011), so a canonical row always has one;
+ * what can be absent is the ROW, and that is what the outer null says.
+ */
+export interface SentMealCreator {
+  /** `recipes.author_name` — the handle as the platform reported it. Null when oEmbed gave none. */
+  readonly authorName: string | null;
+  readonly platform: CreatorPlatform;
+  /** `recipes.author_url`. Never synthesised from the name — see 0006. */
+  readonly authorUrl: string | null;
 }
 
 /**

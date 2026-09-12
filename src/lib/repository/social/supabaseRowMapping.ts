@@ -52,7 +52,14 @@ import type {
   Profile,
   RecipeRating,
 } from '@/domain/social/types';
-import type { CanonicalRecipe, CanonicalRecipeSummary, IncomingSend, RecipeShare, SentMeal } from './types';
+import type {
+  CanonicalRecipe,
+  CanonicalRecipeSummary,
+  IncomingSend,
+  RecipeShare,
+  SentMeal,
+  SentMealCreator,
+} from './types';
 
 /**
  * Postgres row shapes, written out rather than inferred. `supabase.ts`
@@ -261,6 +268,42 @@ export const SENT_MEAL_INGREDIENT_COLUMNS = 'meal_id, name, quantity, unit, sort
 export const SENT_MEAL_STEP_COLUMNS = 'meal_id, step_number, instruction';
 
 /**
+ * The creator credit behind a sent meal, read off `recipes`.
+ *
+ * FOUR COLUMNS AND NOT THE WHOLE ROW, and `id` is one of them only because
+ * the caller keys a Map on it. `SentMealCreator` (./types.ts) carries the
+ * other three and nothing else: this read exists to credit a creator, not to
+ * hand the canonical recipe over a second time. `listCanonicalRecipes`
+ * already reads the summary, and a second projection here that grew toward
+ * it would be two answers to "what is a canonical recipe" in one file.
+ */
+export const SENT_MEAL_CREATOR_COLUMNS = 'id, author_name, platform, author_url';
+
+export interface SentMealCreatorRow {
+  readonly id: string;
+  readonly author_name: string | null;
+  readonly platform: string;
+  readonly author_url: string | null;
+}
+
+/**
+ * ⚠ THE `platform` CAST ASSERTS A CHECK THAT EXISTS, exactly as `toFriendship`
+ * does for its status: `recipes.platform` is `not null` with a CHECK naming
+ * the same set `CreatorPlatform` does (0006, widened to `'youtube'` in 0011).
+ * The cast therefore restates a guarantee the database already keeps rather
+ * than hoping about a free-text column. ⚠ Whoever adds `'web'` there (GAP-02,
+ * open question A) widens `CreatorPlatform` in the same change, or this cast
+ * quietly starts lying.
+ */
+export function toSentMealCreator(row: SentMealCreatorRow): SentMealCreator {
+  return {
+    authorName: row.author_name,
+    platform: row.platform as CreatorPlatform,
+    authorUrl: row.author_url,
+  };
+}
+
+/**
  * Postgres time to this codebase's fixed-width UTC string. See the header:
  * ratings.ts compares these lexically, so the format cannot vary.
  */
@@ -387,6 +430,13 @@ export function toSentMeal(
   meal: SentMealRow,
   ingredients: readonly SentMealIngredientRow[],
   steps: readonly SentMealStepRow[],
+  /**
+   * Already resolved by the caller rather than looked up here, because this
+   * function maps rows and owns no reads — the rule this whole file keeps.
+   * Null both when the meal has no `recipe_id` and when the canonical row
+   * did not come back; see the call site for why those are one answer.
+   */
+  creator: SentMealCreator | null,
 ): SentMeal {
   return {
     shareId: share.id,
@@ -421,6 +471,7 @@ export function toSentMeal(
         text: step.instruction,
         sortOrder: step.step_number,
       })),
+    creator,
   };
 }
 

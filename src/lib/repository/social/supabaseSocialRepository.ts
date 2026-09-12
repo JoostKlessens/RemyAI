@@ -63,6 +63,7 @@ import {
   type RemySocialRepository,
   type SendRecipeInput,
   type SentMeal,
+  type SentMealCreator,
   type UpsertProfileInput,
 } from './types';
 // The Postgres/domain boundary: row shapes, converters, and `fail`. Split
@@ -73,6 +74,7 @@ import {
   CANONICAL_RECIPE_INGREDIENT_COLUMNS,
   CANONICAL_RECIPE_STEP_COLUMNS,
   SENT_MEAL_COLUMNS,
+  SENT_MEAL_CREATOR_COLUMNS,
   SENT_MEAL_INGREDIENT_COLUMNS,
   SENT_MEAL_STEP_COLUMNS,
   fail,
@@ -87,8 +89,10 @@ import {
   toRecipeRating,
   toRecipeShare,
   toSentMeal,
+  toSentMealCreator,
   toSuggestedFriend,
   type FriendshipRow,
+  type SentMealCreatorRow,
   type ProfileRow,
   type RecipeRatingRow,
   type RecipeRow,
@@ -702,6 +706,45 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
       const ingredientRows = (ingredientResult.data as SentMealIngredientRow[] | null) ?? [];
       const stepRows = (stepResult.data as SentMealStepRow[] | null) ?? [];
 
+      // A FOURTH READ, AND IT CANNOT JOIN THE THREE ABOVE, because its scope
+      // is `meals.recipe_id` and that only exists once the meals have come
+      // back. One extra round trip on a screen that already does three, in
+      // exchange for the creator credit GAP-32(b) left missing — see
+      // `SentMeal.creator` for why these three columns may travel at all.
+      //
+      // ⚠ IT IS NOT PART OF THE PERMISSION CHAIN THE COMMENT ABOVE DESCRIBES,
+      // and that is worth saying plainly rather than leaving to inference. The
+      // `in (<meal ids>)` filters up there are scoping over rows whose access
+      // `has_active_send_to_me` decides per row. `recipes` has no such gate:
+      // 0006 grants SELECT to every authenticated reader, the same grant
+      // PD-014 rests Trending on. So this read discloses nothing the reader
+      // could not ask for directly, and its `in` filter is an optimisation
+      // rather than a boundary.
+      const recipeIds = [
+        ...new Set(
+          [...mealsById.values()]
+            .map((meal) => meal.recipe_id)
+            .filter((recipeId): recipeId is string => recipeId !== null),
+        ),
+      ];
+      const creatorsByRecipeId = new Map<string, SentMealCreator>();
+      if (recipeIds.length > 0) {
+        // Guarded for the same reason `listCanonicalRecipes` guards: `in.()`
+        // with an empty list is a PostgREST syntax error, not an empty result.
+        const { data: creatorData, error: creatorError } = await client
+          .from('recipes')
+          .select(SENT_MEAL_CREATOR_COLUMNS)
+          .in('id', recipeIds);
+
+        if (creatorError) {
+          fail('Reading who made a dish somebody sent you', creatorError);
+        }
+
+        for (const row of (creatorData as SentMealCreatorRow[] | null) ?? []) {
+          creatorsByRecipeId.set(row.id, toSentMealCreator(row));
+        }
+      }
+
       return shares.flatMap((share): readonly SentMeal[] => {
         const meal = mealsById.get(share.meal_id);
         if (meal === undefined) {
@@ -718,6 +761,12 @@ export function createSupabaseSocialRepository(client: SupabaseClient): RemySoci
             meal,
             ingredientRows.filter((row) => row.meal_id === meal.id),
             stepRows.filter((row) => row.meal_id === meal.id),
+            // Null for the hand-entered and seeded majority, which have no
+            // `recipe_id` at all, and also when the canonical row exists but
+            // RLS or a deletion kept it out of the read above. Both are the
+            // same answer to the screen — "there is no credit to give" — and
+            // neither is a reason to drop the card.
+            meal.recipe_id === null ? null : creatorsByRecipeId.get(meal.recipe_id) ?? null,
           ),
         ];
       });

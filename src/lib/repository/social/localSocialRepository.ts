@@ -214,6 +214,18 @@ function toSentMeal(
         text: step.instruction,
         sortOrder: step.stepNumber,
       })),
+    // ALWAYS NULL HERE, AND THAT IS A PROPERTY OF THIS BACKEND RATHER THAN A
+    // GAP IN IT. The credit is read off the canonical `recipes` row, and this
+    // store holds no such table — `listCanonicalRecipes` below gives the
+    // reason in full: `recipes` is written by the parse-recipe edge function
+    // with the service role and lives only in Postgres. There is nothing to
+    // look up, rather than a lookup that was skipped.
+    //
+    // The screen already treats a missing credit as "there is no credit to
+    // give" instead of as an error (`buildLiveSentSharedRecipe`), which is
+    // the same answer a hand-entered meal gets on the Supabase backend. A
+    // local send therefore renders correctly, simply without a creator line.
+    creator: null,
   };
 }
 

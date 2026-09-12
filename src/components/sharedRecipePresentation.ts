@@ -205,17 +205,42 @@ export function buildSentSharedRecipe(
  * hidden" is a rule about the LIST, which this single-item read is not.
  */
 export function buildLiveSentSharedRecipe(meal: SentMeal, friendName: string): SharedRecipeView {
+  // Computed once and used twice, because the label is derived FROM the
+  // attribution and not from the creator beside it. `buildAuthorAttribution`
+  // refuses a blank author name, so a canonical row whose oEmbed returned no
+  // name credits nobody — and then there is no platform left to name in the
+  // label either. Deriving both from `meal.creator` independently would
+  // print "Bekijk het originele filmpje op TikTok" under a recipe that
+  // credits no one, which is the fixture path's exact rule one line 150-odd
+  // above and the reason it is written the same way here.
+  const attribution =
+    meal.creator === null
+      ? null
+      : buildAuthorAttribution(meal.creator.authorName, meal.creator.platform, meal.creator.authorUrl);
+
   return {
     title: meal.title,
     eyebrow: buildSharedRecipeEyebrow(friendName),
     note: null,
     metaLine: buildFriendRecipeMetaLine(meal.estimatedMinutes, null),
     collisionLabel: buildAllergenCollisionLabel([]),
-    attribution: null,
+    // ⚠ THIS WAS HARDCODED `null` UNTIL 12 SEPTEMBER 2026, AND THE SEND
+    // SCREEN WAS THEREFORE THE ONE PLACE THIS PRODUCT DROPPED THE CREATOR
+    // CREDIT — with PD-010.2's link to the original post going with it,
+    // because no attribution means no platform and no platform means nothing
+    // to name in the label. The canonical screen one tap away showed both.
+    // That was GAP-32's last open point (b), and closing it needed no new
+    // rights: `SentMeal.creator` carries three columns of the canonical row,
+    // which 0006 grants to every authenticated reader anyway.
+    //
+    // `buildAuthorAttribution` still owns the blank-name rule, so a canonical
+    // row whose oEmbed never returned a name yields null here exactly as it
+    // does on the canonical screen — one rule, two callers.
+    attribution,
     sourceUrl: meal.sourceUrl,
-    // No attribution means no platform, and no platform means there is
-    // nothing to name in the label — see `SharedRecipeView.originalPostLabel`.
-    originalPostLabel: null,
+    // Byte for byte the fixture send path's rule: no attribution means no
+    // platform, and no platform means there is nothing to name in the label.
+    originalPostLabel: attribution === null ? null : buildOriginalPostLinkLabel(attribution.platform),
     ingredientLines: [...meal.ingredients]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((ingredient) => ({

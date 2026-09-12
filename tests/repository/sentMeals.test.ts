@@ -164,6 +164,11 @@ describe('the local store', () => {
     expect(sent?.ingredientTags).toEqual(['noten']);
     expect(Object.keys(sent ?? {}).sort()).toEqual(
       [
+        // `creator` joined this list on 12 September 2026 (GAP-32 b). It is
+        // ALWAYS null on this backend — the local store holds no `recipes`
+        // table by design — so its presence here asserts the SHAPE, and the
+        // assertion below asserts the value.
+        'creator',
         'estimatedMinutes',
         'ingredientTags',
         'ingredients',
@@ -178,6 +183,11 @@ describe('the local store', () => {
         'title',
       ].sort(),
     );
+    // The value half of the claim above. Null is the CORRECT answer on this
+    // backend and not a missing read: canonical recipes are written by the
+    // parse-recipe edge function with the service role and live only in
+    // Postgres, so there is no `remy:recipes` table to look in.
+    expect(sent?.creator).toBeNull();
   });
 
   test('a withdrawn send takes its meal back out of reach', async () => {
@@ -302,22 +312,100 @@ const stepRows = [
   { meal_id: 'meal-1', step_number: 1, instruction: 'Kook de tagliatelle.' },
 ];
 
+/**
+ * The canonical row behind `mealRow.recipe_id`, which is where the creator
+ * credit comes from since 12 September 2026 (GAP-32 b).
+ *
+ * FOUR COLUMNS AND NOT THE WHOLE RECIPE. `SENT_MEAL_CREATOR_COLUMNS` reads
+ * exactly these; a fixture that carried title or ingredients too would let a
+ * projection widen without any test noticing.
+ */
+const creatorRows = [
+  {
+    id: 'recipe-1',
+    author_name: 'kokenmetkees',
+    platform: 'tiktok',
+    author_url: 'https://www.tiktok.com/@kokenmetkees',
+  },
+];
+
 describe('the Postgres backend', () => {
   test('derives every meal id from the reader own live sends, never from an argument', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows), ok(creatorRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     await repository.listMealsSentToMe('p-joost');
 
-    expect(fake.tables).toEqual(['recipe_shares', 'meals', 'meal_ingredients', 'meal_steps']);
+    // ⚠ `recipes` JOINED THIS LIST ON 12 SEPTEMBER 2026 AND IS THE ONE ENTRY
+    // THAT IS NOT PART OF THE PERMISSION CHAIN. The first four are the chain
+    // this test's name describes: every id after `recipe_shares` is derived
+    // from it. `recipes` is scoped by `meals.recipe_id` for efficiency only —
+    // 0006 grants SELECT on it to every authenticated reader, the same grant
+    // PD-014 rests Trending on, so its `in` filter is not a boundary.
+    expect(fake.tables).toEqual(['recipe_shares', 'meals', 'meal_ingredients', 'meal_steps', 'recipes']);
     expect(fake.log).toContain('eq(recipient_profile_id,p-joost)');
     expect(fake.log).toContain('in(id,[meal-1])');
     expect(fake.log).toContain('in(meal_id,[meal-1])');
+    expect(fake.log).toContain('in(id,[recipe-1])');
+  });
+
+  /**
+   * GAP-32's last open point (b): the send screen credited nobody, because
+   * `SentMeal` carried no attribution and `buildLiveSentSharedRecipe`
+   * therefore hardcoded `attribution: null` — and, with no platform to name,
+   * `originalPostLabel: null` beside it. The canonical screen one tap away
+   * showed both.
+   */
+  test('reads the creator off the canonical row behind the meal', async () => {
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows), ok(creatorRows)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    const [sent] = await repository.listMealsSentToMe('p-joost');
+
+    expect(sent?.creator).toEqual({
+      authorName: 'kokenmetkees',
+      platform: 'tiktok',
+      authorUrl: 'https://www.tiktok.com/@kokenmetkees',
+    });
+  });
+
+  /**
+   * The hand-entered and seeded majority. No `recipe_id` means there is
+   * nothing to look up — and the fourth read must not fire at all, because
+   * `in.()` with an empty list is a PostgREST syntax error rather than an
+   * empty result. That guard is the assertion here, not an implementation
+   * detail: without it this method would start failing for every household
+   * whose sends are hand-entered.
+   */
+  test('skips the creator read entirely when no sent meal has a canonical row', async () => {
+    const fake = makeClient([ok([shareRow]), ok([{ ...mealRow, recipe_id: null }]), ok(ingredientRows), ok(stepRows)]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    const [sent] = await repository.listMealsSentToMe('p-joost');
+
+    expect(fake.tables).toEqual(['recipe_shares', 'meals', 'meal_ingredients', 'meal_steps']);
+    expect(sent?.creator).toBeNull();
+  });
+
+  /**
+   * The canonical row exists but did not come back — deleted underneath the
+   * send, or a projection that returned fewer rows than asked. The meal is
+   * still rendered; only the credit is absent. Dropping the card instead
+   * would turn a missing byline into a missing recipe.
+   */
+  test('renders the meal without a credit when the canonical row does not come back', async () => {
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows), ok([])]);
+    const repository = createSupabaseSocialRepository(fake.client);
+
+    const [sent] = await repository.listMealsSentToMe('p-joost');
+
+    expect(sent?.title).toBe('Romige pasta pesto');
+    expect(sent?.creator).toBeNull();
   });
 
   /** `eq(col, null)` is not a null test in PostgREST and would match no row at all. */
   test('filters withdrawn sends out with a null test', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows), ok(creatorRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     await repository.listMealsSentToMe('p-joost');
@@ -327,7 +415,7 @@ describe('the Postgres backend', () => {
 
   /** The projection is the privacy model written as a column list. */
   test('never asks for the household id or the allergen verdict', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows), ok(creatorRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     await repository.listMealsSentToMe('p-joost');
@@ -338,7 +426,7 @@ describe('the Postgres backend', () => {
   });
 
   test('maps every snake_case column onto its domain name and sorts ingredients and steps by recipe order', async () => {
-    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows)]);
+    const fake = makeClient([ok([shareRow]), ok([mealRow]), ok(ingredientRows), ok(stepRows), ok(creatorRows)]);
     const repository = createSupabaseSocialRepository(fake.client);
 
     expect(await repository.listMealsSentToMe('p-joost')).toEqual([
@@ -361,6 +449,15 @@ describe('the Postgres backend', () => {
           { text: 'Kook de tagliatelle.', sortOrder: 1 },
           { text: 'Meng de pesto erdoor.', sortOrder: 2 },
         ],
+        // The fourth read's three columns, renamed the same way the rest of
+        // this object is: `author_name` to `authorName`, `author_url` to
+        // `authorUrl`. `platform` keeps its name because it already had the
+        // domain one.
+        creator: {
+          authorName: 'kokenmetkees',
+          platform: 'tiktok',
+          authorUrl: 'https://www.tiktok.com/@kokenmetkees',
+        },
       },
     ]);
   });

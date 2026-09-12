@@ -56,6 +56,12 @@ function makeSentMeal(overrides: Partial<SentMeal> & { readonly shareId: RecipeS
     recipeId: SHAKSHUKA,
     ingredients: [],
     steps: [],
+    // The send CARD draws no creator credit of its own — that is the shared
+    // recipe SCREEN's job (`buildLiveSentSharedRecipe`), and the card's
+    // creator line comes from `buildCardCreditLine`. Defaulted to null so
+    // this factory keeps compiling without pretending the field matters
+    // here; a test that cares overrides it.
+    creator: null,
     ...overrides,
   };
 }
